@@ -36,9 +36,12 @@ impl AppState {
         }
     }
 
-    /// 登记「项目当前显示在哪个窗口」。重复登记同一项目会覆盖旧值（窗口切换后更新归属）。
+    /// 登记「项目当前显示在哪个窗口」。
+    /// - 同一项目重复登记会覆盖旧值；
+    /// - 同一窗口先清除其它项目的归属（一窗一项目），避免本窗切换后旧项目仍被标为已开窗。
     pub fn record_project_window(&self, project_id: i64, window_label: String) {
         if let Ok(mut windows) = self.project_windows.lock() {
+            windows.retain(|id, label| *id == project_id || label.as_str() != window_label);
             windows.insert(project_id, window_label);
         }
     }
@@ -102,6 +105,23 @@ mod tests {
     }
 
     #[test]
+    fn recording_project_clears_other_projects_on_same_window() {
+        let state = empty_state();
+        state.record_project_window(7, "main".to_string());
+        state.record_project_window(9, "main".to_string());
+
+        assert!(
+            state.find_project_window(7).is_none(),
+            "本窗切换到项目 9 后项目 7 不应仍占 main"
+        );
+        assert_eq!(
+            state.find_project_window(9).as_deref(),
+            Some("main"),
+            "新项目应登记到 main"
+        );
+    }
+
+    #[test]
     fn forget_window_clears_only_matching_entries() {
         let state = empty_state();
         state.record_project_window(7, "main".to_string());
@@ -124,7 +144,7 @@ mod tests {
     fn forget_project_window_is_scoped() {
         let state = empty_state();
         state.record_project_window(7, "main".to_string());
-        state.record_project_window(9, "main".to_string());
+        state.record_project_window(9, "project-9".to_string());
 
         state.forget_project_window(7);
 
@@ -134,8 +154,8 @@ mod tests {
         );
         assert_eq!(
             state.find_project_window(9).as_deref(),
-            Some("main"),
-            "同窗口的其它项目归属应保留"
+            Some("project-9"),
+            "其它项目归属应保留"
         );
     }
 }

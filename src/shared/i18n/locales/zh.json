@@ -838,6 +838,9 @@
     "PROJECT_NOT_FOUND": {
       "default": "Project 不存在。"
     },
+    "PROJECT_VALIDATION_FAILED": {
+      "projectWindowOpen": "该项目已在其他窗口打开，无法从列表移除或删除。"
+    },
     "PROJECT_PERSISTENCE_FAILED": {
       "loadFailed": "Project 读取失败。",
       "saveFailed": "Project 保存失败。",

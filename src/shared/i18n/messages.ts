@@ -170,19 +170,10 @@ export interface I18nMessages {
     createProject: string;
     creatingProject: string;
     localProjects: string;
-    moreActions: string;
     newProject: string;
-    openInCurrentWindow: string;
-    openInNewWindow: string;
     openProject: (projectName: string) => string;
     pathUnavailable: string;
     projects: string;
-    deleteProject: string;
-    deleteProjectConfirmMessage: string;
-    deleteProjectConfirmTitle: string;
-    removeFromList: string;
-    removeFromListConfirmMessage: string;
-    removeFromListConfirmTitle: string;
     searchProjects: string;
     searchProjectsPlaceholder: string;
     selectGitRepository: string;
@@ -193,16 +184,7 @@ export interface I18nMessages {
     currentProject: string;
     currentProjectWithName: (projectName: string) => string;
     menu: string;
-    moreActions: string;
-    openInCurrentWindow: string;
-    openInNewWindow: string;
     pathUnavailable: string;
-    deleteProject: string;
-    deleteProjectConfirmMessage: string;
-    deleteProjectConfirmTitle: string;
-    removeFromList: string;
-    removeFromListConfirmMessage: string;
-    removeFromListConfirmTitle: string;
     status: string;
   };
   createProject: {

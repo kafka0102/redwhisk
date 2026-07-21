@@ -66,6 +66,7 @@ export function GeneralSettingsPanel({
       worktreeSetupCommand: updatedProject.worktreeSetupCommand ?? "",
       recentOpenedAt: `Opened ${new Date(updatedProject.lastOpenedAt).toLocaleString()}`,
       status: "available",
+      hasOpenWindow: true,
     });
   }
 

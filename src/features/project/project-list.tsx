@@ -15,6 +15,7 @@ interface ProjectListProps {
   projects: ProjectSummary[];
   onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
+  onOpenInCurrentWindow: (project: ProjectSummary) => Promise<void> | void;
   onProjectsRefresh: () => Promise<void>;
 }
 
@@ -27,6 +28,7 @@ function getProjectInitial(name: string) {
 export function ProjectList({
   isCreatingProject,
   onCreateProject,
+  onOpenInCurrentWindow,
   onProjectOpen,
   onProjectsRefresh,
   projects,
@@ -120,7 +122,7 @@ export function ProjectList({
                   projectId={project.id}
                   onRemoved={onProjectsRefresh}
                   onOpenInCurrentWindow={async () => {
-                    onProjectOpen({ ...project, hasOpenWindow: false });
+                    await onOpenInCurrentWindow(project);
                   }}
                   onOpenInNewWindow={async () => {
                     await openProjectWindow({ projectId: project.id });

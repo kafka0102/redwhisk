@@ -838,6 +838,9 @@
     "PROJECT_NOT_FOUND": {
       "default": "Project not found."
     },
+    "PROJECT_VALIDATION_FAILED": {
+      "projectWindowOpen": "This project is open in another window and cannot be removed or deleted."
+    },
     "PROJECT_PERSISTENCE_FAILED": {
       "loadFailed": "Failed to load Project.",
       "saveFailed": "Failed to save Project.",

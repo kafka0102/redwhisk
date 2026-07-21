@@ -30,10 +30,10 @@ export function ProjectRemoveMenu({
   onRemoved,
   projectId,
 }: ProjectRemoveMenuProps) {
-  const { messages, t } = useI18n();
-  const copy = messages[messagesSource];
+  const { t } = useI18n();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [isBusy, setIsBusy] = useState(false);
+  const ns = messagesSource;
 
   async function runAction(action: () => Promise<void>) {
     setIsBusy(true);
@@ -48,10 +48,10 @@ export function ProjectRemoveMenu({
 
   async function handleRemove() {
     const confirmed = await confirm({
-      title: copy.removeFromListConfirmTitle,
-      message: copy.removeFromListConfirmMessage,
-      confirmLabel: copy.removeFromList,
-      cancelLabel: messages.confirmDialog.cancel,
+      title: t(`${ns}.removeFromListConfirmTitle`),
+      message: t(`${ns}.removeFromListConfirmMessage`),
+      confirmLabel: t(`${ns}.removeFromList`),
+      cancelLabel: t("confirmDialog.cancel"),
     });
     if (!confirmed) {
       return;
@@ -65,10 +65,10 @@ export function ProjectRemoveMenu({
 
   async function handleDelete() {
     const confirmed = await confirm({
-      title: copy.deleteProjectConfirmTitle,
-      message: copy.deleteProjectConfirmMessage,
-      confirmLabel: copy.deleteProject,
-      cancelLabel: messages.confirmDialog.cancel,
+      title: t(`${ns}.deleteProjectConfirmTitle`),
+      message: t(`${ns}.deleteProjectConfirmMessage`),
+      confirmLabel: t(`${ns}.deleteProject`),
+      cancelLabel: t("confirmDialog.cancel"),
       confirmVariant: "destructive",
     });
     if (!confirmed) {
@@ -85,8 +85,8 @@ export function ProjectRemoveMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
+          aria-label={t(`${ns}.moreActions`)}
           className="project-item-more"
-          aria-label={copy.moreActions}
           disabled={isBusy}
           onClick={(event) => {
             event.preventDefault();
@@ -100,6 +100,7 @@ export function ProjectRemoveMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
+          className="project-item-more__menu"
           onClick={(event) => {
             event.stopPropagation();
           }}
@@ -112,7 +113,7 @@ export function ProjectRemoveMenu({
               void runAction(onOpenInCurrentWindow);
             }}
           >
-            {copy.openInCurrentWindow}
+            {t(`${ns}.openInCurrentWindow`)}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isBusy}
@@ -122,7 +123,7 @@ export function ProjectRemoveMenu({
               void runAction(onOpenInNewWindow);
             }}
           >
-            {copy.openInNewWindow}
+            {t(`${ns}.openInNewWindow`)}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -133,7 +134,7 @@ export function ProjectRemoveMenu({
               void handleRemove();
             }}
           >
-            {copy.removeFromList}
+            {t(`${ns}.removeFromList`)}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isBusy}
@@ -144,7 +145,7 @@ export function ProjectRemoveMenu({
               void handleDelete();
             }}
           >
-            {copy.deleteProject}
+            {t(`${ns}.deleteProject`)}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

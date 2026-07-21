@@ -169,6 +169,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -215,6 +216,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -248,6 +250,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -282,6 +285,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -315,6 +319,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
         openAgentSessionRequest={{
@@ -351,6 +356,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -379,6 +385,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,
@@ -422,6 +429,7 @@ describe("AppShell terminals activity persistence", () => {
           worktreeSetupCommand: "",
           recentOpenedAt: "2026-06-15T00:00:00.000Z",
           status: "available",
+          hasOpenWindow: false,
         }}
         projects={[]}
       />,

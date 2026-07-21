@@ -53,13 +53,15 @@ pub async fn remove_project_from_list(
     state: State<'_, AppState>,
     input: RemoveProjectFromListInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_data_dir(&app, &state)?;
     let project_id = input.project_id;
+    reject_if_project_window_open(&app, &state, project_id)?;
+    let data_dir = prepare_project_data_dir(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
         ProjectService::remove_project_from_list_in_data_dir(data_dir, project_id)
     })
     .await
     .map_err(project_join_error)??;
+    state.forget_project_window(project_id);
     Ok(())
 }
 
@@ -69,13 +71,15 @@ pub async fn delete_project(
     state: State<'_, AppState>,
     input: DeleteProjectInput,
 ) -> Result<(), CommandError> {
-    let data_dir = prepare_project_data_dir(&app, &state)?;
     let project_id = input.project_id;
+    reject_if_project_window_open(&app, &state, project_id)?;
+    let data_dir = prepare_project_data_dir(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
         ProjectService::delete_project_in_data_dir(data_dir, project_id)
     })
     .await
     .map_err(project_join_error)??;
+    state.forget_project_window(project_id);
     Ok(())
 }
 
@@ -203,6 +207,24 @@ pub async fn open_project_window(
     })
 }
 
+fn reject_if_project_window_open(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+    project_id: i64,
+) -> Result<(), CommandError> {
+    if project_has_live_window(app, state, project_id) {
+        return Err(CommandError::new(
+            CommandErrorCode::ProjectValidationFailed,
+            "Project is open in another window and cannot be removed or deleted.",
+        )
+        .with_reason("projectWindowOpen")
+        .with_detail(
+            ErrorDetail::new("ProjectWindow")
+                .with_value("projectId", project_id.to_string()),
+        ));
+    }
+    Ok(())
+}
 
 fn project_has_live_window(
     app: &tauri::AppHandle,

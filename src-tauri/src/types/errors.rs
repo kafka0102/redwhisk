@@ -12,6 +12,7 @@ pub enum CommandErrorCode {
     ProjectRepoPathInvalid,
     ProjectRepoPathUnavailable,
     ProjectNotFound,
+    ProjectValidationFailed,
     IssuePersistenceFailed,
     IssueNotFound,
     IssueValidationFailed,

@@ -48,7 +48,7 @@ export interface ProjectSummary {
   worktreeSetupCommand: string;
   recentOpenedAt: string;
   status: "available" | "missing";
-  hasOpenWindow?: boolean;
+  hasOpenWindow: boolean;
   codeWorkspaces?: CodeWorkspaceRoot[];
 }
 
@@ -384,6 +384,7 @@ function ProjectApp() {
           projects={projects}
           onCreateProject={handleCreateProject}
           onProjectOpen={handleProjectOpen}
+          onOpenInCurrentWindow={handleOpenInCurrentWindow}
           onProjectsRefresh={refreshProjects}
         />
         {createProjectDraft ? (

@@ -8,6 +8,7 @@ interface ProjectHomeProps {
   projects: ProjectSummary[];
   onCreateProject: () => void;
   onProjectOpen: (project: ProjectSummary) => void;
+  onOpenInCurrentWindow: (project: ProjectSummary) => Promise<void> | void;
   onProjectsRefresh: () => Promise<void>;
 }
 
@@ -16,6 +17,7 @@ export function ProjectHome({
   onCreateProject,
   onProjectsRefresh,
   projects,
+  onOpenInCurrentWindow,
   onProjectOpen,
 }: ProjectHomeProps) {
   async function handleWindowHeaderDoubleClick() {
@@ -43,6 +45,7 @@ export function ProjectHome({
         projects={projects}
         onCreateProject={onCreateProject}
         onProjectOpen={onProjectOpen}
+        onOpenInCurrentWindow={onOpenInCurrentWindow}
         onProjectsRefresh={onProjectsRefresh}
       />
     </main>
