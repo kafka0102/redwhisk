@@ -18,6 +18,7 @@ mod validation;
 mod worktree_setup;
 mod content_search;
 mod workspace;
+mod lifecycle;
 
 pub use service::AgentSessionService;
 pub(crate) use service::agent_session_error_to_command_error;
