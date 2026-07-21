@@ -12,6 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use crate::agent::terminal_log_tail::{safe_terminal_log_tail_start, take_terminal_log_tail};
 use serde::{Deserialize, Serialize};
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
@@ -759,12 +760,15 @@ pub(crate) fn trim_log_file(path: &Path, max_bytes: usize) -> Result<(), String>
         return Ok(());
     }
 
-    let start = content.len().saturating_sub(max_bytes);
-    let mut cut = start;
-    if let Some(relative) = content[start..].iter().position(|byte| *byte == b'\n') {
-        cut = start.saturating_add(relative).saturating_add(1);
-        if cut >= content.len() {
-            cut = start;
+    // TUI 日志几乎全是 CSI/OSC：优先按转义/UTF-8 边界裁，再尽量贴到最近换行，
+    // 避免半截 ESC 序列残留在文件头。
+    let mut cut = safe_terminal_log_tail_start(&content, max_bytes);
+    if let Some(relative) = content[cut..].iter().position(|byte| *byte == b'\n') {
+        let newline_cut = cut.saturating_add(relative).saturating_add(1);
+        if newline_cut < content.len()
+            && content.len() - newline_cut >= max_bytes.saturating_div(2)
+        {
+            cut = newline_cut;
         }
     }
 
@@ -787,12 +791,12 @@ impl PtyRestoreBuffer {
             return;
         }
 
-        // 单 chunk 超过上限时只保留尾部，并标记起点历史已丢失。
+        // 单 chunk 超过上限时只保留安全尾部，并标记起点历史已丢失。
         if data.len() > RESTORE_BUFFER_MAX_BYTES {
-            let start = data.len() - RESTORE_BUFFER_MAX_BYTES;
+            let tail = take_terminal_log_tail(data, RESTORE_BUFFER_MAX_BYTES);
             self.chunks.clear();
-            self.chunks.push(data[start..].to_vec());
-            self.total_bytes = RESTORE_BUFFER_MAX_BYTES;
+            self.chunks.push(tail.to_vec());
+            self.total_bytes = tail.len();
             self.is_complete = false;
             return;
         }
@@ -838,12 +842,8 @@ pub fn read_terminal_snapshot(path: &Path, max_bytes: usize) -> Result<String, S
     }
 
     let content = std::fs::read(path).map_err(|error| error.to_string())?;
-    if content.len() <= max_bytes {
-        return Ok(String::from_utf8_lossy(&content).to_string());
-    }
-
-    let start = content.len().saturating_sub(max_bytes);
-    Ok(String::from_utf8_lossy(&content[start..]).to_string())
+    let tail = take_terminal_log_tail(&content, max_bytes);
+    Ok(String::from_utf8_lossy(tail).to_string())
 }
 
 /// 读取指定 PID 的当前工作目录。best-effort：失败返回 `None`。

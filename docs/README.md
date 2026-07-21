@@ -24,6 +24,7 @@
 - [项目代码地图](./architecture-design/project-map.md)
 - [Tauri Command 与 Event 契约](./architecture-design/tauri-contract.md)
 - [Agent Provider 协议](./architecture-design/agent-provider-protocol.md)
+- [TUI / 终端渲染架构](./architecture-design/tui-terminal-rendering.md)
 - [Worktree 与 Git 生命周期](./architecture-design/worktree-git-lifecycle.md)
 - [RedWhisk 设计系统指南](./architecture-design/design-guide.md)
 - [Settings 页面布局规范](./architecture-design/settings-page-layout.md)

@@ -76,7 +76,9 @@ function snapshotBuffer(terminal: Terminal): {
 function bufferContains(terminal: Terminal, needle: string): boolean {
   const parts: string[] = [];
   for (let y = 0; y < terminal.buffer.active.length; y += 1) {
-    parts.push(terminal.buffer.active.getLine(y)?.translateToString(true) ?? "");
+    parts.push(
+      terminal.buffer.active.getLine(y)?.translateToString(true) ?? "",
+    );
   }
   return parts.join("\n").includes(needle);
 }
@@ -242,7 +244,6 @@ describe("terminal scrollback without alternate screen", () => {
     expect(snap.baseY).toBeGreaterThanOrEqual(before);
   });
 
-
   it("RED: short shell prompt is destroyed by full-screen in-place CUP redraw", async () => {
     const mounted = mountTerminal();
     terminal = mounted.terminal;
@@ -283,9 +284,7 @@ describe("terminal scrollback without alternate screen", () => {
     await writeSync(terminal, "prompt % codex\r\n");
     await writeSync(
       terminal,
-      inPlaceRedraw(
-        Array.from({ length: 24 }, (_, i) => `UI-${i}`),
-      ),
+      inPlaceRedraw(Array.from({ length: 24 }, (_, i) => `UI-${i}`)),
     );
     expect(bufferContains(terminal, "prompt %")).toBe(false);
     expect(snapshotBuffer(terminal).baseY).toBe(0);
@@ -304,13 +303,10 @@ describe("terminal scrollback without alternate screen", () => {
     await writeSync(terminal, fillLines(80, "SHELL"));
     await writeSync(
       terminal,
-      inPlaceRedraw(
-        Array.from({ length: 24 }, (_, i) => `UI-${i}`),
-      ),
+      inPlaceRedraw(Array.from({ length: 24 }, (_, i) => `UI-${i}`)),
     );
     expect(snapshotBuffer(terminal).type).toBe("normal");
     expect(snapshotBuffer(terminal).canScroll).toBe(true);
     expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
   });
-
 });

@@ -2,7 +2,9 @@ import type { TerminalOutputChunk, TerminalTransport } from "./terminal-types";
 
 export type TerminalLivePhase = "idle" | "catchingUp" | "live";
 
-const TERMINAL_HISTORY_MAX_BYTES = 1024 * 1024;
+// Codex/Claude TUI 一帧就可能数十 KB；过小会导致 catch-up 只剩半屏，
+// 且旧实现若在 CSI 中间截断会短暂乱码。后端现已安全截断，这里保留更大 tail。
+const TERMINAL_HISTORY_MAX_BYTES = 2 * 1024 * 1024;
 const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
 
 export interface WriteTerminalHistoryMeta {
