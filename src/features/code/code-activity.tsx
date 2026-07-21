@@ -24,7 +24,12 @@ import {
   type CodeContentSearchState,
   type CodeSidebarMode,
 } from "./code-search-state";
-import { type CodeFileTab, codeWorkspaceCache } from "./code-workspace-cache";
+import {
+  type CodeFileTab,
+  clearCodeEditorViewStates,
+  codeWorkspaceCache,
+  deleteCodeEditorViewState,
+} from "./code-workspace-cache";
 import { resolveFileLoadErrorMessage } from "./code-workspace-helpers";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
@@ -73,8 +78,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setActivePath(null);
     setOpenFolders({});
     setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
+    clearCodeEditorViewStates(projectId);
     setRevealRequest(null);
-  }, []);
+  }, [projectId]);
 
   const shell = useWorkspaceShell({
     projectId,
@@ -211,9 +217,13 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                       (left, right) => left.lastActiveAt - right.lastActiveAt,
                     )[0]?.filePath,
               );
-        currentTabs
-          .filter((tab) => !retained.includes(tab))
-          .forEach((tab) => openFilePathsRef.current.delete(tab.filePath));
+        const evicted = currentTabs.filter((tab) => !retained.includes(tab));
+        if (evicted.length > 0) {
+          for (const tab of evicted) {
+            openFilePathsRef.current.delete(tab.filePath);
+            deleteCodeEditorViewState(projectId, tab.filePath);
+          }
+        }
         return [...retained, nextTab];
       });
       if (isAlreadyOpen) return;
@@ -273,6 +283,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
 
   const closeTab = (filePath: string) => {
     openFilePathsRef.current.delete(filePath);
+    deleteCodeEditorViewState(projectId, filePath);
     setTabs((currentTabs) => {
       const remaining = currentTabs.filter((tab) => tab.filePath !== filePath);
       if (activePathRef.current === filePath) {
@@ -374,6 +385,8 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 onOpenFile={openFile}
               />
               <CodeContent
+                key={activeTab.filePath}
+                projectId={projectId}
                 tab={activeTab}
                 contentFontSize={contentFontSize}
                 messages={messages}

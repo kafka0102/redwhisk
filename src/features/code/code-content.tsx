@@ -1,8 +1,12 @@
 import { Editor, type OnMount } from "@monaco-editor/react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import type { CodeFileTab } from "./code-workspace-cache";
+import {
+  getCodeEditorViewState,
+  setCodeEditorViewState,
+  type CodeFileTab,
+} from "./code-workspace-cache";
 
 export interface CodeRevealRequest {
   filePath: string;
@@ -18,14 +22,17 @@ export interface CodeRevealRequest {
  * - 二进制或过大：占位提示，不进入 Monaco。
  * - 正常：Monaco 只读 Editor，字号跟随 `contentFontSize`，主题跟随全局 `theme`。
  * - 可选 revealRequest：打开匹配行时滚动并定位光标。
+ * - 按 projectId + filePath 缓存 Monaco view state，跨 Activity 切换后恢复阅读位置。
  */
 export function CodeContent({
+  projectId,
   tab,
   contentFontSize,
   messages,
   theme,
   revealRequest = null,
 }: {
+  projectId: number;
   tab: CodeFileTab;
   contentFontSize: number;
   messages: ReturnType<typeof useI18n>["messages"];
@@ -33,14 +40,50 @@ export function CodeContent({
   revealRequest?: CodeRevealRequest | null;
 }) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const appliedRevealTokenRef = useRef<number | null>(null);
+  const projectIdRef = useRef(projectId);
+  const filePathRef = useRef(tab.filePath);
 
-  const applyReveal = (lineNumber: number) => {
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
+
+  useEffect(() => {
+    filePathRef.current = tab.filePath;
+  }, [tab.filePath]);
+
+  const persistViewState = useCallback(() => {
     const editor = editorRef.current;
-    if (!editor || lineNumber < 1) return;
-    editor.revealLineInCenter(lineNumber);
-    editor.setPosition({ lineNumber, column: 1 });
-    editor.focus();
-  };
+    if (!editor) return;
+    setCodeEditorViewState(
+      projectIdRef.current,
+      filePathRef.current,
+      editor.saveViewState(),
+    );
+  }, []);
+
+  const applyReveal = useCallback(
+    (lineNumber: number) => {
+      const editor = editorRef.current;
+      if (!editor || lineNumber < 1) return;
+      editor.revealLineInCenter(lineNumber);
+      editor.setPosition({ lineNumber, column: 1 });
+      editor.focus();
+      persistViewState();
+    },
+    [persistViewState],
+  );
+
+  const restoreSavedViewState = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const savedViewState = getCodeEditorViewState(
+      projectIdRef.current,
+      filePathRef.current,
+    );
+    if (!savedViewState) return;
+    editor.restoreViewState(savedViewState);
+  }, []);
 
   useEffect(() => {
     if (!revealRequest) return;
@@ -53,8 +96,38 @@ export function CodeContent({
     ) {
       return;
     }
+    if (appliedRevealTokenRef.current === revealRequest.token) return;
+    appliedRevealTokenRef.current = revealRequest.token;
     applyReveal(revealRequest.lineNumber);
-  }, [revealRequest, tab.content, tab.filePath, tab.isLoading]);
+  }, [applyReveal, revealRequest, tab.content, tab.filePath, tab.isLoading]);
+
+  // 复检文件内容后 Monaco 可能重设 value 并回顶，需再次恢复阅读位置。
+  useEffect(() => {
+    if (
+      tab.isLoading ||
+      !tab.content ||
+      tab.content.isBinary ||
+      tab.content.isTooLarge
+    ) {
+      return;
+    }
+    if (revealRequest && revealRequest.filePath === tab.filePath) {
+      return;
+    }
+    restoreSavedViewState();
+  }, [
+    restoreSavedViewState,
+    revealRequest,
+    tab.content,
+    tab.filePath,
+    tab.isLoading,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      persistViewState();
+    };
+  }, [persistViewState, tab.filePath]);
 
   if (tab.isLoading) {
     return (
@@ -90,8 +163,18 @@ export function CodeContent({
       revealRequest.filePath === tab.filePath &&
       revealRequest.lineNumber >= 1
     ) {
+      appliedRevealTokenRef.current = revealRequest.token;
       applyReveal(revealRequest.lineNumber);
+    } else {
+      restoreSavedViewState();
     }
+
+    const scrollDisposable = editor.onDidScrollChange(() => {
+      persistViewState();
+    });
+    editor.onDidDispose(() => {
+      scrollDisposable.dispose();
+    });
   };
 
   return (

@@ -16,10 +16,39 @@ import {
 } from "./code-workspace-cache";
 import { CodeActivity } from "./code-activity";
 
-// 捕获 Monaco Editor 实际接收到的 theme prop，用于断言代码浏览器跟随应用明暗主题。
-const { editorThemeProp } = vi.hoisted(() => ({
-  editorThemeProp: { current: undefined as string | undefined },
-}));
+// 捕获 Monaco Editor 实际接收到的 theme prop，并模拟 view state 读写。
+const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
+  const viewState = { scrollTop: 420 };
+  return {
+    editorThemeProp: { current: undefined as string | undefined },
+    monacoEditorApi: {
+      lastRestoredViewState: null as unknown,
+      saveViewState: vi.fn(() => viewState),
+      restoreViewState: vi.fn((_state: unknown) => {
+        monacoEditorApi.lastRestoredViewState = _state;
+      }),
+      revealLineInCenter: vi.fn((_line: number) => undefined),
+      setPosition: vi.fn(
+        (_pos: { lineNumber: number; column: number }) => undefined,
+      ),
+      focus: vi.fn(() => undefined),
+      onDidScrollChange: vi.fn((_listener: () => void) => ({
+        dispose: vi.fn(),
+      })),
+      onDidDispose: vi.fn((_listener: () => void) => undefined),
+      reset() {
+        this.lastRestoredViewState = null;
+        this.saveViewState.mockClear();
+        this.restoreViewState.mockClear();
+        this.revealLineInCenter.mockClear();
+        this.setPosition.mockClear();
+        this.focus.mockClear();
+        this.onDidScrollChange.mockClear();
+        this.onDidDispose.mockClear();
+      },
+    },
+  };
+});
 
 vi.mock("@monaco-editor/react", () => ({
   DiffEditor: () => null,
@@ -32,13 +61,23 @@ vi.mock("@monaco-editor/react", () => ({
       revealLineInCenter: (line: number) => void;
       setPosition: (pos: { lineNumber: number; column: number }) => void;
       focus: () => void;
+      saveViewState: () => unknown;
+      restoreViewState: (state: unknown) => void;
+      onDidScrollChange: (listener: () => void) => { dispose: () => void };
+      onDidDispose: (listener: () => void) => void;
     }) => void;
   }) => {
     editorThemeProp.current = theme;
     onMount?.({
-      revealLineInCenter: () => undefined,
-      setPosition: () => undefined,
-      focus: () => undefined,
+      revealLineInCenter: (...args) =>
+        monacoEditorApi.revealLineInCenter(...args),
+      setPosition: (...args) => monacoEditorApi.setPosition(...args),
+      focus: (...args) => monacoEditorApi.focus(...args),
+      saveViewState: () => monacoEditorApi.saveViewState(),
+      restoreViewState: (state) => monacoEditorApi.restoreViewState(state),
+      onDidScrollChange: (listener) =>
+        monacoEditorApi.onDidScrollChange(listener),
+      onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
     });
     return null;
   },
@@ -113,6 +152,7 @@ describe("CodeActivity", () => {
   beforeEach(() => {
     resetCodeWorkspaceCacheForTests();
     editorThemeProp.current = undefined;
+    monacoEditorApi.reset();
     window.localStorage.clear();
     vi.mocked(listCodeWorkspaceRoots).mockReset();
     vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots });
@@ -233,6 +273,45 @@ describe("CodeActivity", () => {
         projectId: 1,
         workspacePath: "/tmp/redwhisk",
         filePath: "src/file.ts",
+      });
+    });
+  });
+
+  it("restores the Monaco editor scroll position after remounting", async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+
+    const scrollListener = monacoEditorApi.onDidScrollChange.mock
+      .calls[0]?.[0] as (() => void) | undefined;
+    expect(scrollListener).toEqual(expect.any(Function));
+    scrollListener?.();
+
+    view.unmount();
+    monacoEditorApi.reset();
+    vi.mocked(readProjectWorktreeFile).mockClear();
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
       });
     });
   });
