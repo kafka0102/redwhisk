@@ -17,7 +17,6 @@
 import { useCallback, memo, useMemo } from "react";
 
 import { AgentComposer } from "../composer/agent-composer";
-import { getAgentCapabilities } from "../agent-capabilities";
 import { AgentMessageStreamView } from "../message-stream/agent-message-stream";
 import { useAgentMessageStream } from "../message-stream/use-agent-message-stream";
 import { PermissionCard } from "../message-stream/permission-card";
@@ -72,7 +71,6 @@ export const AgentSessionView = memo(function AgentSessionView({
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
-  const capabilities = getAgentCapabilities(agentType);
   const canUseExternalTurnRunning =
     sessionStatus === "running" && issueStatus !== "completed";
 
@@ -129,7 +127,6 @@ export const AgentSessionView = memo(function AgentSessionView({
           key={sessionId}
           projectId={projectId}
           sessionId={sessionId}
-          capabilities={capabilities}
           turnStatus={effectiveTurnStatus}
           usage={state.usage}
           currentModelId={state.model}

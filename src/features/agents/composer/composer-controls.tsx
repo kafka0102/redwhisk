@@ -9,13 +9,13 @@ import {
   SelectTrigger,
 } from "@/components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
-import type { AgentCapabilities } from "../agent-capabilities";
+import type { AgentUiCapabilities } from "../agent-stream-types";
 import { ComposerContextMeter } from "./composer-context-meter";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
 import type { ComposerEffort } from "./composer-types";
 
 interface ComposerControlsProps {
-  capabilities: AgentCapabilities;
+  capabilities: AgentUiCapabilities;
   models: AgentModel[];
   selectedModelId: string | null;
   isLoadingModels: boolean;
@@ -219,7 +219,7 @@ export function ComposerControls({
   );
 }
 
-function fallbackModelLabel(capabilities: AgentCapabilities): string | null {
+function fallbackModelLabel(capabilities: AgentUiCapabilities): string | null {
   return capabilities.modelTypeLabel;
 }
 

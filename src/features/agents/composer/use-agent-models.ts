@@ -10,15 +10,27 @@
 // 当 `currentModelId` 为 null（尚未收到事件）时，从模型列表派生默认值
 // （isDefault 优先，否则首个）作为回退，纯渲染期计算无 setState。
 //
+// UI 能力（canShowModel / Think / modes 等）由 list_agent_models 一并返回，
+// 前端不再维护 agent-capabilities 静态双表。
+//
 // 沿用项目既有范式：`isDisposed` 双标志，await 期间若已卸载则丢弃结果
 // （参考 `temporary-session-dialog.tsx` 的 loadProfiles）。
 
 import { useCallback, useEffect, useState } from "react";
 
 import { listAgentModels, setAgentModel } from "../agent-session-commands";
-import type { AgentModel } from "../agent-stream-types";
+import type { AgentModel, AgentUiCapabilities } from "../agent-stream-types";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
+
+/** 加载失败或尚未返回时的安全占位，避免 composer 控件崩溃。 */
+export const SAFE_DEFAULT_CAPABILITIES: AgentUiCapabilities = {
+  modelTypeLabel: "",
+  canShowModel: false,
+  supportsModelSwitching: false,
+  supportsReasoningEffort: false,
+  supportsModes: false,
+};
 
 interface UseAgentModelsArgs {
   projectId: number;
@@ -34,6 +46,8 @@ export interface UseAgentModelsResult {
   isLoading: boolean;
   error: string | null;
   isReadOnly: boolean;
+  /** Provider UI 能力（来自 list_agent_models）。 */
+  capabilities: AgentUiCapabilities;
   /** 切换模型：调 setAgentModel；后端经事件回传后 Select 自动跟随。 */
   selectModel: (modelId: string) => Promise<void>;
 }
@@ -59,8 +73,11 @@ export function useAgentModels({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [capabilities, setCapabilities] = useState<AgentUiCapabilities>(
+    SAFE_DEFAULT_CAPABILITIES,
+  );
 
-  // 拉取模型列表。sessionId 切换时重新加载。
+  // 拉取模型列表与 UI 能力。sessionId 切换时重新加载。
   useEffect(() => {
     let isDisposed = false;
 
@@ -70,28 +87,34 @@ export function useAgentModels({
         setError(null);
         setIsLoading(false);
         setIsReadOnly(true);
+        setCapabilities(SAFE_DEFAULT_CAPABILITIES);
         return;
       }
       setIsLoading(true);
       setError(null);
       setIsReadOnly(false);
       try {
-        const { models: nextModels, isReadOnly: serverReadOnly } =
-          await listAgentModels({
-            projectId,
-            sessionId,
-          });
+        const {
+          models: nextModels,
+          isReadOnly: serverReadOnly,
+          capabilities: nextCapabilities,
+        } = await listAgentModels({
+          projectId,
+          sessionId,
+        });
         if (isDisposed) {
           return;
         }
         setModels(nextModels);
         // 后端按第三方接口判定只读（Claude 配置了 base_url/auth_token 时为 true）。
         setIsReadOnly(serverReadOnly === true);
+        setCapabilities(nextCapabilities ?? SAFE_DEFAULT_CAPABILITIES);
       } catch (loadError) {
         if (isDisposed) {
           return;
         }
         setError(getCommandErrorMessage(loadError, t));
+        setCapabilities(SAFE_DEFAULT_CAPABILITIES);
       } finally {
         if (!isDisposed) {
           setIsLoading(false);
@@ -129,6 +152,7 @@ export function useAgentModels({
     isLoading,
     error,
     isReadOnly,
+    capabilities,
     selectModel,
   };
 }

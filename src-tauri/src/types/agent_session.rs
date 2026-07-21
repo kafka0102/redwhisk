@@ -378,6 +378,19 @@ pub struct ListAgentModelsInput {
     pub session_id: i64,
 }
 
+/// Agent UI 能力投影：由 provider descriptor 提供，经 list_agent_models 下发。
+///
+/// 前端不得再维护静态双表；composer 控件显隐以本结构为准。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentUiCapabilities {
+    pub model_type_label: String,
+    pub can_show_model: bool,
+    pub supports_model_switching: bool,
+    pub supports_reasoning_effort: bool,
+    pub supports_modes: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListAgentModelsResult {
@@ -387,6 +400,8 @@ pub struct ListAgentModelsResult {
     /// Codex / Claude 官方模型为 false；Claude 第三方接口为 true。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_read_only: Option<bool>,
+    /// Provider UI 能力（模型展示 / Think / modes 等）。
+    pub capabilities: AgentUiCapabilities,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

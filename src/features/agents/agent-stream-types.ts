@@ -174,10 +174,21 @@ export interface AgentModel {
 // Save*Result，与 `agent-session-commands.ts` 配套）
 // ---------------------------------------------------------------------------
 
+/** Agent UI 能力投影，由后端 list_agent_models 下发（与 Rust AgentUiCapabilities 对齐）。 */
+export interface AgentUiCapabilities {
+  modelTypeLabel: string;
+  canShowModel: boolean;
+  supportsModelSwitching: boolean;
+  supportsReasoningEffort: boolean;
+  supportsModes: boolean;
+}
+
 export interface ListAgentModelsResult {
   models: AgentModel[];
   /** 模型列表是否只读（第三方接口不允许切换）。 */
   isReadOnly?: boolean;
+  /** Provider UI 能力（模型展示 / Think / modes 等）。 */
+  capabilities: AgentUiCapabilities;
 }
 
 export interface ListAgentModesResult {

@@ -74,6 +74,9 @@ pub trait AgentProviderDescriptor: Send + Sync {
 
     /// 模型列表是否只读（第三方接口不允许切换）。
     fn is_model_list_read_only(&self, home_dir: &Path) -> bool;
+
+    /// UI 能力投影（模型展示 / Think / modes 等），由 list_agent_models 下发前端。
+    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities;
 }
 
 /// 按 agent 类型查表获取 descriptor。
@@ -152,6 +155,16 @@ impl AgentProviderDescriptor for CodexDescriptor {
     fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
         false
     }
+
+    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
+        crate::types::agent_session::AgentUiCapabilities {
+            model_type_label: "Codex".to_string(),
+            can_show_model: true,
+            supports_model_switching: true,
+            supports_reasoning_effort: true,
+            supports_modes: true,
+        }
+    }
 }
 
 // ===== Claude =====
@@ -202,6 +215,16 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         claude_config::read_settings_from_home(home_dir)
             .map(|snapshot| claude_config::is_third_party(&snapshot))
             .unwrap_or(false)
+    }
+
+    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
+        crate::types::agent_session::AgentUiCapabilities {
+            model_type_label: "Claude".to_string(),
+            can_show_model: true,
+            supports_model_switching: true,
+            supports_reasoning_effort: false,
+            supports_modes: false,
+        }
     }
 }
 
@@ -264,6 +287,22 @@ impl AgentProviderDescriptor for StubDescriptor {
 
     fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
         true
+    }
+
+    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
+        let model_type_label = match self.agent_type {
+            AgentType::OpenCode => "OpenCode",
+            AgentType::Grok => "Grok",
+            AgentType::Codex => "Codex",
+            AgentType::Claude => "Claude",
+        };
+        crate::types::agent_session::AgentUiCapabilities {
+            model_type_label: model_type_label.to_string(),
+            can_show_model: false,
+            supports_model_switching: false,
+            supports_reasoning_effort: false,
+            supports_modes: false,
+        }
     }
 }
 

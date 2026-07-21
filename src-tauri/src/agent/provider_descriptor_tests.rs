@@ -355,3 +355,38 @@
             "grok"
         );
     }
+
+
+    #[test]
+    fn codex_ui_capabilities_match_product_table() {
+        let caps = CodexDescriptor.ui_capabilities();
+        assert_eq!(caps.model_type_label, "Codex");
+        assert!(caps.can_show_model);
+        assert!(caps.supports_model_switching);
+        assert!(caps.supports_reasoning_effort);
+        assert!(caps.supports_modes);
+    }
+
+    #[test]
+    fn claude_ui_capabilities_disable_modes_and_effort() {
+        let caps = ClaudeDescriptor.ui_capabilities();
+        assert_eq!(caps.model_type_label, "Claude");
+        assert!(caps.can_show_model);
+        assert!(caps.supports_model_switching);
+        assert!(!caps.supports_reasoning_effort);
+        assert!(!caps.supports_modes);
+    }
+
+    #[test]
+    fn stub_ui_capabilities_disable_all_model_controls() {
+        let opencode = descriptor_for(&AgentType::OpenCode).ui_capabilities();
+        assert_eq!(opencode.model_type_label, "OpenCode");
+        assert!(!opencode.can_show_model);
+        assert!(!opencode.supports_model_switching);
+        assert!(!opencode.supports_reasoning_effort);
+        assert!(!opencode.supports_modes);
+
+        let grok = descriptor_for(&AgentType::Grok).ui_capabilities();
+        assert_eq!(grok.model_type_label, "Grok");
+        assert!(!grok.can_show_model);
+    }

@@ -20,7 +20,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentComposer } from "./agent-composer";
 import { clearComposerDraftCacheForTest } from "./use-agent-composer";
-import { getAgentCapabilities } from "../agent-capabilities";
 import type { AgentUsage } from "../agent-stream-types";
 
 const dialogMocks = vi.hoisted(() => ({
@@ -74,6 +73,13 @@ beforeEach(() => {
     }),
   );
   listAgentModelsMock.mockResolvedValue({
+    capabilities: {
+      modelTypeLabel: "Codex",
+      canShowModel: true,
+      supportsModelSwitching: true,
+      supportsReasoningEffort: true,
+      supportsModes: true,
+    },
     models: [
       {
         modelId: "gpt-5",
@@ -96,28 +102,21 @@ async function renderComposer(
     turnStatus?: "idle" | "running" | "failed" | "canceled";
     usage?: AgentUsage | null;
     currentModelId?: string | null;
-    capabilities?: ReturnType<typeof getAgentCapabilities>;
   } = {},
 ) {
   const result = render(
     <AgentComposer
       projectId={1}
       sessionId={10}
-      capabilities={overrides.capabilities ?? getAgentCapabilities("codex")}
       turnStatus={overrides.turnStatus ?? "idle"}
       usage={overrides.usage ?? null}
       currentModelId={overrides.currentModelId}
     />,
   );
-  if (
-    (overrides.capabilities ?? getAgentCapabilities("codex"))
-      .supportsModelSwitching
-  ) {
-    // 等待 listAgentModels effect 落地。
-    await waitFor(() => {
-      expect(listAgentModelsMock).toHaveBeenCalled();
-    });
-  }
+  // list_agent_models 始终拉取（capabilities 一并返回）。
+  await waitFor(() => {
+    expect(listAgentModelsMock).toHaveBeenCalled();
+  });
   await act(async () => {
     await Promise.resolve();
     await Promise.resolve();
@@ -424,6 +423,13 @@ describe("AgentComposer", () => {
 
   it("当前模型未知时优先显示列表里的默认模型", async () => {
     listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+      },
       models: [
         {
           modelId: "gpt-5.5",
@@ -450,9 +456,24 @@ describe("AgentComposer", () => {
   });
 
   it("Claude 也请求模型列表并展示模型选择器（Think 仍不展示）", async () => {
-    await renderComposer({
-      capabilities: getAgentCapabilities("claude"),
+    listAgentModelsMock.mockResolvedValue({
+      capabilities: {
+        modelTypeLabel: "Claude",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: false,
+        supportsModes: false,
+      },
+      models: [
+        {
+          modelId: "gpt-5",
+          displayName: "GPT-5",
+          isDefault: true,
+          supportedReasoningEfforts: [],
+        },
+      ],
     });
+    await renderComposer();
     // Claude 现在也会展示模型：canShowModel=true，会请求模型列表。
     expect(listAgentModelsMock).toHaveBeenCalledWith({
       projectId: 1,

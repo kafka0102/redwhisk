@@ -728,9 +728,11 @@ pub async fn list_agent_models(
         let models = descriptor.list_models(&home_dir);
         // 第三方接口（Claude 配置了 base_url / auth_token）不允许切换，前端展示只读标签。
         let is_read_only = descriptor.is_model_list_read_only(&home_dir);
+        let capabilities = descriptor.ui_capabilities();
         Ok(ListAgentModelsResult {
             models,
             is_read_only: Some(is_read_only),
+            capabilities,
         })
     })
     .await

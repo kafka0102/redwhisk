@@ -81,7 +81,16 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   setAgentThinkingMock.mockReset();
   setAgentThinkingMock.mockResolvedValue(undefined);
   listAgentModelsMock.mockReset();
-  listAgentModelsMock.mockResolvedValue({ models: [] });
+  listAgentModelsMock.mockResolvedValue({
+    capabilities: {
+      modelTypeLabel: "Codex",
+      canShowModel: true,
+      supportsModelSwitching: true,
+      supportsReasoningEffort: true,
+      supportsModes: true,
+    },
+    models: [],
+  });
   mocks.listeners.length = 0;
 }
 
@@ -150,6 +159,13 @@ describe("AgentSessionView", () => {
   it("收到配置中的 Think effort 后优先显示该值", async () => {
     setupTimeline([]);
     listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+      },
       models: [
         {
           modelId: "gpt-5.5",
@@ -185,6 +201,13 @@ describe("AgentSessionView", () => {
       effort: "high",
     });
     listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+      },
       models: [
         {
           modelId: "gpt-5.5",
@@ -433,6 +456,13 @@ describe("AgentSessionView", () => {
   it("未完成的关闭 session 切换模型时先自动恢复再设置模型", async () => {
     setupTimeline([]);
     listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+      },
       models: [
         {
           modelId: "gpt-5",
@@ -484,6 +514,13 @@ describe("AgentSessionView", () => {
   it("未完成的关闭 session 切换 Think 时先自动恢复再设置 effort", async () => {
     setupTimeline([]);
     listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+      },
       models: [
         {
           modelId: "gpt-5",

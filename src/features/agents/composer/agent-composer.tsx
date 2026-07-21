@@ -24,7 +24,6 @@ const TEXTAREA_MAX_HEIGHT_PX = 160;
 export function AgentComposer({
   projectId,
   sessionId,
-  capabilities,
   turnStatus,
   usage,
   currentModelId,
@@ -43,14 +42,15 @@ export function AgentComposer({
     isLoading: isLoadingModels,
     error: modelsError,
     isReadOnly: isModelReadOnly,
+    capabilities,
     selectModel,
   } = useAgentModels({
     projectId,
     sessionId,
     currentModelId,
-    // 只要该 agent 展示模型信息（Codex/Claude 均为 true），就拉取模型列表；
-    // 实际能否切换由后端返回的 isReadOnly（第三方接口=true）动态决定。
-    enabled: capabilities.canShowModel,
+    // 始终拉取：capabilities 与 models 同由 list_agent_models 返回；
+    // 实际控件显隐由 capabilities 决定，切换权由 isReadOnly 决定。
+    enabled: true,
     onBeforeSelectModel,
   });
 

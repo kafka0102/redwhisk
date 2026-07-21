@@ -4,7 +4,6 @@
 // （任务 6 的 AgentSessionView，从 useAgentMessageStream 提升）下传，避免与
 // message-stream 形成双订阅。本文件只定义类型，无运行时逻辑。
 
-import type { AgentCapabilities } from "../agent-capabilities";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import type { AgentUsage } from "../agent-stream-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
@@ -37,11 +36,6 @@ export type ComposerEffort = string | null;
 export interface AgentComposerProps {
   projectId: number;
   sessionId: number;
-  /**
-   * 当前 agent 的能力声明，决定模型等控件是否渲染。
-   * 父组件按 session 的 agentType 经 `getAgentCapabilities` 取得。
-   */
-  capabilities: AgentCapabilities;
   /** 来自 message-stream state，决定发送/取消按钮切换。 */
   turnStatus: TurnStatus;
   /** 来自 message-stream state.usage，驱动上下文窗口用量条。 */
