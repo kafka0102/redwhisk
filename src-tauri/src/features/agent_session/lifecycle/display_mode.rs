@@ -1,9 +1,6 @@
 //! Session 展示形式快照 → 运行时传输选择（ADR-0022）。
 //! 不回读 profile；调用方传入 session / launch 已持久化的 display_mode 字符串。
 
-// Task 1 仅落地纯 API 与单测；Task 2–4 接入 inject/observe/service 前允许未引用。
-#![allow(dead_code)]
-
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

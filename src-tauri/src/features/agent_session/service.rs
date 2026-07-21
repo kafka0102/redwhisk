@@ -1065,24 +1065,21 @@ impl<'connection> AgentSessionService<'connection> {
         let session = self.find_project_session(input.project_id, input.session_id)?;
         let submitted_prompt = normalize_submitted_prompt(&prompt);
 
-        // Structured session（codex/claude）只注册到 agent_registry，从不进入 pty_sessions；
-        // PTY session 只在 pty_sessions。两条通道分别处理，都不可用时报告 NotRunning，
-        // 让前端有机会触发 resume 后重试。
-        if pty_sessions.contains(input.session_id) {
-            pty_sessions
-                .write_input(input.session_id, &submitted_prompt)
-                .map_err(inactive_terminal_error)?;
-        } else if let Some(handle) = agent_registry.get(session.id) {
-            handle
-                .send_message(prompt.clone(), Vec::new())
-                .map_err(agent_session_error_to_command_error)?;
-        } else {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionNotRunning,
-                "当前 Session 未运行，请先恢复会话后再注入。",
-            ).with_reason("notRunningForInject")
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
-        }
+        // 按 Session 展示形式快照选择运行时通道（ADR-0022）；membership 只检查是否在跑。
+        let runtime_prompt = match super::lifecycle::runtime_transport_from_raw(&session.display_mode)?
+        {
+            super::lifecycle::RuntimeTransport::InteractiveTui => submitted_prompt,
+            super::lifecycle::RuntimeTransport::StructuredJson => prompt.clone(),
+        };
+        super::lifecycle::inject_prompt(
+            &session.display_mode,
+            session.id,
+            &runtime_prompt,
+            super::lifecycle::InjectRuntimePorts {
+                pty: pty_sessions,
+                registry: agent_registry,
+            },
+        )?;
         self.clear_attention_after_successful_input(input.session_id)?;
 
         let codex_session_id = session.codex_session_id.clone();
@@ -2807,7 +2804,7 @@ pub(super) fn worktree_create_error(error: impl std::fmt::Display) -> CommandErr
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-pub(super) fn inactive_terminal_error(error: String) -> CommandError {
+pub(crate) fn inactive_terminal_error(error: String) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "当前 Session 没有活跃终端。",
