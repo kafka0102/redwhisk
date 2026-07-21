@@ -324,65 +324,6 @@ pub(super) fn read_previewable_text_file(path: &str) -> Result<String, CommandEr
     fs::read_to_string(path).map_err(issue_io_error)
 }
 
-/// 从 Agent 助手答复正文提取首个 `<issue-comment>` 标签内容；无匹配返回 None。
-///
-/// 不做容错：标签出现在 fenced code block（``` / ~~~）内或被反斜杠转义时不识别，
-/// 缺闭合标签不识别，空内容不识别。依赖 `build_agent_commit_completion_prompt`
-/// 约束 Agent 把标签写在答复正文顶层。
-pub(crate) fn extract_issue_comment_from_assistant_text(text: &str) -> Option<String> {
-    const START_TAG: &str = "<issue-comment>";
-    const END_TAG: &str = "</issue-comment>";
-
-    let bytes = text.as_bytes();
-    let mut cursor = 0usize;
-
-    loop {
-        let rel = text[cursor..].find(START_TAG)?;
-        let start_idx = cursor + rel;
-
-        // 跳过位于 fenced code block 内的标签：扫描标签前缀统计 fence 切换次数。
-        if is_inside_code_fence(&text[..start_idx]) {
-            cursor = start_idx + START_TAG.len();
-            continue;
-        }
-        // 跳过被反斜杠转义的标签（`\<issue-comment>`）。
-        if start_idx > 0 && bytes[start_idx - 1] == b'\\' {
-            cursor = start_idx + START_TAG.len();
-            continue;
-        }
-
-        let after_start = start_idx + START_TAG.len();
-        let end_rel = text[after_start..].find(END_TAG)?;
-        let content = &text[after_start..after_start + end_rel];
-        let trimmed = content.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        return Some(trimmed.to_string());
-    }
-}
-
-/// 统计 `prefix` 文本中 fenced code block（``` / ~~~）的嵌套状态：返回 true 表示
-/// 当前位置（紧接 prefix 之后）落在未闭合的代码块内。
-fn is_inside_code_fence(prefix: &str) -> bool {
-    let mut in_fence = false;
-    let mut fence_marker: &str = "";
-    for line in prefix.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("```").or_else(|| trimmed.strip_prefix("~~~")) {
-            let _ = rest; // fence 后缀（语言标注或空）不影响切换
-            let marker = &trimmed[..3];
-            if !in_fence {
-                in_fence = true;
-                fence_marker = marker;
-            } else if marker == fence_marker {
-                in_fence = false;
-                fence_marker = "";
-            }
-        }
-    }
-    in_fence
-}
 
 pub(super) fn issue_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")

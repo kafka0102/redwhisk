@@ -45,7 +45,7 @@
 | `agent-session-list-changed`    | 会话列表变更（`projectId`、`sessionId`、`reason`）                              | `agent_event_broadcaster.rs`、`features/agent_session/commands.rs`（`emit_agent_session_list_changed`） | 会话增删/标题/attention 变更；前端 `agents/agent-session-events.ts`（常量）、`agents/use-agent-session-list.ts`（`agents-activity.tsx` 间接消费）、`changes/use-changes-auto-refresh.ts` 据此去抖刷新 |
 | `code-workspace-roots-updated`  | Code workspace 根目录变更                                                       | `features/agent_session/workspace_commands.rs`（`emit_code_workspace_roots_updated`） | worktree/code 根目录刷新；前端 `code/use-code-workspace-roots.ts` 重新拉取 |
 | `update-prompt-changed`         | `UpdateStatus`                                                                  | `features/app_update/commands.rs` | 应用更新提示状态变更；前端 `app-update/use-update-status.ts` 刷新徽章 |
-| `issue-timeline-changed`        | Issue 时间轴变更                                                                | `agent_event_broadcaster.rs`  | 评论自动发表后广播；前端 `issues/issue-detail/issue-timeline.tsx` 刷新当前 Issue 时间轴 |
+| `issue-timeline-changed`        | Issue 时间轴变更                                                                | `features/issue/completion_comment.rs`  | 评论自动发表后广播；前端 `issues/issue-detail/issue-timeline.tsx` 刷新当前 Issue 时间轴 |
 
 新增 event 必须有 kebab-case 名、定位实体 ID、Rust payload 类型、前端 listener 的释放逻辑和至少一条序列/重连行为测试。事件名以 `pub const`（或文件内 `const`）定义；生产者封装为 `emit_*` 函数；跨窗口广播用 `emit_to`；前端 listener 必须在卸载时释放并覆盖序列/重连测试。
 

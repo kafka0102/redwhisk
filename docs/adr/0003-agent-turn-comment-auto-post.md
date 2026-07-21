@@ -25,7 +25,7 @@ ADR 0002 规划了 `issue_comments` 表与「从 Agent 最终答复提取 `<issu
 
 3. **prompt 契约**：`<issue-comment>` 标签必须由派发 prompt 显式要求 Agent 输出。约定注入前端 `run-prompt-builder` 的 `finalPrompt`（随 `prompt_snapshot` 落库、run-dialog 只读可见）；完成流程注入的 `build_agent_commit_completion_prompt` 同步追加。评论提取的唯一来源是该标签，提取不到静默不发，不 fallback 截断最终答复。
 
-4. **执行体**：`agent_event_broadcaster.persist_stream_event` 检测到 TurnCompleted 时 `std::thread::spawn`（与 `finalize_turn_after_grace` 同模式），任务内 `new IssueService`/Repository 完成：校验来源 → 按 turn_id 从 session log 重读该 turn 最后一条 AssistantMessage → 正则提取 `<issue-comment>` → 写 `issue_comments` + `issue_actions(IssueCommentAdded)` → 广播 list 刷新。
+4. **执行体**：`agent_event_broadcaster.persist_stream_event` 检测到 TurnCompleted 时 `std::thread::spawn` 转发信号（与 `finalize_turn_after_grace` 同模式）；Issue feature 的 `completion_comment` 深 module 订阅该信号，任务内 `new IssueService`/Repository 完成：校验来源 → 按 turn_id 从 session log 重读该 turn 最后一条 AssistantMessage → 正则提取 `<issue-comment>` → 写 `issue_comments` + `issue_actions(IssueCommentAdded)` → 广播 `issue-timeline-changed`。触发语义不变，实现位置上移到 Issue feature（agent 横切不感知 issue schema）。
 
 5. **数据模型**：
    - `issue_comments` 新表：正文 + author（agent 快照）+ source + `linked_session_id`/`linked_turn_id`，`UNIQUE(linked_session_id, linked_turn_id)` 保证幂等。

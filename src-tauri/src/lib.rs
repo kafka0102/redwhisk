@@ -60,6 +60,17 @@ pub fn run() {
             state
                 .agent_event_broadcaster
                 .set_app_handle(app.handle().clone());
+            // ADR-0003：TurnCompleted → Issue 交付摘要提取（broadcaster 只发信号）。
+            let completion_comment_app = app.handle().clone();
+            state
+                .agent_event_broadcaster
+                .set_turn_completed_handler(move |session_id, turn_id| {
+                    features::issue::handle_turn_completed(
+                        &completion_comment_app,
+                        session_id,
+                        turn_id,
+                    );
+                });
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
             // 异步播种内置 agent（ADR-0020）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
             // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；

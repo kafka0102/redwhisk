@@ -13,16 +13,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
-use crate::features::issue::IssueService;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
-use crate::db::issue_repository::IssueRepository;
-use crate::db::project_repository::ProjectRepository;
 use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
-use rusqlite::OptionalExtension;
 
 /// 结构化 Agent 事件流的 Tauri event 名。
 pub const AGENT_SESSION_STREAM_EVENT: &str = "agent-session-stream-event";
@@ -33,8 +29,6 @@ pub const TURN_GRACE_MS: i64 = 3000;
 /// grace 收尾延迟任务的额外缓冲，确保越过 grace 边界后再执行 CAS。
 const TURN_GRACE_FINALIZE_BUFFER_MS: u64 = 1000;
 
-/// Issue 时间轴有新条目（如 Agent 自动发表评论）时广播，前端按 issueId 刷新对应时间轴。
-pub const ISSUE_TIMELINE_CHANGED_EVENT: &str = "issue-timeline-changed";
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,12 +38,6 @@ struct AgentSessionListChangedPayload {
     reason: &'static str,
 }
 
-#[derive(Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct IssueTimelineChangedPayload {
-    issue_id: Option<i64>,
-    session_id: i64,
-}
 
 /// 单个 session 的游标状态。
 #[derive(Debug, Clone)]
@@ -64,6 +52,11 @@ struct SessionPersistenceState {
     last_latest_output_write_at: Option<SystemTime>,
 }
 
+
+/// TurnCompleted 信号订阅方（Issue 交付摘要等）。仅传 session_id + turn_id，
+/// 领域反应由 feature 自行完成，broadcaster 不感知 issue schema。
+type TurnCompletedHandler = std::sync::Arc<dyn Fn(i64, String) + Send + Sync>;
+
 /// 跨 session 共享的事件广播器。
 ///
 /// `AppHandle` 在 Tauri setup 阶段经 `set_app_handle` 注入（与
@@ -76,6 +69,7 @@ pub struct AgentEventBroadcaster {
     cursors: std::sync::Arc<Mutex<HashMap<i64, SessionCursor>>>,
     persistence: std::sync::Arc<Mutex<HashMap<i64, SessionPersistenceState>>>,
     log_write_lock: std::sync::Arc<Mutex<()>>,
+    turn_completed_handler: std::sync::Arc<OnceLock<TurnCompletedHandler>>,
 }
 
 impl AgentEventBroadcaster {
@@ -88,6 +82,16 @@ impl AgentEventBroadcaster {
     /// 重复调用会被忽略，保留首次注入的 handle，避免运行期被替换。
     pub fn set_app_handle(&self, app_handle: AppHandle) {
         let _ = self.app_handle.set(app_handle);
+    }
+
+    /// 注入 TurnCompleted 反应 handler（setup 阶段一次）。
+    ///
+    /// 重复调用忽略，保留首次注入。Issue feature 用此信号发表交付摘要评论。
+    pub fn set_turn_completed_handler<F>(&self, handler: F)
+    where
+        F: Fn(i64, String) + Send + Sync + 'static,
+    {
+        let _ = self.turn_completed_handler.set(std::sync::Arc::new(handler));
     }
 
     /// 注册一个新 session，分配起始游标。
@@ -193,54 +197,6 @@ impl AgentEventBroadcaster {
         }
     }
 
-    /// completion turn 评论提取任务：独立开库连接，调 IssueService 提取并发表评论，
-    /// 成功后广播时间轴刷新。失败独立 catch（仅打印日志），不影响 session 运行与
-    /// 既有的提交检测（detect_agent_commit_completion）。
-    fn try_completion_comment_extraction(&self, session_id: i64, turn_id: String) {
-        let Some(app_handle) = self.app_handle.get() else {
-            return;
-        };
-        let Ok(data_dir) = redwhisk_data_dir(app_handle) else {
-            return;
-        };
-        let Ok(database) = DatabaseConfig::new(&data_dir).open() else {
-            return;
-        };
-        let issue_service = IssueService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-        );
-        match issue_service.try_publish_completion_comment(session_id, &turn_id) {
-            Ok(true) => {
-                let issue_id: Option<i64> = database
-                    .connection
-                    .query_row(
-                        "SELECT issues.id FROM issues
-                         JOIN agent_sessions ON agent_sessions.issue_id = issues.id
-                         WHERE agent_sessions.id = ?1 AND issues.del = 0 LIMIT 1",
-                        rusqlite::params![session_id],
-                        |row| row.get::<_, i64>(0),
-                    )
-                    .optional()
-                    .ok()
-                    .flatten();
-                let _ = app_handle.emit(
-                    ISSUE_TIMELINE_CHANGED_EVENT,
-                    IssueTimelineChangedPayload {
-                        issue_id,
-                        session_id,
-                    },
-                );
-            }
-            Ok(false) => {}
-            Err(error) => {
-                eprintln!(
-                    "[completion-comment-extraction] session {session_id} turn {turn_id} failed: {error:?}"
-                );
-            }
-        }
-    }
-
     fn advance_cursor(&self, session_id: i64) -> (u64, String) {
         let mut cursors = match self.cursors.lock() {
             Ok(cursors) => cursors,
@@ -341,15 +297,14 @@ impl AgentEventBroadcaster {
                         expected_turn_ended_at,
                     );
                 });
-                // completion turn 评论提取：TurnCompleted 携带 turn_id 时触发，
-                // 任务内校验 turn 来源与 turn_id 配对后提取 <issue-comment> 发表评论。
+                // TurnCompleted 信号：仅转发 session_id + turn_id，领域反应由注入的 handler 完成。
                 if let AgentStreamEvent::TurnCompleted { turn_id: Some(t), .. } = &envelope.event {
-                    let broadcaster = self.clone();
-                    let session_id = envelope.session_id;
-                    let turn_id = t.clone();
-                    std::thread::spawn(move || {
-                        broadcaster.try_completion_comment_extraction(session_id, turn_id);
-                    });
+                    if let Some(handler) = self.turn_completed_handler.get() {
+                        let handler = std::sync::Arc::clone(handler);
+                        let session_id = envelope.session_id;
+                        let turn_id = t.clone();
+                        std::thread::spawn(move || handler(session_id, turn_id));
+                    }
                 }
             }
             TurnRunningDecision::EndedImmediately => {
