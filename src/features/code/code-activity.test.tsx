@@ -54,9 +54,13 @@ vi.mock("@monaco-editor/react", () => ({
   DiffEditor: () => null,
   Editor: ({
     theme,
+    language,
+    value,
     onMount,
   }: {
     theme?: string;
+    language?: string;
+    value?: string;
     onMount?: (editor: {
       revealLineInCenter: (line: number) => void;
       setPosition: (pos: { lineNumber: number; column: number }) => void;
@@ -79,7 +83,13 @@ vi.mock("@monaco-editor/react", () => ({
         monacoEditorApi.onDidScrollChange(listener),
       onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
     });
-    return null;
+    return (
+      <div
+        data-testid="monaco-editor"
+        data-language={language ?? ""}
+        data-value={value ?? ""}
+      />
+    );
   },
 }));
 
@@ -113,19 +123,34 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
         path: string;
       }) => void;
     }) => (
-      <button
-        type="button"
-        onClick={() =>
-          onOpenFile({
-            id: "src/file.ts",
-            kind: "file",
-            name: "file.ts",
-            path: "src/file.ts",
-          })
-        }
-      >
-        Open file
-      </button>
+      <>
+        <button
+          type="button"
+          onClick={() =>
+            onOpenFile({
+              id: "src/file.ts",
+              kind: "file",
+              name: "file.ts",
+              path: "src/file.ts",
+            })
+          }
+        >
+          Open file
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onOpenFile({
+              id: "docs/readme.md",
+              kind: "file",
+              name: "readme.md",
+              path: "docs/readme.md",
+            })
+          }
+        >
+          Open markdown
+        </button>
+      </>
     ),
   };
 });
@@ -146,6 +171,16 @@ const fileContent = {
   language: "typescript",
   modifiedAt: 1,
   sizeBytes: 24,
+};
+
+const markdownContent = {
+  content: "# Hello Markdown\n\nA [link](https://example.com).\n",
+  filePath: "docs/readme.md",
+  isBinary: false,
+  isTooLarge: false,
+  language: "markdown",
+  modifiedAt: 1,
+  sizeBytes: 48,
 };
 
 describe("CodeActivity", () => {
@@ -680,5 +715,156 @@ describe("CodeActivity", () => {
       await screen.findByText("No results yet. Press Enter to search."),
     ).toBeInTheDocument();
     expect(searchProjectWorktreeContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a markdown source/preview toggle on the breadcrumb and switches views", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: /readme.md/ }),
+      ).toBeInTheDocument();
+    });
+
+    const toggle = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-language",
+      "markdown",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Hello Markdown" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Hello Markdown" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "link" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Hello Markdown" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the markdown preview toggle for non-markdown and unloadable content", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets markdown preview to source after closing the tab and reopening", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    const toggle = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("heading", { name: "Hello Markdown" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Close readme.md"));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /readme.md/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    const toggleAgain = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Hello Markdown" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets markdown preview to source when switching to another file", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    const toggle = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /readme.md/ }));
+    const toggleAgain = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
   });
 });

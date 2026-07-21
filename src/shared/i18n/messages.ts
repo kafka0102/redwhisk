@@ -517,6 +517,7 @@ export interface I18nMessages {
     codeTab: string;
     loadingCode: string;
     toggleContentSearch: string;
+    toggleMarkdownPreview: string;
     contentSearchPanel: string;
     contentSearchQuery: string;
     contentSearchQueryPlaceholder: string;

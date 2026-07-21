@@ -630,6 +630,7 @@
     "permissionKindOther": "权限请求",
     "permissionActionUnrecognized": "无法识别的审批动作：{{actionId}}",
     "agentTypeAlt": "智能体类型：{{label}}",
+    "toggleMarkdownPreview": "Markdown 预览",
     "toggleContentSearch": "在文件中搜索",
     "contentSearchPanel": "内容搜索",
     "contentSearchQuery": "搜索",

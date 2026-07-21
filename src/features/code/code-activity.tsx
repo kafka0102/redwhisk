@@ -30,7 +30,10 @@ import {
   codeWorkspaceCache,
   deleteCodeEditorViewState,
 } from "./code-workspace-cache";
-import { resolveFileLoadErrorMessage } from "./code-workspace-helpers";
+import {
+  isMarkdownPreviewable,
+  resolveFileLoadErrorMessage,
+} from "./code-workspace-helpers";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
@@ -65,6 +68,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [revealRequest, setRevealRequest] = useState<CodeRevealRequest | null>(
     null,
   );
+  const [markdownViewMode, setMarkdownViewMode] = useState<
+    "source" | "preview"
+  >("source");
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
   const openFilePathsRef = useRef(
     new Set((cached?.tabs ?? []).map((tab) => tab.filePath)),
@@ -80,6 +86,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
     clearCodeEditorViewStates(projectId);
     setRevealRequest(null);
+    setMarkdownViewMode("source");
   }, [projectId]);
 
   const shell = useWorkspaceShell({
@@ -179,15 +186,21 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     [activePath, tabs],
   );
 
+  const activateFilePath = useCallback((filePath: string | null) => {
+    activePathRef.current = filePath;
+    setActivePath(filePath);
+    // 换文件/关 tab 后回到默认源码视图（不跨文件记忆）。
+    setMarkdownViewMode("source");
+  }, []);
+
   const openFile = useCallback(
     (file: WorkspaceFileTreeNode) => {
       if (!selectedRoot || file.kind !== "file") return;
       const now = Date.now();
       const previousActivePath = activePathRef.current;
       const isAlreadyOpen = openFilePathsRef.current.has(file.path);
-      activePathRef.current = file.path;
       openFilePathsRef.current.add(file.path);
-      setActivePath(file.path);
+      activateFilePath(file.path);
       setTabs((currentTabs) => {
         const existing = currentTabs.find((tab) => tab.filePath === file.path);
         if (existing) {
@@ -259,7 +272,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           );
         });
     },
-    [fileNotFoundMessage, projectId, selectedRoot, t],
+    [activateFilePath, fileNotFoundMessage, projectId, selectedRoot, t],
   );
 
   const openMatchFromSearch = useCallback(
@@ -289,8 +302,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       if (activePathRef.current === filePath) {
         const nextActivePath =
           remaining[remaining.length - 1]?.filePath ?? null;
-        activePathRef.current = nextActivePath;
-        setActivePath(nextActivePath);
+        activateFilePath(nextActivePath);
       }
       return remaining;
     });
@@ -354,8 +366,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 role="tab"
                 type="button"
                 onClick={() => {
-                  activePathRef.current = tab.filePath;
-                  setActivePath(tab.filePath);
+                  activateFilePath(tab.filePath);
                   setTabs((current) =>
                     current.map((item) =>
                       item.filePath === tab.filePath
@@ -383,6 +394,18 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 filePath={activeTab.filePath}
                 tree={tree}
                 onOpenFile={openFile}
+                markdownPreviewToggle={
+                  isMarkdownPreviewable(activeTab)
+                    ? {
+                        label: messages.agentsFeature.toggleMarkdownPreview,
+                        onToggle: () =>
+                          setMarkdownViewMode((current) =>
+                            current === "preview" ? "source" : "preview",
+                          ),
+                        pressed: markdownViewMode === "preview",
+                      }
+                    : null
+                }
               />
               <CodeContent
                 key={activeTab.filePath}
@@ -392,6 +415,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 messages={messages}
                 revealRequest={revealRequest}
                 theme={theme}
+                viewMode={
+                  isMarkdownPreviewable(activeTab) ? markdownViewMode : "source"
+                }
               />
             </>
           ) : null}

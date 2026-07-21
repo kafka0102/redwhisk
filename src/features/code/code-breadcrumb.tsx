@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder } from "lucide-react";
 import { type CSSProperties, useCallback, useState } from "react";
 
 import {
@@ -9,52 +9,77 @@ import {
 import { FileTypeIcon } from "../../shared/workspace/file-tree-panel";
 import { type WorkspaceFileTreeNode } from "../../shared/workspace/workspace-commands";
 
+export interface CodeMarkdownPreviewToggle {
+  label: string;
+  onToggle: () => void;
+  pressed: boolean;
+}
+
 export function CodeBreadcrumb({
   filePath,
   tree,
   onOpenFile,
+  markdownPreviewToggle = null,
 }: {
   filePath: string;
   tree: WorkspaceFileTreeNode[];
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  markdownPreviewToggle?: CodeMarkdownPreviewToggle | null;
 }) {
   // 受控弹层：同一时间只展开一个目录段。打开文件后立即关闭，回到面包屑。
   const [openCrumb, setOpenCrumb] = useState<string | null>(null);
   const segments = filePath.split("/");
   return (
-    <nav className="code-workspace__breadcrumb" aria-label={filePath}>
-      {segments.map((segment, index) => {
-        const path = segments.slice(0, index + 1).join("/");
-        const node = findNode(tree, path);
-        const isFile = index === segments.length - 1;
-        return (
-          <span key={path}>
-            {index > 0 ? <ChevronRight aria-hidden="true" size={13} /> : null}
-            {isFile || !node ? (
-              <span>{segment}</span>
-            ) : (
-              <DropdownMenu
-                open={openCrumb === path}
-                onOpenChange={(open) => setOpenCrumb(open ? path : null)}
-              >
-                <DropdownMenuTrigger className="code-workspace__crumb">
-                  {segment}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[500px]">
-                  <CodeBreadcrumbMenuTree
-                    nodes={node.children ?? []}
-                    onOpenFile={(file) => {
-                      onOpenFile(file);
-                      setOpenCrumb(null);
-                    }}
-                  />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </span>
-        );
-      })}
-    </nav>
+    <div className="code-workspace__breadcrumb-row">
+      <nav className="code-workspace__breadcrumb" aria-label={filePath}>
+        {segments.map((segment, index) => {
+          const path = segments.slice(0, index + 1).join("/");
+          const node = findNode(tree, path);
+          const isFile = index === segments.length - 1;
+          return (
+            <span key={path}>
+              {index > 0 ? <ChevronRight aria-hidden="true" size={13} /> : null}
+              {isFile || !node ? (
+                <span>{segment}</span>
+              ) : (
+                <DropdownMenu
+                  open={openCrumb === path}
+                  onOpenChange={(open) => setOpenCrumb(open ? path : null)}
+                >
+                  <DropdownMenuTrigger className="code-workspace__crumb">
+                    {segment}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[500px]">
+                    <CodeBreadcrumbMenuTree
+                      nodes={node.children ?? []}
+                      onOpenFile={(file) => {
+                        onOpenFile(file);
+                        setOpenCrumb(null);
+                      }}
+                    />
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </span>
+          );
+        })}
+      </nav>
+      {markdownPreviewToggle ? (
+        <button
+          type="button"
+          className="code-workspace__markdown-toggle"
+          aria-label={markdownPreviewToggle.label}
+          aria-pressed={markdownPreviewToggle.pressed}
+          onClick={markdownPreviewToggle.onToggle}
+        >
+          {markdownPreviewToggle.pressed ? (
+            <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
+          ) : (
+            <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+          )}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

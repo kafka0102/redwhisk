@@ -180,7 +180,7 @@
 
 /* Editor / empty / loading / error fill remaining height below tabs (+ breadcrumb). */
 .code-workspace__main
-  > :not(.code-workspace__tabs):not(.code-workspace__breadcrumb) {
+  > :not(.code-workspace__tabs):not(.code-workspace__breadcrumb-row) {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -204,18 +204,59 @@
   background: var(--color-surface);
 }
 
-.code-workspace__breadcrumb {
+.code-workspace__breadcrumb-row {
   display: flex;
   flex: 0 0 32px;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  padding: 0 12px;
+  padding: 0 8px 0 12px;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
+}
+
+.code-workspace__breadcrumb {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
   font-size: 12px;
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.code-workspace__markdown-toggle {
+  display: inline-grid;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.code-workspace__markdown-toggle:hover,
+.code-workspace__markdown-toggle:focus-visible {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  outline: none;
+}
+
+.code-workspace__markdown-toggle[aria-pressed="true"] {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.code-workspace__markdown-preview {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 16px 20px;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .code-workspace__breadcrumb > span {

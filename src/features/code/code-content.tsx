@@ -1,4 +1,6 @@
 import { Editor, type OnMount } from "@monaco-editor/react";
+
+import { AgentMarkdown } from "../agents/message-stream/agent-markdown";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
@@ -31,6 +33,7 @@ export function CodeContent({
   messages,
   theme,
   revealRequest = null,
+  viewMode = "source",
 }: {
   projectId: number;
   tab: CodeFileTab;
@@ -38,6 +41,7 @@ export function CodeContent({
   messages: ReturnType<typeof useI18n>["messages"];
   theme: "light" | "dark";
   revealRequest?: CodeRevealRequest | null;
+  viewMode?: "source" | "preview";
 }) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const appliedRevealTokenRef = useRef<number | null>(null);
@@ -176,6 +180,17 @@ export function CodeContent({
       scrollDisposable.dispose();
     });
   };
+
+  if (viewMode === "preview") {
+    return (
+      <div
+        className="code-workspace__markdown-preview"
+        style={{ fontSize: contentFontSize }}
+      >
+        <AgentMarkdown>{tab.content.content}</AgentMarkdown>
+      </div>
+    );
+  }
 
   return (
     <Editor

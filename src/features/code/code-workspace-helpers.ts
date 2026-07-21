@@ -3,6 +3,7 @@ import {
   toCommandError,
 } from "../../shared/commands/command-error";
 import { type useI18n } from "../../shared/i18n/i18n";
+import type { CodeFileTab } from "./code-workspace-cache";
 
 /** 工作区文件不可访问 / 不是文件 / 读取失败等「文件缺失」类错误原因集合。 */
 export const MISSING_FILE_ERROR_REASONS = new Set([
@@ -27,4 +28,15 @@ export function resolveFileLoadErrorMessage(
 export function isMissingWorkspaceFileError(error: unknown): boolean {
   const reason = toCommandError(error).reason;
   return reason != null && MISSING_FILE_ERROR_REASONS.has(reason);
+}
+
+/** 当前 tab 是否可显示 markdown 源码/预览切换（语言为 markdown 且文本已成功加载）。 */
+export function isMarkdownPreviewable(tab: CodeFileTab): boolean {
+  if (tab.isLoading || tab.errorMessage || !tab.content) {
+    return false;
+  }
+  if (tab.content.isBinary || tab.content.isTooLarge) {
+    return false;
+  }
+  return tab.content.language === "markdown";
 }

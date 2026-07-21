@@ -630,6 +630,7 @@
     "permissionKindOther": "Permission request",
     "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
     "agentTypeAlt": "Agent type: {{label}}",
+    "toggleMarkdownPreview": "Markdown preview",
     "toggleContentSearch": "Search in files",
     "contentSearchPanel": "Content search",
     "contentSearchQuery": "Search",
