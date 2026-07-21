@@ -5563,6 +5563,11 @@ describe("AgentsActivity", () => {
       projectId: 1,
       issueId: 22,
       ignoreDirty: true,
+      dirtyDecision: null,
+      branchName: null,
+      actualPath: null,
+      continueAfterCommit: null,
+      worktreeCleanupDecision: null,
     });
     expect(sendAgentCommitPromptMock).not.toHaveBeenCalled();
     expect(detectAgentCommitCompletionMock).not.toHaveBeenCalled();

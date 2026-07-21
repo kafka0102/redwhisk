@@ -104,6 +104,7 @@ export function useAgentSessionCompletionFlow({
     locale,
     messages,
     t,
+    confirm,
     setAllSessions,
     refreshSessions,
     selectedSession,

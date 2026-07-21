@@ -5,21 +5,22 @@ import {
 } from "react";
 
 import {
-  completeIssueFlow,
-  detectAgentCommitCompletion,
   type CompleteIssueFlowResult,
   type DirtyWorkspaceOption,
   type IssueRecord,
 } from "./issue-commands";
 import {
+  CompletionCancelledError,
+  runCompletionFlow,
+  WorktreeMergeConflictError,
+  type WorktreeMergeConflictSessionDetail,
+} from "./issue-completion/completion-flow-client";
+import { buildWorktreeMergeConflictPrompt } from "./issue-completion/issue-completion-helpers";
+import {
   EMPTY_FORM,
   type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
-import {
-  buildWorktreeMergeConflictPrompt,
-  type WorktreeMergeDetail,
-} from "./issue-completion/issue-completion-helpers";
 import { injectSessionPromptWithResume } from "../agents/inject-session-prompt-with-resume";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { useI18n } from "../../shared/i18n/i18n";
@@ -36,30 +37,17 @@ export interface DirtyWorkspaceDialogState {
   branchNameEditable: boolean;
 }
 
-export interface WorktreeMergeConflictSessionDetail extends WorktreeMergeDetail {
-  sessionId?: number | null;
-}
-
 export type DirtyWorkspaceDecisionResolver = (
   decision: DirtyWorkspaceOption,
   branchName: string | null,
 ) => void;
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-export class CompletionCancelledError extends Error {
-  constructor() {
-    super("completion cancelled");
-  }
-}
-
-export class WorktreeMergeConflictError extends Error {
-  constructor(readonly detail: WorktreeMergeConflictSessionDetail) {
-    super("worktree merge conflict");
-  }
-}
+// 保持既有公共 API：flow / activity 继续从本模块拿错误类型。
+export {
+  CompletionCancelledError,
+  WorktreeMergeConflictError,
+  type WorktreeMergeConflictSessionDetail,
+};
 
 interface UseIssueCompletionResolutionOptions {
   locale: Locale;
@@ -98,116 +86,6 @@ export function useIssueCompletionResolution({
   messages,
   onOpenAgentsActivity,
 }: UseIssueCompletionResolutionOptions) {
-  async function completeIssueWithCompletionChecks(
-    requestProjectId: number,
-    issueId: number,
-  ): Promise<IssueRecord> {
-    let dirtyDecision: DirtyWorkspaceOption | null = null;
-    let branchName: string | null = null;
-    let actualPath: string | null = null;
-    let continueAfterCommit: boolean | null = null;
-    let worktreeCleanupDecision: boolean | null = null;
-
-    while (true) {
-      showCompletionLoadingDialog();
-
-      const result = await completeIssueFlow({
-        projectId: requestProjectId,
-        issueId,
-        dirtyDecision,
-        branchName,
-        actualPath,
-        continueAfterCommit,
-        worktreeCleanupDecision,
-      });
-      // 决策一次性消费，下一轮不再重复发送。
-      dirtyDecision = null;
-      branchName = null;
-      actualPath = null;
-      continueAfterCommit = null;
-      worktreeCleanupDecision = null;
-
-      if (result.action === "completed") {
-        hideCompletionLoadingDialog();
-        return result.issue;
-      }
-
-      if (result.action === "cancelled") {
-        hideCompletionLoadingDialog();
-        throw new CompletionCancelledError();
-      }
-
-      if (result.action === "blocked") {
-        hideCompletionLoadingDialog();
-        // 仅 worktree merge 冲突走 agent handoff；git_operation / target_worktree_dirty 等直接展示详细 message。
-        if (result.mergeBlockReason === "merge_conflict") {
-          throw new WorktreeMergeConflictError({
-            sessionId: result.sessionId,
-            targetBranch: result.targetBranch ?? undefined,
-            workspaceBranch: result.workspaceBranch ?? undefined,
-            workspacePath: result.workspacePath ?? undefined,
-            message: result.message,
-          });
-        }
-        throw new Error(result.message);
-      }
-
-      if (result.action === "prompt_dirty_decision") {
-        hideCompletionLoadingDialog();
-        const decision = await requestDirtyWorkspaceDecision(result);
-        dirtyDecision = decision.decision;
-        branchName = decision.branchName;
-        if (decision.decision === "cancel") {
-          // 让后端记录 cancelled，下一轮返回 cancelled → 抛 CompletionCancelledError。
-          continue;
-        }
-        continue;
-      }
-
-      if (result.action === "waiting_auto_commit") {
-        const detection = await waitForAgentCommit(requestProjectId, issueId);
-        if (detection.outcome === "blocked") {
-          hideCompletionLoadingDialog();
-          throw new Error(
-            detection.message || messages.issues.completionGitOperationBlocked,
-          );
-        }
-        if (detection.outcome === "no_commit_detected") {
-          hideCompletionLoadingDialog();
-          throw new Error(messages.issues.completionNoCommitDetected);
-        }
-        // commit_detected → 弹「代码已提交成功。确定继续标记完成吗？」
-        hideCompletionLoadingDialog();
-        const proceed = await confirm({
-          title: messages.issues.completionContinueAfterCommitTitle,
-          message: messages.issues.completionContinueAfterCommitMessage,
-          confirmLabel: messages.issues.completionContinueLabel,
-          cancelLabel: messages.issues.completionCancel,
-          confirmVariant: "default",
-        });
-        continueAfterCommit = proceed;
-        continue;
-      }
-
-      if (result.action === "confirm_worktree_cleanup") {
-        hideCompletionLoadingDialog();
-        const del = await confirm({
-          title: messages.issues.completionWorktreeCleanupTitle,
-          message: messages.issues.completionWorktreeCleanupMessage(
-            result.targetBranch ?? "",
-          ),
-          confirmLabel: messages.issues.completionWorktreeCleanupConfirm,
-          cancelLabel: messages.issues.completionWorktreeCleanupKeep,
-          confirmVariant: "destructive",
-        });
-        worktreeCleanupDecision = del;
-        continue;
-      }
-
-      throw new Error(result.message);
-    }
-  }
-
   function requestDirtyWorkspaceDecision(
     result: CompleteIssueFlowResult,
   ): Promise<{ decision: DirtyWorkspaceOption; branchName: string | null }> {
@@ -233,31 +111,45 @@ export function useIssueCompletionResolution({
     setDirtyWorkspaceDialog(null);
   }
 
-  /** 轮询检测 agent 是否已提交新 commit。 */
-  async function waitForAgentCommit(
+  async function completeIssueWithCompletionChecks(
     requestProjectId: number,
     issueId: number,
-  ): Promise<
-    | { outcome: "commit_detected" }
-    | { outcome: "no_commit_detected" }
-    | { outcome: "blocked"; message: string }
-  > {
-    const maxAttempts = 60;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      await delay(2000);
-      const detection = await detectAgentCommitCompletion({
-        projectId: requestProjectId,
-        issueId,
-      });
-      if (detection.outcome === "commit_detected") {
-        return { outcome: "commit_detected" };
-      }
-      if (detection.outcome === "git_operation_blocked") {
-        return { outcome: "blocked", message: detection.message };
-      }
-      // no_commit_detected → 继续轮询。
-    }
-    return { outcome: "no_commit_detected" };
+  ): Promise<IssueRecord> {
+    return runCompletionFlow(
+      { projectId: requestProjectId, issueId },
+      {
+        onLoadingChange: (loading) => {
+          if (loading) {
+            showCompletionLoadingDialog();
+          } else {
+            hideCompletionLoadingDialog();
+          }
+        },
+        requestDirtyDecision: requestDirtyWorkspaceDecision,
+        confirmContinueAfterCommit: () =>
+          confirm({
+            title: messages.issues.completionContinueAfterCommitTitle,
+            message: messages.issues.completionContinueAfterCommitMessage,
+            confirmLabel: messages.issues.completionContinueLabel,
+            cancelLabel: messages.issues.completionCancel,
+            confirmVariant: "default",
+          }),
+        confirmWorktreeCleanup: (targetBranch) =>
+          confirm({
+            title: messages.issues.completionWorktreeCleanupTitle,
+            message: messages.issues.completionWorktreeCleanupMessage(
+              targetBranch ?? "",
+            ),
+            confirmLabel: messages.issues.completionWorktreeCleanupConfirm,
+            cancelLabel: messages.issues.completionWorktreeCleanupKeep,
+            confirmVariant: "destructive",
+          }),
+        messages: {
+          gitOperationBlocked: messages.issues.completionGitOperationBlocked,
+          noCommitDetected: messages.issues.completionNoCommitDetected,
+        },
+      },
+    );
   }
 
   async function handOffWorktreeMergeConflict(
