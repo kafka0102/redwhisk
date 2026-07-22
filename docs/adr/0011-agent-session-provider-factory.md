@@ -4,6 +4,8 @@
 
 已采纳。落实 [ADR-0001](./0001-core-architecture-boundaries.md) 对结构化 provider 的边界：provider 私有协议不得越层；消费侧已有 `AgentSessionHandle`，本 ADR 补齐**构造侧** seam。
 
+> **后续修正（[ADR-0024](./0024-agent-session-must-link-issue.md)）**：standalone **新建** 通路（含 structured standalone 新建 command 与 Agents 加号）已删除。下文「issue / standalone 前半段各自保留」「不改变 issue/standalone 对外 command 契约」描述的是本 ADR **采纳当时** 的分层意图与边界；**现行新建**仅 Issue 启动（`start_agent_session`）。历史独立 Session 的 list / open / resume / 消息 / delete / title 等**非新建**路径仍可保留。不得再引入 standalone 新建 command 或把 issue 与历史兼容路径强行合成巨型 `start_session`。
+
 ## 背景
 
 结构化 Agent Session 的消费路径已统一为 `Arc<dyn AgentSessionHandle>`（Codex / Claude 两 adapter 已坐实）。但构造路径仍在 `AgentSessionService` 内硬 `match AgentType` 并直接 `CodexSessionHandle::start` / `ClaudeSessionHandle::start`：
@@ -18,18 +20,18 @@
 ## 决定
 
 1. **Provider 构造 seam**：引入 `AgentSessionProviderFactory` trait，入参为协议中立的启动请求（`agent_type`、binary/cwd、字符串 `mode_id`、model/effort、可选 resume thread id、broadcaster、home/config 路径等），出参为 `StartedSession`（`handle` + 可选 `thread_id` + 是否/如何回填 DB 的声明）。生产用默认 factory；service **不再** import 具体 Handle/Config/Mode 类型。
-2. **共享启动后半段**：DB 事务提交之后的阶段统一为共享管线——`mark_starting` → `factory.start` → 按 `StartedSession` 回填 thread id → `register` / broadcast → 可选 initial `send_message` → 失败路径统一 unmark / shutdown / 调用方提供的 rollback。issue 与 standalone 的**前半段**校验与事务写入仍各自保留（领域规则不同，不强行合成一个 `start_session(intent)`）。
+2. **共享启动后半段**：DB 事务提交之后的阶段统一为共享管线——`mark_starting` → `factory.start` → 按 `StartedSession` 回填 thread id → `register` / broadcast → 可选 initial `send_message` → 失败路径统一 unmark / shutdown / 调用方提供的 rollback。采纳当时 issue 与 standalone 的**前半段**校验与事务写入各自保留（领域规则不同，不强行合成一个 `start_session(intent)`）；**现行**新建仅 issue 前半段，standalone 新建前半段已由 ADR-0024 删除。
 3. **resume 同源**：`resume_structured_agent_session` 的进程构造同样走 factory（resume 用请求字段表达），不另开 resume factory，也不再硬 match 具体类型。
 4. **配置写盘归属 handle**：`set_model` / `set_effort` 的运行时切换与 provider 配置持久化收进各 adapter 实现；command 只取 registry handle 调用，不再 `match agent_type` 写盘。Claude 对 effort 等仍按既有能力返回不支持。
 5. **可测注入**：service 方法接收 `&dyn AgentSessionProviderFactory`（或等价可替换默认实现），单测注入 fake（start 失败 / 无 thread_id / send_message 失败）覆盖启动回滚时序，不启真实 provider 进程。
-6. **明确不做**：本决策不收敛 PTY 启动路径；不重命名 `codex_session_id` 列；不改变 issue/standalone 对外 command 契约与既有用户可见行为（除错误路径可测性与内部分层）。
+6. **明确不做（采纳时）**：本决策不收敛 PTY 启动路径；不重命名 `codex_session_id` 列；当时不改变 issue/standalone 对外 command 契约与既有用户可见行为（除错误路径可测性与内部分层）。**后续** standalone 新建 command 的删除见 ADR-0024，不属本 ADR 范围回写。
 
 ## 后果
 
 - 新增 provider 时只加 factory 分支 + adapter，不必再复制整条启动编排。
 - service 与 command 对 Codex/Claude 私有类型依赖下降；`CodexMode` 解析留在 Codex adapter/factory 内。
 - 启动失败 rollback 与 mark_starting 窗口可用 fake factory 单测。
-- issue/standalone 前半段仍可能有部分事务骨架相似，属领域差异，允许保留；后续若再抽「会话落库」是独立决策。
+- 采纳当时 issue/standalone 前半段可能有部分事务骨架相似，属领域差异、允许保留；后续若再抽「会话落库」是独立决策。standalone **新建**前半段已删除（ADR-0024）；resume / 历史独立 Session 等非新建路径不受本条恢复新建语义。
 
 ## 考虑过的替代方案
 
@@ -46,7 +48,7 @@
 - 本决策：`docs/adr/0011-agent-session-provider-factory.md`
 - 相关 ADR：[ADR-0001](./0001-core-architecture-boundaries.md)
 - 消费侧 trait：`src-tauri/src/agent/session_handle.rs`
-- 启动/ resume 复制路径：`src-tauri/src/core/agent_session_service.rs`（`start_structured_*`、`resume_structured_agent_session`）
+- 启动/ resume 复制路径（历史路径名）：`src-tauri/src/core/agent_session_service.rs`（当时含 `start_structured_*`、`resume_structured_agent_session`；standalone 新建已删，见 ADR-0024）
 - 配置写盘泄漏：`src-tauri/src/commands/agent_session_commands.rs`（`set_agent_model` / `set_agent_thinking`）
 - adapter：`src-tauri/src/agent/codex_app_server/session.rs`、`src-tauri/src/agent/claude_streaming/session.rs`
 

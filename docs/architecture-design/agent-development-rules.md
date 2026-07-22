@@ -204,6 +204,12 @@ Tauri event 只表示事实发生或终端输出，不发起业务写入。事�
 
 ## Issue 与 Agent Session 流程规则
 
+新建约束（[ADR-0024](../adr/0024-agent-session-must-link-issue.md)、术语见 `CONTEXT.md`「Agent Session」「历史独立 Session」）：
+
+- **新建** Agent Session 必须从 Issue 启动并绑定该 Issue（command：`start_agent_session`）。
+- **禁止**无 Issue 新建：不得提供 Agents 列表加号或等价 UI，不得恢复 `start_structured_agent_session` / structured standalone 新建 command 或旁路 service 入口。
+- **历史独立 Session**（存量 `issue_id` 为空）：允许列表查看、打开、消息/TUI 交互、resume、删除与改标题；不可再新建。本轮不做 schema 强制 `issue_id NOT NULL`，也不 bulk 清理存量。
+
 启动 Issue 关联 Agent Session：
 
 - 只能从 `backlog` Issue 启动。
@@ -251,7 +257,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Project 工作台 Activity Bar 只包含 `Issues`、`Agents`、`Settings`。
 - Project Switcher 属于窗口顶部 chrome，不属于内容 Header。
 - Activity Bar 主分组里的 `Settings` 是 Project Settings；Global Settings 是左侧菜单底部的仅图标 shell action，不属于 Project Activity 列表。
-- Agents Activity 使用左右两栏：左侧 Session list，右侧按 **Session 展示形式快照** 选择主区——`json` 为结构化 Agent Session View（消息流 + 底部固定 composer）；`tui` 为 Agent TUI 会话视图（交互式 xterm，输入直达 PTY）。
+- Agents Activity 使用左右两栏：左侧 Session list（**无**新建会话加号；新建只能从 Issues 启动），右侧按 **Session 展示形式快照** 选择主区——`json` 为结构化 Agent Session View（消息流 + 底部固定 composer）；`tui` 为 Agent TUI 会话视图（交互式 xterm，输入直达 PTY）。
 - composer 的模型 / Think / modes 等 UI 能力位以 `list_agent_models.capabilities`（`descriptor.ui_capabilities()` 投影）为唯一来源；前端不得维护按 agentType 的静态能力双表。
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。

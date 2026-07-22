@@ -9,6 +9,7 @@
 - 成功结果返回显式 DTO；列表包进对象，如 `{ issues: IssueRecord[] }`。
 - 失败返回 `CommandError`：`code`、`message`、可选 `reason`、可选 `details`；每个 detail 必须有 `@type`。
 - 前端以 `getCommandErrorMessage(error, t)` 做本地化；Rust 不返回面向 locale 的文案逻辑。
+- **Agent Session 新建**必须关联 Issue：仅 `start_agent_session`（及 Issue 完成相关注入等既有路径）；不存在、不得再注册无 Issue / structured standalone 新建 command（[ADR-0024](../adr/0024-agent-session-must-link-issue.md)）。历史独立 Session 的 list / resume / delete / title 等非新建 command 仍可保留。
 
 ## Command 注册表
 
