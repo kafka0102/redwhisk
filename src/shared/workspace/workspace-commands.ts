@@ -244,3 +244,9 @@ export function pushProjectWorktree(
 ): Promise<void> {
   return invokeCommand<void>("push_project_worktree", { input });
 }
+
+export function deleteCodeWorkspaceWorktree(
+  input: ProjectWorkspaceInput,
+): Promise<void> {
+  return invokeCommand<void>("delete_code_workspace_worktree", { input });
+}

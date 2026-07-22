@@ -758,7 +758,12 @@
       "workspaceFileReadFailed": "Failed to read workspace file.",
       "workspaceMissingForModelList": "Agent Session workspace does not exist; model list is unavailable.",
       "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume.",
-      "invalidSearchRegex": "Invalid search regular expression."
+      "invalidSearchRegex": "Invalid search regular expression.",
+      "cannotDeleteProjectRoot": "Cannot delete the project main checkout.",
+      "worktreeHasRunningTurn": "This workspace still has a running agent turn and cannot be deleted.",
+      "codeWorkspaceNotFound": "Code workspace not found.",
+      "worktreePathRequired": "Deleting a worktree requires a workspace path.",
+      "worktreeDeleteFailed": "Failed to delete worktree."
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "Attachment not found.",
@@ -892,9 +897,14 @@
     "moreActions": "More",
     "pull": "Pull",
     "push": "Push",
+    "delete": "Delete",
     "pulling": "Pulling…",
     "pushing": "Pushing…",
+    "deleting": "Deleting…",
     "pullSuccess": "Pulled successfully",
-    "pushSuccess": "Pushed successfully"
+    "pushSuccess": "Pushed successfully",
+    "deleteSuccess": "Deleted successfully",
+    "deleteConfirm": "Are you sure you want to delete?",
+    "cannotDeleteWhileRunning": "This workspace still has a running agent turn and cannot be deleted."
   }
 }

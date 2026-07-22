@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
+import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,10 +14,15 @@ import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import {
+  deleteCodeWorkspaceWorktree,
   pullProjectWorktree,
   pushProjectWorktree,
   type CodeWorkspaceRoot,
 } from "../../shared/workspace/workspace-commands";
+import {
+  listAgentSessions,
+  type AgentSessionListItem,
+} from "../agents/agent-session-commands";
 
 export interface ChangesBranchMoreMenuProps {
   projectId: number;
@@ -25,11 +31,11 @@ export interface ChangesBranchMoreMenuProps {
   onSuccess?: () => void;
 }
 
-type BusyAction = "pull" | "push" | null;
+type BusyAction = "pull" | "push" | "delete" | null;
 
 /**
  * 变更 Activity 分支栏右侧「更多」菜单。
- * 主 checkout：拉取 / 推送；linked worktree 的删除项留给后续票扩展。
+ * 主 checkout：拉取 / 推送；linked worktree：删除。
  */
 export function ChangesBranchMoreMenu({
   projectId,
@@ -38,6 +44,7 @@ export function ChangesBranchMoreMenu({
 }: ChangesBranchMoreMenuProps) {
   const { messages, t } = useI18n();
   const { alertDialog, showAlert } = useAlertDialog();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
 
   const isBusy = busyAction !== null;
@@ -91,12 +98,66 @@ export function ChangesBranchMoreMenu({
     );
   }
 
+  async function handleDelete(): Promise<void> {
+    if (!workspacePath || isBusy) {
+      return;
+    }
+
+    try {
+      const response = await listAgentSessions(projectId, {
+        status: "running",
+      });
+      if (hasRunningTurn(response.sessions, workspacePath)) {
+        showAlert({
+          type: "error",
+          message: messages.changesBranchMenu.cannotDeleteWhileRunning,
+        });
+        return;
+      }
+    } catch (error) {
+      showAlert({
+        type: "error",
+        message: getCommandErrorMessage(error, t),
+      });
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: messages.changesBranchMenu.delete,
+      message: messages.changesBranchMenu.deleteConfirm,
+      confirmLabel: messages.changesBranchMenu.delete,
+      cancelLabel: messages.confirmDialog.cancel,
+      confirmVariant: "destructive",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyAction("delete");
+    try {
+      await deleteCodeWorkspaceWorktree({
+        projectId,
+        workspacePath,
+      });
+      toast.success(messages.changesBranchMenu.deleteSuccess);
+    } catch (error) {
+      showAlert({
+        type: "error",
+        message: getCommandErrorMessage(error, t),
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   const loadingMessage =
     busyAction === "pull"
       ? messages.changesBranchMenu.pulling
       : busyAction === "push"
         ? messages.changesBranchMenu.pushing
-        : "";
+        : busyAction === "delete"
+          ? messages.changesBranchMenu.deleting
+          : "";
 
   return (
     <>
@@ -130,6 +191,17 @@ export function ChangesBranchMoreMenu({
                 {messages.changesBranchMenu.push}
               </DropdownMenuItem>
             </>
+          ) : selectedRoot ? (
+            <DropdownMenuItem
+              disabled={isBusy}
+              variant="destructive"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDelete();
+              }}
+            >
+              {messages.changesBranchMenu.delete}
+            </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -138,7 +210,20 @@ export function ChangesBranchMoreMenu({
         message={loadingMessage}
         open={isBusy}
       />
+      {confirmationDialog}
       {alertDialog}
     </>
+  );
+}
+
+function hasRunningTurn(
+  sessions: AgentSessionListItem[],
+  workspacePath: string,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.workspacePath === workspacePath &&
+      session.status === "running" &&
+      session.isTurnRunning === true,
   );
 }

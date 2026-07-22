@@ -758,7 +758,12 @@
       "workspaceFileReadFailed": "工作区文件读取失败。",
       "workspaceMissingForModelList": "Agent Session 工作区不存在，模型列表不可用。",
       "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。",
-      "invalidSearchRegex": "搜索正则无效。"
+      "invalidSearchRegex": "搜索正则无效。",
+      "cannotDeleteProjectRoot": "不能删除项目主工作区。",
+      "worktreeHasRunningTurn": "该工作区仍有进行中的智能体任务，无法删除。",
+      "codeWorkspaceNotFound": "代码工作区不存在。",
+      "worktreePathRequired": "删除 worktree 需要提供工作区路径。",
+      "worktreeDeleteFailed": "删除 worktree 失败。"
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "附件不存在。",
@@ -892,9 +897,14 @@
     "moreActions": "更多",
     "pull": "拉取",
     "push": "推送",
+    "delete": "删除",
     "pulling": "正在拉取…",
     "pushing": "正在推送…",
+    "deleting": "正在删除…",
     "pullSuccess": "拉取成功",
-    "pushSuccess": "推送成功"
+    "pushSuccess": "推送成功",
+    "deleteSuccess": "删除成功",
+    "deleteConfirm": "确定要删除吗？",
+    "cannotDeleteWhileRunning": "该工作区仍有进行中的智能体任务，无法删除。"
   }
 }

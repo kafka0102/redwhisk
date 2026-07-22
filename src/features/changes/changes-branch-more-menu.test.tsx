@@ -1,18 +1,25 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import {
+  deleteCodeWorkspaceWorktree,
   pullProjectWorktree,
   pushProjectWorktree,
 } from "../../shared/workspace/workspace-commands";
+import { listAgentSessions } from "../agents/agent-session-commands";
 import { ChangesBranchMoreMenu } from "./changes-branch-more-menu";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   pullProjectWorktree: vi.fn(),
   pushProjectWorktree: vi.fn(),
+  deleteCodeWorkspaceWorktree: vi.fn(),
+}));
+
+vi.mock("../agents/agent-session-commands", () => ({
+  listAgentSessions: vi.fn(),
 }));
 
 vi.mock("../../shared/toast", () => ({
@@ -24,6 +31,8 @@ vi.mock("../../shared/toast", () => ({
 
 const pullMock = vi.mocked(pullProjectWorktree);
 const pushMock = vi.mocked(pushProjectWorktree);
+const deleteMock = vi.mocked(deleteCodeWorkspaceWorktree);
+const listSessionsMock = vi.mocked(listAgentSessions);
 const toastSuccessMock = vi.mocked(toast.success);
 
 const projectRoot = {
@@ -64,6 +73,10 @@ describe("ChangesBranchMoreMenu", () => {
     pullMock.mockResolvedValue(undefined);
     pushMock.mockReset();
     pushMock.mockResolvedValue(undefined);
+    deleteMock.mockReset();
+    deleteMock.mockResolvedValue(undefined);
+    listSessionsMock.mockReset();
+    listSessionsMock.mockResolvedValue({ sessions: [] });
     toastSuccessMock.mockReset();
   });
 
@@ -77,11 +90,12 @@ describe("ChangesBranchMoreMenu", () => {
     expect(screen.queryByText("删除")).not.toBeInTheDocument();
   });
 
-  it("does not show pull or push for worktree root", async () => {
+  it("shows only delete for worktree root", async () => {
     const user = userEvent.setup();
     renderMenu({ selectedRoot: worktreeRoot });
 
     await user.click(screen.getByRole("button", { name: "更多" }));
+    expect(await screen.findByText("删除")).toBeInTheDocument();
     expect(screen.queryByText("拉取")).not.toBeInTheDocument();
     expect(screen.queryByText("推送")).not.toBeInTheDocument();
   });
@@ -155,5 +169,89 @@ describe("ChangesBranchMoreMenu", () => {
     );
     expect(onSuccess).not.toHaveBeenCalled();
     expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+  it("blocks delete with alert when worktree has running turn", async () => {
+    const user = userEvent.setup();
+    listSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 11,
+          number: 1,
+          projectId: 7,
+          issueId: 3,
+          issueNumber: 3,
+          issueTitle: "t",
+          issueStatus: "running",
+          agentProfileId: 1,
+          agentProfileName: "p",
+          workflowSkillName: null,
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          title: null,
+          agentType: "codex",
+          displayMode: "json",
+          status: "running",
+          attention: "none",
+          isTurnRunning: true,
+          workspaceMode: "worktree",
+          workingDir: worktreeRoot.path,
+          workspacePath: worktreeRoot.path,
+          originBranch: null,
+          workspaceBranch: worktreeRoot.branch,
+          worktreeOwner: "redwhisk",
+          logPath: "/tmp/s.log",
+          latestOutput: null,
+          lastActiveAt: 1,
+          startedAt: 1,
+          closedAt: null,
+          processingMs: 0,
+          lastOutputAt: null,
+        },
+      ],
+    });
+    renderMenu({ selectedRoot: worktreeRoot });
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(await screen.findByText("删除"));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "该工作区仍有进行中的智能体任务，无法删除。",
+    );
+    expect(deleteMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("确定要删除吗？")).not.toBeInTheDocument();
+  });
+
+  it("confirms then deletes worktree with command params and success toast", async () => {
+    const user = userEvent.setup();
+    let resolveDelete: (() => void) | undefined;
+    deleteMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    renderMenu({ selectedRoot: worktreeRoot });
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(await screen.findByText("删除"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("确定要删除吗？");
+    await user.click(within(dialog).getByRole("button", { name: "删除" }));
+
+    expect(await screen.findByText("正在删除…")).toBeInTheDocument();
+    expect(listSessionsMock).toHaveBeenCalledWith(7, { status: "running" });
+    expect(deleteMock).toHaveBeenCalledWith({
+      projectId: 7,
+      workspacePath: worktreeRoot.path,
+    });
+
+    resolveDelete?.();
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("删除成功");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("正在删除…")).not.toBeInTheDocument();
+    });
   });
 });

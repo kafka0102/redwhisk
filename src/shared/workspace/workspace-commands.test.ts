@@ -5,6 +5,7 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  deleteCodeWorkspaceWorktree,
   pullProjectWorktree,
   pushProjectWorktree,
   searchProjectWorktreeContent,
@@ -83,6 +84,23 @@ describe("workspace commands", () => {
       6,
       "push_project_worktree",
       { input: { projectId: 1, workspacePath: "/tmp/root" } },
+    );
+
+    await expect(
+      deleteCodeWorkspaceWorktree({
+        projectId: 1,
+        workspacePath: "/tmp/root.wt/issue-1",
+      }),
+    ).resolves.toEqual({ command: "delete_code_workspace_worktree" });
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      7,
+      "delete_code_workspace_worktree",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root.wt/issue-1",
+        },
+      },
     );
   });
 });
