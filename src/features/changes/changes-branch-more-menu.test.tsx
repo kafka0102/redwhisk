@@ -155,8 +155,14 @@ describe("ChangesBranchMoreMenu", () => {
     const user = userEvent.setup();
     pullMock.mockRejectedValue({
       code: "AGENT_SESSION_VALIDATION_FAILED",
-      message: "Git 命令执行失败。",
+      message: "Git command failed: refused",
       reason: "gitCommandFailed",
+      details: [
+        {
+          "@type": "Cause",
+          message: "error: failed to push some refs to origin",
+        },
+      ],
     });
     const onSuccess = vi.fn();
     renderMenu({ onSuccess });
@@ -164,8 +170,10 @@ describe("ChangesBranchMoreMenu", () => {
     await user.click(screen.getByRole("button", { name: "更多" }));
     await user.click(await screen.findByText("拉取"));
 
-    expect(await screen.findByRole("dialog")).toHaveTextContent(
-      "Git 命令执行失败。",
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Git 命令执行失败。");
+    expect(dialog).toHaveTextContent(
+      "error: failed to push some refs to origin",
     );
     expect(onSuccess).not.toHaveBeenCalled();
     expect(toastSuccessMock).not.toHaveBeenCalled();

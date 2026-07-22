@@ -578,6 +578,27 @@ describe("command client", () => {
     ).toBe("原始后端文案");
   });
 
+  it("appends Cause detail after localized message for git failures", () => {
+    const t = makeTranslationFunction({
+      "errors.AGENT_SESSION_VALIDATION_FAILED.gitCommandFailed":
+        "Git 命令执行失败。",
+    });
+
+    expect(
+      getCommandErrorMessage(
+        {
+          code: "AGENT_SESSION_VALIDATION_FAILED",
+          message: "Git command failed: conflict",
+          reason: "gitCommandFailed",
+          details: [
+            { "@type": "Cause", message: "CONFLICT (content): Merge conflict" },
+          ],
+        },
+        t,
+      ),
+    ).toBe("Git 命令执行失败。 CONFLICT (content): Merge conflict");
+  });
+
   it("wraps unknown invoke failures as command errors", async () => {
     invokeMock.mockRejectedValue("bridge unavailable");
 

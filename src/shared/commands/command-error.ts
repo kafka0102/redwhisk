@@ -45,7 +45,31 @@ export function getCommandErrorMessage(error: unknown, t: TFunction): string {
   const reason = commandError.reason ?? "default";
   const key = `errors.${commandError.code}.${reason}`;
   const localized = t(key);
-  return localized && localized !== key ? localized : commandError.message;
+  const base =
+    localized && localized !== key ? localized : commandError.message;
+  const cause = getCauseDetailMessage(commandError.details);
+  if (cause && !base.includes(cause)) {
+    return `${base} ${cause}`.trim();
+  }
+  return base;
+}
+
+function getCauseDetailMessage(
+  details: CommandError["details"] | undefined,
+): string | null {
+  if (!details) {
+    return null;
+  }
+  for (const detail of details) {
+    if (
+      detail["@type"] === "Cause" &&
+      typeof detail.message === "string" &&
+      detail.message.trim().length > 0
+    ) {
+      return detail.message;
+    }
+  }
+  return null;
 }
 
 function hasValidDetails(

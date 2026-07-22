@@ -218,7 +218,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         let workspace_path = input.workspace_path.as_deref().ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
-                "删除 worktree 需要提供工作区路径。",
+                "Deleting a worktree requires a workspace path.",
             )
             .with_reason("worktreePathRequired")
         })?;
@@ -238,7 +238,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         let target = roots.iter().find(|root| root.path == workspace_path).ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
-                "代码工作区不存在。",
+                "Code workspace not found.",
             )
             .with_reason("codeWorkspaceNotFound")
             .with_detail(
@@ -249,7 +249,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         if target.is_project_root {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
-                "不能删除项目主工作区。",
+                "Cannot delete the project main checkout.",
             )
             .with_reason("cannotDeleteProjectRoot")
             .with_detail(
@@ -269,7 +269,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         if has_running_turn {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
-                "该工作区仍有进行中的智能体任务，无法删除。",
+                "This workspace still has a running agent turn and cannot be deleted.",
             )
             .with_reason("worktreeHasRunningTurn")
             .with_detail(
@@ -280,7 +280,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         cleanup_worktree(&project.repo_path, workspace_path, &target.branch).map_err(|error| {
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
-                "删除 worktree 失败。",
+                "Failed to delete worktree.",
             )
             .with_reason("worktreeDeleteFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
@@ -1319,16 +1319,16 @@ fn map_git_command_error(error: GitCommandError) -> CommandError {
     match error {
         GitCommandError::Failed { message, .. } => CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
-            "Git 命令执行失败。",
+            format!("Git command failed: {message}"),
         )
         .with_reason("gitCommandFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", message)),
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message.clone())),
         GitCommandError::OutputInvalid { message, .. } => CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
-            "Git 输出不是 UTF-8。",
+            format!("Git output is not UTF-8: {message}"),
         )
         .with_reason("gitOutputNotUtf8")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", message)),
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message.clone())),
     }
 }
 

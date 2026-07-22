@@ -42,7 +42,7 @@ export function ChangesBranchMoreMenu({
   selectedRoot,
   onSuccess,
 }: ChangesBranchMoreMenuProps) {
-  const { messages, t } = useI18n();
+  const { t } = useI18n();
   const { alertDialog, showAlert } = useAlertDialog();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -82,7 +82,7 @@ export function ChangesBranchMoreMenu({
           projectId,
           workspacePath,
         }),
-      messages.changesBranchMenu.pullSuccess,
+      t("changesBranchMenu.pullSuccess"),
     );
   }
 
@@ -94,7 +94,7 @@ export function ChangesBranchMoreMenu({
           projectId,
           workspacePath,
         }),
-      messages.changesBranchMenu.pushSuccess,
+      t("changesBranchMenu.pushSuccess"),
     );
   }
 
@@ -110,7 +110,7 @@ export function ChangesBranchMoreMenu({
       if (hasRunningTurn(response.sessions, workspacePath)) {
         showAlert({
           type: "error",
-          message: messages.changesBranchMenu.cannotDeleteWhileRunning,
+          message: t("changesBranchMenu.cannotDeleteWhileRunning"),
         });
         return;
       }
@@ -123,10 +123,10 @@ export function ChangesBranchMoreMenu({
     }
 
     const confirmed = await confirm({
-      title: messages.changesBranchMenu.delete,
-      message: messages.changesBranchMenu.deleteConfirm,
-      confirmLabel: messages.changesBranchMenu.delete,
-      cancelLabel: messages.confirmDialog.cancel,
+      title: t("changesBranchMenu.delete"),
+      message: t("changesBranchMenu.deleteConfirm"),
+      confirmLabel: t("changesBranchMenu.delete"),
+      cancelLabel: t("confirmDialog.cancel"),
       confirmVariant: "destructive",
     });
     if (!confirmed) {
@@ -139,7 +139,7 @@ export function ChangesBranchMoreMenu({
         projectId,
         workspacePath,
       });
-      toast.success(messages.changesBranchMenu.deleteSuccess);
+      toast.success(t("changesBranchMenu.deleteSuccess"));
     } catch (error) {
       showAlert({
         type: "error",
@@ -152,18 +152,18 @@ export function ChangesBranchMoreMenu({
 
   const loadingMessage =
     busyAction === "pull"
-      ? messages.changesBranchMenu.pulling
+      ? t("changesBranchMenu.pulling")
       : busyAction === "push"
-        ? messages.changesBranchMenu.pushing
+        ? t("changesBranchMenu.pushing")
         : busyAction === "delete"
-          ? messages.changesBranchMenu.deleting
+          ? t("changesBranchMenu.deleting")
           : "";
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={messages.changesBranchMenu.moreActions}
+          aria-label={t("changesBranchMenu.moreActions")}
           className="code-workspace__refresh"
           disabled={isBusy || !selectedRoot}
         >
@@ -179,7 +179,7 @@ export function ChangesBranchMoreMenu({
                   handlePull();
                 }}
               >
-                {messages.changesBranchMenu.pull}
+                {t("changesBranchMenu.pull")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isBusy}
@@ -188,7 +188,7 @@ export function ChangesBranchMoreMenu({
                   handlePush();
                 }}
               >
-                {messages.changesBranchMenu.push}
+                {t("changesBranchMenu.push")}
               </DropdownMenuItem>
             </>
           ) : selectedRoot ? (
@@ -200,7 +200,7 @@ export function ChangesBranchMoreMenu({
                 void handleDelete();
               }}
             >
-              {messages.changesBranchMenu.delete}
+              {t("changesBranchMenu.delete")}
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
