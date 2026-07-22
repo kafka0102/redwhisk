@@ -25,6 +25,10 @@ interface SessionChangesPanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  hasMoreCommitHistory?: boolean;
+  isLoadingMoreCommitHistory?: boolean;
+  loadMoreCommitHistoryErrorMessage?: string | null;
+  onLoadMoreCommitHistory?: () => void;
 }
 
 export function SessionChangesPanel({
@@ -42,6 +46,10 @@ export function SessionChangesPanel({
   onToggleCommittedExpanded,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  hasMoreCommitHistory,
+  isLoadingMoreCommitHistory,
+  loadMoreCommitHistoryErrorMessage,
+  onLoadMoreCommitHistory,
 }: SessionChangesPanelProps) {
   return (
     <WorkspaceChangesPanels
@@ -59,6 +67,10 @@ export function SessionChangesPanel({
       isCommittedExpanded={isCommittedExpanded}
       onToggleCommittedExpanded={onToggleCommittedExpanded}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+      hasMoreCommitHistory={hasMoreCommitHistory}
+      isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
+      loadMoreCommitHistoryErrorMessage={loadMoreCommitHistoryErrorMessage}
+      onLoadMoreCommitHistory={onLoadMoreCommitHistory}
     />
   );
 }

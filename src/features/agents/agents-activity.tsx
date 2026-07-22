@@ -572,6 +572,14 @@ export function AgentsActivity({
               isUncommittedChangesExpanded={
                 workspaceCache.uncommittedChangesExpanded
               }
+              hasMoreCommitHistory={workspaceCache.hasMoreCommitHistory}
+              isLoadingMoreCommitHistory={
+                workspaceCache.isLoadingMoreCommitHistory
+              }
+              loadMoreCommitHistoryErrorMessage={
+                workspaceCache.loadMoreCommitHistoryErrorMessage
+              }
+              onLoadMoreCommitHistory={workspaceCache.loadMoreCommitHistory}
               projectId={projectId}
               workspacePath={selectedSession.workspacePath}
             />

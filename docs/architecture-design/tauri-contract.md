@@ -19,7 +19,7 @@
 | 项目         | `create_project`、`list_projects`、`remove_project_from_list`、`delete_project`、`open_project`、`open_project_window`、`update_project_settings`、`validate_project_repo_path`                                  | `features/project/project-commands.ts`                              | `features/project/commands.rs`           |
 | Issue        | `list_issues`、`create_issue`、`update_issue`、附件 draft/preview/export、`mark_issue_review`、`advance_issue_status`、完成 flow、summary、`get_issue_timeline`、delete、`prepare_agent_commit_completion`、`send_agent_commit_prompt`、`detect_agent_commit_completion`、`get_issue_worktree_status`、`delete_issue_worktree` | `features/issues/issue-commands.ts`                                 | `features/issue/commands.rs`             |
 | 会话         | session 列表/Issue 启动/标题/attention、`get_project_git_branches`、`inject_agent_session_prompt`、结构化恢复、`delete_agent_session`、消息、取消、权限、模型/思考/模式、附件、timeline、TUI 终端 write/resize/restore/subscribe/read（新建须关联 Issue，无 standalone 新建 command） | `features/agents/agent-session-commands.ts`                         | `features/agent_session/commands.rs`、`tui_terminal_commands.rs` |
-| 工作区       | changes、`list_code_workspace_roots`、file tree、commit history、file、diff、`search_project_worktree_content`、`pull_project_worktree`、`push_project_worktree`、`delete_code_workspace_worktree`                                                      | `shared/workspace/workspace-commands.ts`                            | `features/agent_session/workspace_commands.rs` |
+| 工作区       | changes、`list_code_workspace_roots`、file tree、commit history（可选 `limit`/`offset`，响应 `hasMore`）、file、diff、`search_project_worktree_content`、`pull_project_worktree`、`push_project_worktree`、`delete_code_workspace_worktree` | `shared/workspace/workspace-commands.ts`                            | `features/agent_session/workspace_commands.rs` |
 | 项目终端     | 创建、`create_temporary_project_terminal`、`list_project_terminals`、`subscribe_project_terminal_output`、`unsubscribe_project_terminal_output`、读写、恢复、resize、关闭、配置与快捷命令、cwd、`set_app_theme` | `features/terminals/project-terminal-commands.ts`                   | `features/project_terminal/commands.rs`  |
 | Settings     | command 检测、`test_agent_command`、profile、`preview_agent_command_args`、label、保存的 skill CRUD、`get_user_profile`、`update_user_profile`                       | `features/settings/settings-commands.ts`                            | `features/settings/commands.rs`          |
 | Skill 索引   | `list_agent_skills`、`refresh_agent_skills`                                                                                                                        | `features/settings/settings-commands.ts`                            | `features/settings/agent_skill_commands.rs` |
@@ -28,6 +28,9 @@
 | 应用主题     | `set_app_theme`（当前挂在 `project_terminal` 模块，语义属应用级，未来宜迁出）                                                                                      | `shared/commands/app-commands.ts`                                   | `features/project_terminal/commands.rs`  |
 
 新增 command 必须同时更新 Rust DTO、adapter、`generate_handler!`、前端 wrapper、类型和成功/失败路径测试；并同步更新本注册表对应行 + 错误码到前端 locale 的映射（见错误码边界表）。不要只在本表新增名称。
+
+> `get_project_worktree_commit_history`：`ProjectWorkspaceInput` 可选 `limit` / `offset`（缺省 50 / 0）；`ProjectWorktreeCommitHistoryResponse.hasMore` 为本页条数 `>= limit`。允许 `limit > 50` 支撑整窗刷新；`signature` 仍对**本次响应** commits 计算。
+
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
 

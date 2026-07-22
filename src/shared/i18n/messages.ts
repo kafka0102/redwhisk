@@ -478,6 +478,7 @@ export interface I18nMessages {
     committed: string;
     committedChanges: string;
     loadingChanges: string;
+    loadingMoreCommitHistory: string;
     noUncommittedChanges: string;
     noCommittedChanges: string;
     committedTimeline: string;

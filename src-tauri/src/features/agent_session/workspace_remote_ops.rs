@@ -219,6 +219,8 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical.clone()),
+                            limit: None,
+                offset: None,
             })
             .expect("delete worktree");
 
@@ -269,6 +271,8 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(repo_canonical.clone()),
+                            limit: None,
+                offset: None,
             })
             .expect_err("should reject project root");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -358,6 +362,8 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical.clone()),
+                            limit: None,
+                offset: None,
             })
             .expect_err("should reject running turn");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -420,6 +426,8 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical),
+                            limit: None,
+                offset: None,
             })
             .expect_err("pull should reject worktree");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);

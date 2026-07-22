@@ -19,6 +19,14 @@ pub struct ProjectWorkspaceInput {
     pub session_id: Option<i64>,
     #[serde(default)]
     pub workspace_path: Option<String>,
+    /// 已提交历史分页：每页条数。仅 `get_project_worktree_commit_history` 使用；
+    /// 缺省等价 50。允许 >50 以支撑前端整窗刷新。
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// 已提交历史分页：跳过条数。仅 `get_project_worktree_commit_history` 使用；
+    /// 缺省等价 0。
+    #[serde(default)]
+    pub offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -96,6 +104,9 @@ pub struct ProjectWorktreeCommitHistoryResponse {
     // 黄色提交右侧的黄色 base Tag。非 worktree / 主分支 / base 解析失败时为 None。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    // 是否可能还有更早的提交：本页返回条数 >= 本次 limit 则为 true。
+    // 恰好整页倍数时下一页可能为空，由调用方再请求一次收敛。
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

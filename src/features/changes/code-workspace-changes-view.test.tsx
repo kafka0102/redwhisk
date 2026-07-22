@@ -18,8 +18,12 @@ vi.mock("./use-code-workspace-changes", () => ({
     isCommitHistoryLoading: false,
     commitHistoryErrorMessage: null,
     isWorktree: false,
+    hasMoreCommitHistory: false,
+    isLoadingMoreCommitHistory: false,
+    loadMoreCommitHistoryErrorMessage: null,
     refreshChanges: () => {},
     refreshCommitHistory: () => {},
+    loadMoreCommitHistory: () => {},
   }),
 }));
 

@@ -19,7 +19,12 @@ describe("session workspace commands", () => {
       getProjectWorktreeChanges({ projectId: 1, sessionId: 2 }),
     ).resolves.toEqual({ command: "get_project_worktree_changes" });
     await expect(
-      getProjectWorktreeCommitHistory({ projectId: 1, sessionId: 2 }),
+      getProjectWorktreeCommitHistory({
+        projectId: 1,
+        sessionId: 2,
+        limit: 50,
+        offset: 0,
+      }),
     ).resolves.toEqual({ command: "get_project_worktree_commit_history" });
     await expect(
       readProjectWorktreeDiff({
@@ -37,7 +42,7 @@ describe("session workspace commands", () => {
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
       2,
       "get_project_worktree_commit_history",
-      { input: { projectId: 1, sessionId: 2 } },
+      { input: { projectId: 1, sessionId: 2, limit: 50, offset: 0 } },
     );
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
       3,

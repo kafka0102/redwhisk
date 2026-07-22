@@ -21,6 +21,7 @@ export type {
 } from "../../../shared/workspace/workspace-commands";
 export {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
+  COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   getProjectWorktreeFileTree,

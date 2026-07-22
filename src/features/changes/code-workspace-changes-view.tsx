@@ -54,8 +54,12 @@ export function CodeWorkspaceChangesView({
     commitHistoryErrorMessage,
     isWorktree,
     baseBranch,
+    hasMoreCommitHistory,
+    isLoadingMoreCommitHistory,
+    loadMoreCommitHistoryErrorMessage,
     refreshChanges,
     refreshCommitHistory,
+    loadMoreCommitHistory,
   } = useCodeWorkspaceChanges(projectId, selectedRootWorkspacePath, true);
 
   const isWorktreeRunning = useWorktreeRunningSession(
@@ -95,6 +99,10 @@ export function CodeWorkspaceChangesView({
       baseBranch={baseBranch}
       isCommittedExpanded={committedExpanded}
       onToggleCommittedExpanded={onToggleCommitted}
+      hasMoreCommitHistory={hasMoreCommitHistory}
+      isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
+      loadMoreCommitHistoryErrorMessage={loadMoreCommitHistoryErrorMessage}
+      onLoadMoreCommitHistory={loadMoreCommitHistory}
     />
   );
 }

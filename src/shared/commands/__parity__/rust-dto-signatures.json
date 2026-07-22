@@ -852,6 +852,8 @@
     },
     "ProjectWorkspaceInput": {
       "fields": {
+        "limit": "optional",
+        "offset": "optional",
         "projectId": "required",
         "sessionId": "optional",
         "workspacePath": "optional"
@@ -876,6 +878,7 @@
       "fields": {
         "baseBranch": "optional",
         "commits": "required",
+        "hasMore": "required",
         "isWorktree": "required",
         "signature": "required"
       }

@@ -645,7 +645,8 @@
     "contentSearchRemoveFilterTag": "移除 {{tag}}",
     "contentSearchSuffixPicker": "常见文件后缀",
     "contentSearchSuffixOption": ".{{suffix}}",
-    "contentSearchNoSuffixes": "暂无后缀统计"
+    "contentSearchNoSuffixes": "暂无后缀统计",
+    "loadingMoreCommitHistory": "正在加载更多提交..."
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

@@ -7,6 +7,11 @@ import {
 } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import {
+  appendUniqueCommitsByHash,
+  commitHistoryRefreshLimit,
+} from "../../shared/workspace/commit-history-pagination";
+import {
+  COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   type WorkspaceChangedFile,
@@ -25,14 +30,25 @@ export interface UseCodeWorkspaceChangesResult {
   // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
   // 透传给变更面板渲染首条黄色提交右侧的黄色 base Tag（spec F3/F5）。
   baseBranch: string | null;
+  /** 是否还有更早的已提交历史。 */
+  hasMoreCommitHistory: boolean;
+  isLoadingMoreCommitHistory: boolean;
+  loadMoreCommitHistoryErrorMessage: string | null;
   refreshChanges: () => void;
   refreshCommitHistory: () => void;
+  loadMoreCommitHistory: () => void;
 }
+
+type CommitHistoryRequestMode = "initial" | "refresh" | "load-more";
 
 /**
  * 代码工作区左侧栏「变更」视图的数据源。按当前选中根的 workspacePath 拉取未提交
  * 变更与已提交历史：进入变更视图（enabled）或切换工作区时各拉取一次，手动刷新可
  * 再触发；不做轮询。
+ *
+ * 已提交历史支持分页：首页 50；load-more 按 loadedCount offset 追加；刷新按
+ * max(50, loadedCount) 整窗替换且不清空旧列表。刷新优先于 load-more，generation
+ * 作废过期响应；同时最多一个 commit-history 请求。
  *
  * 与 Agent 会话侧的 useSessionWorkspaceCache 不同：本 hook 以 workspacePath 为键
  * （无 sessionId），且不轮询；signature 去重 + 请求序号防竞态的写法与会话侧一致。
@@ -59,15 +75,33 @@ export function useCodeWorkspaceChanges(
   >(null);
   const [isWorktree, setIsWorktree] = useState(false);
   const [baseBranch, setBaseBranch] = useState<string | null>(null);
+  const [hasMoreCommitHistory, setHasMoreCommitHistory] = useState(false);
+  const [isLoadingMoreCommitHistory, setIsLoadingMoreCommitHistory] =
+    useState(false);
+  const [
+    loadMoreCommitHistoryErrorMessage,
+    setLoadMoreCommitHistoryErrorMessage,
+  ] = useState<string | null>(null);
   const changesRequestSequenceRef = useRef(0);
   const lastChangesSignatureRef = useRef<string | null>(null);
   const commitHistoryRequestSequenceRef = useRef(0);
   const lastCommitHistorySignatureRef = useRef<string | null>(null);
+  const commitHistoryLoadedCountRef = useRef(0);
+  const hasMoreCommitHistoryRef = useRef(false);
+  const commitHistoryInFlightRef = useRef(false);
   const translateRef = useRef(t);
 
   useEffect(() => {
     translateRef.current = t;
   }, [t]);
+
+  useEffect(() => {
+    commitHistoryLoadedCountRef.current = commitHistory.length;
+  }, [commitHistory]);
+
+  useEffect(() => {
+    hasMoreCommitHistoryRef.current = hasMoreCommitHistory;
+  }, [hasMoreCommitHistory]);
 
   const runChangesRequest = useCallback(
     (options: { clearStale: boolean }) => {
@@ -119,19 +153,47 @@ export function useCodeWorkspaceChanges(
   );
 
   const runCommitHistoryRequest = useCallback(
-    (options: { clearStale: boolean }) => {
+    (mode: CommitHistoryRequestMode) => {
       if (!workspacePath) return;
+
+      if (mode === "load-more") {
+        if (!hasMoreCommitHistoryRef.current) return;
+        if (commitHistoryInFlightRef.current) return;
+      }
+
       const requestSequence = (commitHistoryRequestSequenceRef.current += 1);
+      commitHistoryInFlightRef.current = true;
+
+      const loadedCount = commitHistoryLoadedCountRef.current;
+      const limit =
+        mode === "load-more"
+          ? COMMIT_HISTORY_PAGE_SIZE
+          : commitHistoryRefreshLimit(loadedCount);
+      const offset = mode === "load-more" ? loadedCount : 0;
 
       void Promise.resolve()
         .then(() => {
-          setIsCommitHistoryLoading(true);
-          setCommitHistoryErrorMessage(null);
-          if (options.clearStale) {
-            setCommitHistory([]);
-            lastCommitHistorySignatureRef.current = null;
+          if (mode === "load-more") {
+            setIsLoadingMoreCommitHistory(true);
+            setLoadMoreCommitHistoryErrorMessage(null);
+          } else {
+            // 刷新优先：作废进行中的 load-more UI 态。
+            setIsLoadingMoreCommitHistory(false);
+            setLoadMoreCommitHistoryErrorMessage(null);
+            setIsCommitHistoryLoading(true);
+            setCommitHistoryErrorMessage(null);
+            if (mode === "initial") {
+              setCommitHistory([]);
+              setHasMoreCommitHistory(false);
+              lastCommitHistorySignatureRef.current = null;
+            }
           }
-          return getProjectWorktreeCommitHistory({ projectId, workspacePath });
+          return getProjectWorktreeCommitHistory({
+            projectId,
+            workspacePath,
+            limit,
+            offset,
+          });
         })
         .then((response) => {
           if (
@@ -140,25 +202,48 @@ export function useCodeWorkspaceChanges(
           ) {
             return;
           }
-          const unchanged =
-            lastCommitHistorySignatureRef.current === response.signature;
-          lastCommitHistorySignatureRef.current = response.signature;
-          if (!unchanged) {
-            setCommitHistory(response.commits);
+          if (mode === "load-more") {
+            setCommitHistory((current) =>
+              appendUniqueCommitsByHash(current, response.commits),
+            );
             setIsWorktree(response.isWorktree);
             setBaseBranch(response.baseBranch ?? null);
+            setHasMoreCommitHistory(response.hasMore);
+            // load-more 的 signature 仅代表一页；清空以便下次整窗刷新必应用。
+            lastCommitHistorySignatureRef.current = null;
+            setIsLoadingMoreCommitHistory(false);
+            setLoadMoreCommitHistoryErrorMessage(null);
+          } else {
+            const unchanged =
+              lastCommitHistorySignatureRef.current === response.signature;
+            lastCommitHistorySignatureRef.current = response.signature;
+            if (!unchanged) {
+              setCommitHistory(response.commits);
+              setIsWorktree(response.isWorktree);
+              setBaseBranch(response.baseBranch ?? null);
+              setHasMoreCommitHistory(response.hasMore);
+            }
+            setIsCommitHistoryLoading(false);
+            setCommitHistoryErrorMessage(null);
           }
-          setIsCommitHistoryLoading(false);
-          setCommitHistoryErrorMessage(null);
+          commitHistoryInFlightRef.current = false;
         })
         .catch((error) => {
           if (commitHistoryRequestSequenceRef.current !== requestSequence) {
             return;
           }
-          setCommitHistoryErrorMessage(
-            getCommandErrorMessage(error, translateRef.current),
-          );
-          setIsCommitHistoryLoading(false);
+          if (mode === "load-more") {
+            setLoadMoreCommitHistoryErrorMessage(
+              getCommandErrorMessage(error, translateRef.current),
+            );
+            setIsLoadingMoreCommitHistory(false);
+          } else {
+            setCommitHistoryErrorMessage(
+              getCommandErrorMessage(error, translateRef.current),
+            );
+            setIsCommitHistoryLoading(false);
+          }
+          commitHistoryInFlightRef.current = false;
         });
     },
     [projectId, workspacePath],
@@ -168,7 +253,7 @@ export function useCodeWorkspaceChanges(
   useEffect(() => {
     if (!enabled || !workspacePath) return;
     runChangesRequest({ clearStale: true });
-    runCommitHistoryRequest({ clearStale: true });
+    runCommitHistoryRequest("initial");
   }, [enabled, workspacePath, runChangesRequest, runCommitHistoryRequest]);
 
   const refreshChanges = useCallback(
@@ -177,7 +262,12 @@ export function useCodeWorkspaceChanges(
   );
 
   const refreshCommitHistory = useCallback(
-    () => runCommitHistoryRequest({ clearStale: false }),
+    () => runCommitHistoryRequest("refresh"),
+    [runCommitHistoryRequest],
+  );
+
+  const loadMoreCommitHistory = useCallback(
+    () => runCommitHistoryRequest("load-more"),
     [runCommitHistoryRequest],
   );
 
@@ -191,8 +281,12 @@ export function useCodeWorkspaceChanges(
     commitHistoryErrorMessage,
     isWorktree,
     baseBranch,
+    hasMoreCommitHistory,
+    isLoadingMoreCommitHistory,
+    loadMoreCommitHistoryErrorMessage,
     refreshChanges,
     refreshCommitHistory,
+    loadMoreCommitHistory,
   };
 }
 
