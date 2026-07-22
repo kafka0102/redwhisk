@@ -2,7 +2,7 @@
 //
 // 负责滚动容器、空态文案、轮次运行指示器与自动滚动到底部。自动滚动策略：
 // 用户停留在底部附近时跟随新内容滚动；手动上滚后停止跟随（避免抢夺滚动位置）。
-// 长内容（超过两屏）时在右下角显示跳转按钮：贴顶显示向下、贴底显示向上，中间隐藏。
+// 长内容（超过两屏）时在右下角显示跳转按钮：未贴底显示向下（可快速到底），贴底显示向上。
 //
 // 拆分为两层：
 // - `AgentMessageStream`：自包含，内部调 `useAgentMessageStream` 订阅，用于独立场景/测试。
@@ -37,9 +37,6 @@ interface AgentMessageStreamProps {
 
 /** 距底部阈值（px），小于此值视为"贴底"，新内容自动跟随滚动。 */
 const PIN_TO_BOTTOM_THRESHOLD_PX = 80;
-
-/** 距顶部阈值（px），小于此值视为"贴顶"，显示回到底部按钮。 */
-const SCROLL_TOP_THRESHOLD_PX = 4;
 
 /** 长内容跳转按钮的方向；hidden 时不渲染按钮。 */
 type ScrollNavTarget = "hidden" | "to-bottom" | "to-top";
@@ -147,7 +144,8 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     node.scrollTop = node.scrollHeight;
     isPinnedRef.current = true;
   }, [isActive, autoScrollOnActivate]);
-  // 计算长内容跳转按钮方向：仅当内容超过两屏且贴顶/贴底时显示，中间位置隐藏。
+  // 计算长内容跳转按钮方向：内容超过两屏时始终显示；
+  // 未贴底显示向下（初始顶/中段均可快速到底），贴底显示向上。
   const measureNav = useCallback(() => {
     const node = scrollRef.current;
     if (!node) {
@@ -158,11 +156,10 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     let next: ScrollNavTarget = "hidden";
     if (longEnough) {
-      if (scrollTop <= SCROLL_TOP_THRESHOLD_PX) {
-        next = "to-bottom";
-      } else if (distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX) {
-        next = "to-top";
-      }
+      next =
+        distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX
+          ? "to-top"
+          : "to-bottom";
     }
     setNavTarget((prev) => (prev === next ? prev : next));
   }, []);

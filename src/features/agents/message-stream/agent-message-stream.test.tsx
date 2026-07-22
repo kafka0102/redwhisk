@@ -716,3 +716,112 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     expect(scroll.scrollTop).toBe(42);
   });
 });
+
+describe("AgentMessageStreamView 长内容跳转按钮", () => {
+  function mockScrollMetrics(
+    el: HTMLElement,
+    metrics: {
+      clientHeight?: number;
+      scrollHeight?: number;
+      scrollTop?: number;
+    },
+  ) {
+    if (metrics.clientHeight !== undefined) {
+      Object.defineProperty(el, "clientHeight", {
+        configurable: true,
+        get: () => metrics.clientHeight as number,
+      });
+    }
+    if (metrics.scrollHeight !== undefined) {
+      Object.defineProperty(el, "scrollHeight", {
+        configurable: true,
+        get: () => metrics.scrollHeight as number,
+      });
+    }
+    if (metrics.scrollTop !== undefined) {
+      el.scrollTop = metrics.scrollTop;
+    }
+  }
+
+  function createStateWithMessages() {
+    return createMessageStreamState({
+      entries: [
+        {
+          id: "u1",
+          kind: "user_message",
+          item: { type: "user_message", text: "开始", messageId: "u1" },
+        },
+        {
+          id: "a1",
+          kind: "assistant_message",
+          item: {
+            type: "assistant_message",
+            text: "处理中",
+            messageId: "a1",
+          },
+        },
+      ],
+    });
+  }
+
+  function renderLongStream() {
+    const state = createStateWithMessages();
+    const view = render(<AgentMessageStreamView state={state} />);
+    const scroll = view.container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollMetrics(scroll, { clientHeight: 100, scrollHeight: 500 });
+    return { ...view, scroll };
+  }
+
+  it("贴顶时显示向下按钮", async () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 0;
+    fireEvent.scroll(scroll);
+
+    expect(
+      await screen.findByRole("button", { name: "Scroll to bottom" }),
+    ).toBeInTheDocument();
+  });
+
+  it("中段滚动时仍显示向下按钮，便于快速到底", async () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 150;
+    fireEvent.scroll(scroll);
+
+    expect(
+      await screen.findByRole("button", { name: "Scroll to bottom" }),
+    ).toBeInTheDocument();
+  });
+
+  it("贴底时显示向上按钮", async () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 400;
+    fireEvent.scroll(scroll);
+
+    expect(
+      await screen.findByRole("button", { name: "Scroll to top" }),
+    ).toBeInTheDocument();
+  });
+
+  it("内容不足两屏时不显示跳转按钮", () => {
+    const state = createStateWithMessages();
+    const { container } = render(<AgentMessageStreamView state={state} />);
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollMetrics(scroll, {
+      clientHeight: 100,
+      scrollHeight: 150,
+      scrollTop: 0,
+    });
+    fireEvent.scroll(scroll);
+
+    expect(
+      screen.queryByRole("button", { name: "Scroll to bottom" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Scroll to top" }),
+    ).not.toBeInTheDocument();
+  });
+});
