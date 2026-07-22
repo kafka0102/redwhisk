@@ -36,7 +36,7 @@ import {
 import { useSessionToolTabs } from "./use-session-tool-tabs";
 import { useAgentSessionList } from "./use-agent-session-list";
 import { useAgentSessionCompletionFlow } from "./use-agent-session-completion-flow";
-import { AgentCompletionPreviewDialog } from "./agent-completion-preview-dialog";
+import { IssueCompletionDirtyWorkspaceDialog } from "../issues/issue-completion/issue-completion-dirty-workspace-dialog";
 import { AgentMergePromptDialog } from "./agent-merge-prompt-dialog";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
@@ -308,10 +308,9 @@ export function AgentsActivity({
   });
   const {
     setIsCompletionLoadingDialogDismissed,
-    agentCommitPreview,
+    dirtyWorkspaceDialog,
     mergePromptSessionId,
     isSubmittingMergePrompt,
-    isAgentCommitPreviewPending,
     isCompletionLoadingDialogOpen,
     canRenderTransitionButton,
     canRenderTransitionMenu,
@@ -322,9 +321,7 @@ export function AgentsActivity({
     acknowledgeSessionAttention,
     handleTransitionAction,
     handleTransitionMainAction,
-    handleCloseAgentCommitPreview,
-    handleCompleteAgentCommitPreviewManually,
-    handleConfirmAgentCommit,
+    resolveDirtyWorkspaceDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   } = useAgentSessionCompletionFlow({
@@ -587,14 +584,17 @@ export function AgentsActivity({
         ) : null}
       </section>
 
-      {agentCommitPreview ? (
-        <AgentCompletionPreviewDialog
-          preview={agentCommitPreview}
-          isPending={isAgentCommitPreviewPending}
-          onClose={handleCloseAgentCommitPreview}
-          onConfirm={handleConfirmAgentCommit}
-          onCompleteManually={handleCompleteAgentCommitPreviewManually}
-          messages={messages}
+      {dirtyWorkspaceDialog ? (
+        <IssueCompletionDirtyWorkspaceDialog
+          title={messages.issues.completionDirtyTitle}
+          message={messages.issues.completionDirtyMessage}
+          branchName={dirtyWorkspaceDialog.branchName}
+          branchNameEditable={dirtyWorkspaceDialog.branchNameEditable}
+          branchNameLabel={messages.issues.completionBranchNameLabel}
+          autoCommitLabel={messages.issues.completionAutoCommit}
+          skipLabel={messages.issues.completionSkipDirty}
+          cancelLabel={messages.issues.completionCancel}
+          onDecision={resolveDirtyWorkspaceDecision}
         />
       ) : null}
       <LoadingDialog

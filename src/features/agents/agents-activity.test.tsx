@@ -22,6 +22,7 @@ import {
   resumeStructuredAgentSession,
   setAgentSessionAttention,
   updateAgentSessionTitle,
+  type AgentSessionListItem,
 } from "./agent-session-commands";
 import * as composerDraftModule from "./composer/use-agent-composer";
 import {
@@ -31,8 +32,6 @@ import {
   detectAgentCommitCompletion,
   listIssues,
   markIssueReview,
-  prepareAgentCommitCompletion,
-  sendAgentCommitPrompt,
   updateIssue,
 } from "../issues/issue-commands";
 import {
@@ -179,8 +178,6 @@ vi.mock("../issues/issue-commands", () => ({
   detectAgentCommitCompletion: vi.fn(),
   listIssues: vi.fn(),
   markIssueReview: vi.fn(),
-  prepareAgentCommitCompletion: vi.fn(),
-  sendAgentCommitPrompt: vi.fn(),
   updateIssue: vi.fn(),
 }));
 
@@ -216,10 +213,6 @@ const completeIssueManualMock = vi.mocked(completeIssueManual);
 const detectAgentCommitCompletionMock = vi.mocked(detectAgentCommitCompletion);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
-const prepareAgentCommitCompletionMock = vi.mocked(
-  prepareAgentCommitCompletion,
-);
-const sendAgentCommitPromptMock = vi.mocked(sendAgentCommitPrompt);
 const updateIssueMock = vi.mocked(updateIssue);
 const openPathMock = vi.mocked(openPath);
 const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
@@ -235,6 +228,79 @@ const createTemporaryProjectTerminalMock = vi.mocked(
 );
 const toastSuccessMock = vi.mocked(toast.success);
 const toastErrorMock = vi.mocked(toast.error);
+
+function reviewSessionFixture(
+  overrides: Partial<AgentSessionListItem> = {},
+): AgentSessionListItem {
+  return {
+    sessionId: 502,
+    number: 502,
+    issueId: 22,
+    issueNumber: 22,
+    issueTitle: "Review issue",
+    issueStatus: "review",
+    title: null,
+    agentType: "codex",
+    displayMode: "json",
+    status: "running",
+    attention: "none",
+    lastActiveAt: 1_780_637_000_000,
+    startedAt: 1_780_637_000_000,
+    closedAt: null,
+    projectId: 1,
+    agentProfileId: 1,
+    agentProfileName: "Test Profile",
+    workflowSkillName: null,
+    canCompleteClean: false,
+    canCompleteAgentCommit: false,
+    isTurnRunning: false,
+    workspaceMode: "current_branch",
+    workingDir: "/tmp/repo",
+    workspacePath: null,
+    originBranch: null,
+    workspaceBranch: null,
+    worktreeOwner: "redwhisk",
+    logPath: "/tmp/session.log",
+    latestOutput: null,
+    processingMs: 0,
+    lastOutputAt: null,
+    ...overrides,
+  };
+}
+
+function dirtyPromptFlowResult(overrides: Record<string, unknown> = {}) {
+  return {
+    action: "prompt_dirty_decision" as const,
+    issue: {
+      id: 22,
+      number: 22,
+      projectId: 1,
+      title: "Review issue",
+      description: "",
+      attachments: [],
+      labels: [],
+      status: "review" as const,
+      linkedSessionId: 502,
+      linkedSessionStatus: "running" as const,
+      linkedSessionAttention: "none" as const,
+      linkedSessionLogPath: null,
+      linkedSessionLatestOutput: null,
+      createdAt: 1_780_637_000_000,
+      updatedAt: 1_780_637_000_000,
+      statusChangedAt: 1_780_637_000_000,
+    },
+    flow: null,
+    message: "当前工作区存在未提交改动，请选择处理方式。",
+    mergeBlockReason: null,
+    targetBranch: "main",
+    workspaceBranch: "issue-22",
+    workspacePath: null,
+    actualPath: null,
+    drifted: false,
+    sessionId: 502,
+    ...overrides,
+  };
+}
 
 function completedFlowResult(issueId: number, projectId = 1) {
   return {
@@ -455,8 +521,6 @@ describe("AgentsActivity", () => {
     completeIssueManualMock.mockReset();
     completeIssueCleanMock.mockReset();
     detectAgentCommitCompletionMock.mockReset();
-    prepareAgentCommitCompletionMock.mockReset();
-    sendAgentCommitPromptMock.mockReset();
     markIssueReviewMock.mockReset();
     updateIssueMock.mockReset();
     getProjectWorktreeChangesMock.mockReset();
@@ -497,11 +561,6 @@ describe("AgentsActivity", () => {
       name: "issue-20-redwhisk",
       workingDir: "/tmp/worktrees/issue-20-redwhisk",
       launchCommand: "/bin/zsh",
-    });
-    sendAgentCommitPromptMock.mockResolvedValue({
-      issueId: 22,
-      sessionId: 502,
-      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
     listIssuesMock.mockResolvedValue({
       issues: [
@@ -598,7 +657,7 @@ describe("AgentsActivity", () => {
       statusChangedAt: 1_780_639_000_000,
     });
     detectAgentCommitCompletionMock.mockResolvedValue({
-      outcome: "completed",
+      outcome: "commit_detected",
       issue: {
         id: 22,
         number: 22,
@@ -607,9 +666,9 @@ describe("AgentsActivity", () => {
         description: "Review description",
         attachments: [],
         labels: [],
-        status: "completed",
+        status: "review",
         linkedSessionId: 502,
-        linkedSessionStatus: "closed",
+        linkedSessionStatus: "running",
         linkedSessionAttention: "none",
         linkedSessionLogPath: "/tmp/session.log",
         linkedSessionLatestOutput: null,
@@ -617,27 +676,7 @@ describe("AgentsActivity", () => {
         updatedAt: 1_780_639_000_000,
         statusChangedAt: 1_780_639_000_000,
       },
-      message: "已检测到新的 commit，Issue 已完成。",
-    });
-    prepareAgentCommitCompletionMock.mockResolvedValue({
-      issueId: 22,
-      sessionId: 502,
-      option: "complete_agent_commit",
-      head: "4157f0c",
-      changedFilesCount: 2,
-      changedFiles: [
-        {
-          status: " M",
-          path: "src/features/agents/agents-activity.tsx",
-          oldPath: null,
-        },
-        {
-          status: " M",
-          path: "src-tauri/src/core/issue_service.rs",
-          oldPath: null,
-        },
-      ],
-      completionPrompt: "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
+      message: "已检测到新的 commit。",
     });
     updateIssueMock.mockImplementation(async (input) => ({
       id: input.issueId,
@@ -4602,491 +4641,333 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows agent commit action for dirty review sessions and opens completion confirmation", async () => {
+  it("shows dirty three-option dialog when mark done hits dirty workspace", async () => {
     const user = userEvent.setup();
     listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 502,
-          number: 502,
-          issueId: 22,
-          issueNumber: 22,
-          issueTitle: "Review issue",
-          issueStatus: "review",
-          canCompleteClean: false,
-          canCompleteAgentCommit: true,
-          title: null,
-          agentType: "codex",
-          displayMode: "json",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-          projectId: 1,
-          agentProfileId: 1,
-          agentProfileName: "Test Profile",
-          workflowSkillName: null,
-          isTurnRunning: false,
-          workspaceMode: "current_branch",
-          workingDir: "/tmp/repo",
-          workspacePath: null,
-          originBranch: null,
-          workspaceBranch: null,
-          worktreeOwner: "redwhisk",
-          logPath: "/tmp/session.log",
-          latestOutput: null,
-          processingMs: 0,
-          lastOutputAt: null,
-        },
-      ],
+      sessions: [reviewSessionFixture()],
     });
-
-    render(<AgentsActivity activeSessionId={502} projectId={1} />);
-
-    expect(
-      await screen.findByRole("button", { name: "Mark done" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Open status options" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Mark review" }),
-    ).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
-
-    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
-    });
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Completion Confirmation",
-    });
-    expect(within(dialog).getByText("HEAD: 4157f0c")).toBeInTheDocument();
-    expect(within(dialog).getByText("Changed files: 2")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Completion option: complete_agent_commit"),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).queryByText(
-        "请仅处理当前 Issue 相关改动，并在确认无误后提交。",
-      ),
-    ).not.toBeInTheDocument();
-    expect(
-      within(dialog).queryByText("Completion prompt"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Submit code" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Mark done" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("button", { name: "Cancel" }),
-    ).toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(completeIssueCleanMock).not.toHaveBeenCalled();
-  });
-
-  it("completes an agent auto commit review session when the preview finds a clean worktree", async () => {
-    const user = userEvent.setup();
-    prepareAgentCommitCompletionMock.mockRejectedValueOnce({
-      code: "ISSUE_VALIDATION_FAILED",
-      message: "当前仓库无未提交改动，请直接使用 Complete。",
-      details: [
-        {
-          "@type": "GitStatus",
-          head: "4157f0c",
-          isClean: true,
-        },
-      ],
-    });
-    listAgentSessionsMock
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
-            issueStatus: "review",
-            canCompleteClean: false,
-            canCompleteAgentCommit: true,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
-            issueStatus: "completed",
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "closed",
-            attention: "none",
-            lastActiveAt: 1_780_639_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: 1_780_639_000_000,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      });
+    completeIssueFlowMock.mockResolvedValueOnce(dirtyPromptFlowResult());
 
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
 
-    expect(prepareAgentCommitCompletionMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
+    const dialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
     });
+    expect(
+      within(dialog).getByRole("button", { name: "Auto commit" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Complete without commit",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Branch")).toHaveValue("issue-22");
+    expect(within(dialog).getByLabelText("Branch")).toHaveAttribute("readonly");
+    expect(
+      screen.queryByRole("dialog", { name: "Completion Confirmation" }),
+    ).not.toBeInTheDocument();
     expect(completeIssueFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: 1, issueId: 22 }),
     );
-    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("cancels completion from dirty dialog and keeps issue in review", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [reviewSessionFixture()],
+    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce(dirtyPromptFlowResult())
+      .mockResolvedValueOnce({
+        action: "cancelled",
+        issue: dirtyPromptFlowResult().issue,
+        flow: null,
+        message: "完成已取消，Issue 保持待验收。",
+        mergeBlockReason: null,
+        targetBranch: "main",
+        workspaceBranch: "issue-22",
+        workspacePath: null,
+        actualPath: null,
+        drifted: false,
+        sessionId: 502,
+      });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Uncommitted changes" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          projectId: 1,
+          issueId: 22,
+          dirtyDecision: "cancel",
+          branchName: "issue-22",
+        }),
+      ),
+    );
     expect(
-      screen.queryByText("当前仓库无未提交改动，请直接使用 Complete。"),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Mark done" }),
+    ).toBeInTheDocument();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("skips dirty via complete without commit and finishes the issue", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({ sessions: [reviewSessionFixture()] })
+      .mockResolvedValueOnce({
+        sessions: [
+          reviewSessionFixture({
+            issueStatus: "completed",
+            status: "closed",
+            closedAt: 1_780_639_000_000,
+            lastActiveAt: 1_780_639_000_000,
+          }),
+        ],
+      });
+    completeIssueFlowMock
+      .mockResolvedValueOnce(dirtyPromptFlowResult())
+      .mockResolvedValueOnce(completedFlowResult(22));
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
+    });
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: "Complete without commit",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          projectId: 1,
+          issueId: 22,
+          dirtyDecision: "skip",
+          branchName: "issue-22",
+        }),
+      ),
+    );
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
     expect(toastSuccessMock).toHaveBeenCalledWith("Issue marked as done");
   });
 
-  it("marks a dirty review session done directly from completion confirmation", async () => {
-    const user = userEvent.setup();
+  it("auto commits from dirty dialog, confirms continue after commit, and completes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+    });
     listAgentSessionsMock
+      .mockResolvedValueOnce({ sessions: [reviewSessionFixture()] })
       .mockResolvedValueOnce({
         sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
-            issueStatus: "review",
-            canCompleteClean: false,
-            canCompleteAgentCommit: true,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
+          reviewSessionFixture({
             issueStatus: "completed",
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
             status: "closed",
-            attention: "none",
-            lastActiveAt: 1_780_639_000_000,
-            startedAt: 1_780_637_000_000,
             closedAt: 1_780_639_000_000,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
+            lastActiveAt: 1_780_639_000_000,
+          }),
         ],
       });
-
-    render(<AgentsActivity activeSessionId={502} projectId={1} />);
-
-    await user.click(await screen.findByRole("button", { name: "Mark done" }));
-    const dialog = await screen.findByRole("dialog", {
-      name: "Completion Confirmation",
-    });
-    await user.click(within(dialog).getByRole("button", { name: "Mark done" }));
-
-    expect(completeIssueFlowMock).toHaveBeenCalledWith({
-      projectId: 1,
-      issueId: 22,
-      ignoreDirty: true,
-      dirtyDecision: null,
-      branchName: null,
-      actualPath: null,
-      continueAfterCommit: null,
-      worktreeCleanupDecision: null,
-    });
-    expect(sendAgentCommitPromptMock).not.toHaveBeenCalled();
-    expect(detectAgentCommitCompletionMock).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Completion Confirmation" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Mark done" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows dismissible loading dialog while completing linked issue", async () => {
-    const user = userEvent.setup();
-    const completion =
-      deferred<Awaited<ReturnType<typeof completeIssueFlow>>>();
-    completeIssueFlowMock.mockReturnValueOnce(completion.promise);
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 502,
-          number: 502,
-          issueId: 22,
-          issueNumber: 22,
-          issueTitle: "Review issue",
-          issueStatus: "review",
-          canCompleteClean: false,
-          canCompleteAgentCommit: false,
-          title: null,
-          agentType: "codex",
-          displayMode: "json",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-          projectId: 1,
-          agentProfileId: 1,
-          agentProfileName: "Test Profile",
-          workflowSkillName: null,
-          isTurnRunning: false,
-          workspaceMode: "current_branch",
-          workingDir: "/tmp/repo",
-          workspacePath: null,
-          originBranch: null,
-          workspaceBranch: null,
-          worktreeOwner: "redwhisk",
-          logPath: "/tmp/session.log",
-          latestOutput: null,
-          processingMs: 0,
-          lastOutputAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={502} projectId={1} />);
-
-    await user.click(await screen.findByRole("button", { name: "Mark done" }));
-
-    expect(
-      await screen.findByRole("dialog", { name: "Submitting..." }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Close completion progress" }),
-    );
-    expect(
-      screen.queryByRole("dialog", { name: "Submitting..." }),
-    ).not.toBeInTheDocument();
-
-    await act(async () => {
-      completion.reject(new Error("completion failed"));
-    });
-
-    expect(
-      await screen.findByRole("dialog", { name: "completion failed" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("dialog", { name: "Submitting..." }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("detects agent commit completion after sending prompt and hides completion actions", async () => {
-    const user = userEvent.setup();
-    listAgentSessionsMock
+    completeIssueFlowMock
+      .mockResolvedValueOnce(dirtyPromptFlowResult())
       .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
-            issueStatus: "review",
-            canCompleteClean: false,
-            canCompleteAgentCommit: true,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
+        ...dirtyPromptFlowResult(),
+        action: "waiting_auto_commit",
+        message: "已注入自动提交提示词，等待 Agent 提交。",
       })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 502,
-            number: 502,
-            issueId: 22,
-            issueNumber: 22,
-            issueTitle: "Review issue",
-            issueStatus: "completed",
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "closed",
-            attention: "none",
-            lastActiveAt: 1_780_639_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: 1_780_639_000_000,
-            projectId: 1,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            isTurnRunning: false,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      });
+      .mockResolvedValueOnce(completedFlowResult(22));
+    detectAgentCommitCompletionMock.mockResolvedValue({
+      outcome: "commit_detected",
+      issue: dirtyPromptFlowResult().issue,
+      message: "已检测到新的 commit。",
+    });
 
     render(<AgentsActivity activeSessionId={502} projectId={1} />);
 
     await user.click(await screen.findByRole("button", { name: "Mark done" }));
-    const dialog = await screen.findByRole("dialog", {
-      name: "Completion Confirmation",
+    const dirtyDialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
     });
     await user.click(
-      within(dialog).getByRole("button", { name: "Submit code" }),
+      within(dirtyDialog).getByRole("button", { name: "Auto commit" }),
     );
 
     await waitFor(() =>
       expect(completeIssueFlowMock).toHaveBeenCalledWith(
-        expect.objectContaining({ projectId: 1, issueId: 22 }),
+        expect.objectContaining({
+          dirtyDecision: "auto_commit",
+          branchName: "issue-22",
+        }),
+      ),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    await waitFor(() =>
+      expect(detectAgentCommitCompletionMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: 22,
+      }),
+    );
+
+    const continueDialog = await screen.findByRole("dialog", {
+      name: "Commit detected",
+    });
+    await user.click(
+      within(continueDialog).getByRole("button", { name: "Continue" }),
+    );
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          continueAfterCommit: true,
+        }),
       ),
     );
     await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
     expect(
       screen.queryByRole("button", { name: "Mark done" }),
     ).not.toBeInTheDocument();
+    expect(toastSuccessMock).toHaveBeenCalledWith("Issue marked as done");
+  });
+
+  it("shows error and keeps review when auto commit detects no new commit", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [reviewSessionFixture()],
+    });
+    completeIssueFlowMock
+      .mockResolvedValueOnce(dirtyPromptFlowResult())
+      .mockResolvedValueOnce({
+        ...dirtyPromptFlowResult(),
+        action: "waiting_auto_commit",
+        message: "已注入自动提交提示词，等待 Agent 提交。",
+      });
+    detectAgentCommitCompletionMock.mockResolvedValue({
+      outcome: "no_commit_detected",
+      issue: dirtyPromptFlowResult().issue,
+      message: "未检测到新的提交。",
+    });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dirtyDialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
+    });
+    await user.click(
+      within(dirtyDialog).getByRole("button", { name: "Auto commit" }),
+    );
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dirtyDecision: "auto_commit",
+        }),
+      ),
+    );
+
+    // waitForAgentCommit：maxDetectAttempts(60) * detectIntervalMs(2000)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 2_000);
+    });
+
     expect(
-      screen.queryByRole("button", { name: "Mark review" }),
+      await screen.findByText("No new commit was detected."),
+    ).toBeInTheDocument();
+    // 错误 alert 打开时主界面 aria-hidden；关闭后再确认仍可 Mark done。
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(
+      await screen.findByRole("button", { name: "Mark done" }),
+    ).toBeInTheDocument();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(completeIssueFlowMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ continueAfterCommit: true }),
+    );
+  });
+
+  it("allows editing branch name when workspace branch drifted", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [reviewSessionFixture()],
+    });
+    completeIssueFlowMock.mockResolvedValueOnce(
+      dirtyPromptFlowResult({
+        drifted: true,
+        workspaceBranch: "old-branch",
+        targetBranch: "main",
+      }),
+    );
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Uncommitted changes",
+    });
+    const branchInput = within(dialog).getByLabelText("Branch");
+    expect(branchInput).toHaveValue("old-branch");
+    expect(branchInput).not.toHaveAttribute("readonly");
+  });
+
+  it("does not show dirty dialog when mark done completes on a clean workspace", async () => {
+    const user = userEvent.setup();
+    listAgentSessionsMock
+      .mockResolvedValueOnce({ sessions: [reviewSessionFixture()] })
+      .mockResolvedValueOnce({
+        sessions: [
+          reviewSessionFixture({
+            issueStatus: "completed",
+            status: "closed",
+            closedAt: 1_780_639_000_000,
+            lastActiveAt: 1_780_639_000_000,
+          }),
+        ],
+      });
+
+    render(<AgentsActivity activeSessionId={502} projectId={1} />);
+
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+
+    await waitFor(() =>
+      expect(completeIssueFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: 1, issueId: 22 }),
+      ),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Uncommitted changes" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Open status options" }),
+      screen.queryByRole("dialog", { name: "Completion Confirmation" }),
     ).not.toBeInTheDocument();
+    await waitFor(() => expect(listAgentSessionsMock).toHaveBeenCalledTimes(2));
   });
 
   it("completes a linked review issue manually from the session header and refreshes sessions", async () => {

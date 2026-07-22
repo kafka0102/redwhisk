@@ -1,21 +1,17 @@
 import {
+  useRef,
   useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from "react";
 
-import {
-  listAgentSessions,
-  type AgentSessionListItem,
-} from "./agent-session-commands";
+import { type AgentSessionListItem } from "./agent-session-commands";
 import { injectSessionPromptWithResume } from "./inject-session-prompt-with-resume";
-import { applySessionOverlays } from "./agent-session-overlays";
 import type { LinkedSessionIssue } from "./session-pane/agents-session-pane";
 import {
-  prepareAgentCommitCompletion,
-  type AgentCommitCompletionPreview,
   type CompleteIssueFlowResult,
+  type DirtyWorkspaceOption,
   type IssueRecord,
 } from "../issues/issue-commands";
 import {
@@ -26,9 +22,9 @@ import {
 } from "../issues/issue-completion/completion-flow-client";
 import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion/issue-completion-helpers";
 import {
-  getCommandErrorMessage,
-  toCommandError,
-} from "../../shared/commands/command-error";
+  type DirtyWorkspaceDecisionResolver,
+  type DirtyWorkspaceDialogState,
+} from "../issues/use-issue-completion-resolution";
 import type { useI18n } from "../../shared/i18n/i18n";
 import type { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import type { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
@@ -39,19 +35,6 @@ type Translate = ReturnType<typeof useI18n>["t"];
 type Locale = ReturnType<typeof useI18n>["locale"];
 type ShowAlert = ReturnType<typeof useAlertDialog>["showAlert"];
 type Confirm = ReturnType<typeof useConfirmDialog>["confirm"];
-
-function isCleanWorktreeAgentCommitPreviewError(error: {
-  code: string;
-  message: string;
-  details?: Array<Record<string, unknown>>;
-}) {
-  return (
-    error.code === "ISSUE_VALIDATION_FAILED" &&
-    error.details?.some(
-      (detail) => detail["@type"] === "GitStatus" && detail.isClean === true,
-    ) === true
-  );
-}
 
 interface UseAgentSessionCompletionResolutionOptions {
   projectId: number;
@@ -72,38 +55,33 @@ interface UseAgentSessionCompletionResolutionOptions {
 }
 
 /**
- * Agents surface 适配层：preview / mergePrompt / session list 投影。
+ * Agents surface 适配层：dirty 三选对话框 / mergePrompt / session list 投影。
  * 完成协议解释统一走 issues/issue-completion/completion-flow-client。
  */
 export function useAgentSessionCompletionResolution({
   projectId,
   locale,
   messages,
-  t,
   confirm,
   setAllSessions,
   refreshSessions,
-  selectedSession,
-  linkedIssue,
   showAlert,
   showCommandErrorAlert,
   setIsTransitionMenuOpen,
-  reviewedIssueIdsRef,
+  reviewedIssueIdsRef: _reviewedIssueIdsRef,
   completedIssueIdsRef,
   closedSessionIdsRef,
 }: UseAgentSessionCompletionResolutionOptions) {
-  const [isCompletingManual, setIsCompletingManual] = useState(false);
   const [isCompletingClean, setIsCompletingClean] = useState(false);
-  const [isPreparingAgentCommit, setIsPreparingAgentCommit] = useState(false);
-  const [isSendingAgentCommitPrompt, setIsSendingAgentCommitPrompt] =
-    useState(false);
   const [
     isDetectingAgentCommitCompletion,
     setIsDetectingAgentCommitCompletion,
   ] = useState(false);
   const [isSubmittingMergePrompt, setIsSubmittingMergePrompt] = useState(false);
-  const [agentCommitPreview, setAgentCommitPreview] =
-    useState<AgentCommitCompletionPreview | null>(null);
+  const [dirtyWorkspaceDialog, setDirtyWorkspaceDialog] =
+    useState<DirtyWorkspaceDialogState | null>(null);
+  const dirtyWorkspaceDecisionRef =
+    useRef<DirtyWorkspaceDecisionResolver | null>(null);
   const [mergePromptSessionId, setMergePromptSessionId] = useState<
     number | null
   >(null);
@@ -206,6 +184,31 @@ export function useAgentSessionCompletionResolution({
     return true;
   }
 
+  function requestDirtyWorkspaceDecision(
+    result: CompleteIssueFlowResult,
+  ): Promise<{ decision: DirtyWorkspaceOption; branchName: string | null }> {
+    return new Promise((resolve) => {
+      dirtyWorkspaceDecisionRef.current = (decision, branchName) =>
+        resolve({ decision, branchName });
+      const prefill = result.workspaceBranch ?? result.targetBranch ?? null;
+      setDirtyWorkspaceDialog({
+        issueId: result.issue.id,
+        branchName: prefill,
+        // 已知分支只读预填；漂移或 session 关闭无预填时允许手填。
+        branchNameEditable: result.drifted || prefill == null,
+      });
+    });
+  }
+
+  function resolveDirtyWorkspaceDecision(
+    decision: DirtyWorkspaceOption,
+    branchName: string | null,
+  ) {
+    dirtyWorkspaceDecisionRef.current?.(decision, branchName);
+    dirtyWorkspaceDecisionRef.current = null;
+    setDirtyWorkspaceDialog(null);
+  }
+
   async function completeLinkedIssueViaFlow(
     issueId: number,
     sessionId: number,
@@ -224,13 +227,7 @@ export function useAgentSessionCompletionResolution({
         },
         {
           onWaitingAutoCommitChange: setIsDetectingAgentCommitCompletion,
-          requestDirtyDecision: async (result) => {
-            // Agents surface 无 dirty 三选项对话框；clean 路径应已保证工作区干净，
-            // agent-commit 路径通过 initialDirtyDecision=auto_commit 进入。
-            throw new Error(
-              result.message || messages.issues.completionDirtyMessage,
-            );
-          },
+          requestDirtyDecision: requestDirtyWorkspaceDecision,
           confirmContinueAfterCommit: () =>
             confirm({
               title: messages.issues.completionContinueAfterCommitTitle,
@@ -273,59 +270,8 @@ export function useAgentSessionCompletionResolution({
     }
   }
 
-  async function completeLinkedIssueManual(
-    issue: NonNullable<typeof linkedIssue>,
-    session: AgentSessionListItem,
-    options: { ignoreDirty?: boolean } = {},
-  ) {
-    const targetSessionId = session.sessionId;
-    setIsTransitionMenuOpen(false);
-    setIsCompletingManual(true);
-
-    let completedIssueId: number | null = null;
-    let completedSessionId: number | null = null;
-
-    try {
-      const completedIssue = await completeLinkedIssueViaFlow(
-        issue.issueId,
-        targetSessionId,
-        options,
-      );
-      if (completedIssue == null) {
-        return;
-      }
-      completedIssueId = completedIssue.id;
-      completedSessionId = session.sessionId;
-      applyCompletedIssueToSessions(completedIssue, targetSessionId);
-      showIssueMarkedDoneToast();
-    } catch (error) {
-      showCommandErrorAlert(error);
-      try {
-        await refreshSessions();
-      } catch {
-        // Keep the command failure visible; future session events can retry refresh.
-      }
-    } finally {
-      if (completedIssueId == null) {
-        setIsCompletingManual(false);
-      }
-    }
-
-    if (completedIssueId == null || completedSessionId == null) {
-      return;
-    }
-
-    try {
-      await refreshSessions();
-    } catch (error) {
-      showCommandErrorAlert(error);
-    } finally {
-      setIsCompletingManual(false);
-    }
-  }
-
   async function completeLinkedIssueClean(
-    issue: NonNullable<typeof linkedIssue>,
+    issue: LinkedSessionIssue,
     session: AgentSessionListItem,
   ) {
     const targetSessionId = session.sessionId;
@@ -373,68 +319,6 @@ export function useAgentSessionCompletionResolution({
     }
   }
 
-  async function prepareLinkedIssueAgentCommit(
-    issue: NonNullable<typeof linkedIssue>,
-    session: AgentSessionListItem,
-  ) {
-    setIsTransitionMenuOpen(false);
-    setIsPreparingAgentCommit(true);
-
-    try {
-      const preview = await prepareAgentCommitCompletion({
-        projectId,
-        issueId: issue.issueId,
-      });
-      setAgentCommitPreview(preview);
-    } catch (error) {
-      const commandError = toCommandError(error);
-      if (isCleanWorktreeAgentCommitPreviewError(commandError)) {
-        await completeLinkedIssueClean(issue, session);
-      } else {
-        showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
-      }
-    } finally {
-      setIsPreparingAgentCommit(false);
-    }
-  }
-
-  async function handleConfirmAgentCommit() {
-    if (!linkedIssue || !agentCommitPreview || !selectedSession) {
-      return;
-    }
-
-    setIsSendingAgentCommitPrompt(true);
-
-    try {
-      // 预览确认「提交代码」= dirty 三选项中的 auto_commit。
-      const completedIssue = await completeLinkedIssueViaFlow(
-        linkedIssue.issueId,
-        selectedSession.sessionId,
-        { initialDirtyDecision: "auto_commit" },
-      );
-      if (completedIssue == null) {
-        return;
-      }
-      applyCompletedIssueToSessions(completedIssue, selectedSession.sessionId);
-      showIssueMarkedDoneToast();
-      setAgentCommitPreview(null);
-      const response = await listAgentSessions(projectId);
-      setAllSessions(
-        applySessionOverlays(
-          response.sessions,
-          reviewedIssueIdsRef.current,
-          completedIssueIdsRef.current,
-          closedSessionIdsRef.current,
-        ),
-      );
-    } catch (error) {
-      showCommandErrorAlert(error);
-    } finally {
-      setIsDetectingAgentCommitCompletion(false);
-      setIsSendingAgentCommitPrompt(false);
-    }
-  }
-
   async function handleConfirmMergePrompt() {
     if (
       mergePromptContent == null ||
@@ -473,20 +357,14 @@ export function useAgentSessionCompletionResolution({
   }
 
   return {
-    isCompletingManual,
     isCompletingClean,
-    isPreparingAgentCommit,
-    isSendingAgentCommitPrompt,
     isDetectingAgentCommitCompletion,
     isSubmittingMergePrompt,
-    agentCommitPreview,
-    setAgentCommitPreview,
+    dirtyWorkspaceDialog,
     mergePromptSessionId,
     mergePromptContent,
-    completeLinkedIssueManual,
     completeLinkedIssueClean,
-    prepareLinkedIssueAgentCommit,
-    handleConfirmAgentCommit,
+    resolveDirtyWorkspaceDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   };

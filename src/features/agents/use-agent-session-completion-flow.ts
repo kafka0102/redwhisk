@@ -52,9 +52,9 @@ interface UseAgentSessionCompletionFlowOptions {
 
 /**
  * agents-activity 的 issue 完成状态机编排层：attention 确认、mark review、状态转换
- * 入口（review / done）、手动完成与 preview 关闭。完成三路径、agent-commit 完成检测、
+ * 入口（review / done）、dirty 三选对话框。完成路径、agent-commit 完成检测、
  * merge-conflict prompt 注入下沉到 useAgentSessionCompletionResolution。列表 state 与
- * 跨簇编排留在容器，经 options 传入；3 个 completion dialog 的 JSX 仍在容器。
+ * 跨簇编排留在容器，经 options 传入；completion dialog 的 JSX 仍在容器。
  */
 export function useAgentSessionCompletionFlow({
   projectId,
@@ -83,20 +83,14 @@ export function useAgentSessionCompletionFlow({
   ] = useState(false);
 
   const {
-    isCompletingManual,
     isCompletingClean,
-    isPreparingAgentCommit,
-    isSendingAgentCommitPrompt,
     isDetectingAgentCommitCompletion,
     isSubmittingMergePrompt,
-    agentCommitPreview,
-    setAgentCommitPreview,
+    dirtyWorkspaceDialog,
     mergePromptSessionId,
     mergePromptContent,
-    completeLinkedIssueManual,
     completeLinkedIssueClean,
-    prepareLinkedIssueAgentCommit,
-    handleConfirmAgentCommit,
+    resolveDirtyWorkspaceDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   } = useAgentSessionCompletionResolution({
@@ -138,30 +132,17 @@ export function useAgentSessionCompletionFlow({
   const canRenderTransitionMenu = transitionMenuOptions.length > 0;
   const isTransitionPending =
     isMarkingReview ||
-    isCompletingManual ||
     isCompletingClean ||
-    isPreparingAgentCommit ||
-    isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion ||
     isSubmittingMergePrompt ||
     isDeletingSession;
-  const isAgentCommitPreviewPending =
-    isCompletingManual ||
-    isSendingAgentCommitPrompt ||
-    isDetectingAgentCommitCompletion ||
-    isSubmittingMergePrompt;
   const isCompletionCheckPending =
-    isCompletingManual ||
     isCompletingClean ||
-    isPreparingAgentCommit ||
-    isSendingAgentCommitPrompt ||
     isDetectingAgentCommitCompletion ||
     isSubmittingMergePrompt;
   const isCompletionLoadingDialogOpen =
     isCompletionCheckPending && !isCompletionLoadingDialogDismissed;
 
-  // completion 检查结束（pending 转 false）时重置 dismiss 标志，供下次显示。
-  // 用渲染期 state 调整替代 effect 内 setState，避开 react-hooks/set-state-in-effect。
   const [prevCompletionCheckPending, setPrevCompletionCheckPending] = useState(
     isCompletionCheckPending,
   );
@@ -211,7 +192,9 @@ export function useAgentSessionCompletionFlow({
     }
   }
 
-  async function markLinkedIssueReview(issue: NonNullable<typeof linkedIssue>) {
+  async function markLinkedIssueReview(
+    issue: LinkedSessionIssue,
+  ): Promise<AgentSessionListItem[] | null> {
     setIsTransitionMenuOpen(false);
     setIsMarkingReview(true);
 
@@ -283,20 +266,9 @@ export function useAgentSessionCompletionFlow({
         (session: AgentSessionListItem) =>
           session.sessionId === selectedSession.sessionId,
       ) ?? selectedSession;
-    const isSessionClosed = currentSession.status === "closed";
 
-    if (isSessionClosed) {
-      await completeLinkedIssueManual(linkedIssue, currentSession);
-      return;
-    }
-
-    if (currentSession.canCompleteAgentCommit) {
-      await prepareLinkedIssueAgentCommit(linkedIssue, currentSession);
-      return;
-    }
-
-    // completion_policy 已移除：默认走 clean 完成入口，由 complete_issue_flow
-    // 在后端统一检测实际工作区状态并驱动新流程。
+    // 打开 / 关闭 session 均统一进入 complete_issue_flow；
+    // dirty 时由 requestDirtyDecision 弹出三选对话框。
     await completeLinkedIssueClean(linkedIssue, currentSession);
   }
 
@@ -345,36 +317,12 @@ export function useAgentSessionCompletionFlow({
     await handleTransitionAction(action);
   }
 
-  function handleCloseAgentCommitPreview() {
-    if (isAgentCommitPreviewPending) {
-      return;
-    }
-    setAgentCommitPreview(null);
-  }
-
-  async function handleCompleteAgentCommitPreviewManually() {
-    if (!linkedIssue || !selectedSession) {
-      return;
-    }
-
-    const currentSession =
-      allSessions.find(
-        (session: AgentSessionListItem) =>
-          session.sessionId === selectedSession.sessionId,
-      ) ?? selectedSession;
-
-    await completeLinkedIssueManual(linkedIssue, currentSession, {
-      ignoreDirty: true,
-    });
-    setAgentCommitPreview(null);
-  }
-
   return {
     isUpdatingAttention,
     isMarkingReview,
     isCompletionLoadingDialogDismissed,
     setIsCompletionLoadingDialogDismissed,
-    agentCommitPreview,
+    dirtyWorkspaceDialog,
     mergePromptSessionId,
     mergePromptContent,
     isSubmittingMergePrompt,
@@ -384,16 +332,13 @@ export function useAgentSessionCompletionFlow({
     canRenderTransitionButton,
     canRenderTransitionMenu,
     isTransitionPending,
-    isAgentCommitPreviewPending,
     isCompletionLoadingDialogOpen,
     acknowledgeSessionAttention,
     handleMarkReview,
     handleMarkDone,
     handleTransitionAction,
     handleTransitionMainAction,
-    handleCloseAgentCommitPreview,
-    handleCompleteAgentCommitPreviewManually,
-    handleConfirmAgentCommit,
+    resolveDirtyWorkspaceDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   };
