@@ -116,6 +116,57 @@ describe("terminal theme contrast (Codex dark composer strip)", () => {
   });
 });
 
+/**
+ * dark 选区相对背景须可辨：active 对齐 VS Code dark 量级（约 1.9），
+ * inactive 弱于 active 但仍可见；默认前景在 active 选区上保持正文可读。
+ */
+const MIN_DARK_SELECTION_ACTIVE_CONTRAST = 1.8;
+const MIN_DARK_SELECTION_INACTIVE_CONTRAST = 1.25;
+
+describe("terminal theme contrast (dark selection readability)", () => {
+  it("dark: active selectionBackground contrasts enough against background", () => {
+    const theme = getTerminalTheme("dark");
+    const background = requireHex(theme.background, "background");
+    const selection = requireHex(
+      theme.selectionBackground,
+      "selectionBackground",
+    );
+    const ratio = hexContrastRatio(selection, background);
+    expect(
+      ratio,
+      `dark selectionBackground=${selection} vs bg=${background} contrast ${ratio.toFixed(2)} < ${MIN_DARK_SELECTION_ACTIVE_CONTRAST}`,
+    ).toBeGreaterThanOrEqual(MIN_DARK_SELECTION_ACTIVE_CONTRAST);
+  });
+
+  it("dark: inactive selectionInactiveBackground stays distinguishable on background", () => {
+    const theme = getTerminalTheme("dark");
+    const background = requireHex(theme.background, "background");
+    const selection = requireHex(
+      theme.selectionInactiveBackground,
+      "selectionInactiveBackground",
+    );
+    const ratio = hexContrastRatio(selection, background);
+    expect(
+      ratio,
+      `dark selectionInactiveBackground=${selection} vs bg=${background} contrast ${ratio.toFixed(2)} < ${MIN_DARK_SELECTION_INACTIVE_CONTRAST}`,
+    ).toBeGreaterThanOrEqual(MIN_DARK_SELECTION_INACTIVE_CONTRAST);
+  });
+
+  it("dark: default foreground remains text-readable on active selection", () => {
+    const theme = getTerminalTheme("dark");
+    const foreground = requireHex(theme.foreground, "foreground");
+    const selection = requireHex(
+      theme.selectionBackground,
+      "selectionBackground",
+    );
+    const ratio = hexContrastRatio(foreground, selection);
+    expect(
+      ratio,
+      `dark foreground=${foreground} vs selectionBackground=${selection} contrast ${ratio.toFixed(2)} < ${MIN_TEXT_CONTRAST}`,
+    ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+});
+
 function liftHex(hex: string, amount: number): string {
   const raw = hex.replace(/^#/, "");
   const r = Math.min(255, parseInt(raw.slice(0, 2), 16) + amount);
