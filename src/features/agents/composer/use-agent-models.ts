@@ -14,7 +14,7 @@
 // 前端不再维护 agent-capabilities 静态双表。
 //
 // 沿用项目既有范式：`isDisposed` 双标志，await 期间若已卸载则丢弃结果
-// （参考 `temporary-session-dialog.tsx` 的 loadProfiles）。
+// （await 期间若组件卸载则丢弃结果）。
 
 import { useCallback, useEffect, useState } from "react";
 

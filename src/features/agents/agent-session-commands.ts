@@ -170,28 +170,6 @@ export function updateAgentSessionTitle(
 export type AgentPermissionDecisionLiteral = "accept" | "decline" | "cancel";
 export type { AgentAttachmentKindLiteral } from "./agent-stream-types";
 
-export interface StartStructuredAgentSessionInput {
-  projectId: number;
-  title?: string;
-  /** agent 类型，缺省 codex。决定走哪种 provider 实现。 */
-  agentType?: AgentType;
-  /** agent profile id，优先使用对应 profile 的配置。 */
-  agentProfileId?: number;
-  /** auto / full-access / read-only，缺省 full-access。 */
-  mode?: string;
-  /** 初始模型 id，缺省由 agent 选默认。 */
-  model?: string;
-  /** reasoning effort 由 Agent 模型声明，常见值为 low / medium / high / xhigh。 */
-  effort?: string;
-  /** 续接已存在的 agent threadId，缺省则新建 thread。 */
-  resumeFromCodexSessionId?: string;
-}
-
-export interface StartStructuredAgentSessionResult {
-  sessionId: number;
-  threadId: string;
-}
-
 export interface ResumeStructuredAgentSessionInput {
   projectId: number;
   sessionId: number;
@@ -271,15 +249,6 @@ export interface SaveAgentAttachmentInput {
 export interface ReadAgentTimelineInput {
   projectId: number;
   sessionId: number;
-}
-
-export function startStructuredAgentSession(
-  input: StartStructuredAgentSessionInput,
-): Promise<StartStructuredAgentSessionResult> {
-  return invokeCommand<StartStructuredAgentSessionResult>(
-    "start_structured_agent_session",
-    { input },
-  );
 }
 
 export function resumeStructuredAgentSession(

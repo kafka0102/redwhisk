@@ -497,66 +497,6 @@ impl<'connection> AgentSessionRepository<'connection> {
         find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
-    /// 插入结构化 standalone session（无 issue）。
-    ///
-    /// PTY 专用字段填占位空串以满足 NOT NULL；`codex_session_id` 留空待 handle.start 后回填。
-    /// `worktree_owner` 依赖列默认值 `external`。
-    pub fn insert_structured_in_transaction(
-        transaction: &Transaction<'_>,
-        project_id: i64,
-        agent_profile_id: i64,
-        title: Option<&str>,
-        working_dir: &str,
-        command_snapshot: &str,
-        log_path: &str,
-        display_mode: &str,
-        started_at: i64,
-    ) -> rusqlite::Result<AgentSessionRecord> {
-        let number: i64 = transaction.query_row(
-            "SELECT COALESCE(MAX(number), 0) + 1 FROM agent_sessions WHERE project_id = ?1",
-            params![project_id],
-            |row| row.get(0),
-        )?;
-        transaction.execute(
-            "INSERT INTO agent_sessions (
-               project_id,
-               number,
-               issue_id,
-               title,
-               agent_profile_id,
-               status,
-               attention,
-               working_dir,
-               command_snapshot,
-               prompt_snapshot,
-               workspace_mode,
-               target_branch,
-               workspace_branch,
-               workspace_path,
-               worktree_root_path,
-               log_path,
-               display_mode,
-               list_inserted_at,
-               last_active_at,
-               started_at
-             ) VALUES (?1, ?2, NULL, ?3, ?4, 'running', 'none', ?5, ?6, '', 'current_branch', NULL, NULL, ?5, NULL, ?7, ?8, ?9, ?9, ?9)",
-            params![
-                project_id,
-                number,
-                title,
-                agent_profile_id,
-                working_dir,
-                command_snapshot,
-                log_path,
-                display_mode,
-                started_at
-            ],
-        )?;
-
-        let id = transaction.last_insert_rowid();
-        find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
-    }
-
     pub fn mark_terminated_in_transaction(
         transaction: &Transaction<'_>,
         session_id: i64,

@@ -2,7 +2,6 @@ import { GitBranch, LoaderCircle } from "lucide-react";
 import { memo, useMemo } from "react";
 
 import type { AgentSessionListItem } from "../agent-session-commands";
-import { AgentsNewSessionButton } from "./agents-new-session-button";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agent-visuals";
 import {
   formatSessionStatusLabel,
@@ -11,17 +10,10 @@ import {
   shouldShowRunningSpinner,
 } from "../agent-session-formatters";
 import { useI18n } from "../../../shared/i18n/i18n";
-import type { AgentProfileRecord } from "../../settings/settings-commands";
 
 interface AgentsSessionListProps {
-  availableAgentProfiles: AgentProfileRecord[];
   errorMessage: string | null;
-  hasAgentProfilesLoadError: boolean;
   isLoading: boolean;
-  isCreatingSession: boolean;
-  isLoadingAgentProfiles: boolean;
-  onCreateSession: (profile: AgentProfileRecord) => Promise<void> | void;
-  onOpenProjectAgentSettings?: () => void;
   onSelectSession: (sessionId: number) => void;
   selectedSessionId: number | null;
   sessions: AgentSessionListItem[];
@@ -29,14 +21,8 @@ interface AgentsSessionListProps {
 }
 
 export function AgentsSessionList({
-  availableAgentProfiles,
   errorMessage,
-  hasAgentProfilesLoadError,
   isLoading,
-  isCreatingSession,
-  isLoadingAgentProfiles,
-  onCreateSession,
-  onOpenProjectAgentSettings,
   onSelectSession,
   selectedSessionId,
   sessions,
@@ -52,19 +38,6 @@ export function AgentsSessionList({
       <div className="agents-sidebar__header">
         <div className="agents-sidebar__header-main">
           <h2>{title}</h2>
-        </div>
-        <div
-          className="agents-sidebar__toolbar"
-          aria-label={messages.agentsFeature.sessionListControls}
-        >
-          <AgentsNewSessionButton
-            availableAgentProfiles={availableAgentProfiles}
-            hasAgentProfilesLoadError={hasAgentProfilesLoadError}
-            isCreatingSession={isCreatingSession}
-            isLoadingAgentProfiles={isLoadingAgentProfiles}
-            onCreateSession={onCreateSession}
-            onOpenProjectAgentSettings={onOpenProjectAgentSettings}
-          />
         </div>
       </div>
 

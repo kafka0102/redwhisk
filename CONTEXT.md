@@ -124,6 +124,14 @@ _Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
 某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude）默认 json 且可在 json/tui 间切换，未接入（opencode/grok）锁定 tui 且隐藏切换。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）；opencode/grok 在具备可启动实现前仍不可真正启动会话。
 _Avoid_: 纯 UI 别名、按 CLI 能力判定、运行中切换呈现方式
 
+**Agent Session**：
+在项目中运行 Agent 的执行会话；**新建**时必须关联某一 Issue，从 Issue 启动，一个 Issue 最多关联一个有效 Session。
+_Avoid_: 自定义 Session、临时 Session、无 Issue 会话、standalone session（新建语义）
+
+**历史独立 Session**：
+既有数据中 `issue` 关联为空的 Agent Session 存量；可列表查看、恢复、收发、删除与改标题，但不可再新建。
+_Avoid_: 自定义 Session 产品能力、临时会话功能
+
 **Session 展示形式快照**：
 Agent Session 启动瞬间从所属 Agent profile 拷贝并持久化的 displayMode；会话存续期间 UI 路由、恢复与重启语义只认该快照，不回读 profile 当前值。
 _Avoid_: 实时跟随 profile、内存-only 运行时标记

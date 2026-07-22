@@ -30,14 +30,14 @@ use crate::git::worktree::{
     cleanup_worktree, list_local_branches, restore_worktree_for_branch,
     GitBranchInfo,
 };
-use crate::types::agent_profile::{AgentScope, AgentType};
+use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineResult,
     ResumeStructuredAgentSessionInput, ResumeStructuredAgentSessionResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
-    StartAgentSessionResult, StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    StartAgentSessionResult,
     UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -51,15 +51,15 @@ use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
 
-use super::command_snapshot::{build_structured_command_snapshot, build_tui_command_snapshot_for_profile};
+use super::command_snapshot::build_tui_command_snapshot_for_profile;
 use super::codex_session_id_capture::{
     command_supports_prompt_argument, should_attempt_codex_session_capture,
 };
 use crate::agent::descriptor_for;
-use super::launch::{persist_started_session_thread_id, start_provider_session};
-use super::log_path::{build_issue_runtime_structured_log_path, build_log_path, build_pending_structured_log_path, build_standalone_runtime_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
+use super::launch::start_provider_session;
+use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
 use super::timeline::latest_output_from_session_log;
-use super::validation::{validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope, validate_prompt_snapshot, validate_session_title, validate_working_dir};
+use super::validation::{validate_injected_prompt, validate_prompt_snapshot, validate_session_title};
 use super::worktree_setup::run_worktree_setup_command;
 
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
@@ -1379,408 +1379,6 @@ impl AgentSessionService<'_> {
         .start_agent_session(data_dir, input)
     }
 
-    /// 启动结构化 Agent Session（codex app-server JSON-RPC 路径）。
-    ///
-    /// 与 PTY 路径并存：不创建 PTY 子进程，而是 spawn `codex app-server`
-    /// 并通过 `CodexSessionHandle` 走结构化事件流。session 行会落到
-    /// `agent_sessions` 表，并记录 log 路径、command snapshot、绑定的
-    /// agent profile 与 `codex_session_id`（codex threadId）。
-    pub fn start_structured_agent_session_in_data_dir(
-        data_dir: impl AsRef<Path>,
-        input: StartStructuredAgentSessionInput,
-        agent_registry: &AgentSessionRegistry,
-        broadcaster: &AgentEventBroadcaster,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
-        let database = DatabaseConfig::new(&data_dir)
-            .open()
-            .map_err(CommandError::from)?;
-        MigrationRunner::default()
-            .run(&database.connection)
-            .map_err(agent_session_database_error)?;
-
-        let service = AgentSessionService::new(
-            IssueRepository::new(&database.connection),
-            ProjectRepository::new(&database.connection),
-            AgentProfileRepository::new(&database.connection),
-            AgentSessionRepository::new(&database.connection),
-        );
-        service.start_structured_agent_session(
-            data_dir.as_ref(),
-            input,
-            agent_registry,
-            broadcaster,
-            pty_sessions,
-        )
-    }
-
-    fn start_structured_agent_session(
-        &self,
-        data_dir: &Path,
-        input: StartStructuredAgentSessionInput,
-        agent_registry: &AgentSessionRegistry,
-        broadcaster: &AgentEventBroadcaster,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
-        let project = self.project_by_id(input.project_id)?;
-        let cwd = validate_working_dir(&project.repo_path).map_err(|mut error| {
-            error
-                .details
-                .get_or_insert_with(Vec::new)
-                .push(ErrorDetail::new("Project").with_value("projectId", input.project_id));
-            error
-        })?;
-
-        let profile = self.resolve_temporary_session_profile(&input)?;
-        match super::lifecycle::runtime_transport_from_raw(&profile.display_mode)? {
-            super::lifecycle::RuntimeTransport::InteractiveTui => {
-                return self.start_standalone_tui_agent_session(
-                    data_dir,
-                    &input,
-                    &profile,
-                    &cwd,
-                    pty_sessions,
-                );
-            }
-            super::lifecycle::RuntimeTransport::StructuredJson => {
-                let _ = pty_sessions;
-            }
-        }
-
-        let agent_profile_id = profile.id;
-        let agent_type = profile.agent_type.clone();
-        let command_snapshot = build_structured_command_snapshot(&profile);
-        let display_mode = profile.display_mode.as_str();
-
-        let title = input
-            .title
-            .as_deref()
-            .map(validate_session_title)
-            .transpose()?;
-        let started_at = current_epoch_millis()?;
-        let pending_log_path =
-            build_pending_structured_log_path(data_dir, input.project_id, started_at)?;
-
-        // 落 session 行。
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-        let session = (|| {
-            let session = AgentSessionRepository::insert_structured_in_transaction(
-                &transaction,
-                input.project_id,
-                agent_profile_id,
-                title.as_deref(),
-                &cwd,
-                &command_snapshot,
-                &pending_log_path,
-                display_mode,
-                started_at,
-            )?;
-            let log_path = build_standalone_runtime_structured_log_path(
-                data_dir,
-                input.project_id,
-                session.number,
-            )
-            .map_err(command_error_to_sqlite)?;
-            let session = AgentSessionRepository::update_log_path_in_transaction(
-                &transaction,
-                session.id,
-                &log_path,
-            )?
-            .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-            let event_payload = json!({
-                "sessionId": session.id,
-                "projectId": input.project_id,
-                "issueId": Value::Null,
-                "title": title,
-                "status": "running",
-                "structuredStream": true,
-                "logPath": log_path,
-            })
-            .to_string();
-            EventRepository::insert_session_event_in_transaction(
-                &transaction,
-                session.id,
-                SessionEventType::SessionStarted,
-                &event_payload,
-                started_at,
-            )?;
-            transaction.commit()?;
-            Ok::<_, rusqlite::Error>(session)
-        })()
-        .map_err(agent_session_database_error)?;
-
-        let session_id = session.id;
-        // DB 已 commit（running），后续 handle 启动期间需防并发 reconcile 误判。
-        // mark_starting 让 contains 返回 true；register 真实 handle 时自动清除，
-        // 各失败路径需显式 unmark。
-        agent_registry.mark_starting(session_id);
-
-        let runtime = descriptor_for(&agent_type)
-            .resolve_runtime_config(data_dir, input.model.as_deref(), input.effort.as_deref());
-        let thread_id = self.finish_structured_standalone_provider_start(
-            &DefaultAgentSessionProviderFactory,
-            AgentSessionStartRequest {
-                agent_type: agent_type.clone(),
-                project_id: input.project_id,
-                session_id,
-                binary: command_snapshot.clone(),
-                cwd: cwd.clone(),
-                mode_id: input.mode.clone(),
-                dangerous: false,
-                model: runtime.model,
-                effort: runtime.effort,
-                resume_thread_id: input.resume_from_codex_session_id.clone(),
-                broadcaster: broadcaster.clone(),
-                config_home: user_home_from_data_dir(data_dir),
-            },
-            agent_registry,
-            broadcaster,
-            session_id,
-        )?;
-
-        Ok(StartStructuredAgentSessionResult {
-            session_id,
-            thread_id,
-        })
-    }
-
-    fn start_standalone_tui_agent_session(
-        &self,
-        data_dir: &Path,
-        input: &StartStructuredAgentSessionInput,
-        profile: &AgentProfileRow,
-        cwd: &str,
-        pty_sessions: &PtySessionManager,
-    ) -> Result<StartStructuredAgentSessionResult, CommandError> {
-        let title = input
-            .title
-            .as_deref()
-            .map(validate_session_title)
-            .transpose()?;
-        let started_at = current_epoch_millis()?;
-        let command_snapshot = build_tui_command_snapshot_for_profile(profile);
-        let log_path = build_log_path(
-            data_dir,
-            input.project_id,
-            "standalone",
-            profile.id,
-            started_at,
-        )?;
-
-        let pending_pty = pty_sessions
-            .spawn_pending(&PtySpawnRequest {
-                mode: PtyCommandMode::ExecReplace,
-                command: command_snapshot.clone(),
-                working_dir: cwd.to_string(),
-                log_path: log_path.clone(),
-                initial_prompt: None,
-                rows: 32,
-                cols: 120,
-                startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
-                startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
-            })
-            .map_err(agent_session_start_error)?;
-
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-        let session = (|| {
-            let session = AgentSessionRepository::insert_structured_in_transaction(
-                &transaction,
-                input.project_id,
-                profile.id,
-                title.as_deref(),
-                cwd,
-                &command_snapshot,
-                &log_path,
-                profile.display_mode.as_str(),
-                started_at,
-            )?;
-            let event_payload = json!({
-                "sessionId": session.id,
-                "projectId": input.project_id,
-                "issueId": Value::Null,
-                "title": title,
-                "status": "running",
-                "structuredStream": false,
-                "displayMode": profile.display_mode,
-                "logPath": log_path,
-            })
-            .to_string();
-            EventRepository::insert_session_event_in_transaction(
-                &transaction,
-                session.id,
-                SessionEventType::SessionStarted,
-                &event_payload,
-                started_at,
-            )?;
-            transaction.commit()?;
-            Ok::<_, rusqlite::Error>(session)
-        })();
-
-        let session = match session {
-            Ok(session) => session,
-            Err(error) => {
-                pending_pty.terminate();
-                return Err(agent_session_database_error(error));
-            }
-        };
-
-        let session_id = session.id;
-        let data_dir_for_exit = data_dir.to_path_buf();
-        if let Err(error) = pty_sessions.register_for_project(
-            input.project_id,
-            session_id,
-            pending_pty,
-            move |exit_status| {
-                let _ = AgentSessionService::record_session_termination_in_data_dir(
-                    &data_dir_for_exit,
-                    session_id,
-                    exit_status,
-                );
-            },
-        ) {
-            error.pending.terminate();
-            let _ = AgentSessionService::record_session_termination_in_data_dir(
-                data_dir,
-                session_id,
-                PtyExitStatus { exit_code: None },
-            );
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionStartFailed,
-                "Agent TUI Session 注册失败。",
-            )
-            .with_reason("tuiRegisterFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.message)));
-        }
-
-        Ok(StartStructuredAgentSessionResult {
-            session_id,
-            thread_id: String::new(),
-        })
-    }
-
-    fn resolve_temporary_session_profile(
-        &self,
-        input: &StartStructuredAgentSessionInput,
-    ) -> Result<AgentProfileRow, CommandError> {
-        let requested_agent_type = input.agent_type.clone().unwrap_or(AgentType::Codex);
-
-        if let Some(profile_id) = input.agent_profile_id {
-            let profile = self
-                .agent_profile_repository
-                .find_profile_by_id(profile_id)
-                .map_err(agent_session_database_error)?
-                .ok_or_else(|| {
-                    CommandError::new(
-                        CommandErrorCode::AgentProfileValidationFailed,
-                        "Agent Profile 不存在。",
-                    )
-                    .with_reason("profileNotFound")
-                    .with_detail(
-                        ErrorDetail::new("AgentProfile").with_value("agentProfileId", profile_id),
-                    )
-                })?;
-            validate_profile_not_deleted(&profile)?;
-            validate_profile_scope(&profile, input.project_id)?;
-            return Ok(profile);
-        }
-
-        let project_profiles = self
-            .agent_profile_repository
-            .list_profiles_by_scope(&AgentScope::Project, Some(input.project_id))
-            .map_err(agent_session_database_error)?;
-        let global_profiles = self
-            .agent_profile_repository
-            .list_profiles_by_scope(&AgentScope::Global, None)
-            .map_err(agent_session_database_error)?;
-
-        let all_profiles: Vec<_> = project_profiles
-            .into_iter()
-            .chain(global_profiles.into_iter())
-            .collect();
-
-        if let Some(profile) = all_profiles
-            .into_iter()
-            .find(|profile| profile.agent_type == requested_agent_type)
-        {
-            return Ok(profile);
-        }
-
-        let requested_agent_type_literal = match requested_agent_type {
-            AgentType::Codex => "codex",
-            AgentType::Claude => "claude",
-            AgentType::OpenCode => "opencode",
-            AgentType::Grok => "grok",
-        };
-        Err(CommandError::new(
-            CommandErrorCode::AgentProfileValidationFailed,
-            "未找到可用于当前 Agent 类型的 Agent Profile。",
-        )
-        .with_reason("noProfileForAgentType")
-        .with_detail(
-            ErrorDetail::new("AgentType").with_value("agentType", requested_agent_type_literal),
-        )
-        .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)))
-    }
-
-    /// DB commit 之后的 standalone 启动后半段（无 initial prompt）。
-    fn finish_structured_standalone_provider_start(
-        &self,
-        factory: &dyn AgentSessionProviderFactory,
-        request: AgentSessionStartRequest,
-        agent_registry: &AgentSessionRegistry,
-        broadcaster: &AgentEventBroadcaster,
-        session_id: i64,
-    ) -> Result<String, CommandError> {
-        // 调用方已 mark_starting；失败路径 unmark + soft-delete session。
-        let started = match start_provider_session(factory, request) {
-            Ok(started) => started,
-            Err(error) => {
-                agent_registry.unmark_starting(session_id);
-                let _ = self.rollback_failed_structured_standalone_session(session_id);
-                return Err(error);
-            }
-        };
-        if let Err(error) =
-            persist_started_session_thread_id(&self.agent_session_repository, session_id, &started)
-        {
-            agent_registry.unmark_starting(session_id);
-            started.handle.shutdown();
-            let _ = self.rollback_failed_structured_standalone_session(session_id);
-            return Err(error);
-        }
-        let thread_id = started.thread_id.clone().unwrap_or_default();
-        broadcaster.register_session(session_id);
-        agent_registry.register(session_id, started.handle);
-        Ok(thread_id)
-    }
-
-    fn rollback_failed_structured_standalone_session(
-        &self,
-        session_id: i64,
-    ) -> Result<(), CommandError> {
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(agent_session_database_error)?;
-        AgentSessionRepository::soft_delete_in_transaction(
-            &transaction,
-            session_id,
-            current_epoch_millis()?,
-        )
-        .map_err(agent_session_database_error)?;
-        transaction.commit().map_err(agent_session_database_error)?;
-        Ok(())
-    }
-
     fn previous_issue_archive_log_path(
         &self,
         data_dir: &Path,
@@ -2827,13 +2425,12 @@ mod tests {
         normalize_submitted_prompt, preferred_session_cwd, should_restore_redwhisk_worktree,
         AgentSessionService,
     };
-    use crate::features::agent_session::command_snapshot::build_structured_command_snapshot;
     use crate::features::agent_session::log_path::{
         build_issue_archive_log_path, build_issue_runtime_structured_log_path,
         build_issue_session_archive,
     };
     use crate::features::agent_session::timeline::{
-        latest_output_from_session_log, read_timeline_from_session_log,
+        latest_output_from_session_log, read_timeline_from_log_path,
     };
     use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
@@ -2927,12 +2524,6 @@ mod tests {
         assert_eq!(normalize_submitted_prompt("hello\r"), "hello\r");
     }
 
-    #[test]
-    fn structured_command_snapshot_keeps_codex_profile_command_unchanged() {
-        let profile = test_agent_profile(AgentType::Codex, " codex-asxs ");
-
-        assert_eq!(build_structured_command_snapshot(&profile), "codex-asxs");
-    }
 
     #[test]
     fn codex_profile_default_mode_uses_full_access() {
@@ -2997,7 +2588,7 @@ mod tests {
         .expect("write structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
             history.items,
@@ -3276,7 +2867,7 @@ mod tests {
         fs::write(&log_path, format!("{lines}\n")).expect("write structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
             history.items,
@@ -3362,7 +2953,7 @@ mod tests {
         fs::write(&log_path, format!("{lines}\n")).expect("write structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
             history.items,
@@ -3394,7 +2985,7 @@ mod tests {
         .expect("write legacy structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
             history.items,
@@ -3432,7 +3023,7 @@ mod tests {
         .expect("write concatenated structured log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert!(history.items.is_empty());
         assert_eq!(history.effort.as_deref(), Some("high"));
@@ -3453,7 +3044,7 @@ mod tests {
         .expect("write pty log");
 
         let session = test_session_record(log_path.to_string_lossy().as_ref());
-        let history = read_timeline_from_session_log(&session).expect("read timeline");
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(history.items.len(), 1);
         assert_eq!(history.effort, None);
@@ -5530,47 +5121,6 @@ mod tests {
         assert_eq!(format!("{:?}", issue.status).to_lowercase(), "running");
     }
 
-
-    #[test]
-    fn finish_standalone_provider_start_rolls_back_when_factory_fails() {
-        let connection = setup_session_list_database();
-        insert_session_list_row(
-            &connection,
-            600,
-            None,
-            None,
-            None,
-            AgentSessionStatus::Running,
-            100,
-            None,
-        );
-        let service = test_agent_session_service(&connection);
-        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
-        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
-        registry.mark_starting(600);
-        let factory = ScriptedProviderFactory {
-            result: std::sync::Mutex::new(Some(Err(AgentSessionError::NotRunning(
-                "spawn failed".into(),
-            )))),
-        };
-        let error = service
-            .finish_structured_standalone_provider_start(
-                &factory,
-                base_start_request(&broadcaster, 600),
-                &registry,
-                &broadcaster,
-                600,
-            )
-            .expect_err("should fail");
-        assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
-        assert!(!registry.contains(600));
-        assert!(
-            AgentSessionRepository::new(&connection)
-                .find_by_id(600)
-                .expect("query")
-                .is_none()
-        );
-    }
 
     #[test]
     fn resume_structured_session_short_circuits_live_handle_without_codex_session_id() {

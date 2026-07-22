@@ -21,7 +21,6 @@ import {
   listAgentSessions,
   resumeStructuredAgentSession,
   setAgentSessionAttention,
-  startStructuredAgentSession,
   updateAgentSessionTitle,
 } from "./agent-session-commands";
 import * as composerDraftModule from "./composer/use-agent-composer";
@@ -36,7 +35,6 @@ import {
   sendAgentCommitPrompt,
   updateIssue,
 } from "../issues/issue-commands";
-import { listAgentProfiles } from "../settings/settings-commands";
 import {
   closeProjectTerminal,
   createTemporaryProjectTerminal,
@@ -160,7 +158,6 @@ vi.mock("./agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
   resumeStructuredAgentSession: vi.fn(),
   setAgentSessionAttention: vi.fn(),
-  startStructuredAgentSession: vi.fn(),
   updateAgentSessionTitle: vi.fn(),
   sendAgentMessage: vi.fn(),
 }));
@@ -172,10 +169,6 @@ vi.mock("./session-workspace/session-workspace-commands", () => ({
   listCodeWorkspaceRoots: vi.fn().mockResolvedValue({ roots: [] }),
   readProjectWorktreeDiff: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
-}));
-
-vi.mock("../settings/settings-commands", () => ({
-  listAgentProfiles: vi.fn(),
 }));
 
 vi.mock("../issues/issue-commands", () => ({
@@ -215,9 +208,7 @@ const resumeStructuredAgentSessionMock = vi.mocked(
   resumeStructuredAgentSession,
 );
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
-const startStructuredAgentSessionMock = vi.mocked(startStructuredAgentSession);
 const updateAgentSessionTitleMock = vi.mocked(updateAgentSessionTitle);
-const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const completeIssueFlowMock = vi.mocked(completeIssueFlow);
 const completeIssueCleanMock = vi.mocked(completeIssueClean);
 const completeIssueManualMock = vi.mocked(completeIssueManual);
@@ -300,43 +291,6 @@ function getSessionRowByIssue(
 
   return row;
 }
-
-const defaultProfiles = {
-  project: [
-    {
-      id: 101,
-      name: "Project Agent",
-      agentType: "codex" as const,
-      command: "codex",
-      scope: "project" as const,
-      projectId: 1,
-      mode: "full-auto",
-      dangerous: true,
-      defaultSkill: "",
-      promptTemplate: "",
-      del: 0,
-      displayMode: "json" as const,
-      enabled: true,
-    },
-  ],
-  global: [
-    {
-      id: 201,
-      name: "Global Agent",
-      agentType: "codex" as const,
-      command: "codex",
-      scope: "global" as const,
-      projectId: null,
-      mode: "full-auto",
-      dangerous: true,
-      defaultSkill: "",
-      promptTemplate: "",
-      del: 0,
-      displayMode: "json" as const,
-      enabled: true,
-    },
-  ],
-};
 
 function runningSession(sessionId: number, issueTitle = "Existing issue") {
   return {
@@ -494,7 +448,6 @@ describe("AgentsActivity", () => {
     injectAgentSessionPromptMock.mockReset();
     resumeStructuredAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
-    startStructuredAgentSessionMock.mockReset();
     updateAgentSessionTitleMock.mockReset();
     listIssuesMock.mockReset();
     completeIssueFlowMock.mockReset();
@@ -520,10 +473,6 @@ describe("AgentsActivity", () => {
     setAgentSessionAttentionMock.mockResolvedValue({
       sessionId: 301,
       attention: "requested",
-    });
-    startStructuredAgentSessionMock.mockResolvedValue({
-      sessionId: 701,
-      threadId: "thread-701",
     });
     deleteAgentSessionMock.mockResolvedValue({
       sessionId: 701,
@@ -706,11 +655,6 @@ describe("AgentsActivity", () => {
       createdAt: 1_780_637_000_000,
       updatedAt: 1_780_638_002_000,
       statusChangedAt: 1_780_638_002_000,
-    }));
-    listAgentProfilesMock.mockReset();
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
-      profiles:
-        scope === "project" ? defaultProfiles.project : defaultProfiles.global,
     }));
     getProjectWorktreeChangesMock.mockResolvedValue({
       signature: "default-changes",
@@ -1930,7 +1874,7 @@ describe("AgentsActivity", () => {
           workflowSkillName: null,
           canCompleteClean: false,
           canCompleteAgentCommit: false,
-          isTurnRunning: true,
+          isTurnRunning: false,
           workspaceMode: "current_branch",
           workingDir: "/tmp/repo",
           workspacePath: null,
@@ -2163,214 +2107,54 @@ describe("AgentsActivity", () => {
     expect(claudeRow).not.toHaveTextContent("Claude");
   });
 
-  it("creates a new session immediately when only one agent profile is configured", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
-      profiles: scope === "project" ? defaultProfiles.project : [],
-    }));
-    listAgentSessionsMock
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 701,
-            number: 701,
-            issueId: null,
-            issueNumber: null,
-            issueTitle: null,
-            title: "Untitled Session",
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_638_500_000,
-            startedAt: 1_780_638_500_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValue({
-        sessions: [
-          {
-            sessionId: 701,
-            number: 701,
-            issueId: null,
-            issueNumber: null,
-            issueTitle: null,
-            title: "Untitled Session",
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_638_500_000,
-            startedAt: 1_780_638_500_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      });
+  it("does not render a new-session entry on the agents session list", async () => {
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [
+        {
+          sessionId: 301,
+          number: 301,
+          issueId: 20,
+          issueNumber: 20,
+          issueTitle: "Existing issue",
+          title: null,
+          agentType: "codex",
+          displayMode: "json",
+          status: "running",
+          attention: "none",
+          lastActiveAt: 1_780_637_000_000,
+          startedAt: 1_780_637_000_000,
+          closedAt: null,
+          projectId: 1,
+          issueStatus: null,
+          agentProfileId: 1,
+          agentProfileName: "Test Profile",
+          workflowSkillName: null,
+          canCompleteClean: false,
+          canCompleteAgentCommit: false,
+          isTurnRunning: true,
+          workspaceMode: "current_branch",
+          workingDir: "/tmp/repo",
+          workspacePath: null,
+          originBranch: null,
+          workspaceBranch: null,
+          worktreeOwner: "redwhisk",
+          logPath: "/tmp/session.log",
+          latestOutput: null,
+          processingMs: 0,
+          lastOutputAt: null,
+        },
+      ],
+    });
 
     render(<AgentsActivity activeSessionId={301} projectId={1} />);
 
-    const newSessionButton = await screen.findByRole("button", {
-      name: "New session",
-    });
-    await waitFor(() => expect(newSessionButton).not.toBeDisabled());
-
-    await user.click(newSessionButton);
-
     await waitFor(() =>
-      expect(startStructuredAgentSessionMock).toHaveBeenCalledWith({
-        projectId: 1,
-        title: "Untitled Session",
-        agentType: "codex",
-        agentProfileId: 101,
-      }),
+      expect(screen.getByText("Existing issue")).toBeInTheDocument(),
     );
-    await waitFor(() =>
-      expect(listAgentSessionsMock.mock.calls.length).toBeGreaterThanOrEqual(2),
-    );
-    expect(newSessionButton).toHaveFocus();
     expect(
-      screen.getByRole("heading", { level: 3, name: "Untitled Session" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "New session" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("New session")).not.toBeInTheDocument();
   });
 
   it("shows standalone session header actions without issue status controls", async () => {
@@ -2706,462 +2490,6 @@ describe("AgentsActivity", () => {
     expect(
       screen.getByRole("heading", { level: 3, name: "Untitled Session" }),
     ).toBeInTheDocument();
-  });
-
-  it("prompts to open agent settings when no agent profiles are available", async () => {
-    const user = userEvent.setup();
-    const handleOpenProjectAgentSettings = vi.fn();
-    listAgentProfilesMock.mockImplementation(async () => ({ profiles: [] }));
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          number: 301,
-          issueId: 20,
-          issueNumber: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          displayMode: "json",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-          projectId: 1,
-          issueStatus: null,
-          agentProfileId: 1,
-          agentProfileName: "Test Profile",
-          workflowSkillName: null,
-          canCompleteClean: false,
-          canCompleteAgentCommit: false,
-          isTurnRunning: true,
-          workspaceMode: "current_branch",
-          workingDir: "/tmp/repo",
-          workspacePath: null,
-          originBranch: null,
-          workspaceBranch: null,
-          worktreeOwner: "redwhisk",
-          logPath: "/tmp/session.log",
-          latestOutput: null,
-          processingMs: 0,
-          lastOutputAt: null,
-        },
-      ],
-    });
-
-    render(
-      <AgentsActivity
-        activeSessionId={301}
-        onOpenProjectAgentSettings={handleOpenProjectAgentSettings}
-        projectId={1}
-      />,
-    );
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "New session",
-      }),
-    );
-
-    const confirmation = await screen.findByRole("dialog", {
-      name: "No Agent is available. Create one now?",
-    });
-    expect(
-      within(confirmation).getByText("No Agent is available. Create one now?"),
-    ).toBeInTheDocument();
-    await user.click(within(confirmation).getByRole("button", { name: "Yes" }));
-
-    expect(handleOpenProjectAgentSettings).toHaveBeenCalledTimes(1);
-    expect(toastErrorMock).not.toHaveBeenCalled();
-  });
-
-  it("shows all configured agent profiles by name when multiple agents are configured", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
-        return {
-          profiles: [
-            defaultProfiles.project[0],
-            {
-              ...defaultProfiles.project[0],
-              id: 102,
-              name: "Second Codex Agent",
-            },
-            {
-              ...defaultProfiles.project[0],
-              id: 103,
-              name: "Claude Agent",
-              agentType: "claude",
-              command: "claude",
-            },
-          ],
-        };
-      }
-
-      return {
-        profiles: [defaultProfiles.global[0]],
-      };
-    });
-    listAgentSessionsMock.mockResolvedValueOnce({
-      sessions: [
-        {
-          sessionId: 301,
-          number: 301,
-          issueId: 20,
-          issueNumber: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          displayMode: "json",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-          projectId: 1,
-          issueStatus: null,
-          agentProfileId: 1,
-          agentProfileName: "Test Profile",
-          workflowSkillName: null,
-          canCompleteClean: false,
-          canCompleteAgentCommit: false,
-          isTurnRunning: true,
-          workspaceMode: "current_branch",
-          workingDir: "/tmp/repo",
-          workspacePath: null,
-          originBranch: null,
-          workspaceBranch: null,
-          worktreeOwner: "redwhisk",
-          logPath: "/tmp/session.log",
-          latestOutput: null,
-          processingMs: 0,
-          lastOutputAt: null,
-        },
-      ],
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New session" }),
-      ).not.toBeDisabled(),
-    );
-    await user.click(screen.getByRole("button", { name: "New session" }));
-
-    expect(
-      await screen.findByRole("menuitem", { name: "Project Agent" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Second Codex Agent" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Claude Agent" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: "Global Agent" }),
-    ).toBeInTheDocument();
-    expect(startStructuredAgentSessionMock).not.toHaveBeenCalled();
-  });
-
-  it("creates a session for the selected agent profile from the picker", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") {
-        return {
-          profiles: [
-            defaultProfiles.project[0],
-            {
-              ...defaultProfiles.project[0],
-              id: 102,
-              name: "Second Codex Agent",
-            },
-            {
-              ...defaultProfiles.project[0],
-              id: 103,
-              name: "Claude Agent",
-              agentType: "claude",
-              command: "claude",
-            },
-          ],
-        };
-      }
-
-      return {
-        profiles: [defaultProfiles.global[0]],
-      };
-    });
-    listAgentSessionsMock
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        sessions: [
-          {
-            sessionId: 701,
-            number: 701,
-            issueId: null,
-            issueNumber: null,
-            issueTitle: null,
-            title: "Untitled Session",
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_638_500_000,
-            startedAt: 1_780_638_500_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      })
-      .mockResolvedValue({
-        sessions: [
-          {
-            sessionId: 701,
-            number: 701,
-            issueId: null,
-            issueNumber: null,
-            issueTitle: null,
-            title: "Untitled Session",
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_638_500_000,
-            startedAt: 1_780_638_500_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-          {
-            sessionId: 301,
-            number: 301,
-            issueId: 20,
-            issueNumber: 20,
-            issueTitle: "Existing issue",
-            title: null,
-            agentType: "codex",
-            displayMode: "json",
-            status: "running",
-            attention: "none",
-            lastActiveAt: 1_780_637_000_000,
-            startedAt: 1_780_637_000_000,
-            closedAt: null,
-            projectId: 1,
-            issueStatus: null,
-            agentProfileId: 1,
-            agentProfileName: "Test Profile",
-            workflowSkillName: null,
-            canCompleteClean: false,
-            canCompleteAgentCommit: false,
-            isTurnRunning: true,
-            workspaceMode: "current_branch",
-            workingDir: "/tmp/repo",
-            workspacePath: null,
-            originBranch: null,
-            workspaceBranch: null,
-            worktreeOwner: "redwhisk",
-            logPath: "/tmp/session.log",
-            latestOutput: null,
-            processingMs: 0,
-            lastOutputAt: null,
-          },
-        ],
-      });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New session" }),
-      ).not.toBeDisabled(),
-    );
-    await user.click(screen.getByRole("button", { name: "New session" }));
-    await user.click(
-      await screen.findByRole("menuitem", { name: "Global Agent" }),
-    );
-
-    await waitFor(() =>
-      expect(startStructuredAgentSessionMock).toHaveBeenCalledWith({
-        projectId: 1,
-        title: "Untitled Session",
-        agentType: "codex",
-        agentProfileId: 201,
-      }),
-    );
-    await waitFor(() =>
-      expect(listAgentSessionsMock.mock.calls.length).toBeGreaterThanOrEqual(2),
-    );
-    expect(
-      screen.getByRole("heading", { level: 3, name: "Untitled Session" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("complementary", { name: "Linked issue" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Issue$/)).not.toBeInTheDocument();
-    expect(screen.queryByText("No linked issue")).not.toBeInTheDocument();
-  });
-
-  it("shows the start failure reason inline when session creation fails", async () => {
-    const user = userEvent.setup();
-    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
-      profiles: scope === "project" ? defaultProfiles.project : [],
-    }));
-    listAgentSessionsMock.mockResolvedValue({
-      sessions: [
-        {
-          sessionId: 301,
-          number: 301,
-          issueId: 20,
-          issueNumber: 20,
-          issueTitle: "Existing issue",
-          title: null,
-          agentType: "codex",
-          displayMode: "json",
-          status: "running",
-          attention: "none",
-          lastActiveAt: 1_780_637_000_000,
-          startedAt: 1_780_637_000_000,
-          closedAt: null,
-          projectId: 1,
-          issueStatus: null,
-          agentProfileId: 1,
-          agentProfileName: "Test Profile",
-          workflowSkillName: null,
-          canCompleteClean: false,
-          canCompleteAgentCommit: false,
-          isTurnRunning: true,
-          workspaceMode: "current_branch",
-          workingDir: "/tmp/repo",
-          workspacePath: null,
-          originBranch: null,
-          workspaceBranch: null,
-          worktreeOwner: "redwhisk",
-          logPath: "/tmp/session.log",
-          latestOutput: null,
-          processingMs: 0,
-          lastOutputAt: null,
-        },
-      ],
-    });
-    startStructuredAgentSessionMock.mockRejectedValue({
-      code: "AGENT_SESSION_START_FAILED",
-      message: "Agent 进程启动失败。",
-    });
-
-    render(<AgentsActivity activeSessionId={301} projectId={1} />);
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: "New session",
-      }),
-    );
-    await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith("Agent 进程启动失败。");
-    });
-    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
   });
 
   it("groups sessions by linked issue status without rendering backlog", async () => {
@@ -3550,7 +2878,7 @@ describe("AgentsActivity", () => {
           workflowSkillName: null,
           canCompleteClean: false,
           canCompleteAgentCommit: false,
-          isTurnRunning: true,
+          isTurnRunning: false,
           workspaceMode: "current_branch",
           workingDir: "/tmp/repo",
           workspacePath: null,
@@ -3934,7 +3262,7 @@ describe("AgentsActivity", () => {
             workflowSkillName: null,
             canCompleteClean: false,
             canCompleteAgentCommit: false,
-            isTurnRunning: true,
+            isTurnRunning: false,
             workspaceMode: "current_branch",
             workingDir: "/tmp/repo",
             workspacePath: null,
@@ -6278,7 +5606,7 @@ describe("AgentsActivity", () => {
             workflowSkillName: null,
             canCompleteClean: false,
             canCompleteAgentCommit: false,
-            isTurnRunning: true,
+            isTurnRunning: false,
             workspaceMode: "current_branch",
             workingDir: "/tmp/repo",
             workspacePath: null,

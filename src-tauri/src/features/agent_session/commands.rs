@@ -24,7 +24,7 @@ use crate::types::agent_session::{
     ResumeStructuredAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
     SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
-    StartAgentSessionResult, StartStructuredAgentSessionInput, StartStructuredAgentSessionResult,
+    StartAgentSessionResult,
     UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -359,51 +359,6 @@ fn emit_agent_session_list_changed(
             reason,
         },
     );
-}
-
-#[tauri::command]
-pub async fn start_structured_agent_session(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: StartStructuredAgentSessionInput,
-) -> Result<StartStructuredAgentSessionResult, CommandError> {
-    let data_dir = prepare_agent_session_data_dir(&app, &state)?;
-    let agent_sessions = state.agent_sessions.clone();
-    let agent_event_broadcaster = state.agent_event_broadcaster.clone();
-    let pty_sessions = state.pty_sessions.clone();
-    let project_id = input.project_id;
-    let event_data_dir = data_dir.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let result = AgentSessionService::start_structured_agent_session_in_data_dir(
-            data_dir,
-            input,
-            &agent_sessions,
-            &agent_event_broadcaster,
-            &pty_sessions,
-        )?;
-        emit_agent_session_list_changed(
-            &app,
-            project_id,
-            Some(result.session_id),
-            "session_started",
-        );
-        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
-            &app,
-            &event_data_dir,
-            project_id,
-        );
-        Ok(result)
-    })
-    .await
-    .map_err(|error| {
-        CommandError::new(
-            CommandErrorCode::AgentSessionPersistenceFailed,
-            "Agent Session 启动失败。",
-        )
-        .with_reason("startFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-    })?
-    .log_if_error("start_structured_agent_session")
 }
 
 #[tauri::command]

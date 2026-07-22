@@ -385,18 +385,14 @@ export interface I18nMessages {
     mergeToBaseBranchNo: string;
     mergeToBaseBranchQuestion: string;
     mergeToBaseBranchYes: string;
-    newSession: string;
     noChangedFiles: string;
     noDoneSessions: string;
-    noAvailableAgentPrompt: string;
     noInProgressSessions: string;
     noProfilesForAgentType: string;
     noReviewSessions: string;
     noSessions: string;
     /** ADR-0020：opencode/grok 在会话入口置灰时的标注。 */
     unsupportedLaunch: string;
-    openAgentSettingsNo: string;
-    openAgentSettingsYes: string;
     openSessionActions: string;
     openSessionSidePanel: string;
     openStatusOptions: string;
@@ -408,8 +404,6 @@ export interface I18nMessages {
     running: string;
     attentionRequested: string;
     attentionOutputComplete: string;
-    sessionDialog: string;
-    sessionDialogStatus: string;
     sessionInlineMaximize: string;
     sessionInlineRestore: string;
     sessionInlineTabs: string;
@@ -421,17 +415,12 @@ export interface I18nMessages {
     cancelSessionTitleEdit: string;
     renameSessionTitle: string;
     saveSessionTitle: string;
-    start: string;
-    starting: string;
     submitting: string;
-    temporarySessionDefaultPrompt: string;
-    temporarySessionDefaultTitle: string;
     titleField: string;
     viewIssue: string;
     viewAllContent: string;
     collapseContent: string;
     detailsField: string;
-    promptField: string;
     currentModelType: string;
     addAttachment: string;
     removeAttachment: (fileName: string) => string;

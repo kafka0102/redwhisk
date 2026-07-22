@@ -146,7 +146,6 @@ pub fn run() {
             features::agent_session::commands::get_project_git_branches,
             features::agent_session::commands::set_agent_session_attention,
             features::agent_session::commands::inject_agent_session_prompt,
-            features::agent_session::commands::start_structured_agent_session,
             features::agent_session::commands::resume_structured_agent_session,
             features::agent_session::commands::delete_agent_session,
             features::agent_session::commands::update_agent_session_title,

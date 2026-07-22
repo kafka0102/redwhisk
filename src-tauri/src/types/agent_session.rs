@@ -260,35 +260,6 @@ impl AgentPermissionDecision {
     }
 }
 
-/// 启动结构化 Agent Session。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartStructuredAgentSessionInput {
-    pub project_id: i64,
-    /// 会话标题（独立会话用，关联 issue 的场景留空）。
-    pub title: Option<String>,
-    /// agent 类型（缺省 Codex）。决定走哪种 provider 实现。
-    #[serde(default)]
-    pub agent_type: Option<AgentType>,
-    /// agent profile id（可选，优先用 profile 的配置）。
-    #[serde(default)]
-    pub agent_profile_id: Option<i64>,
-    /// 协作模式：auto / full-access / read-only。缺省 full-access。
-    pub mode: Option<String>,
-    /// 初始模型 id（缺省由 agent 选默认）。
-    pub model: Option<String>,
-    /// 初始 reasoning effort，由 Agent 模型能力声明。
-    pub effort: Option<String>,
-    /// 续接已存在的 agent threadId（缺省则新建 thread）。
-    pub resume_from_codex_session_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartStructuredAgentSessionResult {
-    pub session_id: i64,
-    pub thread_id: String,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]

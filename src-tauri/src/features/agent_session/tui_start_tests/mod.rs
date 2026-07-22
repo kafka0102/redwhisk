@@ -16,7 +16,7 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::features::agent_session::service::AgentSessionService;
-use crate::types::agent_session::{StartAgentSessionInput, StartStructuredAgentSessionInput, WorkspaceMode};
+use crate::types::agent_session::{StartAgentSessionInput, WorkspaceMode};
 use crate::types::agent_session_terminal::WriteAgentSessionTerminalInput;
 use crate::types::agent_session::AgentSessionStatus;
 
@@ -109,4 +109,3 @@ pub(super) fn service<'a>(connection: &'a Connection) -> AgentSessionService<'a>
 }
 
 mod issue;
-mod temporary;

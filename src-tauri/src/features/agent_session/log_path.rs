@@ -99,17 +99,6 @@ pub(super) fn build_issue_runtime_structured_log_path(
 }
 
 
-pub(super) fn build_standalone_runtime_structured_log_path(
-    data_dir: &Path,
-    project_id: i64,
-    session_number: i64,
-) -> Result<String, CommandError> {
-    let logs_dir = runtime_session_log_project_dir(data_dir, project_id)?;
-    let path = logs_dir.join(format!(
-        "project-{project_id}-standalone-session-{session_number}.jsonl"
-    ));
-    Ok(path.to_string_lossy().to_string())
-}
 
 
 pub(crate) fn build_issue_archive_log_path(

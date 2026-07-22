@@ -23,7 +23,7 @@ use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
     ResumeStructuredAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
-    StartStructuredAgentSessionInput, WorkspaceMode, WorktreeOwner,
+    WorkspaceMode, WorktreeOwner,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
@@ -726,65 +726,6 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
 }
 
 #[test]
-fn start_structured_agent_session_rolls_back_when_command_cannot_start() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let database = migrated_database(temp_dir.path());
-    let project_id = insert_project(&database.connection, "structured-standalone-fail-project");
-    let profile_id = insert_agent_profile_with_command(
-        &database.connection,
-        AgentScope::Global,
-        None,
-        temp_dir
-            .path()
-            .join("missing-structured-command")
-            .to_string_lossy()
-            .as_ref(),
-    );
-    let registry = AgentSessionRegistry::new();
-    let broadcaster = AgentEventBroadcaster::new();
-
-    let error = AgentSessionService::start_structured_agent_session_in_data_dir(
-        temp_dir.path(),
-        StartStructuredAgentSessionInput {
-            project_id,
-            title: Some("Scratch Session".to_string()),
-            agent_type: Some(AgentType::Codex),
-            agent_profile_id: Some(profile_id),
-            mode: None,
-            model: None,
-            effort: None,
-            resume_from_codex_session_id: None,
-        },
-        &registry,
-        &broadcaster,
-    )
-    .expect_err("structured standalone start should fail when command cannot start");
-
-    assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
-    assert_eq!(error.message, "Agent 会话调用失败。");
-
-    let session_count = database
-        .connection
-        .query_row(
-            "SELECT COUNT(*) FROM agent_sessions WHERE del = 0",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("active agent session count");
-    assert_eq!(session_count, 0);
-
-    let session_event_count = database
-        .connection
-        .query_row(
-            "SELECT COUNT(*) FROM session_events WHERE session_id IN (SELECT id FROM agent_sessions WHERE del = 0)",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("active session event count");
-    assert_eq!(session_event_count, 0);
-}
-
-#[test]
 fn start_structured_claude_issue_session_log_path_uses_number_segments() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -843,6 +784,7 @@ fn start_structured_claude_issue_session_log_path_uses_number_segments() {
             None,
             None,
             "/tmp/redwhisk-log-path-number-seed.log",
+            "json",
             1_780_000_000_000,
         )
         .expect("seed session");
@@ -951,6 +893,7 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
             None,
             None,
             "/tmp/redwhisk-session-race.log",
+            "json",
             1_780_000_000_000,
         )
         .expect("insert existing session");
@@ -1041,6 +984,7 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
             None,
             None,
             "/tmp/redwhisk-soft-deleted-session.log",
+            "json",
             1_780_000_000_000,
         )
         .expect("insert deleted session");

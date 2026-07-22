@@ -7,25 +7,17 @@ import {
 
 import {
   listAgentSessions,
-  startStructuredAgentSession,
   updateAgentSessionTitle,
   type AgentSessionListItem,
-  type StartStructuredAgentSessionResult,
 } from "./agent-session-commands";
 import {
   AGENT_SESSION_LIST_CHANGED_EVENT,
   type AgentSessionListChangedEvent,
 } from "./agent-session-events";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
-import {
-  listAgentProfiles,
-  type AgentProfileRecord,
-} from "../settings/settings-commands";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { useI18n } from "../../shared/i18n/i18n";
-import { toast } from "../../shared/toast";
 
-type Messages = ReturnType<typeof useI18n>["messages"];
 type Translate = ReturnType<typeof useI18n>["t"];
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
@@ -36,49 +28,30 @@ interface UseAgentSessionListOptions {
     sessions: AgentSessionListItem[],
   ) => AgentSessionListItem[];
   selectedSession: AgentSessionListItem | null;
-  isCreatingSession: boolean;
   setAllSessions: Dispatch<SetStateAction<AgentSessionListItem[]>>;
   setIsLoading: Dispatch<SetStateAction<boolean>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   setShouldLoadDeferredContent: Dispatch<SetStateAction<boolean>>;
-  setAvailableAgentProfiles: Dispatch<SetStateAction<AgentProfileRecord[]>>;
-  setIsLoadingAgentProfiles: Dispatch<SetStateAction<boolean>>;
-  setHasAgentProfilesLoadError: Dispatch<SetStateAction<boolean>>;
-  setIsCreatingSession: Dispatch<SetStateAction<boolean>>;
   setIsRenamingSessionTitle: Dispatch<SetStateAction<boolean>>;
-  setIsSessionSidePanelOpen: Dispatch<SetStateAction<boolean>>;
-  setSelectedSessionId: Dispatch<SetStateAction<number | null>>;
-  onSelectSession?: (sessionId: number) => void;
   showCommandErrorAlert: (error: unknown) => void;
   t: Translate;
-  messages: Messages;
 }
 
 /**
- * agents-activity 的 session 列表数据层：加载 / 事件防抖刷新 / agent profile 合并
- * 加载 / 创建临时 session / 改名。列表 state 留在容器（被完成流与跨簇编排共享），
- * 本 hook 只接收 setter 与上下文，跑两个加载 effect 并返回 CRUD handler。
+ * agents-activity 的 session 列表数据层：加载 / 事件防抖刷新 / 改名。
+ * 列表 state 留在容器（被完成流与跨簇编排共享），本 hook 只接收 setter 与上下文。
  */
 export function useAgentSessionList({
   projectId,
   applySessionListOverlays,
   selectedSession,
-  isCreatingSession,
   setAllSessions,
   setIsLoading,
   setErrorMessage,
   setShouldLoadDeferredContent,
-  setAvailableAgentProfiles,
-  setIsLoadingAgentProfiles,
-  setHasAgentProfilesLoadError,
-  setIsCreatingSession,
   setIsRenamingSessionTitle,
-  setIsSessionSidePanelOpen,
-  setSelectedSessionId,
-  onSelectSession,
   showCommandErrorAlert,
   t,
-  messages,
 }: UseAgentSessionListOptions) {
   useEffect(() => {
     let isMounted = true;
@@ -168,94 +141,12 @@ export function useAgentSessionList({
     t,
   ]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadAgentProfiles() {
-      setIsLoadingAgentProfiles(true);
-      setHasAgentProfilesLoadError(false);
-
-      try {
-        const [projectResponse, globalResponse] = await Promise.all([
-          listAgentProfiles({ scope: "project", projectId }),
-          listAgentProfiles({ scope: "global", projectId: null }),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const mergedProfiles = [
-          ...projectResponse.profiles,
-          ...globalResponse.profiles,
-        ];
-        setAvailableAgentProfiles(mergedProfiles);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setAvailableAgentProfiles([]);
-        setHasAgentProfilesLoadError(true);
-        toast.error(getCommandErrorMessage(error, t));
-      } finally {
-        if (isMounted) {
-          setIsLoadingAgentProfiles(false);
-        }
-      }
-    }
-
-    void loadAgentProfiles();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    projectId,
-    setAvailableAgentProfiles,
-    setHasAgentProfilesLoadError,
-    setIsLoadingAgentProfiles,
-    t,
-  ]);
-
   const refreshSessions = useCallback(async () => {
     const response = await listAgentSessions(projectId);
     const nextSessions = applySessionListOverlays(response.sessions);
     setAllSessions(nextSessions);
     return nextSessions;
   }, [applySessionListOverlays, projectId, setAllSessions]);
-
-  async function handleTemporarySessionStarted(
-    result: StartStructuredAgentSessionResult,
-  ) {
-    const response = await listAgentSessions(projectId);
-    setAllSessions(applySessionListOverlays(response.sessions));
-    setIsSessionSidePanelOpen(false);
-    setSelectedSessionId(result.sessionId);
-    onSelectSession?.(result.sessionId);
-  }
-
-  async function createSession(profile: AgentProfileRecord) {
-    if (isCreatingSession) {
-      return;
-    }
-
-    setIsCreatingSession(true);
-
-    try {
-      const result = await startStructuredAgentSession({
-        projectId,
-        title: messages.agentsFeature.temporarySessionDefaultTitle,
-        agentType: profile.agentType,
-        agentProfileId: profile.id,
-      });
-      await handleTemporarySessionStarted(result);
-    } catch (error) {
-      toast.error(getCommandErrorMessage(error, t));
-    } finally {
-      setIsCreatingSession(false);
-    }
-  }
 
   async function handleRenameSessionTitle(sessionId: number, title: string) {
     if (!selectedSession || selectedSession.sessionId !== sessionId) {
@@ -291,8 +182,6 @@ export function useAgentSessionList({
 
   return {
     refreshSessions,
-    createSession,
-    handleTemporarySessionStarted,
     handleRenameSessionTitle,
   };
 }

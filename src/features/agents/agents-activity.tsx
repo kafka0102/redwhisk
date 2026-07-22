@@ -19,7 +19,6 @@ import { toast } from "../../shared/toast";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { AgentsSessionList } from "./session-list/agents-session-list";
-import { type AgentProfileRecord } from "../settings/settings-commands";
 import {
   AgentsSessionPane,
   type LinkedSessionIssue,
@@ -58,7 +57,6 @@ const MAX_CACHED_SESSION_VIEWS = 5;
 interface AgentsActivityProps {
   activeSessionId: number | null;
   onOpenIssue?: (request: IssueOpenRequest) => void;
-  onOpenProjectAgentSettings?: () => void;
   onSelectSession?: (sessionId: number) => void;
   projectId: number;
 }
@@ -66,7 +64,6 @@ interface AgentsActivityProps {
 export function AgentsActivity({
   activeSessionId,
   onOpenIssue,
-  onOpenProjectAgentSettings,
   onSelectSession,
   projectId,
 }: AgentsActivityProps) {
@@ -81,15 +78,8 @@ export function AgentsActivity({
   );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isRenamingSessionTitle, setIsRenamingSessionTitle] = useState(false);
-  const [isLoadingAgentProfiles, setIsLoadingAgentProfiles] = useState(true);
-  const [hasAgentProfilesLoadError, setHasAgentProfilesLoadError] =
-    useState(false);
-  const [availableAgentProfiles, setAvailableAgentProfiles] = useState<
-    AgentProfileRecord[]
-  >([]);
   const [isSessionSidePanelOpen, setIsSessionSidePanelOpen] = useState(false);
   const [isTransitionMenuOpen, setIsTransitionMenuOpen] = useState(false);
   // 分离allSessions和visibleSessions，优化性能
@@ -304,28 +294,18 @@ export function AgentsActivity({
     visibleSessions,
     workspaceCache,
   ]);
-  const { refreshSessions, createSession, handleRenameSessionTitle } =
-    useAgentSessionList({
-      projectId,
-      applySessionListOverlays,
-      selectedSession,
-      isCreatingSession,
-      setAllSessions,
-      setIsLoading,
-      setErrorMessage,
-      setShouldLoadDeferredContent,
-      setAvailableAgentProfiles,
-      setIsLoadingAgentProfiles,
-      setHasAgentProfilesLoadError,
-      setIsCreatingSession,
-      setIsRenamingSessionTitle,
-      setIsSessionSidePanelOpen,
-      setSelectedSessionId,
-      onSelectSession,
-      showCommandErrorAlert,
-      t,
-      messages,
-    });
+  const { refreshSessions, handleRenameSessionTitle } = useAgentSessionList({
+    projectId,
+    applySessionListOverlays,
+    selectedSession,
+    setAllSessions,
+    setIsLoading,
+    setErrorMessage,
+    setShouldLoadDeferredContent,
+    setIsRenamingSessionTitle,
+    showCommandErrorAlert,
+    t,
+  });
   const {
     setIsCompletionLoadingDialogDismissed,
     agentCommitPreview,
@@ -458,16 +438,8 @@ export function AgentsActivity({
       }
     >
       <AgentsSessionList
-        availableAgentProfiles={availableAgentProfiles}
         errorMessage={errorMessage}
-        hasAgentProfilesLoadError={hasAgentProfilesLoadError}
         isLoading={isLoading}
-        isCreatingSession={isCreatingSession}
-        isLoadingAgentProfiles={isLoadingAgentProfiles}
-        onCreateSession={(profile) => {
-          void createSession(profile);
-        }}
-        onOpenProjectAgentSettings={onOpenProjectAgentSettings}
         onSelectSession={handleSelectSession}
         selectedSessionId={selectedSession?.sessionId ?? null}
         sessions={visibleSessions}

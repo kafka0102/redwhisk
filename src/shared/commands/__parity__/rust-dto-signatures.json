@@ -195,6 +195,15 @@
         "sessionId": "required"
       }
     },
+    "AgentUiCapabilities": {
+      "fields": {
+        "canShowModel": "required",
+        "modelTypeLabel": "required",
+        "supportsModelSwitching": "required",
+        "supportsModes": "required",
+        "supportsReasoningEffort": "required"
+      }
+    },
     "AgentUsage": {
       "fields": {
         "contextWindowMaxTokens": "optional",
@@ -650,6 +659,7 @@
     },
     "ListAgentModelsResult": {
       "fields": {
+        "capabilities": "required",
         "isReadOnly": "optional",
         "models": "required"
       }
@@ -1176,24 +1186,6 @@
       "fields": {
         "issueId": "required",
         "sessionId": "required"
-      }
-    },
-    "StartStructuredAgentSessionInput": {
-      "fields": {
-        "agentProfileId": "optional",
-        "agentType": "optional",
-        "effort": "optional",
-        "mode": "optional",
-        "model": "optional",
-        "projectId": "required",
-        "resumeFromCodexSessionId": "optional",
-        "title": "optional"
-      }
-    },
-    "StartStructuredAgentSessionResult": {
-      "fields": {
-        "sessionId": "required",
-        "threadId": "required"
       }
     },
     "SubscribeAgentSessionTerminalOutputInput": {

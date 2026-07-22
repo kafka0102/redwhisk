@@ -36,11 +36,6 @@ pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
 }
 
 
-pub(super) fn read_timeline_from_session_log(
-    session: &crate::types::agent_session::AgentSessionRecord,
-) -> Result<StructuredTimelineHistory, CommandError> {
-    read_timeline_from_log_path(&session.log_path)
-}
 
 
 /// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
