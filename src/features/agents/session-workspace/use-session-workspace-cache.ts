@@ -6,6 +6,10 @@ import {
   type CommandError,
 } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
+import {
+  appendUniqueCommitsByHash,
+  commitHistoryRefreshLimit,
+} from "../../../shared/workspace/commit-history-pagination";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import {
   COMMIT_HISTORY_PAGE_SIZE,
@@ -61,8 +65,10 @@ interface SessionWorkspaceCache {
   // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
   // 透传到 SessionSidePanel -> SessionChangesPanel 渲染首条黄色提交右侧的黄色 base Tag。
   baseBranch: string | null;
-  /** 是否还有更早的已提交历史；UI 无限滚动在后续票接入。 */
+  /** 是否还有更早的已提交历史。 */
   hasMoreCommitHistory: boolean;
+  isLoadingMoreCommitHistory: boolean;
+  loadMoreCommitHistoryErrorMessage: string | null;
   commitHistoryErrorMessage: string | null;
   commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
@@ -93,6 +99,8 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   isCommitFromWorktree: false,
   baseBranch: null,
   hasMoreCommitHistory: false,
+  isLoadingMoreCommitHistory: false,
+  loadMoreCommitHistoryErrorMessage: null,
   commitHistoryErrorMessage: null,
   commitHistoryRequestSequence: 0,
   fileTab: null,
@@ -311,24 +319,32 @@ export function useSessionWorkspaceCache({
       return;
     }
 
+    const requestSessionId = sessionId;
     let requestSequence = 0;
-    updateCurrentCache((cache) => ({
-      ...cache,
-      commitHistoryRequestSequence: (requestSequence =
-        cache.commitHistoryRequestSequence + 1),
-      isCommitHistoryLoading: true,
-      commitHistoryErrorMessage: null,
-    }));
+    let loadedCount = 0;
+    updateSessionCache(requestSessionId, (cache) => {
+      requestSequence = cache.commitHistoryRequestSequence + 1;
+      loadedCount = cache.commitHistory.length;
+      return {
+        ...cache,
+        commitHistoryRequestSequence: requestSequence,
+        isCommitHistoryLoading: true,
+        // 刷新优先：作废进行中的 load-more UI 态，且不清空旧列表。
+        isLoadingMoreCommitHistory: false,
+        loadMoreCommitHistoryErrorMessage: null,
+        commitHistoryErrorMessage: null,
+      };
+    });
 
     try {
       const response = await getProjectWorktreeCommitHistory({
         projectId,
-        sessionId,
-        limit: COMMIT_HISTORY_PAGE_SIZE,
+        sessionId: requestSessionId,
+        limit: commitHistoryRefreshLimit(loadedCount),
         offset: 0,
       });
 
-      updateCurrentCache((cache) =>
+      updateSessionCache(requestSessionId, (cache) =>
         cache.commitHistoryRequestSequence === requestSequence
           ? {
               ...cache,
@@ -349,7 +365,7 @@ export function useSessionWorkspaceCache({
           : cache,
       );
     } catch (error) {
-      updateCurrentCache((cache) =>
+      updateSessionCache(requestSessionId, (cache) =>
         cache.commitHistoryRequestSequence === requestSequence
           ? {
               ...cache,
@@ -359,7 +375,80 @@ export function useSessionWorkspaceCache({
           : cache,
       );
     }
-  }, [projectId, sessionId, updateCurrentCache, t]);
+  }, [projectId, sessionId, updateSessionCache, t]);
+
+  const loadMoreCommitHistory = useCallback(async () => {
+    if (sessionId == null) {
+      return;
+    }
+
+    const requestSessionId = sessionId;
+    let requestSequence = 0;
+    let loadedCount = 0;
+    let shouldRequest = false;
+    updateSessionCache(requestSessionId, (cache) => {
+      if (
+        !cache.hasMoreCommitHistory ||
+        cache.isLoadingMoreCommitHistory ||
+        cache.isCommitHistoryLoading
+      ) {
+        return cache;
+      }
+      shouldRequest = true;
+      requestSequence = cache.commitHistoryRequestSequence + 1;
+      loadedCount = cache.commitHistory.length;
+      return {
+        ...cache,
+        commitHistoryRequestSequence: requestSequence,
+        isLoadingMoreCommitHistory: true,
+        loadMoreCommitHistoryErrorMessage: null,
+      };
+    });
+    if (!shouldRequest) {
+      return;
+    }
+
+    try {
+      const response = await getProjectWorktreeCommitHistory({
+        projectId,
+        sessionId: requestSessionId,
+        limit: COMMIT_HISTORY_PAGE_SIZE,
+        offset: loadedCount,
+      });
+
+      updateSessionCache(requestSessionId, (cache) =>
+        cache.commitHistoryRequestSequence === requestSequence
+          ? {
+              ...cache,
+              commitHistory: appendUniqueCommitsByHash(
+                cache.commitHistory,
+                response.commits,
+              ),
+              isCommitFromWorktree: response.isWorktree,
+              baseBranch: response.baseBranch ?? null,
+              hasMoreCommitHistory: response.hasMore,
+              // 分页 signature 仅代表一页，清空以便下次整窗刷新必应用。
+              lastCommitHistorySignature: null,
+              isLoadingMoreCommitHistory: false,
+              loadMoreCommitHistoryErrorMessage: null,
+            }
+          : cache,
+      );
+    } catch (error) {
+      updateSessionCache(requestSessionId, (cache) =>
+        cache.commitHistoryRequestSequence === requestSequence
+          ? {
+              ...cache,
+              isLoadingMoreCommitHistory: false,
+              loadMoreCommitHistoryErrorMessage: getCommandErrorMessage(
+                error,
+                t,
+              ),
+            }
+          : cache,
+      );
+    }
+  }, [projectId, sessionId, updateSessionCache, t]);
 
   const setSidePanelTab = useCallback(
     (tab: SessionSidePanelTab) => {
@@ -702,6 +791,9 @@ export function useSessionWorkspaceCache({
     isCommitFromWorktree: currentCache.isCommitFromWorktree,
     baseBranch: currentCache.baseBranch,
     hasMoreCommitHistory: currentCache.hasMoreCommitHistory,
+    isLoadingMoreCommitHistory: currentCache.isLoadingMoreCommitHistory,
+    loadMoreCommitHistoryErrorMessage:
+      currentCache.loadMoreCommitHistoryErrorMessage,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,
@@ -714,6 +806,7 @@ export function useSessionWorkspaceCache({
     openCommittedChange,
     openFile,
     refreshCommitHistory,
+    loadMoreCommitHistory,
     refreshChanges,
     selectWorkspaceTab,
     selectWorkspaceTabForSession,

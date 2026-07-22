@@ -41,6 +41,10 @@ interface SessionSidePanelProps {
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onToggleCommittedChangesExpanded: () => void;
   onToggleUncommittedChangesExpanded: () => void;
+  hasMoreCommitHistory?: boolean;
+  isLoadingMoreCommitHistory?: boolean;
+  loadMoreCommitHistoryErrorMessage?: string | null;
+  onLoadMoreCommitHistory?: () => void;
   projectId: number;
   workspacePath?: string | null;
 }
@@ -69,6 +73,10 @@ export function SessionSidePanel({
   onOpenFile,
   onToggleCommittedChangesExpanded,
   onToggleUncommittedChangesExpanded,
+  hasMoreCommitHistory,
+  isLoadingMoreCommitHistory,
+  loadMoreCommitHistoryErrorMessage,
+  onLoadMoreCommitHistory,
   projectId,
   workspacePath,
 }: SessionSidePanelProps) {
@@ -134,6 +142,12 @@ export function SessionSidePanel({
             onToggleCommittedExpanded={onToggleCommittedChangesExpanded}
             onOpenChangedFile={onOpenChangedFile}
             onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+            hasMoreCommitHistory={hasMoreCommitHistory}
+            isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
+            loadMoreCommitHistoryErrorMessage={
+              loadMoreCommitHistoryErrorMessage
+            }
+            onLoadMoreCommitHistory={onLoadMoreCommitHistory}
           />
         ) : (
           <SessionFileTreePanel

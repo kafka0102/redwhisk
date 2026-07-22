@@ -50,11 +50,10 @@ export function CommittedChangesTimeline({
 }: CommittedChangesTimelineProps) {
   const { messages } = useI18n();
 
-  if (errorMessage) {
-    return <p className="session-side-panel__empty">{errorMessage}</p>;
-  }
-
   if (commits.length === 0) {
+    if (errorMessage) {
+      return <p className="session-side-panel__empty">{errorMessage}</p>;
+    }
     return (
       <p className="session-side-panel__empty">
         {isLoading
@@ -83,72 +82,80 @@ export function CommittedChangesTimeline({
   }
 
   return (
-    <ol
-      aria-label={messages.agentsFeature.committedTimeline}
-      className="session-commit-timeline"
-    >
-      {commits.map((commit, index) => {
-        const isExpanded = expandedCommitHashes.has(commit.hash);
-        const showBaseTag = index === showBaseTagAt;
-        const showPushedTag = index === pushedTagIndex;
-        return (
-          <li className="session-commit-timeline__item" key={commit.hash}>
-            <span className="session-commit-timeline__rail" aria-hidden="true">
+    <>
+      {errorMessage ? (
+        <p className="session-side-panel__empty">{errorMessage}</p>
+      ) : null}
+      <ol
+        aria-label={messages.agentsFeature.committedTimeline}
+        className="session-commit-timeline"
+      >
+        {commits.map((commit, index) => {
+          const isExpanded = expandedCommitHashes.has(commit.hash);
+          const showBaseTag = index === showBaseTagAt;
+          const showPushedTag = index === pushedTagIndex;
+          return (
+            <li className="session-commit-timeline__item" key={commit.hash}>
               <span
-                className={`session-commit-timeline__dot${getCommitTimelineDotModifier(commit, isWorktree)}`}
-              />
-            </span>
-            <button
-              aria-expanded={isExpanded}
-              className="session-commit-row"
-              type="button"
-              onClick={() => onToggleCommit(commit.hash)}
-            >
-              <span className="session-commit-row__content">
-                <span className="session-commit-row__message">
-                  {commit.message || commit.shortHash}
-                </span>
-                <span className="session-commit-row__author">
-                  {commit.authorName}
-                </span>
+                className="session-commit-timeline__rail"
+                aria-hidden="true"
+              >
+                <span
+                  className={`session-commit-timeline__dot${getCommitTimelineDotModifier(commit, isWorktree)}`}
+                />
               </span>
-              {showBaseTag && baseBranch ? (
-                <span
-                  aria-label={messages.agentsFeature.baseBranchTag}
-                  className="session-commit-row__base-tag"
-                  title={messages.agentsFeature.baseBranchTag}
-                >
-                  <GitBranch aria-hidden="true" size={11} strokeWidth={1.8} />
-                  <span>{baseBranch}</span>
+              <button
+                aria-expanded={isExpanded}
+                className="session-commit-row"
+                type="button"
+                onClick={() => onToggleCommit(commit.hash)}
+              >
+                <span className="session-commit-row__content">
+                  <span className="session-commit-row__message">
+                    {commit.message || commit.shortHash}
+                  </span>
+                  <span className="session-commit-row__author">
+                    {commit.authorName}
+                  </span>
                 </span>
+                {showBaseTag && baseBranch ? (
+                  <span
+                    aria-label={messages.agentsFeature.baseBranchTag}
+                    className="session-commit-row__base-tag"
+                    title={messages.agentsFeature.baseBranchTag}
+                  >
+                    <GitBranch aria-hidden="true" size={11} strokeWidth={1.8} />
+                    <span>{baseBranch}</span>
+                  </span>
+                ) : null}
+                {showPushedTag ? (
+                  <span
+                    aria-label={messages.agentsFeature.pushedToRemote}
+                    className="session-commit-row__remote-tag"
+                    title={messages.agentsFeature.pushedToRemote}
+                  >
+                    <Cloud aria-hidden="true" size={11} strokeWidth={1.8} />
+                    <span>{commit.pushedTo}</span>
+                  </span>
+                ) : null}
+              </button>
+              {isExpanded ? (
+                <ul className="session-commit-files">
+                  {commit.files.map((file) => (
+                    <CommittedFileRow
+                      commitHash={commit.hash}
+                      file={file}
+                      key={`${commit.hash}:${file.status}:${file.filePath}:${file.oldPath ?? ""}`}
+                      onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+                    />
+                  ))}
+                </ul>
               ) : null}
-              {showPushedTag ? (
-                <span
-                  aria-label={messages.agentsFeature.pushedToRemote}
-                  className="session-commit-row__remote-tag"
-                  title={messages.agentsFeature.pushedToRemote}
-                >
-                  <Cloud aria-hidden="true" size={11} strokeWidth={1.8} />
-                  <span>{commit.pushedTo}</span>
-                </span>
-              ) : null}
-            </button>
-            {isExpanded ? (
-              <ul className="session-commit-files">
-                {commit.files.map((file) => (
-                  <CommittedFileRow
-                    commitHash={commit.hash}
-                    file={file}
-                    key={`${commit.hash}:${file.status}:${file.filePath}:${file.oldPath ?? ""}`}
-                    onOpenCommittedChangedFile={onOpenCommittedChangedFile}
-                  />
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 

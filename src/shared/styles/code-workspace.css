@@ -598,3 +598,37 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.code-workspace__commit-history-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  padding: 6px 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.code-workspace__commit-history-load-more-spinner {
+  animation: code-workspace-commit-history-load-more-spin 900ms linear infinite;
+}
+
+@keyframes code-workspace-commit-history-load-more-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-workspace__commit-history-load-more-spinner {
+    animation: none;
+  }
+}
+
+.code-workspace__commit-history-load-more-error {
+  margin: 0;
+  padding: 8px 12px 12px;
+  color: var(--color-danger, #c44);
+  font-size: 11px;
+}

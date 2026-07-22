@@ -645,7 +645,8 @@
     "contentSearchRemoveFilterTag": "Remove {{tag}}",
     "contentSearchSuffixPicker": "Common file extensions",
     "contentSearchSuffixOption": ".{{suffix}}",
-    "contentSearchNoSuffixes": "No extensions yet"
+    "contentSearchNoSuffixes": "No extensions yet",
+    "loadingMoreCommitHistory": "Loading more commits..."
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

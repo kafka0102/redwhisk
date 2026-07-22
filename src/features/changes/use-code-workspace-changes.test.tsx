@@ -195,3 +195,325 @@ describe("useCodeWorkspaceChanges", () => {
     expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 });
+
+function makeCommit(hash: string, message = `msg ${hash}`) {
+  return {
+    hash,
+    shortHash: hash.slice(0, 6),
+    message,
+    authorName: "Alice",
+    committedAt: 1_780_638_000,
+    files: [],
+    isPushed: true,
+    pushedTo: "origin/main",
+    isCreatedInWorktree: false,
+  };
+}
+
+describe("useCodeWorkspaceChanges commit history pagination", () => {
+  beforeEach(() => {
+    vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
+      signature: "changes-empty",
+    });
+    vi.mocked(getProjectWorktreeCommitHistory).mockReset();
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [],
+      signature: "commits-empty",
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  it("loads more by offset of the loaded count and appends without duplicates", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`p1-${index}`),
+    );
+    const page2 = [makeCommit("p1-49"), makeCommit("p2-0"), makeCommit("p2-1")];
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-page-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        commits: page2,
+        signature: "sig-page-2",
+        isWorktree: false,
+        hasMore: false,
+      });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.commitHistory).toHaveLength(50);
+    });
+    expect(result.current.hasMoreCommitHistory).toBe(true);
+
+    await act(async () => {
+      result.current.loadMoreCommitHistory();
+    });
+
+    await waitFor(() => {
+      expect(result.current.commitHistory).toHaveLength(52);
+    });
+    expect(getProjectWorktreeCommitHistory).toHaveBeenLastCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+      limit: 50,
+      offset: 50,
+    });
+    expect(result.current.hasMoreCommitHistory).toBe(false);
+    expect(result.current.isLoadingMoreCommitHistory).toBe(false);
+    expect(result.current.commitHistory.map((commit) => commit.hash)).toEqual([
+      ...page1.map((commit) => commit.hash),
+      "p2-0",
+      "p2-1",
+    ]);
+  });
+
+  it("refreshes the whole loaded window without clearing the list first", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`r1-${index}`),
+    );
+    const page2 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`r2-${index}`),
+    );
+    const refreshed = Array.from({ length: 100 }, (_, index) =>
+      makeCommit(`rf-${index}`),
+    );
+
+    let resolveRefresh:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        commits: page2,
+        signature: "sig-2",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.commitHistory).toHaveLength(50));
+    await act(async () => {
+      result.current.loadMoreCommitHistory();
+    });
+    await waitFor(() => expect(result.current.commitHistory).toHaveLength(100));
+
+    const listBeforeRefresh = result.current.commitHistory;
+    await act(async () => {
+      result.current.refreshCommitHistory();
+    });
+
+    // 刷新进行中不清空列表。
+    expect(result.current.commitHistory).toBe(listBeforeRefresh);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+    expect(getProjectWorktreeCommitHistory).toHaveBeenLastCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+      limit: 100,
+      offset: 0,
+    });
+
+    await act(async () => {
+      resolveRefresh?.({
+        commits: refreshed,
+        signature: "sig-refresh",
+        isWorktree: false,
+        hasMore: true,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.commitHistory).toEqual(refreshed);
+    });
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("discards a stale load-more when a refresh starts first", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`g1-${index}`),
+    );
+    let resolveLoadMore:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+    let resolveRefresh:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLoadMore = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.commitHistory).toHaveLength(50));
+
+    await act(async () => {
+      result.current.loadMoreCommitHistory();
+    });
+    await waitFor(() =>
+      expect(result.current.isLoadingMoreCommitHistory).toBe(true),
+    );
+
+    await act(async () => {
+      result.current.refreshCommitHistory();
+    });
+
+    // 刷新优先：作废 load-more loading 态。
+    await waitFor(() =>
+      expect(result.current.isLoadingMoreCommitHistory).toBe(false),
+    );
+
+    await act(async () => {
+      resolveLoadMore?.({
+        commits: [makeCommit("stale-page-2")],
+        signature: "sig-stale",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+
+    // 过期 load-more 不得污染列表。
+    expect(result.current.commitHistory).toHaveLength(50);
+    expect(
+      result.current.commitHistory.some(
+        (commit) => commit.hash === "stale-page-2",
+      ),
+    ).toBe(false);
+
+    await act(async () => {
+      resolveRefresh?.({
+        commits: page1.map((commit) => ({
+          ...commit,
+          message: "refreshed",
+        })),
+        signature: "sig-refresh",
+        isWorktree: false,
+        hasMore: true,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.commitHistory[0]?.message).toBe("refreshed");
+    });
+  });
+
+  it("keeps loaded pages when load-more fails and surfaces an error", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`e1-${index}`),
+    );
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockRejectedValueOnce(new Error("network down"));
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.commitHistory).toHaveLength(50));
+
+    await act(async () => {
+      result.current.loadMoreCommitHistory();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadMoreCommitHistoryErrorMessage).not.toBeNull();
+    });
+    expect(result.current.commitHistory).toHaveLength(50);
+    expect(result.current.isLoadingMoreCommitHistory).toBe(false);
+    expect(result.current.hasMoreCommitHistory).toBe(true);
+  });
+
+  it("keeps the previous window when a refresh fails", async () => {
+    const page1 = [makeCommit("keep-1")];
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: false,
+      })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.commitHistory).toEqual(page1));
+
+    await act(async () => {
+      result.current.refreshCommitHistory();
+    });
+
+    await waitFor(() => {
+      expect(result.current.commitHistoryErrorMessage).not.toBeNull();
+    });
+    expect(result.current.commitHistory).toEqual(page1);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+});

@@ -217,3 +217,148 @@ describe("useSessionWorkspaceCache committed history polling", () => {
     expect(getProjectWorktreeCommitHistoryMock).not.toHaveBeenCalled();
   });
 });
+
+function makeCommit(hash: string, message = `msg ${hash}`) {
+  return {
+    hash,
+    shortHash: hash.slice(0, 6),
+    message,
+    authorName: "Alice",
+    committedAt: 1_780_638_000,
+    files: [],
+    isPushed: true,
+    pushedTo: "origin/main",
+    isCreatedInWorktree: false,
+  };
+}
+
+describe("useSessionWorkspaceCache commit history pagination", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("loads more from the loaded offset and refreshes the whole window", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`s1-${index}`),
+    );
+    const page2 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`s2-${index}`),
+    );
+    const refreshed = Array.from({ length: 100 }, (_, index) =>
+      makeCommit(`sr-${index}`),
+    );
+
+    getProjectWorktreeCommitHistoryMock
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        commits: page2,
+        signature: "sig-2",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        commits: refreshed,
+        signature: "sig-r",
+        isWorktree: false,
+        hasMore: true,
+      });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    act(() => {
+      result.current.toggleCommittedChangesExpanded();
+    });
+    await settle();
+    expect(result.current.commitHistory).toHaveLength(50);
+    expect(result.current.hasMoreCommitHistory).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMoreCommitHistory();
+    });
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      limit: 50,
+      offset: 50,
+    });
+    expect(result.current.commitHistory).toHaveLength(100);
+
+    await act(async () => {
+      await result.current.refreshCommitHistory();
+    });
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      limit: 100,
+      offset: 0,
+    });
+    expect(result.current.commitHistory).toEqual(refreshed);
+  });
+
+  it("keeps loaded pages when load-more fails", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`se-${index}`),
+    );
+    getProjectWorktreeCommitHistoryMock
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockRejectedValueOnce(new Error("page failed"));
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    act(() => {
+      result.current.toggleCommittedChangesExpanded();
+    });
+    await settle();
+
+    await act(async () => {
+      await result.current.loadMoreCommitHistory();
+    });
+
+    expect(result.current.commitHistory).toHaveLength(50);
+    expect(result.current.loadMoreCommitHistoryErrorMessage).not.toBeNull();
+    expect(result.current.isLoadingMoreCommitHistory).toBe(false);
+  });
+});

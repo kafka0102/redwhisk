@@ -27,8 +27,11 @@ vi.mock("./use-code-workspace-changes", () => ({
     commitHistoryErrorMessage: null,
     isWorktree: false,
     hasMoreCommitHistory: false,
+    isLoadingMoreCommitHistory: false,
+    loadMoreCommitHistoryErrorMessage: null,
     refreshChanges: () => {},
     refreshCommitHistory: () => {},
+    loadMoreCommitHistory: () => {},
   }),
 }));
 vi.mock("./use-changes-auto-refresh", () => ({
