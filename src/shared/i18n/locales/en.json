@@ -760,6 +760,7 @@
       "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume.",
       "invalidSearchRegex": "Invalid search regular expression.",
       "cannotDeleteProjectRoot": "Cannot delete the project main checkout.",
+      "remoteOpsRequireProjectRoot": "Pull and push are only allowed on the project main checkout.",
       "worktreeHasRunningTurn": "This workspace still has a running agent turn and cannot be deleted.",
       "codeWorkspaceNotFound": "Code workspace not found.",
       "worktreePathRequired": "Deleting a worktree requires a workspace path.",

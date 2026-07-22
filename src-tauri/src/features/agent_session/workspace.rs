@@ -9,8 +9,7 @@ use std::time::UNIX_EPOCH;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::git::command::{self, GitCommandError};
-use crate::git::worktree::{cleanup_worktree, is_additional_worktree, list_code_workspaces};
-use crate::types::agent_session::AgentSessionStatus;
+use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
@@ -46,8 +45,8 @@ const BASE_BRANCH_CANDIDATES: &[&str] = &[
 ];
 
 pub struct SessionWorkspaceService<'connection> {
-    project_repository: ProjectRepository<'connection>,
-    agent_session_repository: AgentSessionRepository<'connection>,
+    pub(super) project_repository: ProjectRepository<'connection>,
+    pub(super) agent_session_repository: AgentSessionRepository<'connection>,
 }
 
 impl<'connection> SessionWorkspaceService<'connection> {
@@ -187,109 +186,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
         }
     }
 
-    pub fn pull(
-        &self,
-        input: ProjectWorkspaceInput,
-    ) -> Result<(), CommandError> {
-        let root = self.resolve_workspace_root(
-            input.project_id,
-            input.session_id,
-            input.workspace_path.as_deref(),
-        )?;
-        crate::git::remote::pull(&root).map_err(map_git_command_error)
-    }
-
-    pub fn push(
-        &self,
-        input: ProjectWorkspaceInput,
-    ) -> Result<(), CommandError> {
-        let root = self.resolve_workspace_root(
-            input.project_id,
-            input.session_id,
-            input.workspace_path.as_deref(),
-        )?;
-        crate::git::remote::push(&root).map_err(map_git_command_error)
-    }
-
-    pub fn delete_worktree(
-        &self,
-        input: ProjectWorkspaceInput,
-    ) -> Result<(), CommandError> {
-        let workspace_path = input.workspace_path.as_deref().ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Deleting a worktree requires a workspace path.",
-            )
-            .with_reason("worktreePathRequired")
-        })?;
-
-        let project = self
-            .project_repository
-            .find_by_id(input.project_id)
-            .map_err(workspace_persistence_error)?
-            .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::ProjectNotFound, "Project 不存在。")
-                    .with_detail(
-                        ErrorDetail::new("Project").with_value("projectId", input.project_id),
-                    )
-            })?;
-
-        let roots = list_code_workspace_roots(Path::new(&project.repo_path))?.roots;
-        let target = roots.iter().find(|root| root.path == workspace_path).ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Code workspace not found.",
-            )
-            .with_reason("codeWorkspaceNotFound")
-            .with_detail(
-                ErrorDetail::new("WorkspaceRoot").with_value("path", workspace_path.to_string()),
-            )
-        })?;
-
-        if target.is_project_root {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Cannot delete the project main checkout.",
-            )
-            .with_reason("cannotDeleteProjectRoot")
-            .with_detail(
-                ErrorDetail::new("WorkspaceRoot").with_value("path", workspace_path.to_string()),
-            ));
-        }
-
-        let sessions = self
-            .agent_session_repository
-            .list_by_project_id(input.project_id)
-            .map_err(workspace_persistence_error)?;
-        let has_running_turn = sessions.iter().any(|session| {
-            session.workspace_path.as_deref() == Some(workspace_path)
-                && session.status == AgentSessionStatus::Running
-                && session.is_turn_running
-        });
-        if has_running_turn {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "This workspace still has a running agent turn and cannot be deleted.",
-            )
-            .with_reason("worktreeHasRunningTurn")
-            .with_detail(
-                ErrorDetail::new("WorkspaceRoot").with_value("path", workspace_path.to_string()),
-            ));
-        }
-
-        cleanup_worktree(&project.repo_path, workspace_path, &target.branch).map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Failed to delete worktree.",
-            )
-            .with_reason("worktreeDeleteFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
-
-        Ok(())
-    }
-
-    fn resolve_workspace_root(
+    pub(super) fn resolve_workspace_root(
         &self,
         project_id: i64,
         session_id: Option<i64>,
@@ -400,7 +297,7 @@ fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandErr
     Ok(relative_path)
 }
 
-fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
+pub(super) fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
     let root = Path::new(path).canonicalize().map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
@@ -872,7 +769,7 @@ fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeRespon
     Ok(ProjectWorktreeFileTreeResponse { nodes, signature })
 }
 
-fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+pub(super) fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
     let roots = list_code_workspaces(root).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
@@ -1315,7 +1212,7 @@ fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
 // 不回传前端，仅保留 message 作为 Cause 详情。镜像 git/worktree、git/status 的
 // From<GitCommandError> 收敛方式；CommandError 是跨 feature 通用类型，故用局部
 // 映射函数而非 impl From，避免给通用错误类型绑 git 专属转换。
-fn map_git_command_error(error: GitCommandError) -> CommandError {
+pub(super) fn map_git_command_error(error: GitCommandError) -> CommandError {
     match error {
         GitCommandError::Failed { message, .. } => CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
@@ -1332,7 +1229,7 @@ fn map_git_command_error(error: GitCommandError) -> CommandError {
     }
 }
 
-fn workspace_persistence_error(error: rusqlite::Error) -> CommandError {
+pub(super) fn workspace_persistence_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "工作区查询失败。",
@@ -2023,210 +1920,6 @@ mod tests {
         assert!(!history.commits[2].is_created_in_worktree);
     }
 
-
-    #[test]
-    fn delete_worktree_removes_directory_and_branch() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let repo_root = temp_dir.path().join("repo");
-        let worktree_path = temp_dir.path().join("worktrees").join("issue-del");
-        fs::create_dir_all(&repo_root).expect("create repo dir");
-        init_git_repo(&repo_root);
-        fs::write(repo_root.join("README.md"), "base\n").expect("write");
-        git(&repo_root, &["add", "README.md"]);
-        git(&repo_root, &["commit", "-m", "base"]);
-        git(&repo_root, &["branch", "-M", "main"]);
-        git(
-            &repo_root,
-            &[
-                "worktree",
-                "add",
-                "-b",
-                "issue-del",
-                worktree_path.to_string_lossy().as_ref(),
-                "main",
-            ],
-        );
-
-        let worktree_canonical = worktree_path
-            .canonicalize()
-            .expect("canonicalize worktree")
-            .to_string_lossy()
-            .to_string();
-        let repo_canonical = repo_root
-            .canonicalize()
-            .expect("canonicalize repo")
-            .to_string_lossy()
-            .to_string();
-
-        let connection = rusqlite::Connection::open_in_memory().expect("open db");
-        MigrationRunner::default()
-            .run(&connection)
-            .expect("migrate");
-        connection
-            .execute(
-                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
-                 VALUES (1, 'p1', ?1, 0, 0)",
-                params![&repo_canonical],
-            )
-            .expect("insert project");
-
-        let service = SessionWorkspaceService::new(
-            ProjectRepository::new(&connection),
-            AgentSessionRepository::new(&connection),
-        );
-        service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(worktree_canonical.clone()),
-            })
-            .expect("delete worktree");
-
-        assert!(!Path::new(&worktree_canonical).exists());
-        let branches = Command::new("git")
-            .args(["branch", "--list", "issue-del"])
-            .current_dir(&repo_root)
-            .output()
-            .expect("list branch");
-        assert!(
-            String::from_utf8_lossy(&branches.stdout).trim().is_empty(),
-            "branch should be deleted"
-        );
-    }
-
-    #[test]
-    fn delete_worktree_rejects_project_root() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let repo_root = temp_dir.path().join("repo");
-        fs::create_dir_all(&repo_root).expect("create repo dir");
-        init_git_repo(&repo_root);
-        fs::write(repo_root.join("README.md"), "base\n").expect("write");
-        git(&repo_root, &["add", "README.md"]);
-        git(&repo_root, &["commit", "-m", "base"]);
-        git(&repo_root, &["branch", "-M", "main"]);
-
-        let repo_canonical = repo_root
-            .canonicalize()
-            .expect("canonicalize repo")
-            .to_string_lossy()
-            .to_string();
-
-        let connection = rusqlite::Connection::open_in_memory().expect("open db");
-        MigrationRunner::default()
-            .run(&connection)
-            .expect("migrate");
-        connection
-            .execute(
-                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
-                 VALUES (1, 'p1', ?1, 0, 0)",
-                params![&repo_canonical],
-            )
-            .expect("insert project");
-
-        let service = SessionWorkspaceService::new(
-            ProjectRepository::new(&connection),
-            AgentSessionRepository::new(&connection),
-        );
-        let error = service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(repo_canonical.clone()),
-            })
-            .expect_err("should reject project root");
-        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
-        assert_eq!(error.reason.as_deref(), Some("cannotDeleteProjectRoot"));
-    }
-
-    #[test]
-    fn delete_worktree_rejects_running_turn() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let repo_root = temp_dir.path().join("repo");
-        let worktree_path = temp_dir.path().join("worktrees").join("issue-run");
-        fs::create_dir_all(&repo_root).expect("create repo dir");
-        init_git_repo(&repo_root);
-        fs::write(repo_root.join("README.md"), "base\n").expect("write");
-        git(&repo_root, &["add", "README.md"]);
-        git(&repo_root, &["commit", "-m", "base"]);
-        git(&repo_root, &["branch", "-M", "main"]);
-        git(
-            &repo_root,
-            &[
-                "worktree",
-                "add",
-                "-b",
-                "issue-run",
-                worktree_path.to_string_lossy().as_ref(),
-                "main",
-            ],
-        );
-
-        let worktree_canonical = worktree_path
-            .canonicalize()
-            .expect("canonicalize worktree")
-            .to_string_lossy()
-            .to_string();
-        let repo_canonical = repo_root
-            .canonicalize()
-            .expect("canonicalize repo")
-            .to_string_lossy()
-            .to_string();
-
-        let connection = rusqlite::Connection::open_in_memory().expect("open db");
-        MigrationRunner::default()
-            .run(&connection)
-            .expect("migrate");
-        connection
-            .execute(
-                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
-                 VALUES (1, 'p1', ?1, 0, 0)",
-                params![&repo_canonical],
-            )
-            .expect("insert project");
-        connection
-            .execute(
-                "INSERT INTO agent_profiles (
-                   id, name, agent_type, command, scope, project_id, mode, dangerous,
-                   default_skill, prompt_template, del
-                 ) VALUES (
-                   100, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1,
-                   '', '', 0
-                 )",
-                [],
-            )
-            .expect("insert profile");
-        connection
-            .execute(
-                "INSERT INTO agent_sessions (
-                   id, project_id, number, agent_profile_id, status, attention,
-                   working_dir, command_snapshot, prompt_snapshot, log_path,
-                   last_active_at, started_at, workspace_path, workspace_branch,
-                   is_turn_running, del
-                 ) VALUES (
-                   1, 1, 1, 100, 'running', 'none',
-                   ?1, 'codex', '', '/tmp/s.log',
-                   1000, 1000, ?1, 'issue-run',
-                   1, 0
-                 )",
-                params![&worktree_canonical],
-            )
-            .expect("insert running session");
-
-        let service = SessionWorkspaceService::new(
-            ProjectRepository::new(&connection),
-            AgentSessionRepository::new(&connection),
-        );
-        let error = service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(worktree_canonical.clone()),
-            })
-            .expect_err("should reject running turn");
-        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
-        assert_eq!(error.reason.as_deref(), Some("worktreeHasRunningTurn"));
-        assert!(Path::new(&worktree_canonical).exists());
-    }
 
     fn init_git_repo(root: &Path) {
         git(root, &["init"]);

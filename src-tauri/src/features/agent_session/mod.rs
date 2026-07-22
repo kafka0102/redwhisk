@@ -18,6 +18,7 @@ mod validation;
 mod worktree_setup;
 mod content_search;
 mod workspace;
+mod workspace_remote_ops;
 mod lifecycle;
 
 pub use service::AgentSessionService;

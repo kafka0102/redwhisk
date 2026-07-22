@@ -760,6 +760,7 @@
       "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。",
       "invalidSearchRegex": "搜索正则无效。",
       "cannotDeleteProjectRoot": "不能删除项目主工作区。",
+      "remoteOpsRequireProjectRoot": "仅项目主工作区支持拉取与推送。",
       "worktreeHasRunningTurn": "该工作区仍有进行中的智能体任务，无法删除。",
       "codeWorkspaceNotFound": "代码工作区不存在。",
       "worktreePathRequired": "删除 worktree 需要提供工作区路径。",
