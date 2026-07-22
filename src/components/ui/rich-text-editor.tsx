@@ -364,7 +364,10 @@ export function RichTextEditor({
       if (selection && selection.length > 0) {
         quill.deleteText(selection.index, selection.length, "user");
       }
-      const contentOps = buildPasteContent(trimmedText);
+      // 代码块是行级格式，属性挂在换行上。自定义粘贴若只插入无属性换行，
+      // 中间行会变成普通段落，仅最后一行承接原代码块换行——表现为“只剩末行是代码块”。
+      const activeFormats = quill.getFormat(index) as Record<string, unknown>;
+      const contentOps = buildPasteContent(trimmedText, activeFormats);
       quill.updateContents([{ retain: index }, ...contentOps], "user");
       quill.setSelection(index + measureDeltaLength(contentOps), 0, "user");
     };
@@ -572,13 +575,43 @@ function getQuillOperations(quill: Quill): DeltaOperation[] {
   return contents.ops ?? [];
 }
 
-// 将粘贴文本转为可插入的 delta 片段：先按 Markdown 解析为文档 delta，再剥离
-// 末尾代表文档结束的普通换行（无块级属性的 "\n"），使其作为片段插入光标处而
-// 非整体替换。附件传空数组：粘贴属外部内容，不与既有附件 token 绑定，仅渲染
-// Markdown 排版（加粗 / 列表 / 标题 / 引用 / 代码）。
-function buildPasteContent(markdown: string): DeltaOperation[] {
+// 将粘贴文本转为可插入的 delta 片段。
+// - 光标已在代码块内：按纯文本逐行插入，并为每个换行挂上 code-block，避免
+//   Markdown 解析改写代码内容，也避免中间行丢失代码块格式。
+// - 其余位置：按 Markdown 解析为文档 delta，再剥离末尾代表文档结束的普通换行
+//   （无块级属性的 "\n"），使其作为片段插入光标处而非整体替换。附件传空数组：
+//   粘贴属外部内容，不与既有附件 token 绑定，仅渲染 Markdown 排版。
+function buildPasteContent(
+  markdown: string,
+  activeFormats: Record<string, unknown>,
+): DeltaOperation[] {
+  if (isActiveCodeBlockFormat(activeFormats)) {
+    return buildCodeBlockPasteContent(markdown);
+  }
   const { ops } = markdownToDelta(markdown, []);
   return stripTrailingPlainNewline(ops);
+}
+
+function isActiveCodeBlockFormat(formats: Record<string, unknown>): boolean {
+  return formats["code-block"] !== undefined && formats["code-block"] !== false;
+}
+
+// 代码块内粘贴：保留字面内容，不为 Markdown 标记做二次解析；每个行间换行都带
+// code-block，使多行粘贴整段保持在同一代码块中。末行不追加换行，由光标处既有
+// 的代码块换行承接，避免多出空代码行。
+function buildCodeBlockPasteContent(text: string): DeltaOperation[] {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const ops: DeltaOperation[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.length > 0) {
+      ops.push({ insert: line });
+    }
+    if (index < lines.length - 1) {
+      ops.push({ insert: "\n", attributes: { "code-block": true } });
+    }
+  }
+  return ops;
 }
 
 // 末尾若是无属性的普通换行（文档结束符），剥掉它，避免在光标处多出一个空行；

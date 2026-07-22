@@ -19,6 +19,7 @@ const quillInstances = vi.hoisted(() => {
     root: HTMLElement;
     setContents: ReturnType<typeof vi.fn>;
     deleteText: ReturnType<typeof vi.fn>;
+    getFormat: ReturnType<typeof vi.fn>;
     getSelection: ReturnType<typeof vi.fn>;
     insertText: ReturnType<typeof vi.fn>;
     setSelection: ReturnType<typeof vi.fn>;
@@ -35,6 +36,7 @@ vi.mock("quill", () => {
     getLength = vi.fn(() => 1);
     getLine = vi.fn(() => [{ domNode: document.createElement("p") }, 0]);
     getSelection = vi.fn(() => ({ index: 0, length: 0 }));
+    getFormat = vi.fn(() => ({}));
     getText = vi.fn(() => "");
     insertEmbed = vi.fn();
     insertText = vi.fn();
@@ -528,6 +530,38 @@ describe("RichTextEditor", () => {
     const pasteOps = updateContentsCalls[updateContentsCalls.length - 1]?.[0];
     // 末尾文档结束换行被剥离，仅保留正文 insert，避免在光标处多出空行。
     expect(pasteOps).toEqual([{ retain: 0 }, { insert: "plain text" }]);
+  });
+
+  it("keeps every pasted line in code-block format when pasting inside a code block", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    // 模拟用户先点选代码块工具栏，光标落在空代码块行后再粘贴多行代码。
+    quillInstances[0].getFormat.mockReturnValue({ "code-block": true });
+    const editorRoot = quillInstances[0].root;
+    const event = createPasteEvent("line1\nline2\nline3");
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    const updateContentsCalls = quillInstances[0].updateContents.mock.calls;
+    const pasteOps = updateContentsCalls[updateContentsCalls.length - 1]?.[0];
+    // 症状：中间换行若无 code-block，仅承接末尾原代码块换行的那一行会显示为代码块。
+    expect(pasteOps).toEqual([
+      { retain: 0 },
+      { insert: "line1" },
+      { insert: "\n", attributes: { "code-block": true } },
+      { insert: "line2" },
+      { insert: "\n", attributes: { "code-block": true } },
+      { insert: "line3" },
+    ]);
   });
 });
 
