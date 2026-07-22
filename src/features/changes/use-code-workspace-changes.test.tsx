@@ -10,6 +10,7 @@ import {
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
+  COMMIT_HISTORY_PAGE_SIZE: 50,
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
 }));
@@ -50,6 +51,7 @@ describe("useCodeWorkspaceChanges", () => {
       commits: [],
       signature: "commits-empty",
       isWorktree: false,
+      hasMore: false,
     });
   });
 
@@ -171,6 +173,7 @@ describe("useCodeWorkspaceChanges", () => {
       commits: [commit],
       signature: "commits-1",
       isWorktree: true,
+      hasMore: false,
     });
 
     const { result } = renderHook(
@@ -184,8 +187,11 @@ describe("useCodeWorkspaceChanges", () => {
     expect(getProjectWorktreeCommitHistory).toHaveBeenCalledWith({
       projectId: 1,
       workspacePath: "/tmp/redwhisk",
+      limit: 50,
+      offset: 0,
     });
     expect(result.current.isWorktree).toBe(true);
+    expect(result.current.hasMoreCommitHistory).toBe(false);
     expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 });

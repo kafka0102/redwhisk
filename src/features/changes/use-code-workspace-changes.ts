@@ -7,6 +7,7 @@ import {
 } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import {
+  COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   type WorkspaceChangedFile,
@@ -25,6 +26,8 @@ export interface UseCodeWorkspaceChangesResult {
   // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
   // 透传给变更面板渲染首条黄色提交右侧的黄色 base Tag（spec F3/F5）。
   baseBranch: string | null;
+  /** 是否还有更早的已提交历史；UI 无限滚动在后续票接入。 */
+  hasMoreCommitHistory: boolean;
   refreshChanges: () => void;
   refreshCommitHistory: () => void;
 }
@@ -59,6 +62,7 @@ export function useCodeWorkspaceChanges(
   >(null);
   const [isWorktree, setIsWorktree] = useState(false);
   const [baseBranch, setBaseBranch] = useState<string | null>(null);
+  const [hasMoreCommitHistory, setHasMoreCommitHistory] = useState(false);
   const changesRequestSequenceRef = useRef(0);
   const lastChangesSignatureRef = useRef<string | null>(null);
   const commitHistoryRequestSequenceRef = useRef(0);
@@ -129,9 +133,15 @@ export function useCodeWorkspaceChanges(
           setCommitHistoryErrorMessage(null);
           if (options.clearStale) {
             setCommitHistory([]);
+            setHasMoreCommitHistory(false);
             lastCommitHistorySignatureRef.current = null;
           }
-          return getProjectWorktreeCommitHistory({ projectId, workspacePath });
+          return getProjectWorktreeCommitHistory({
+            projectId,
+            workspacePath,
+            limit: COMMIT_HISTORY_PAGE_SIZE,
+            offset: 0,
+          });
         })
         .then((response) => {
           if (
@@ -147,6 +157,7 @@ export function useCodeWorkspaceChanges(
             setCommitHistory(response.commits);
             setIsWorktree(response.isWorktree);
             setBaseBranch(response.baseBranch ?? null);
+            setHasMoreCommitHistory(response.hasMore);
           }
           setIsCommitHistoryLoading(false);
           setCommitHistoryErrorMessage(null);
@@ -191,6 +202,7 @@ export function useCodeWorkspaceChanges(
     commitHistoryErrorMessage,
     isWorktree,
     baseBranch,
+    hasMoreCommitHistory,
     refreshChanges,
     refreshCommitHistory,
   };

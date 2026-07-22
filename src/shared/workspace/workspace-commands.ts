@@ -4,7 +4,14 @@ export interface ProjectWorkspaceInput {
   projectId: number;
   sessionId?: number | null;
   workspacePath?: string | null;
+  /** 已提交历史分页：每页条数；仅 commit history 使用，缺省等价 50。 */
+  limit?: number | null;
+  /** 已提交历史分页：跳过条数；仅 commit history 使用，缺省等价 0。 */
+  offset?: number | null;
 }
+
+/** 已提交历史默认页大小（与后端 DEFAULT_COMMIT_HISTORY_LIMIT 对齐）。 */
+export const COMMIT_HISTORY_PAGE_SIZE = 50;
 
 export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
   filePath: string;
@@ -152,6 +159,8 @@ export interface ProjectWorktreeCommitHistoryResponse {
   // 候选），仅 worktree 且非主分支且成功解出 base 时为 Some。前端用它渲染首条
   // 黄色提交右侧的黄色 base Tag。非 worktree / 主分支 / base 解析失败时不返回。
   baseBranch?: string | null;
+  /** 本页条数 >= limit 时为 true，调用方可继续 offset 取更早提交。 */
+  hasMore: boolean;
 }
 
 export interface WorkspaceDiffContent {

@@ -11,6 +11,7 @@ import {
 
 vi.mock("../session-workspace/session-workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
+  COMMIT_HISTORY_PAGE_SIZE: 50,
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
@@ -50,6 +51,7 @@ describe("useSessionWorkspaceCache committed history polling", () => {
       signature: "commits-empty",
       commits: [],
       isWorktree: false,
+      hasMore: false,
     });
   });
 
@@ -94,6 +96,8 @@ describe("useSessionWorkspaceCache committed history polling", () => {
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledWith({
       projectId: 1,
       sessionId: 1,
+      limit: 50,
+      offset: 0,
     });
 
     await vi.advanceTimersByTimeAsync(5_000);

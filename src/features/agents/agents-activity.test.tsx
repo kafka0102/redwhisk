@@ -163,6 +163,7 @@ vi.mock("./agent-session-commands", () => ({
 }));
 
 vi.mock("./session-workspace/session-workspace-commands", () => ({
+  COMMIT_HISTORY_PAGE_SIZE: 50,
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
@@ -671,6 +672,7 @@ describe("AgentsActivity", () => {
       signature: "default-commits",
       commits: [],
       isWorktree: false,
+      hasMore: false,
     });
     getProjectWorktreeFileTreeMock.mockResolvedValue({
       signature: "default-tree",
@@ -1049,6 +1051,7 @@ describe("AgentsActivity", () => {
         ]),
       ],
       isWorktree: false,
+      hasMore: false,
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],
@@ -1073,6 +1076,8 @@ describe("AgentsActivity", () => {
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledWith({
       projectId: 1,
       sessionId: 301,
+      limit: 50,
+      offset: 0,
     });
 
     await user.click(commitButton);

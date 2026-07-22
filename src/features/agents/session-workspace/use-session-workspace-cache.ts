@@ -8,6 +8,7 @@ import {
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import {
+  COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   getProjectWorktreeFileTree,
@@ -60,6 +61,8 @@ interface SessionWorkspaceCache {
   // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
   // 透传到 SessionSidePanel -> SessionChangesPanel 渲染首条黄色提交右侧的黄色 base Tag。
   baseBranch: string | null;
+  /** 是否还有更早的已提交历史；UI 无限滚动在后续票接入。 */
+  hasMoreCommitHistory: boolean;
   commitHistoryErrorMessage: string | null;
   commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
@@ -89,6 +92,7 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   commitHistory: [],
   isCommitFromWorktree: false,
   baseBranch: null,
+  hasMoreCommitHistory: false,
   commitHistoryErrorMessage: null,
   commitHistoryRequestSequence: 0,
   fileTab: null,
@@ -320,6 +324,8 @@ export function useSessionWorkspaceCache({
       const response = await getProjectWorktreeCommitHistory({
         projectId,
         sessionId,
+        limit: COMMIT_HISTORY_PAGE_SIZE,
+        offset: 0,
       });
 
       updateCurrentCache((cache) =>
@@ -332,6 +338,10 @@ export function useSessionWorkspaceCache({
                   : response.commits,
               isCommitFromWorktree: response.isWorktree,
               baseBranch: response.baseBranch ?? null,
+              hasMoreCommitHistory:
+                cache.lastCommitHistorySignature === response.signature
+                  ? cache.hasMoreCommitHistory
+                  : response.hasMore,
               isCommitHistoryLoading: false,
               commitHistoryErrorMessage: null,
               lastCommitHistorySignature: response.signature,
@@ -691,6 +701,7 @@ export function useSessionWorkspaceCache({
     commitHistory: currentCache.commitHistory,
     isCommitFromWorktree: currentCache.isCommitFromWorktree,
     baseBranch: currentCache.baseBranch,
+    hasMoreCommitHistory: currentCache.hasMoreCommitHistory,
     commitHistoryErrorMessage: currentCache.commitHistoryErrorMessage,
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,

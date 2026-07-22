@@ -32,7 +32,7 @@ const HIDDEN_DIRS: &[&str] = &[
     ".vite",
 ];
 const PRIMARY_BRANCHES: &[&str] = &["main", "master"];
-const MAX_COMMIT_HISTORY_ENTRIES: usize = 50;
+const DEFAULT_COMMIT_HISTORY_LIMIT: usize = 50;
 const BASE_BRANCH_CANDIDATES: &[&str] = &[
     "origin/devlop",
     "devlop",
@@ -110,7 +110,12 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.session_id,
             input.workspace_path.as_deref(),
         );
-        read_workspace_commit_history(&root, base_branch.as_deref())
+        read_workspace_commit_history(
+            &root,
+            base_branch.as_deref(),
+            input.limit,
+            input.offset,
+        )
     }
 
     // 读取 session 创建 worktree 时记录的 target_branch，作为 commit history 的精确
@@ -373,7 +378,14 @@ struct CommitLogEntry {
 fn read_workspace_commit_history(
     root: &Path,
     base_branch: Option<&str>,
+    limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<ProjectWorktreeCommitHistoryResponse, CommandError> {
+    let limit = match limit {
+        Some(value) if value > 0 => value,
+        _ => DEFAULT_COMMIT_HISTORY_LIMIT,
+    };
+    let offset = offset.unwrap_or(0);
     let branch_name = current_branch_name(root)?;
     let is_worktree = is_additional_worktree(root).unwrap_or(false);
 
@@ -408,15 +420,16 @@ fn read_workspace_commit_history(
 
     let upstream = current_upstream(root)?;
 
-    // 单次 git log --name-status 取最近 50 条提交与其变更文件，替代旧实现「每条提交
-    // 一次 diff-tree」（50 条 ≈ 50 个子进程）。--root 让初始提交也按新增展示，与旧
-    // diff-tree --root 行为一致；-M -C 保留重命名/复制检测。
+    // 单次 git log --name-status 按 limit/offset 分页取提交与其变更文件，替代旧实现「每条提交
+    // 一次 diff-tree」。--root 让初始提交也按新增展示，与旧 diff-tree --root 行为一致；
+    // -M -C 保留重命名/复制检测。
     let log_output = run_git_owned(
         root,
         &[
             "log".to_string(),
             "--date-order".to_string(),
-            format!("--max-count={MAX_COMMIT_HISTORY_ENTRIES}"),
+            format!("--max-count={limit}"),
+            format!("--skip={offset}"),
             "--root".to_string(),
             "--name-status".to_string(),
             "-M".to_string(),
@@ -489,12 +502,14 @@ fn read_workspace_commit_history(
         });
     }
 
+    let has_more = commits.len() >= limit;
     let signature = hash_string(&format!("{commits:?}"));
     Ok(ProjectWorktreeCommitHistoryResponse {
         commits,
         signature,
         is_worktree,
         base_branch: base_branch_name,
+        has_more,
     })
 }
 
@@ -1614,7 +1629,7 @@ mod tests {
         git(root, &["add", "feature.txt"]);
         git(root, &["commit", "-m", "feature two"]);
 
-        let history = read_workspace_commit_history(root, None).expect("read commit history");
+        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 不再用 base..HEAD 过滤：返回最近 50 条全历史（base + 2 条
         // feature，共 3 条），顺序为 date-order（新→旧）。
@@ -1650,7 +1665,7 @@ mod tests {
         git(root, &["add", "session.txt"]);
         git(root, &["commit", "-m", "session change"]);
 
-        let history = read_workspace_commit_history(root, None).expect("read commit history");
+        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 不再过滤 base，返回最近 50 条全历史（base + session change）。
         assert_eq!(history.commits.len(), 2);
@@ -1691,25 +1706,95 @@ mod tests {
     }
 
     #[test]
-    fn commit_history_caps_at_fifty_entries() {
+    fn commit_history_defaults_to_first_page_of_fifty_with_has_more() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let root = temp_dir.path();
         init_git_repo(root);
-        for index in 0..(MAX_COMMIT_HISTORY_ENTRIES + 2) {
+        for index in 0..(DEFAULT_COMMIT_HISTORY_LIMIT + 2) {
             let file_name = format!("file{index}.txt");
             fs::write(root.join(&file_name), format!("content {index}\n")).expect("write file");
             git(root, &["add", &file_name]);
             git(root, &["commit", "-m", &format!("commit {index}")]);
         }
 
-        let history = read_workspace_commit_history(root, None).expect("read commit history");
+        // 缺省 limit/offset ≡ 首页 50 条；满页则 has_more=true。
+        let history =
+            read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
-        assert_eq!(history.commits.len(), MAX_COMMIT_HISTORY_ENTRIES);
+        assert_eq!(history.commits.len(), DEFAULT_COMMIT_HISTORY_LIMIT);
+        assert!(history.has_more);
         // 最新提交排在最前。
         assert_eq!(
             history.commits[0].message,
-            format!("commit {}", MAX_COMMIT_HISTORY_ENTRIES + 1)
+            format!("commit {}", DEFAULT_COMMIT_HISTORY_LIMIT + 1)
         );
+    }
+
+    #[test]
+    fn commit_history_offset_returns_next_page() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        for index in 0..(DEFAULT_COMMIT_HISTORY_LIMIT + 2) {
+            let file_name = format!("file{index}.txt");
+            fs::write(root.join(&file_name), format!("content {index}\n")).expect("write file");
+            git(root, &["add", &file_name]);
+            git(root, &["commit", "-m", &format!("commit {index}")]);
+        }
+
+        let page2 = read_workspace_commit_history(
+            root,
+            None,
+            Some(DEFAULT_COMMIT_HISTORY_LIMIT),
+            Some(DEFAULT_COMMIT_HISTORY_LIMIT),
+        )
+        .expect("read commit history page 2");
+
+        assert_eq!(page2.commits.len(), 2);
+        assert!(!page2.has_more);
+        // date-order 新→旧：第 51 条是 commit 1，第 52 条是 commit 0。
+        assert_eq!(page2.commits[0].message, "commit 1");
+        assert_eq!(page2.commits[1].message, "commit 0");
+    }
+
+    #[test]
+    fn commit_history_has_more_false_when_page_not_full() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        for index in 0..3 {
+            let file_name = format!("file{index}.txt");
+            fs::write(root.join(&file_name), format!("content {index}\n")).expect("write file");
+            git(root, &["add", &file_name]);
+            git(root, &["commit", "-m", &format!("commit {index}")]);
+        }
+
+        let history = read_workspace_commit_history(root, None, Some(50), Some(0))
+            .expect("read commit history");
+
+        assert_eq!(history.commits.len(), 3);
+        assert!(!history.has_more);
+    }
+
+    #[test]
+    fn commit_history_allows_limit_above_default_for_window_refresh() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        for index in 0..12 {
+            let file_name = format!("file{index}.txt");
+            fs::write(root.join(&file_name), format!("content {index}\n")).expect("write file");
+            git(root, &["add", &file_name]);
+            git(root, &["commit", "-m", &format!("commit {index}")]);
+        }
+
+        // 已加载 100 条时整窗刷新会传 limit>50；本仓库只有 12 条。
+        let history = read_workspace_commit_history(root, None, Some(100), Some(0))
+            .expect("read commit history");
+
+        assert_eq!(history.commits.len(), 12);
+        assert!(!history.has_more);
+        assert_eq!(history.commits[0].message, "commit 11");
     }
 
     #[test]
@@ -1748,7 +1833,7 @@ mod tests {
         git(root, &["config", "branch.dev.remote", "origin"]);
         git(root, &["config", "branch.dev.merge", "refs/heads/dev"]);
 
-        let history = read_workspace_commit_history(root, None).expect("read commit history");
+        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 的 dev 分支：返回最近 50 条全历史（base + pushed + local = 3）。
         assert_eq!(history.commits.len(), 3);
@@ -1809,7 +1894,7 @@ mod tests {
         // one / main two / issue seven change 共 3 条，date-order 新→旧），不再用
         // base..HEAD 过滤。其中只有 issue seven change 落在 base..HEAD 范围内，标记
         // 为当前 worktree 自身提交；从 main 继承下来的两条标记为他处提交。
-        let history = read_workspace_commit_history(&worktree_path, Some("main"))
+        let history = read_workspace_commit_history(&worktree_path, Some("main"), None, None)
             .expect("read commit history");
         assert!(history.is_worktree);
         assert_eq!(history.commits.len(), 3);
@@ -1906,6 +1991,8 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical.clone()),
+                limit: None,
+                offset: None,
             })
             .expect("read commit history via workspace path");
 
