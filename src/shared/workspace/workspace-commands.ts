@@ -232,3 +232,15 @@ export function searchProjectWorktreeContent(
     { input },
   );
 }
+
+export function pullProjectWorktree(
+  input: ProjectWorkspaceInput,
+): Promise<void> {
+  return invokeCommand<void>("pull_project_worktree", { input });
+}
+
+export function pushProjectWorktree(
+  input: ProjectWorkspaceInput,
+): Promise<void> {
+  return invokeCommand<void>("push_project_worktree", { input });
+}

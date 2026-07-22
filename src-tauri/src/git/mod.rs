@@ -1,4 +1,5 @@
 pub mod command;
+pub mod remote;
 pub mod operation_state;
 pub mod repository;
 pub mod status;

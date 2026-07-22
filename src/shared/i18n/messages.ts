@@ -53,6 +53,15 @@ export interface I18nMessages {
     deleteSuccess: string;
     issueMarkedDone: string;
   };
+  changesBranchMenu: {
+    moreActions: string;
+    pull: string;
+    push: string;
+    pulling: string;
+    pushing: string;
+    pullSuccess: string;
+    pushSuccess: string;
+  };
   richText: {
     attachFile: string;
     bold: string;

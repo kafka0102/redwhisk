@@ -887,5 +887,14 @@
       "avatarFormatInvalid": "头像必须是 PNG、JPG 或 WebP 图片。",
       "nameTooLong": "用户名不能超过 20 个字符。"
     }
+  },
+  "changesBranchMenu": {
+    "moreActions": "更多",
+    "pull": "拉取",
+    "push": "推送",
+    "pulling": "正在拉取…",
+    "pushing": "正在推送…",
+    "pullSuccess": "拉取成功",
+    "pushSuccess": "推送成功"
   }
 }

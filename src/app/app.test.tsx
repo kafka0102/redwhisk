@@ -90,6 +90,9 @@ vi.mock("../features/issues/issue-commands", () => ({
   createIssue: vi.fn(),
   listIssues: vi.fn(),
   updateIssue: vi.fn(),
+  // completion-flow-client 在模块加载期绑定 defaultDependencies，mock 须提供同名导出。
+  completeIssueFlow: vi.fn(),
+  detectAgentCommitCompletion: vi.fn(),
 }));
 
 vi.mock("../features/settings/settings-commands", () => ({
@@ -97,7 +100,7 @@ vi.mock("../features/settings/settings-commands", () => ({
   listProjectLabels: vi.fn(),
 }));
 
-vi.mock("../features/issues/issue-description-editor", () => ({
+vi.mock("../features/issues/issue-form/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     ariaLabel,
     onChange,

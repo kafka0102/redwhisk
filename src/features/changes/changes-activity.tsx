@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { DiffViewer } from "../../shared/workspace/diff-viewer";
@@ -8,6 +8,7 @@ import {
 } from "../../shared/workspace/use-workspace-shell";
 import { WorkspaceShell } from "../../shared/workspace/workspace-shell";
 import type { CodeWorkspaceRoot } from "../../shared/workspace/workspace-commands";
+import { ChangesBranchMoreMenu } from "./changes-branch-more-menu";
 import { CodeWorkspaceChangesView } from "./code-workspace-changes-view";
 import { changesWorkspaceCache } from "./changes-workspace-cache";
 import { useCodeWorkspaceDiff } from "./use-code-workspace-diff";
@@ -34,6 +35,11 @@ export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
   const [committedExpanded, setCommittedExpanded] = useState(
     () => cached?.committedChangesExpanded ?? true,
   );
+  // 拉取/推送成功后递增，驱动变更面板立即重拉未提交 + 已提交历史。
+  const [changesRefreshTick, setChangesRefreshTick] = useState(0);
+  const handleRemoteSuccess = useCallback(() => {
+    setChangesRefreshTick((current) => current + 1);
+  }, []);
 
   // shell 与 diff 互相依赖（onRootChange 要调 diff.clear，diff 要 shell 的 workspace
   // path）：用 ref 桥接 onRootChange，先建 shell，再建 diff，再在 effect 里回填
@@ -75,10 +81,18 @@ export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
       onSelectRoot={shell.selectRoot}
       sidebarWidth={shell.sidebarWidth}
       onBeginResize={shell.beginResize}
+      branchBarTrailing={
+        <ChangesBranchMoreMenu
+          projectId={projectId}
+          selectedRoot={shell.selectedRoot}
+          onSuccess={handleRemoteSuccess}
+        />
+      }
       sidebar={
         <CodeWorkspaceChangesView
           projectId={projectId}
           selectedRootWorkspacePath={shell.selectedRootWorkspacePath}
+          refreshTick={changesRefreshTick}
           uncommittedExpanded={uncommittedExpanded}
           committedExpanded={committedExpanded}
           onToggleUncommitted={() =>

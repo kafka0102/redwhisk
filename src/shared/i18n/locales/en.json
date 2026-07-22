@@ -887,5 +887,14 @@
       "avatarFormatInvalid": "Avatar must be a PNG, JPG, or WebP image.",
       "nameTooLong": "Name is limited to 20 characters."
     }
+  },
+  "changesBranchMenu": {
+    "moreActions": "More",
+    "pull": "Pull",
+    "push": "Push",
+    "pulling": "Pulling…",
+    "pushing": "Pushing…",
+    "pullSuccess": "Pulled successfully",
+    "pushSuccess": "Pushed successfully"
   }
 }

@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
 import type {
   WorkspaceChangedFile,
@@ -12,6 +14,8 @@ import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 interface CodeWorkspaceChangesViewProps {
   projectId: number;
   selectedRootWorkspacePath: string | null;
+  /** 外部递增时立即刷新未提交与已提交列表（拉取/推送成功）。 */
+  refreshTick?: number;
   uncommittedExpanded: boolean;
   committedExpanded: boolean;
   onToggleUncommitted: () => void;
@@ -32,6 +36,7 @@ interface CodeWorkspaceChangesViewProps {
 export function CodeWorkspaceChangesView({
   projectId,
   selectedRootWorkspacePath,
+  refreshTick = 0,
   uncommittedExpanded,
   committedExpanded,
   onToggleUncommitted,
@@ -65,6 +70,14 @@ export function CodeWorkspaceChangesView({
     refreshCommitHistory,
     isUnavailable: isChangesUnavailable,
   });
+
+  useEffect(() => {
+    if (refreshTick <= 0) {
+      return;
+    }
+    refreshChanges();
+    refreshCommitHistory();
+  }, [refreshTick, refreshChanges, refreshCommitHistory]);
 
   return (
     <WorkspaceChangesPanels

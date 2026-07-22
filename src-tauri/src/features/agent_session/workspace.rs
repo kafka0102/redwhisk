@@ -186,6 +186,30 @@ impl<'connection> SessionWorkspaceService<'connection> {
         }
     }
 
+    pub fn pull(
+        &self,
+        input: ProjectWorkspaceInput,
+    ) -> Result<(), CommandError> {
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
+        crate::git::remote::pull(&root).map_err(map_git_command_error)
+    }
+
+    pub fn push(
+        &self,
+        input: ProjectWorkspaceInput,
+    ) -> Result<(), CommandError> {
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
+        crate::git::remote::push(&root).map_err(map_git_command_error)
+    }
+
     fn resolve_workspace_root(
         &self,
         project_id: i64,

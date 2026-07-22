@@ -8,6 +8,19 @@ import {
 } from "./changes-workspace-cache";
 import { ChangesActivity } from "./changes-activity";
 
+vi.mock("./changes-branch-more-menu", () => ({
+  ChangesBranchMoreMenu: ({
+    selectedRoot,
+  }: {
+    selectedRoot: { branch: string; isProjectRoot: boolean } | null;
+  }) => (
+    <button type="button" aria-label="更多">
+      more-for-{selectedRoot?.branch ?? "none"}-
+      {selectedRoot?.isProjectRoot ? "root" : "wt"}
+    </button>
+  ),
+}));
+
 vi.mock("../../shared/workspace/workspace-changes-panels", () => ({
   WorkspaceChangesPanels: () => <div>Changes View</div>,
 }));
@@ -68,6 +81,9 @@ describe("ChangesActivity", () => {
     expect(
       screen.queryByRole("button", { name: "Search in files" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更多" })).toHaveTextContent(
+      "more-for-main-root",
+    );
   });
 
   it("persists its own selected root independent of code cache", () => {

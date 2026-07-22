@@ -93,6 +93,26 @@ pub async fn read_project_worktree_diff(
     run_workspace_blocking(data_dir, move |service| service.read_diff(input)).await
 }
 
+#[tauri::command]
+pub async fn pull_project_worktree(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.pull(input)).await
+}
+
+#[tauri::command]
+pub async fn push_project_worktree(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.push(input)).await
+}
+
 /// 解析 data_dir 并完成幂等本地数据初始化。仅目录解析与迁移幂等检查，轻量，留在
 /// async command 体内同步执行；真正阻塞的开库 / git / spawn 放入 `run_workspace_blocking`。
 fn prepare_workspace_data_dir(

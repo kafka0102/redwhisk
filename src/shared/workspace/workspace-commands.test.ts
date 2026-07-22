@@ -5,6 +5,8 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  pullProjectWorktree,
+  pushProjectWorktree,
   searchProjectWorktreeContent,
 } from "./workspace-commands";
 
@@ -64,6 +66,23 @@ describe("workspace commands", () => {
           matchCase: true,
         },
       },
+    );
+
+    await expect(
+      pullProjectWorktree({ projectId: 1, workspacePath: "/tmp/root" }),
+    ).resolves.toEqual({ command: "pull_project_worktree" });
+    await expect(
+      pushProjectWorktree({ projectId: 1, workspacePath: "/tmp/root" }),
+    ).resolves.toEqual({ command: "push_project_worktree" });
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      5,
+      "pull_project_worktree",
+      { input: { projectId: 1, workspacePath: "/tmp/root" } },
+    );
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      6,
+      "push_project_worktree",
+      { input: { projectId: 1, workspacePath: "/tmp/root" } },
     );
   });
 });
