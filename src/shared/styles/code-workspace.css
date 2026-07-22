@@ -191,11 +191,23 @@
   align-items: center;
   gap: 8px;
   max-width: 320px;
+  min-width: 0;
   padding: 0 10px;
   border-top: 2px solid transparent;
   border-right: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-size: 12px;
+}
+
+.code-workspace__tab > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-workspace__tab > svg {
+  flex-shrink: 0;
 }
 
 .code-workspace__tab[aria-selected="true"] {
@@ -529,8 +541,11 @@
 }
 
 .code-workspace__search-file-name {
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .code-workspace__search-file-path {

@@ -659,6 +659,11 @@
   background: #48494f;
 }
 
+.session-file-tree__folder > svg:not(.session-file-tree__chevron),
+.session-file-tree__row > svg:not(.session-file-tree__chevron) {
+  flex: 0 0 auto;
+}
+
 .session-file-tree__icon {
   flex: 0 0 auto;
   color: var(--color-text-muted);
@@ -673,8 +678,18 @@
   visibility: hidden;
 }
 
+.session-file-tree__folder > span,
+.session-file-tree__row
+  > span:not(.session-file-tree__chevron):not(.session-file-tree__status) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-file-tree__status {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 650;
   line-height: 1;
