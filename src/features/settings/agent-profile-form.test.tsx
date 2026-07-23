@@ -115,7 +115,7 @@ describe("AgentProfileForm", () => {
       expect(trigger).toHaveTextContent("TUI");
     });
 
-    it("locks tui and hides switch UI when agentType is opencode", async () => {
+    it("defaults to json and shows switch UI for opencode", async () => {
       const user = userEvent.setup();
       renderForm({
         mode: "create",
@@ -127,12 +127,11 @@ describe("AgentProfileForm", () => {
 
       await selectShadcnOption(user, screen, "智能体类型", "OpenCode");
 
-      // 切换控件消失：combobox 不存在
-      expect(screen.queryByRole("combobox", { name: "展示形式" })).toBeNull();
-      // 只读输入框展示锁定文案
-      const lockedInput = screen.getByLabelText("展示形式");
-      expect(lockedInput).toHaveValue("TUI（暂未接入解析器，不可切换）");
-      expect(lockedInput).toHaveAttribute("readonly");
+      const trigger = screen.getByRole("combobox", { name: "展示形式" });
+      expect(trigger).toHaveTextContent("JSON");
+
+      await selectShadcnOption(user, screen, "展示形式", "TUI");
+      expect(trigger).toHaveTextContent("TUI");
     });
 
     it("locks tui and hides switch UI when agentType is grok", async () => {
@@ -168,9 +167,11 @@ describe("AgentProfileForm", () => {
         screen.getByRole("combobox", { name: "展示形式" }),
       ).toHaveTextContent("TUI");
 
-      // 切到 opencode（强制 tui，隐藏切换）
+      // 切到 opencode：保留 tui，仍可切换
       await selectShadcnOption(user, screen, "智能体类型", "OpenCode");
-      expect(screen.queryByRole("combobox", { name: "展示形式" })).toBeNull();
+      expect(
+        screen.getByRole("combobox", { name: "展示形式" }),
+      ).toHaveTextContent("TUI");
 
       // 切回 codex → 仍可切，值仍为 tui
       await selectShadcnOption(user, screen, "智能体类型", "Codex");
@@ -337,7 +338,39 @@ describe("AgentProfileForm", () => {
       });
     });
 
-    it("passes tui + enabled form value for opencode", async () => {
+    it("passes default json + enabled form value for opencode", async () => {
+      const user = userEvent.setup();
+      saveAgentProfileMock.mockResolvedValue(
+        buildProfile({ agentType: "opencode", displayMode: "json" }),
+      );
+
+      renderForm({
+        mode: "create",
+        scope: "global",
+        projectId: null,
+        onCancel: () => {},
+        onSaved: () => {},
+      });
+
+      await user.type(screen.getByLabelText("智能体配置名称"), "OpenCode");
+      await user.type(screen.getByLabelText("智能体命令"), "opencode");
+
+      await selectShadcnOption(user, screen, "智能体类型", "OpenCode");
+
+      await user.click(screen.getByRole("button", { name: "保存" }));
+
+      await waitFor(() => {
+        expect(saveAgentProfileMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agentType: "opencode",
+            displayMode: "json",
+            enabled: true,
+          }),
+        );
+      });
+    });
+
+    it("can save switched tui displayMode for opencode", async () => {
       const user = userEvent.setup();
       saveAgentProfileMock.mockResolvedValue(
         buildProfile({ agentType: "opencode", displayMode: "tui" }),
@@ -355,6 +388,7 @@ describe("AgentProfileForm", () => {
       await user.type(screen.getByLabelText("智能体命令"), "opencode");
 
       await selectShadcnOption(user, screen, "智能体类型", "OpenCode");
+      await selectShadcnOption(user, screen, "展示形式", "TUI");
 
       await user.click(screen.getByRole("button", { name: "保存" }));
 

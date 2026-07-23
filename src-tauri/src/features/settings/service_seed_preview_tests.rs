@@ -227,7 +227,7 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
         .find(|p| p.agent_type == AgentType::OpenCode)
         .expect("opencode profile");
     assert_eq!(opencode.name, "OpenCode");
-    assert_eq!(opencode.display_mode, "tui");
+    assert_eq!(opencode.display_mode, "json");
     let grok = profiles
         .iter()
         .find(|p| p.agent_type == AgentType::Grok)

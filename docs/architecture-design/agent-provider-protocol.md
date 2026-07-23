@@ -40,7 +40,7 @@ Agent TUI 会话视图 (xterm)
 1. 会话存续期只认 **Session 展示形式快照**，不回读 profile 当前 `displayMode`。
 2. TUI 命令**不得**注入 structured 专属参数（Codex 无 `app-server`；Claude 无 `stream-json` / `-p` / `--print` / `--output-format`）。
 3. mode / dangerous 映射由 descriptor 按 provider 交互式 CLI 语义处理；service / command 不按 `agentType` 散落 match。
-4. 本期 codex/claude/opencode 可以 tui 启动；grok 仍不可启动（descriptor 占位仅 trim）。OpenCode json 未解锁。
+4. 本期 codex/claude/opencode 可以 json 与 tui 启动；grok 仍不可启动（descriptor 占位仅 trim）。OpenCode json 使用 `opencode run --format json`。
 5. 运行中不得热切换 displayMode。
 
 ### TUI 命令映射要点（descriptor）

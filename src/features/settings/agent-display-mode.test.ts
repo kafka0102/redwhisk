@@ -7,7 +7,7 @@ import {
 import type { AgentType } from "../agents/agent-session-commands";
 
 describe("getDisplayModeDefaults", () => {
-  it.each(["codex", "claude"] as const)(
+  it.each(["codex", "claude", "opencode"] as const)(
     "returns json default + switchable for %s",
     (agentType: AgentType) => {
       expect(getDisplayModeDefaults(agentType)).toEqual({
@@ -17,21 +17,23 @@ describe("getDisplayModeDefaults", () => {
     },
   );
 
-  it.each(["opencode", "grok"] as const)(
-    "returns tui default + locked for %s",
-    (agentType: AgentType) => {
-      expect(getDisplayModeDefaults(agentType)).toEqual({
-        defaultMode: "tui",
-        canSwitch: false,
-      });
-    },
-  );
+  it("returns tui default + locked for grok", () => {
+    expect(getDisplayModeDefaults("grok")).toEqual({
+      defaultMode: "tui",
+      canSwitch: false,
+    });
+  });
 });
 
 describe("resolveDisplayModeOnAgentTypeChange", () => {
-  it("forces tui when switching to opencode", () => {
-    expect(resolveDisplayModeOnAgentTypeChange("opencode", "json")).toBe("tui");
+  it("preserves tui when switching to opencode with tui selected", () => {
     expect(resolveDisplayModeOnAgentTypeChange("opencode", "tui")).toBe("tui");
+  });
+
+  it("falls back to json when switching to opencode with json current", () => {
+    expect(resolveDisplayModeOnAgentTypeChange("opencode", "json")).toBe(
+      "json",
+    );
   });
 
   it("forces tui when switching to grok", () => {

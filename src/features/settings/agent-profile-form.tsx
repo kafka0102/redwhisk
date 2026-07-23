@@ -136,7 +136,7 @@ export function AgentProfileForm({
 
   function handleAgentTypeChange(nextAgentType: AgentType) {
     setAgentType(nextAgentType);
-    // 切 agentType 时同步调整 displayMode（opencode/grok 强制 tui；codex/claude 可保留 tui）。
+    // 切 agentType 时同步调整 displayMode（grok 强制 tui；codex/claude/opencode 可保留 tui）。
     setDisplayMode((current) =>
       resolveDisplayModeOnAgentTypeChange(nextAgentType, current),
     );

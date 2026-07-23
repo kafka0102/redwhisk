@@ -875,7 +875,7 @@ fn default_builtin_profile_input(agent_type: AgentType, detected_command: &str) 
     let (name, display_mode) = match agent_type {
         AgentType::Codex => ("Codex", "json"),
         AgentType::Claude => ("Claude Code", "json"),
-        AgentType::OpenCode => ("OpenCode", "tui"),
+        AgentType::OpenCode => ("OpenCode", "json"),
         AgentType::Grok => ("Grok", "tui"),
     };
     SaveAgentProfileInput {

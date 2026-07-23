@@ -12,7 +12,7 @@ ADR-0020 已为 Agent profile 引入 `displayMode`（`json`/`tui`），但仅作
    - `json` → 结构化路径（`AgentSessionHandle` + `AgentStreamEvent` + 消息流/composer）
    - `tui` → 交互式 PTY 路径（`PtySessionManager` + xterm `TerminalSurface`）
 2. **Session 展示形式快照**：将 `displayMode` 持久化到 `agent_sessions`；会话存续期 UI、恢复与重启语义只认快照，不回读 profile。
-3. **范围**：codex/claude/opencode 可以 tui 启动；grok 仍不可启动。TUI 产品能力以**进程生命周期**为准（exit → closed/crashed；应用重启无活跃 PTY → stopped），不实现精细 turn、权限卡、自动评论或完成工作流联动。OpenCode json 由后续变更接入。
+3. **范围**：codex/claude/opencode 可以 json 与 tui 启动；grok 仍不可启动。TUI 产品能力以**进程生命周期**为准（exit → closed/crashed；应用重启无活跃 PTY → stopped），不实现精细 turn、权限卡、自动评论或完成工作流联动。OpenCode json 走 structured 子进程路径（`run --format json`）。
 4. **命令构造分离**：`AgentProviderDescriptor` 提供 TUI 专用命令构造（交互式 CLI + mode/dangerous 参数）；不得复用 structured 的 app-server / stream-json 参数。
 5. **首条 prompt**：能作 CLI 参数则注入参数；否则 PTY 就绪后写入 stdin。
 6. **前端**：独立 Agent TUI 会话视图，复用 `TerminalSurface` / theme / live pipeline；不混用 Project Terminal 配置实体。
