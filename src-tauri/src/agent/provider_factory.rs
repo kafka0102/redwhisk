@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
+use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
@@ -79,6 +80,7 @@ impl AgentSessionProviderFactory for DefaultAgentSessionProviderFactory {
                 start_codex_session(request, mode, backfill)
             }
             ProviderStartPlan::Claude { backfill } => start_claude_session(request, backfill),
+            ProviderStartPlan::OpenCode { backfill } => start_opencode_session(request, backfill),
         }
     }
 }
@@ -91,6 +93,9 @@ pub enum ProviderStartPlan {
         backfill: ThreadIdBackfill,
     },
     Claude {
+        backfill: ThreadIdBackfill,
+    },
+    OpenCode {
         backfill: ThreadIdBackfill,
     },
 }
@@ -138,8 +143,17 @@ pub fn plan_provider_start(
             };
             Ok(ProviderStartPlan::Claude { backfill })
         }
-        AgentType::OpenCode | AgentType::Grok => Err(AgentSessionError::Other(
-            "暂不支持启动 OpenCode / Grok 类型的 Agent 会话。".to_string(),
+        AgentType::OpenCode => {
+            // 与 Claude 同构：新建 defer 到首事件；resume 时 WhenPresent。
+            let backfill = if request.resume_thread_id.is_some() {
+                ThreadIdBackfill::WhenPresent
+            } else {
+                ThreadIdBackfill::DeferToStream
+            };
+            Ok(ProviderStartPlan::OpenCode { backfill })
+        }
+        AgentType::Grok => Err(AgentSessionError::Other(
+            "暂不支持启动 Grok 类型的 Agent 会话。".to_string(),
         )),
     }
 }
@@ -221,6 +235,33 @@ fn start_claude_session(
     let _ = request.dangerous;
 
     let handle = ClaudeSessionHandle::start(config).map_err(AgentSessionError::from)?;
+    let thread_id = handle.thread_id();
+    Ok(StartedSession {
+        handle: Arc::new(handle),
+        thread_id,
+        backfill,
+    })
+}
+
+fn start_opencode_session(
+    request: AgentSessionStartRequest,
+    backfill: ThreadIdBackfill,
+) -> Result<StartedSession, AgentSessionError> {
+    let config = OpenCodeSessionConfig {
+        project_id: request.project_id,
+        session_id: request.session_id,
+        binary: request.binary,
+        cwd: request.cwd,
+        model: request.model,
+        dangerous: request.dangerous,
+        mode_id: request.mode_id,
+        broadcaster: request.broadcaster,
+        resume_session_id: request.resume_thread_id,
+    };
+    let _ = request.effort;
+    let _ = request.config_home;
+
+    let handle = OpenCodeSessionHandle::start(config).map_err(AgentSessionError::from)?;
     let thread_id = handle.thread_id();
     Ok(StartedSession {
         handle: Arc::new(handle),
@@ -518,4 +559,51 @@ mod tests {
             .expect_err("unsupported");
         assert!(matches!(err, AgentSessionError::UnsupportedMode(_)));
     }
+
+    #[test]
+    fn plan_routes_opencode_new_with_defer_backfill() {
+        let request = base_request(AgentType::OpenCode);
+        let plan = plan_provider_start(&request).expect("plan");
+        assert_eq!(
+            plan,
+            ProviderStartPlan::OpenCode {
+                backfill: ThreadIdBackfill::DeferToStream,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_routes_opencode_resume_with_when_present_backfill() {
+        let mut request = base_request(AgentType::OpenCode);
+        request.resume_thread_id = Some("ses_resume".into());
+        let plan = plan_provider_start(&request).expect("plan");
+        assert_eq!(
+            plan,
+            ProviderStartPlan::OpenCode {
+                backfill: ThreadIdBackfill::WhenPresent,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_still_rejects_grok() {
+        let request = base_request(AgentType::Grok);
+        let err = plan_provider_start(&request).expect_err("grok");
+        assert!(matches!(err, AgentSessionError::Other(ref m) if m.contains("Grok")));
+    }
+
+    #[test]
+    fn default_factory_starts_opencode_without_spawning_process() {
+        let factory = DefaultAgentSessionProviderFactory;
+        let mut request = base_request(AgentType::OpenCode);
+        request.resume_thread_id = Some("ses_resume".into());
+        request.dangerous = true;
+        request.mode_id = Some("full-access".into());
+        request.model = Some("openai/gpt-5".into());
+        let started = factory.start(request).expect("opencode start");
+        assert_eq!(started.thread_id.as_deref(), Some("ses_resume"));
+        assert_eq!(started.backfill, ThreadIdBackfill::WhenPresent);
+        assert_eq!(started.handle.thread_id().as_deref(), Some("ses_resume"));
+    }
+
 }

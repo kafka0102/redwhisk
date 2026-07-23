@@ -74,7 +74,7 @@ pub(super) fn build_claude_tui_command_snapshot(raw_command: &str, mode: &str, d
 }
 
 /// OpenCode 交互式 TUI：trim；dangerous 或 mode=full-access 追加 `--auto`；
-/// 不注入 `run` / `--format`（json 路径另票）。
+/// 不注入 `run` / `--format`（structured 见 build_opencode_structured_command_snapshot）。
 pub(super) fn build_opencode_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
     let trimmed = raw_command.trim();
     if mode == "full-access" || dangerous {
@@ -82,6 +82,28 @@ pub(super) fn build_opencode_tui_command_snapshot(raw_command: &str, mode: &str,
     } else {
         trimmed.to_string()
     }
+}
+
+/// OpenCode structured/json launch snapshot：确保含 `run --format json`；不注入 message / -s / -m。
+///
+/// 运行时完整 argv 由 `opencode_streaming::session` 拼装。
+pub(super) fn build_opencode_structured_command_snapshot(raw_command: &str) -> String {
+    let trimmed = raw_command.trim();
+    if trimmed.is_empty() {
+        return format!("{OPENCODE_FALLBACK_BINARY} run --format json");
+    }
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    let has_run = parts.iter().any(|p| *p == "run");
+    let has_format_json = parts.windows(2).any(|w| w[0] == "--format" && w[1] == "json")
+        || parts.iter().any(|p| *p == "--format=json");
+    let mut command = trimmed.to_string();
+    if !has_run {
+        command = append_missing_args(&command, &["run"]);
+    }
+    if !has_format_json {
+        command = append_missing_args(&command, &["--format", "json"]);
+    }
+    command
 }
 
 pub(super) fn ensure_claude_bypass_permission_args(command: &str) -> String {

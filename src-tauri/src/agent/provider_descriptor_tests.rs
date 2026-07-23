@@ -461,3 +461,37 @@
         assert!(!grok.supports_reasoning_effort);
         assert!(!grok.supports_modes);
     }
+
+    #[test]
+    fn opencode_launch_snapshot_includes_run_format_json() {
+        assert_eq!(
+            OpenCodeDescriptor.build_launch_command_snapshot("opencode"),
+            "opencode run --format json"
+        );
+        assert_eq!(
+            OpenCodeDescriptor.build_launch_command_snapshot("  opencode  "),
+            "opencode run --format json"
+        );
+    }
+
+    #[test]
+    fn opencode_launch_snapshot_does_not_duplicate_run_or_format() {
+        assert_eq!(
+            OpenCodeDescriptor.build_launch_command_snapshot("opencode run --format json"),
+            "opencode run --format json"
+        );
+        assert_eq!(
+            OpenCodeDescriptor.build_launch_command_snapshot("opencode run"),
+            "opencode run --format json"
+        );
+    }
+
+    #[test]
+    fn opencode_launch_snapshot_does_not_inject_command_flag() {
+        let command = OpenCodeDescriptor.build_launch_command_snapshot("opencode");
+        assert!(!command.split_whitespace().any(|part| part == "--command"));
+        assert!(command.contains("run"));
+        assert!(command.contains("--format"));
+        assert!(command.contains("json"));
+    }
+

@@ -19,8 +19,8 @@ use command::{
     CLAUDE_FALLBACK_BINARY, CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY,
     OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY, append_missing_args,
     build_claude_tui_command_snapshot, build_codex_tui_command_snapshot,
-    build_opencode_tui_command_snapshot, claude_models_from_home,
-    ensure_claude_bypass_permission_args,
+    build_opencode_structured_command_snapshot, build_opencode_tui_command_snapshot,
+    claude_models_from_home, ensure_claude_bypass_permission_args,
 };
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
@@ -229,7 +229,7 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
 
 /// OpenCode provider 描述符。
 ///
-/// 本期开放 TUI 进程级启动（ADR-0022）；json / `run --format` 由后续票接入。
+/// TUI 走进程级 PTY（ADR-0022）；structured/json 走 `run --format json` 会话。
 #[derive(Debug, Clone, Copy)]
 pub struct OpenCodeDescriptor;
 
@@ -255,8 +255,7 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
     }
 
     fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
-        // structured/json 尚未解锁：launch snapshot 仅 trim，不注入 run/--format。
-        raw_command.trim().to_string()
+        build_opencode_structured_command_snapshot(raw_command)
     }
 
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {

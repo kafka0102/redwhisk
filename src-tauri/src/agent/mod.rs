@@ -1,6 +1,7 @@
 pub mod agent_event_broadcaster;
 pub mod claude_config;
 pub mod claude_streaming;
+pub mod opencode_streaming;
 pub mod codex_app_server;
 pub mod codex_config;
 pub mod command_detector;
