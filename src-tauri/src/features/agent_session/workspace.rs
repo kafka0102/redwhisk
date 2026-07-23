@@ -777,7 +777,15 @@ fn read_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
 }
 
 fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeResponse, CommandError> {
-    let mut nodes = read_directory_nodes(root, root)?;
+    // canonicalize 失败时仍用 root 做前缀守卫，避免因软链/权限问题直接空白整树。
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    // 祖先栈只防软链成环，不跨兄弟分支去重，这样
+    // `.agents/skills/x` 与 `.claude/skills/x -> ../../.agents/skills/x` 都能各自展开。
+    let mut ancestors = HashSet::new();
+    if let Ok(canonical_dir) = root.canonicalize() {
+        ancestors.insert(canonical_dir);
+    }
+    let mut nodes = read_directory_nodes(root, &canonical_root, root, &mut ancestors)?;
     nodes.sort_by(compare_tree_nodes);
     let signature = hash_string(&format!("{nodes:?}"));
 
@@ -798,7 +806,9 @@ pub(super) fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRoot
 
 fn read_directory_nodes(
     root: &Path,
+    canonical_root: &Path,
     dir: &Path,
+    ancestors: &mut HashSet<PathBuf>,
 ) -> Result<Vec<WorkspaceFileTreeNode>, CommandError> {
     let mut nodes = Vec::new();
     let entries = fs::read_dir(dir).map_err(|error| {
@@ -815,10 +825,22 @@ fn read_directory_nodes(
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
         let file_type = entry.file_type().map_err(workspace_io_error)?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        if file_type.is_dir() && HIDDEN_DIRS.contains(&name.as_str()) {
+
+        // 目录软链（如 .claude/skills/<skill> 指向仓库内共享 skill）需要展开；
+        // 越出工作区则跳过。文件软链仍跳过，避免把外部敏感文件暴露在树中。
+        let is_directory = if file_type.is_symlink() {
+            let Ok(target_meta) = fs::metadata(&path) else {
+                continue;
+            };
+            if !target_meta.is_dir() {
+                continue;
+            }
+            true
+        } else {
+            file_type.is_dir()
+        };
+
+        if is_directory && HIDDEN_DIRS.contains(&name.as_str()) {
             continue;
         }
 
@@ -827,13 +849,29 @@ fn read_directory_nodes(
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
-        let metadata = entry.metadata().map_err(workspace_io_error)?;
         // 逐条启动 `git check-ignore` 会在大型仓库创建海量子进程并阻塞 command。
         let is_ignored = false;
 
-        if file_type.is_dir() {
-            let mut children = read_directory_nodes(root, &path)?;
-            children.sort_by(compare_tree_nodes);
+        if is_directory {
+            let Ok(canonical_dir) = path.canonicalize() else {
+                continue;
+            };
+            if !canonical_dir.starts_with(canonical_root) {
+                continue;
+            }
+
+            let metadata = fs::metadata(&path).map_err(workspace_io_error)?;
+            let children = if ancestors.insert(canonical_dir.clone()) {
+                let mut children =
+                    read_directory_nodes(root, canonical_root, &path, ancestors)?;
+                children.sort_by(compare_tree_nodes);
+                ancestors.remove(&canonical_dir);
+                children
+            } else {
+                // 祖先栈已含同一真实目录：软链成环，展示空目录节点即可。
+                Vec::new()
+            };
+
             nodes.push(WorkspaceFileTreeNode {
                 id: relative_path.clone(),
                 name,
@@ -845,6 +883,7 @@ fn read_directory_nodes(
                 is_ignored,
             });
         } else if file_type.is_file() {
+            let metadata = entry.metadata().map_err(workspace_io_error)?;
             nodes.push(WorkspaceFileTreeNode {
                 id: relative_path.clone(),
                 name,
@@ -1488,6 +1527,96 @@ mod tests {
         let resolved = resolve_workspace_relative_path(root, "src/main.rs").expect("resolve");
 
         assert_eq!(resolved, root.join("src/main.rs"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_tree_includes_directory_symlink_children_inside_workspace() {
+        // 复现：.claude/skills/<skill> 常是指向仓库内 .agents/skills 的目录软链；
+        // 文件树若跳过符号链接，侧栏无法展开看到其下文件。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join(".agents/skills/eos-ontology")).expect("create target");
+        fs::write(
+            root.join(".agents/skills/eos-ontology/SKILL.md"),
+            "# skill\n",
+        )
+        .expect("write skill");
+        fs::create_dir_all(root.join(".claude/skills")).expect("create skills dir");
+        std::os::unix::fs::symlink(
+            root.join(".agents/skills/eos-ontology"),
+            root.join(".claude/skills/eos-ontology"),
+        )
+        .expect("symlink skill dir");
+
+        let tree = read_workspace_file_tree(root).expect("read file tree");
+        let claude = tree
+            .nodes
+            .iter()
+            .find(|node| node.name == ".claude")
+            .expect(".claude directory");
+        let skills = claude
+            .children
+            .iter()
+            .find(|node| node.name == "skills")
+            .expect("skills directory");
+        let linked = skills
+            .children
+            .iter()
+            .find(|node| node.name == "eos-ontology")
+            .expect("symlinked skill directory should appear");
+        assert_eq!(linked.kind, WorkspaceFileTreeNodeKind::Directory);
+        assert!(
+            linked
+                .children
+                .iter()
+                .any(|node| node.name == "SKILL.md" && node.kind == WorkspaceFileTreeNodeKind::File),
+            "expected SKILL.md under directory symlink, got {:?}",
+            linked.children
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_file_through_in_workspace_directory_symlink() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join(".agents/skills/eos-ontology")).expect("create target");
+        fs::write(
+            root.join(".agents/skills/eos-ontology/SKILL.md"),
+            "# skill body\n",
+        )
+        .expect("write skill");
+        fs::create_dir_all(root.join(".claude/skills")).expect("create skills dir");
+        std::os::unix::fs::symlink(
+            root.join(".agents/skills/eos-ontology"),
+            root.join(".claude/skills/eos-ontology"),
+        )
+        .expect("symlink skill dir");
+
+        let content = read_workspace_file(root, ".claude/skills/eos-ontology/SKILL.md")
+            .expect("read through directory symlink");
+        assert!(content.content.contains("skill body"), "got {:?}", content.content);
+        assert!(!content.is_binary);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_tree_skips_directory_symlink_escaping_workspace() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("workspace");
+        let outside = temp_dir.path().join("outside");
+        fs::create_dir_all(&root).expect("create root");
+        fs::create_dir_all(&outside).expect("create outside");
+        fs::write(outside.join("secret.txt"), "secret").expect("write outside");
+        std::os::unix::fs::symlink(&outside, root.join("linked")).expect("symlink");
+
+        let tree = read_workspace_file_tree(&root).expect("read file tree");
+        assert!(
+            tree.nodes.iter().all(|node| node.name != "linked"),
+            "escaping directory symlink must not appear in file tree, got {:?}",
+            tree.nodes
+        );
     }
 
     #[cfg(unix)]
