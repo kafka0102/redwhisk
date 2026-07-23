@@ -1,15 +1,8 @@
 //! 变更 Activity 工作区远端操作：pull / push / delete worktree。
 //! 从 `workspace.rs` 拆出，避免继续胀大白名单主文件。
 
-use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use rusqlite::params;
-
-use crate::db::agent_session_repository::AgentSessionRepository;
-use crate::db::migrations::MigrationRunner;
-use crate::db::project_repository::ProjectRepository;
 use crate::git::worktree::cleanup_worktree;
 use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -163,6 +156,15 @@ impl<'connection> SessionWorkspaceService<'connection> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs;
+    use std::process::Command;
+
+    use rusqlite::params;
+
+    use crate::db::agent_session_repository::AgentSessionRepository;
+    use crate::db::migrations::MigrationRunner;
+    use crate::db::project_repository::ProjectRepository;
 
     #[test]
     fn delete_worktree_removes_directory_and_branch() {
