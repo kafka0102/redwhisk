@@ -35,6 +35,9 @@ const mockAppWindow = {
   isMaximized: vi.fn(),
   maximize: vi.fn(),
   unmaximize: vi.fn(),
+  isFullscreen: vi.fn().mockResolvedValue(false),
+  setFullscreen: vi.fn().mockResolvedValue(undefined),
+  onResized: vi.fn().mockResolvedValue(() => undefined),
 };
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -182,9 +185,15 @@ describe("App project entry", () => {
     mockAppWindow.isMaximized.mockReset();
     mockAppWindow.maximize.mockReset();
     mockAppWindow.unmaximize.mockReset();
+    mockAppWindow.isFullscreen.mockReset();
+    mockAppWindow.setFullscreen.mockReset();
+    mockAppWindow.onResized.mockReset();
     mockAppWindow.isMaximized.mockResolvedValue(false);
     mockAppWindow.maximize.mockResolvedValue(undefined);
     mockAppWindow.unmaximize.mockResolvedValue(undefined);
+    mockAppWindow.isFullscreen.mockResolvedValue(false);
+    mockAppWindow.setFullscreen.mockResolvedValue(undefined);
+    mockAppWindow.onResized.mockResolvedValue(() => undefined);
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
       currentVersion: "0001_core",

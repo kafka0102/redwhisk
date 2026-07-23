@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
     "dialog:allow-open",
     "notification:default",
     "opener:allow-open-path",

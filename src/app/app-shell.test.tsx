@@ -14,6 +14,9 @@ const mockAppWindow = {
   isMaximized: vi.fn().mockResolvedValue(false),
   maximize: vi.fn().mockResolvedValue(undefined),
   unmaximize: vi.fn().mockResolvedValue(undefined),
+  isFullscreen: vi.fn().mockResolvedValue(false),
+  setFullscreen: vi.fn().mockResolvedValue(undefined),
+  onResized: vi.fn().mockResolvedValue(() => undefined),
 };
 
 vi.mock("@tauri-apps/api/window", () => ({
