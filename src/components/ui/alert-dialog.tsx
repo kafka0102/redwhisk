@@ -55,9 +55,12 @@ export function AlertDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle className="flex items-start gap-3 leading-6">
+      <DialogContent
+        className="min-w-0 overflow-hidden sm:max-w-xl"
+        showCloseButton={false}
+      >
+        <DialogHeader className="min-w-0">
+          <DialogTitle className="flex min-w-0 items-start gap-3 leading-6">
             <Icon
               aria-hidden="true"
               className={cn("mt-0.5 size-5 shrink-0", className)}
@@ -65,10 +68,12 @@ export function AlertDialog({
               data-type={type}
               strokeWidth={2}
             />
-            <span>{message}</span>
+            <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">
+              {message}
+            </span>
           </DialogTitle>
         </DialogHeader>
-        <DialogFooter>
+        <DialogFooter className="min-w-0">
           <Button type="button" onClick={() => onOpenChange?.(false)}>
             {acknowledgeLabel}
           </Button>

@@ -86,4 +86,42 @@ describe("desktop ui primitives", () => {
       document.querySelector('[data-slot="alert-dialog-icon"]'),
     ).toHaveAttribute("data-type", "success");
   });
+
+  it("keeps long push error text and acknowledge action inside a wider alert dialog", () => {
+    const longMessage = [
+      "error: failed to push some refs to 'https://github.com/example/very-long-org-name/very-long-repo-name.git'",
+      "hint: Updates were rejected because the remote contains work that you do not have locally.",
+      "hint: See the 'Note about fast-forwards' in 'git push --help' for details.",
+    ].join("\n");
+
+    render(
+      <AlertDialog
+        acknowledgeLabel="知道了"
+        message={longMessage}
+        open
+        type="error"
+      />,
+    );
+
+    const content = document.querySelector('[data-slot="dialog-content"]');
+    expect(content).not.toBeNull();
+    expect(content?.className).toContain("sm:max-w-xl");
+    expect(content?.className).toContain("min-w-0");
+    expect(content?.className).toContain("overflow-hidden");
+
+    const message = content?.querySelector("span.min-w-0");
+    expect(message).not.toBeNull();
+    expect(message?.textContent).toBe(longMessage);
+    expect(message?.className).toContain("break-words");
+    expect(message?.className).toContain("whitespace-pre-wrap");
+    expect(message?.className).toContain("min-w-0");
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toContainElement(
+      screen.getByRole("button", { name: "知道了" }),
+    );
+    expect(
+      document.querySelector('[data-slot="alert-dialog-icon"]'),
+    ).toHaveAttribute("data-type", "error");
+  });
 });
