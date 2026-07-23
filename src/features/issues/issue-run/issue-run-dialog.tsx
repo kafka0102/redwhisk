@@ -141,9 +141,9 @@ export function IssueRunDialog({
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,
         ];
-        // ADR-0020 决策 4/5：enabled=false 隐藏；opencode/grok 显示但置灰不可选。
-        // 默认选中需从「可选」子集中挑，避免 initial profile 落到 opencode/grok
-        // 不可选项上。resolveInitialProfile 的入参也用 selectable 子集。
+        // enabled=false 隐藏；grok 显示但置灰不可选；OpenCode 在 enabled 时可选。
+        // 默认选中需从「可选」子集中挑，避免 initial profile 落到 grok 不可选项。
+        // resolveInitialProfile 的入参也用 selectable 子集。
         const selectableProjectProfiles =
           projectProfilesResponse.profiles.filter(
             (profile) =>

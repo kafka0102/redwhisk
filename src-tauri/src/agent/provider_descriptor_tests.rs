@@ -26,6 +26,11 @@
             descriptor_for(&AgentType::Claude).agent_type(),
             AgentType::Claude
         );
+        assert_eq!(
+            descriptor_for(&AgentType::OpenCode).agent_type(),
+            AgentType::OpenCode
+        );
+        assert_eq!(descriptor_for(&AgentType::Grok).agent_type(), AgentType::Grok);
     }
 
     #[test]
@@ -341,17 +346,77 @@
     }
 
     #[test]
-    fn stub_tui_command_trims_only() {
+    fn opencode_tui_full_access_or_dangerous_appends_auto() {
         assert_eq!(
-            descriptor_for(&AgentType::OpenCode).build_tui_command_snapshot(
-                "  opencode  ",
+            OpenCodeDescriptor.build_tui_command_snapshot("opencode", "full-access", false),
+            "opencode --auto"
+        );
+        assert_eq!(
+            OpenCodeDescriptor.build_tui_command_snapshot("opencode", "auto", true),
+            "opencode --auto"
+        );
+        assert_eq!(
+            OpenCodeDescriptor.build_tui_command_snapshot("  opencode  ", "full-access", true),
+            "opencode --auto"
+        );
+    }
+
+    #[test]
+    fn opencode_tui_safe_mode_trims_only_without_auto() {
+        assert_eq!(
+            OpenCodeDescriptor.build_tui_command_snapshot("  opencode  ", "auto", false),
+            "opencode"
+        );
+    }
+
+    #[test]
+    fn opencode_tui_does_not_inject_run_or_format() {
+        let command =
+            OpenCodeDescriptor.build_tui_command_snapshot("opencode", "full-access", true);
+        assert!(!command.split_whitespace().any(|part| part == "run"));
+        assert!(!command.contains("--format"));
+    }
+
+    #[test]
+    fn opencode_tui_preserves_user_args_and_does_not_duplicate_auto() {
+        assert_eq!(
+            OpenCodeDescriptor.build_tui_command_snapshot(
+                "opencode --auto",
                 "full-access",
                 true
             ),
-            "opencode"
+            "opencode --auto"
         );
         assert_eq!(
-            descriptor_for(&AgentType::Grok).build_tui_command_snapshot("grok", "auto", false),
+            OpenCodeDescriptor.build_tui_command_snapshot(
+                "opencode --model foo",
+                "full-access",
+                false
+            ),
+            "opencode --model foo --auto"
+        );
+    }
+
+    #[test]
+    fn opencode_bypass_snapshot_appends_auto() {
+        assert_eq!(
+            OpenCodeDescriptor.build_command_snapshot_with_bypass("opencode"),
+            "opencode --auto"
+        );
+        assert_eq!(
+            OpenCodeDescriptor.build_command_snapshot_with_bypass("opencode --auto"),
+            "opencode --auto"
+        );
+    }
+
+    #[test]
+    fn grok_stub_tui_command_trims_only() {
+        assert_eq!(
+            descriptor_for(&AgentType::Grok).build_tui_command_snapshot(
+                "  grok  ",
+                "full-access",
+                true
+            ),
             "grok"
         );
     }
@@ -378,15 +443,21 @@
     }
 
     #[test]
-    fn stub_ui_capabilities_disable_all_model_controls() {
-        let opencode = descriptor_for(&AgentType::OpenCode).ui_capabilities();
+    fn opencode_ui_capabilities_show_model_without_switching() {
+        let opencode = OpenCodeDescriptor.ui_capabilities();
         assert_eq!(opencode.model_type_label, "OpenCode");
-        assert!(!opencode.can_show_model);
+        assert!(opencode.can_show_model);
         assert!(!opencode.supports_model_switching);
         assert!(!opencode.supports_reasoning_effort);
         assert!(!opencode.supports_modes);
+    }
 
+    #[test]
+    fn grok_stub_ui_capabilities_disable_all_model_controls() {
         let grok = descriptor_for(&AgentType::Grok).ui_capabilities();
         assert_eq!(grok.model_type_label, "Grok");
         assert!(!grok.can_show_model);
+        assert!(!grok.supports_model_switching);
+        assert!(!grok.supports_reasoning_effort);
+        assert!(!grok.supports_modes);
     }

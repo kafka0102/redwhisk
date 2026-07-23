@@ -16,15 +16,15 @@
 2. **启动异步检测 + 幂等播种**：app 启动在 setup 钩子异步检测四命令是否安装，对已安装且库中该 agentType **无任何记录（含软删 `del=1`）**者插入一条默认开启（`enabled=1`）的 global profile。软删后记录留存，重启不再重复播种。
 3. **displayMode 字段**（`json`/`tui`，默认 `json`）：判定以「RedWhisk 当前是否已接入该 agentType 的 JSON 解析器」为准——codex/claude 默认 `json` 且可在 json/tui 间切换，opencode/grok 锁定 `tui` 且表单隐藏切换。本期仅作数据记录与表单/表格展示，**不驱动后端渲染切换**。
 4. **enabled 字段**（默认启用）：禁用的 profile 在 Agent 表以浅灰行底区分、排序置末；在「启动 Agent 会话」选择列表中**前端隐藏**。本期**后端不做启动校验**。
-5. **opencode/grok 仅登记不执行**：本期不实现其会话执行 JSON 解析器。`descriptor_for` 为二者加**占位臂**（最小 descriptor：参数空、模型列表空），仅满足 match 编译穷尽与参数预览返回空；`provider_factory` 启动路由**不**接 opencode/grok；前端在选择列表将二者置灰「暂不支持启动」不可选。
-6. **命令参数预览**：新增后端 command `preview_agent_command_args`，复用 `provider_descriptor` 的 command snapshot 返回某 profile 启动时实际带上的参数；前端在命令名后以「i」小图标提示，悬停 Tooltip 展示，无参数（opencode/grok）不显示图标。
+5. **Grok 仅登记不执行；OpenCode 已开放 TUI**：JSON 解析器仍未接入 OpenCode/Grok。`descriptor_for` 中 OpenCode 为真实 TUI descriptor（`dangerous`/`full-access` → `--auto`），Grok 仍为占位臂；`provider_factory` 结构化启动路由仍不接 OpenCode/Grok；前端选择列表仅将 Grok 置灰「暂不支持启动」，OpenCode 在 enabled 时可选。
+6. **命令参数预览**：后端 command `preview_agent_command_args` 复用 `provider_descriptor` 的 command snapshot 返回某 profile 启动时实际带上的参数；前端在命令名后以「i」小图标提示，悬停 Tooltip 展示；无参数（如 Grok 或 `dangerous=false`）不显示图标；OpenCode 在 dangerous 时展示 `--auto`。
 
 ## 后果
 
 - 全新环境自动出现已装内置 agent 的默认 profile；用户软删某内置 agent 即「永久隐藏」，需手动新建方可恢复。
-- opencode/grok 可在表格中登记、编辑 displayMode/enabled，但本期不能真正启动会话（前端置灰）。
+- Grok 可在表格中登记、编辑 displayMode/enabled，但不能真正启动会话（前端置灰）；OpenCode 可走 TUI 启动。
 - `displayMode`/`enabled` 为后续 TUI 渲染、启用联动后端校验预留扩展点；本期不产生执行侧效果。
-- `descriptor_for` 增加两条占位臂，`provider_factory` 不变；后续接入 opencode/grok 解析器时，补 descriptor 实现与 factory 分支即可解锁执行。
+- OpenCode 已从占位升级为真实 TUI descriptor；Grok 仍占位。后续接入 json 解析器时补 factory/structured 分支与 displayMode 解锁即可。
 
 ## 考虑过的替代方案
 

@@ -121,7 +121,7 @@ _Avoid_: 持久化后缀索引、全盘 watcher、gitignore 派生后缀表
 _Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
 
 **Agent 展示形式**（displayMode）：
-某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude）默认 json 且可在 json/tui 间切换，未接入（opencode/grok）锁定 tui 且隐藏切换。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）；opencode/grok 在具备可启动实现前仍不可真正启动会话。
+某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——已接入（codex/claude/opencode）默认 json 且可在 json/tui 间切换，未接入（grok）锁定 tui 且隐藏切换。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）。OpenCode 的 json 使用 `opencode run --format json`（每轮子进程 + `-s`/`--continue` 续会话）；TUI 使用交互式 `opencode` CLI。Grok 在具备可启动实现前仍不可真正启动会话。
 _Avoid_: 纯 UI 别名、按 CLI 能力判定、运行中切换呈现方式
 
 **Agent Session**：

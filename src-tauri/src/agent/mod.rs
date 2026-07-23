@@ -14,7 +14,8 @@ pub mod session_handle;
 pub mod session_registry;
 
 pub use provider_descriptor::{
-    AgentProviderDescriptor, ClaudeDescriptor, CodexDescriptor, RuntimeConfig, descriptor_for,
+    AgentProviderDescriptor, ClaudeDescriptor, CodexDescriptor, OpenCodeDescriptor, RuntimeConfig,
+    descriptor_for,
 };
 pub use provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,

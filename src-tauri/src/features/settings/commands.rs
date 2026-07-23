@@ -70,7 +70,7 @@ pub fn delete_agent_profile(
 /// 预览给定 profile 启动 PTY 时实际带上的 CLI 参数（ADR-0020）。
 ///
 /// 入参：`agentType` + `command` + `mode` + `dangerous`（profile 启动相关字段）。
-/// 出参：`Vec<String>`，参数数组（不含命令本身）；opencode/grok 与 `dangerous=false` 返回空。
+/// 出参：`Vec<String>`，参数数组（不含命令本身）；Grok 与 `dangerous=false` 返回空；OpenCode dangerous 时含 `--auto`。
 #[tauri::command]
 pub fn preview_agent_command_args(
     app: tauri::AppHandle,

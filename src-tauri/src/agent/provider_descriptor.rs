@@ -13,16 +13,15 @@ use crate::agent::codex_config;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::AgentModel;
 
-const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str = "--dangerously-bypass-approvals-and-sandbox";
-const CLAUDE_PERMISSION_MODE_ARG: &str = "--permission-mode";
-const CLAUDE_BYPASS_PERMISSIONS_MODE: &str = "bypassPermissions";
-const CODEX_ASK_FOR_APPROVAL_ARG: &str = "--ask-for-approval";
-const CODEX_ON_REQUEST_APPROVAL: &str = "on-request";
-const CODEX_SANDBOX_ARG: &str = "--sandbox";
-const CODEX_SANDBOX_WORKSPACE_WRITE: &str = "workspace-write";
-const CODEX_SANDBOX_READ_ONLY: &str = "read-only";
-const CODEX_FALLBACK_BINARY: &str = "codex";
-const CLAUDE_FALLBACK_BINARY: &str = "claude";
+#[path = "provider_descriptor_command.rs"]
+mod command;
+use command::{
+    CLAUDE_FALLBACK_BINARY, CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY,
+    OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY, append_missing_args,
+    build_claude_tui_command_snapshot, build_codex_tui_command_snapshot,
+    build_opencode_tui_command_snapshot, claude_models_from_home,
+    ensure_claude_bypass_permission_args,
+};
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
 /// [`crate::agent::provider_factory::AgentSessionStartRequest`]。
@@ -86,9 +85,7 @@ pub trait AgentProviderDescriptor: Send + Sync {
 pub fn descriptor_for(agent_type: &AgentType) -> &'static dyn AgentProviderDescriptor {
     static CODEX: CodexDescriptor = CodexDescriptor;
     static CLAUDE: ClaudeDescriptor = ClaudeDescriptor;
-    static OPENCODE: StubDescriptor = StubDescriptor {
-        agent_type: AgentType::OpenCode,
-    };
+    static OPENCODE: OpenCodeDescriptor = OpenCodeDescriptor;
     static GROK: StubDescriptor = StubDescriptor {
         agent_type: AgentType::Grok,
     };
@@ -228,12 +225,72 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
     }
 }
 
-// ===== OpenCode / Grok（占位 descriptor，本期未接入会话执行） =====
-//
-// 见 ADR-0020：opencode/grok 仅登记展示，descriptor_for 为编译穷尽返回最小占位实现，
-// 参数与模型列表为空；provider_factory 启动路由不接二者。
+// ===== OpenCode =====
 
-/// OpenCode / Grok 的占位 descriptor（本期未接入会话执行）。
+/// OpenCode provider 描述符。
+///
+/// 本期开放 TUI 进程级启动（ADR-0022）；json / `run --format` 由后续票接入。
+#[derive(Debug, Clone, Copy)]
+pub struct OpenCodeDescriptor;
+
+impl AgentProviderDescriptor for OpenCodeDescriptor {
+    fn agent_type(&self) -> AgentType {
+        AgentType::OpenCode
+    }
+
+    fn resolve_runtime_config(
+        &self,
+        _data_dir: &Path,
+        requested_model: Option<&str>,
+        _requested_effort: Option<&str>,
+    ) -> RuntimeConfig {
+        RuntimeConfig {
+            model: requested_model.map(str::to_string),
+            effort: None,
+        }
+    }
+
+    fn build_command_snapshot_with_bypass(&self, raw_command: &str) -> String {
+        append_missing_args(raw_command.trim(), &[OPENCODE_AUTO_ARG])
+    }
+
+    fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
+        // structured/json 尚未解锁：launch snapshot 仅 trim，不注入 run/--format。
+        raw_command.trim().to_string()
+    }
+
+    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
+        build_opencode_tui_command_snapshot(raw_command, mode, dangerous)
+    }
+
+    fn fallback_command_when_snapshot_empty(&self) -> String {
+        OPENCODE_FALLBACK_BINARY.to_string()
+    }
+
+    fn list_models(&self, _home_dir: &Path) -> Vec<AgentModel> {
+        Vec::new()
+    }
+
+    fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
+        true
+    }
+
+    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
+        crate::types::agent_session::AgentUiCapabilities {
+            model_type_label: "OpenCode".to_string(),
+            can_show_model: true,
+            supports_model_switching: false,
+            supports_reasoning_effort: false,
+            supports_modes: false,
+        }
+    }
+}
+
+// ===== Grok（占位 descriptor） =====
+//
+// Grok 仍仅登记展示；descriptor 最小占位，provider_factory 启动路由不接。
+
+/// Grok 的占位 descriptor（尚未接入会话执行）。
 #[derive(Debug, Clone)]
 pub struct StubDescriptor {
     agent_type: AgentType,
@@ -275,8 +332,8 @@ impl AgentProviderDescriptor for StubDescriptor {
 
     fn fallback_command_when_snapshot_empty(&self) -> String {
         match self.agent_type {
-            AgentType::OpenCode => "opencode".to_string(),
             AgentType::Grok => "grok".to_string(),
+            AgentType::OpenCode => OPENCODE_FALLBACK_BINARY.to_string(),
             _ => String::new(),
         }
     }
@@ -291,8 +348,8 @@ impl AgentProviderDescriptor for StubDescriptor {
 
     fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
         let model_type_label = match self.agent_type {
-            AgentType::OpenCode => "OpenCode",
             AgentType::Grok => "Grok",
+            AgentType::OpenCode => "OpenCode",
             AgentType::Codex => "Codex",
             AgentType::Claude => "Claude",
         };
@@ -305,134 +362,6 @@ impl AgentProviderDescriptor for StubDescriptor {
         }
     }
 }
-
-// ===== 内部工具：bypass 参数补全（原 features/agent_session/command_snapshot.rs） =====
-
-/// Codex 交互式 TUI：按 mode/dangerous 映射审批与沙箱，不注入 app-server。
-fn build_codex_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
-    let trimmed = raw_command.trim();
-    match mode {
-        "full-access" | "full-auto" => {
-            append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
-        }
-        "auto" => append_missing_args(
-            trimmed,
-            &[
-                CODEX_ASK_FOR_APPROVAL_ARG,
-                CODEX_ON_REQUEST_APPROVAL,
-                CODEX_SANDBOX_ARG,
-                CODEX_SANDBOX_WORKSPACE_WRITE,
-            ],
-        ),
-        "read-only" | "read_only" => append_missing_args(
-            trimmed,
-            &[
-                CODEX_ASK_FOR_APPROVAL_ARG,
-                CODEX_ON_REQUEST_APPROVAL,
-                CODEX_SANDBOX_ARG,
-                CODEX_SANDBOX_READ_ONLY,
-            ],
-        ),
-        _ if dangerous => {
-            append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
-        }
-        _ => trimmed.to_string(),
-    }
-}
-
-/// Claude 交互式 TUI：按 mode/dangerous 映射 permission-mode，不注入 stream-json / -p。
-fn build_claude_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
-    let trimmed = raw_command.trim();
-    if command_has_arg(trimmed, CLAUDE_PERMISSION_MODE_ARG) {
-        return trimmed.to_string();
-    }
-
-    if mode == "full-access" || dangerous {
-        return append_missing_args(
-            trimmed,
-            &[CLAUDE_PERMISSION_MODE_ARG, CLAUDE_BYPASS_PERMISSIONS_MODE],
-        );
-    }
-
-    match mode {
-        "plan" | "acceptEdits" | "auto" => {
-            append_missing_args(trimmed, &[CLAUDE_PERMISSION_MODE_ARG, mode])
-        }
-        _ => trimmed.to_string(),
-    }
-}
-
-fn ensure_claude_bypass_permission_args(command: &str) -> String {
-    if command_has_arg(command, CLAUDE_PERMISSION_MODE_ARG) {
-        command.trim().to_string()
-    } else {
-        append_missing_args(
-            command,
-            &[CLAUDE_PERMISSION_MODE_ARG, CLAUDE_BYPASS_PERMISSIONS_MODE],
-        )
-    }
-}
-
-fn append_missing_args(command: &str, args: &[&str]) -> String {
-    let trimmed = command.trim();
-    let mut command_line = trimmed.to_string();
-
-    for arg in args {
-        if command_has_arg(trimmed, arg) {
-            continue;
-        }
-
-        if !command_line.is_empty() {
-            command_line.push(' ');
-        }
-        command_line.push_str(arg);
-    }
-
-    command_line
-}
-
-fn command_has_arg(command: &str, arg: &str) -> bool {
-    command.split_whitespace().any(|part| part == arg)
-}
-
-/// 从 `~/.claude/settings.json` 解析 Claude 可用模型列表（原 commands.rs）。
-///
-/// - 第三方接口（存在 base_url / auth_token）：返回单个只读模型，modelId 取
-///   `env.ANTHROPIC_MODEL` 或顶层 `model`，前端展示但不允许切换。
-/// - 官方接口：返回 opus / sonnet / haiku 列表，当前 settings.json 的 `model`
-///   字段对应项标 `is_default`，允许用户切换并持久化。
-fn claude_models_from_home(home_dir: &Path) -> Vec<AgentModel> {
-    let snapshot = match claude_config::read_settings_from_home(home_dir) {
-        Some(s) => s,
-        None => return Vec::new(),
-    };
-    if claude_config::is_third_party(&snapshot) {
-        // 第三方接口：只读展示当前真实模型（env.ANTHROPIC_MODEL 优先于顶层 model）。
-        let current = snapshot.anthropic_model.or(snapshot.model.clone());
-        let model_id = current.clone().unwrap_or_else(|| "claude".to_string());
-        return vec![AgentModel {
-            model_id,
-            display_name: current,
-            is_default: Some(true),
-            default_reasoning_effort: None,
-            supported_reasoning_efforts: Vec::new(),
-        }];
-    }
-    // 官方接口：返回 opus / sonnet / haiku，当前 settings.json 的 model 标默认。
-    let current = snapshot.model.as_deref();
-    claude_config::OFFICIAL_CLAUDE_MODELS
-        .iter()
-        .map(|(model_id, display_name)| AgentModel {
-            model_id: (*model_id).to_string(),
-            display_name: Some((*display_name).to_string()),
-            // 当前 settings.json 的 model 字段匹配则标默认（兼容 "sonnet[1m]" 等带后缀别名）。
-            is_default: Some(current.is_some_and(|c| c == *model_id || c.starts_with(model_id))),
-            default_reasoning_effort: None,
-            supported_reasoning_efforts: Vec::new(),
-        })
-        .collect()
-}
-
 
 #[cfg(test)]
 #[path = "provider_descriptor_tests.rs"]
