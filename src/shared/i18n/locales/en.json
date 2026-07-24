@@ -571,6 +571,7 @@
     "shortcutCommandsDelete": "Delete",
     "shortcutCommandsSave": "Save",
     "shortcutCommandsCancel": "Cancel",
+    "shortcutCommandsClose": "Close",
     "shortcutCommandsCommandPlaceholder": "Enter a command",
     "shortcutCommandsLimit": "Up to {{limit}} commands.",
     "shortcutCommandsRun": "Run {{command}}",

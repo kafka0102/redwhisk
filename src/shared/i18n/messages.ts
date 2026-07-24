@@ -567,6 +567,7 @@ export interface I18nMessages {
     shortcutCommandsDelete: string;
     shortcutCommandsSave: string;
     shortcutCommandsCancel: string;
+    shortcutCommandsClose: string;
     shortcutCommandsCommandPlaceholder: string;
     shortcutCommandsLimit: (limit: number) => string;
     shortcutCommandsRun: (command: string) => string;

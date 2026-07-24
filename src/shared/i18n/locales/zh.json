@@ -571,6 +571,7 @@
     "shortcutCommandsDelete": "删除",
     "shortcutCommandsSave": "保存",
     "shortcutCommandsCancel": "取消",
+    "shortcutCommandsClose": "关闭",
     "shortcutCommandsCommandPlaceholder": "请输入命令",
     "shortcutCommandsLimit": "最多 {{limit}} 条命令。",
     "shortcutCommandsRun": "执行 {{command}}",

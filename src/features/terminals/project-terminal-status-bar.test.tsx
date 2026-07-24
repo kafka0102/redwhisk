@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import "../../shared/styles/terminals.css";
 import { ProjectTerminalStatusBar } from "./project-terminal-status-bar";
 import {
   deleteProjectTerminalShortcutCommand,
@@ -142,5 +143,25 @@ describe("ProjectTerminalStatusBar", () => {
     expect(
       await screen.findByText("No quick commands yet."),
     ).toBeInTheDocument();
+  });
+
+  it("uses a 300px min-width for the shortcut commands menu", async () => {
+    listCommandsMock.mockResolvedValue({
+      commands: [{ id: 1, projectId: 1, command: "git status", sortOrder: 0 }],
+    });
+    readCwdMock.mockResolvedValue({ sessionId: 10, cwd: null });
+
+    const user = userEvent.setup();
+    render(<ProjectTerminalStatusBar projectId={1} sessionId={10} />);
+
+    const trigger = await screen.findByRole("button", {
+      name: "Quick commands",
+    });
+    await user.click(trigger);
+
+    const menu = await screen.findByText("git status");
+    const menuRoot = menu.closest(".project-terminal-status-bar__menu");
+    expect(menuRoot).toBeTruthy();
+    expect(window.getComputedStyle(menuRoot!).minWidth).toBe("300px");
   });
 });

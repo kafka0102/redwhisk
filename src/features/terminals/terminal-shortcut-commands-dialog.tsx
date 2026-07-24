@@ -260,7 +260,7 @@ export function TerminalShortcutCommandsDialog({
             variant="outline"
             onClick={onClose}
           >
-            {messages.agentsFeature.shortcutCommandsCancel}
+            {messages.agentsFeature.shortcutCommandsClose}
           </Button>
         </div>
       </div>

@@ -160,7 +160,7 @@ describe("TerminalShortcutCommandsDialog", () => {
     expect(screen.getByText("No quick commands yet.")).toBeInTheDocument();
   });
 
-  it("closes the dialog via the cancel button", async () => {
+  it("closes the dialog via the footer close button", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
 
@@ -173,7 +173,25 @@ describe("TerminalShortcutCommandsDialog", () => {
       />,
     );
 
-    await user.click(screen.getByText("Cancel"));
+    await user.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps cancel label on the edit-row cancel control", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TerminalShortcutCommandsDialog
+        commands={[makeCommand({ id: 3, command: "echo hi", sortOrder: 0 })]}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Edit"));
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
