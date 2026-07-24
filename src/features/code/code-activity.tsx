@@ -35,6 +35,10 @@ import {
   isMarkdownPreviewable,
   resolveFileLoadErrorMessage,
 } from "./code-workspace-helpers";
+import {
+  buildActiveFileSignature,
+  useCodeActiveFileRefresh,
+} from "./use-code-active-file-refresh";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
@@ -124,6 +128,32 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const { tree, treeError, isTreeLoading, changedFileKinds } =
     useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
 
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.filePath === activePath) ?? null,
+    [activePath, tabs],
+  );
+  const knownActiveSignature =
+    activeTab?.content != null
+      ? buildActiveFileSignature(
+          activeTab.content.sizeBytes,
+          activeTab.content.modifiedAt,
+        )
+      : null;
+  const resolveActiveFileErrorMessage = useCallback(
+    (error: unknown) =>
+      resolveFileLoadErrorMessage(error, fileNotFoundMessage, t),
+    [fileNotFoundMessage, t],
+  );
+  useCodeActiveFileRefresh({
+    projectId,
+    workspacePath: selectedRootWorkspacePath,
+    activePath,
+    enabled: Boolean(selectedRoot && activePath),
+    knownSignature: knownActiveSignature,
+    setTabs,
+    resolveErrorMessage: resolveActiveFileErrorMessage,
+  });
+
   // 切回代码页时复检已打开文件：缓存内容先展示，再异步校验是否被删除。
   useEffect(() => {
     if (!selectedRoot || tabs.length === 0) return;
@@ -182,11 +212,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     // 仅在挂载 / 切换 root 时复检，避免打开新文件时重复请求。
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount/root revalidation
   }, [fileNotFoundMessage, projectId, selectedRoot?.path, t]);
-
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.filePath === activePath) ?? null,
-    [activePath, tabs],
-  );
 
   const activateFilePath = useCallback((filePath: string | null) => {
     activePathRef.current = filePath;

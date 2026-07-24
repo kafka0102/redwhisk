@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import {
@@ -9,6 +9,7 @@ import {
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
   searchProjectWorktreeContent,
+  statProjectWorktreeFile,
 } from "../../shared/workspace/workspace-commands";
 import {
   codeWorkspaceCache,
@@ -100,6 +101,7 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   listCodeWorkspaceRoots: vi.fn(),
   readProjectWorktreeFile: vi.fn(),
   searchProjectWorktreeContent: vi.fn(),
+  statProjectWorktreeFile: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -183,8 +185,26 @@ const markdownContent = {
   sizeBytes: 48,
 };
 
+function setDocumentVisibility(visible: boolean): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (visible ? "visible" : "hidden"),
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+async function settleMicrotasks(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("CodeActivity", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    setDocumentVisibility(true);
     resetCodeWorkspaceCacheForTests();
     editorThemeProp.current = undefined;
     monacoEditorApi.reset();
@@ -203,7 +223,17 @@ describe("CodeActivity", () => {
     });
     vi.mocked(readProjectWorktreeFile).mockReset();
     vi.mocked(searchProjectWorktreeContent).mockReset();
+    vi.mocked(statProjectWorktreeFile).mockReset();
     vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
+    vi.mocked(statProjectWorktreeFile).mockResolvedValue({
+      filePath: fileContent.filePath,
+      sizeBytes: fileContent.sizeBytes,
+      modifiedAt: fileContent.modifiedAt,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders the workspace snapshot immediately and refreshes roots on mount", () => {
@@ -975,5 +1005,129 @@ describe("CodeActivity", () => {
     });
     expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("does not re-read the active file when its metadata signature is unchanged", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        fileContent.content,
+      );
+    });
+
+    const readCallsAfterOpen = vi.mocked(readProjectWorktreeFile).mock.calls
+      .length;
+    vi.mocked(statProjectWorktreeFile).mockClear();
+    vi.mocked(readProjectWorktreeFile).mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settleMicrotasks();
+
+    expect(statProjectWorktreeFile).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+      filePath: "src/file.ts",
+    });
+    expect(readProjectWorktreeFile).not.toHaveBeenCalled();
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      fileContent.content,
+    );
+    // 基线：打开时至少读过一次；本轮签名未变不应新增 read。
+    expect(readCallsAfterOpen).toBeGreaterThan(0);
+  });
+
+  it("silently reloads the active file content when the metadata signature changes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        fileContent.content,
+      );
+    });
+
+    const updatedContent = {
+      ...fileContent,
+      content: "export const value = 2;\n",
+      modifiedAt: 2,
+      sizeBytes: 25,
+    };
+    vi.mocked(statProjectWorktreeFile).mockResolvedValue({
+      filePath: updatedContent.filePath,
+      sizeBytes: updatedContent.sizeBytes,
+      modifiedAt: updatedContent.modifiedAt,
+    });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(updatedContent);
+    vi.mocked(readProjectWorktreeFile).mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settleMicrotasks();
+
+    await waitFor(() => {
+      expect(readProjectWorktreeFile).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        filePath: "src/file.ts",
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        updatedContent.content,
+      );
+    });
+    expect(screen.queryByText("Loading file…")).not.toBeInTheDocument();
+  });
+
+  it("shows the existing file-missing error state when active-file refresh fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="zh">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        fileContent.content,
+      );
+    });
+
+    vi.mocked(statProjectWorktreeFile).mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "工作区文件读取失败。",
+      reason: "workspaceFileReadFailed",
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settleMicrotasks();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("文件不存在");
+    expect(alert).toHaveClass("code-workspace__file-error");
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
   });
 });
