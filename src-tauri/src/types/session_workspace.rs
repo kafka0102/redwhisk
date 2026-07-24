@@ -165,6 +165,15 @@ pub struct WorkspaceFileContent {
     pub is_too_large: bool,
 }
 
+/// 工作区单文件轻量元数据（不读正文），供前端构造 size:mtime 签名。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceFileStat {
+    pub file_path: String,
+    pub size_bytes: u64,
+    pub modified_at: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceDiffContent {

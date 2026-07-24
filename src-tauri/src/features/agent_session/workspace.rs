@@ -17,7 +17,7 @@ use crate::types::session_workspace::{
     ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
     WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceContentSearchInput,
     WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
-    WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
+    WorkspaceFileStat, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
@@ -165,6 +165,18 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.workspace_path.as_deref(),
         )?;
         read_workspace_file(&root, &input.file_path)
+    }
+
+    pub fn stat_file(
+        &self,
+        input: ProjectWorkspacePathInput,
+    ) -> Result<WorkspaceFileStat, CommandError> {
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
+        stat_workspace_file(&root, &input.file_path)
     }
 
     pub fn list_code_workspace_roots(
@@ -900,6 +912,15 @@ fn read_directory_nodes(
     Ok(nodes)
 }
 
+fn stat_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileStat, CommandError> {
+    let workspace_file = resolve_workspace_file(root, file_path)?;
+    Ok(WorkspaceFileStat {
+        file_path: file_path.to_string(),
+        size_bytes: workspace_file.metadata.len(),
+        modified_at: modified_at_millis(&workspace_file.metadata),
+    })
+}
+
 fn read_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileContent, CommandError> {
     let workspace_file = resolve_workspace_file(root, file_path)?;
     let size_bytes = workspace_file.metadata.len();
@@ -1574,6 +1595,39 @@ mod tests {
             "expected SKILL.md under directory symlink, got {:?}",
             linked.children
         );
+    }
+
+    #[test]
+    fn stat_workspace_file_returns_size_and_mtime_without_reading_content() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("note.txt"), "hello").expect("write file");
+
+        let stat = stat_workspace_file(root, "note.txt").expect("stat file");
+
+        assert_eq!(stat.file_path, "note.txt");
+        assert_eq!(stat.size_bytes, 5);
+        assert!(stat.modified_at.is_some());
+        assert_eq!(
+            format!(
+                "{}:{}",
+                stat.size_bytes,
+                stat.modified_at.unwrap_or_default()
+            ),
+            file_metadata_signature(root, "note.txt")
+        );
+    }
+
+    #[test]
+    fn stat_workspace_file_missing_path_matches_read_error_category() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+
+        let stat_err = stat_workspace_file(root, "missing.txt").expect_err("missing stat");
+        let read_err = read_workspace_file(root, "missing.txt").expect_err("missing read");
+
+        assert_eq!(stat_err.code, read_err.code);
+        assert_eq!(stat_err.reason, read_err.reason);
     }
 
     #[cfg(unix)]

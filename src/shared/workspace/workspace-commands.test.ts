@@ -9,6 +9,7 @@ import {
   pullProjectWorktree,
   pushProjectWorktree,
   searchProjectWorktreeContent,
+  statProjectWorktreeFile,
 } from "./workspace-commands";
 
 vi.mock("../commands/command-client", () => ({
@@ -99,6 +100,27 @@ describe("workspace commands", () => {
         input: {
           projectId: 1,
           workspacePath: "/tmp/root.wt/issue-1",
+        },
+      },
+    );
+  });
+
+  it("invokes stat_project_worktree_file with path input envelope", async () => {
+    await expect(
+      statProjectWorktreeFile({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "src/main.ts",
+      }),
+    ).resolves.toEqual({ command: "stat_project_worktree_file" });
+
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "stat_project_worktree_file",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          filePath: "src/main.ts",
         },
       },
     );

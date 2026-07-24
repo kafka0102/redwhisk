@@ -48,6 +48,13 @@ export interface WorkspaceFileContent {
   isTooLarge: boolean;
 }
 
+/** 工作区单文件轻量元数据（不读正文），用于构造 size:mtime 签名。 */
+export interface WorkspaceFileStat {
+  filePath: string;
+  sizeBytes: number;
+  modifiedAt: number | null;
+}
+
 export interface CodeWorkspaceRoot {
   branch: string;
   path: string;
@@ -90,6 +97,14 @@ export function readProjectWorktreeFile(
   input: ProjectWorkspacePathInput,
 ): Promise<WorkspaceFileContent> {
   return invokeCommand<WorkspaceFileContent>("read_project_worktree_file", {
+    input,
+  });
+}
+
+export function statProjectWorktreeFile(
+  input: ProjectWorkspacePathInput,
+): Promise<WorkspaceFileStat> {
+  return invokeCommand<WorkspaceFileStat>("stat_project_worktree_file", {
     input,
   });
 }
