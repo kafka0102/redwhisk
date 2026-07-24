@@ -24,6 +24,7 @@ import {
   type CodeContentSearchState,
   type CodeSidebarMode,
 } from "./code-search-state";
+import { isContentSearchShortcut } from "./is-content-search-shortcut";
 import {
   type CodeFileTab,
   clearCodeEditorViewStates,
@@ -65,6 +66,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [contentSearch, setContentSearch] = useState<CodeContentSearchState>(
     () => cached?.contentSearch ?? DEFAULT_CODE_CONTENT_SEARCH_STATE,
   );
+  const [queryFocusRequest, setQueryFocusRequest] = useState(0);
   const [revealRequest, setRevealRequest] = useState<CodeRevealRequest | null>(
     null,
   );
@@ -294,6 +296,21 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     [openFile],
   );
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isContentSearchShortcut(event)) {
+        return;
+      }
+      event.preventDefault();
+      setSidebarMode("search");
+      setQueryFocusRequest((token) => token + 1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   const closeTab = (filePath: string) => {
     openFilePathsRef.current.delete(filePath);
     deleteCodeEditorViewState(projectId, filePath);
@@ -341,6 +358,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
             workspacePath={selectedRootWorkspacePath}
             fileTree={tree}
             onOpenMatch={openMatchFromSearch}
+            queryFocusRequest={queryFocusRequest}
           />
         ) : (
           <FileTreePanel

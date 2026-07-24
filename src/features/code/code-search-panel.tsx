@@ -5,7 +5,13 @@ import {
   Regex,
   WholeWord,
 } from "lucide-react";
-import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 import { Input } from "../../components/ui/input";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -32,6 +38,8 @@ export interface CodeSearchPanelProps {
     filePath: string;
     lineNumber: number;
   }) => void;
+  /** 递增以请求聚焦查询输入；有文本时全选。 */
+  queryFocusRequest?: number;
 }
 
 /**
@@ -45,9 +53,25 @@ export function CodeSearchPanel({
   workspacePath,
   fileTree,
   onOpenMatch,
+  queryFocusRequest = 0,
 }: CodeSearchPanelProps) {
   const { messages, t } = useI18n();
   const copy = messages.agentsFeature;
+  const queryInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (queryFocusRequest <= 0) {
+      return;
+    }
+    const input = queryInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    if (input.value.length > 0) {
+      input.select();
+    }
+  }, [queryFocusRequest]);
 
   const patch = (partial: Partial<CodeContentSearchState>) => {
     onChange({ ...state, ...partial });
@@ -133,6 +157,7 @@ export function CodeSearchPanel({
       <form className="code-workspace__search-form" onSubmit={onSubmit}>
         <div className="code-workspace__search-query-row">
           <Input
+            ref={queryInputRef}
             className="code-workspace__search-query"
             type="search"
             value={state.query}

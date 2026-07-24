@@ -717,6 +717,115 @@ describe("CodeActivity", () => {
     expect(searchProjectWorktreeContent).toHaveBeenCalledTimes(1);
   });
 
+  it("opens content search and focuses the query on Cmd/Ctrl+Shift+F", async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      "platform",
+    );
+    Object.defineProperty(navigator, "platform", {
+      configurable: true,
+      get: () => "MacIntel",
+    });
+
+    try {
+      render(
+        <I18nProvider initialLocale="en">
+          <CodeActivity projectId={1} roots={roots} />
+        </I18nProvider>,
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Open file" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Content search")).not.toBeInTheDocument();
+
+      const prevented = window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "f",
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(prevented).toBe(false);
+
+      const searchInput = await screen.findByLabelText("Search");
+      expect(screen.getByLabelText("Content search")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Search in files" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      await waitFor(() => {
+        expect(searchInput).toHaveFocus();
+      });
+    } finally {
+      if (platformDescriptor) {
+        Object.defineProperty(navigator, "platform", platformDescriptor);
+      } else {
+        // @ts-expect-error restore deleted platform in jsdom
+        delete navigator.platform;
+      }
+    }
+  });
+
+  it("focuses and selects existing query text when the shortcut is pressed again", async () => {
+    const user = userEvent.setup();
+    const platformDescriptor = Object.getOwnPropertyDescriptor(
+      navigator,
+      "platform",
+    );
+    Object.defineProperty(navigator, "platform", {
+      configurable: true,
+      get: () => "Win32",
+    });
+
+    try {
+      render(
+        <I18nProvider initialLocale="en">
+          <CodeActivity projectId={1} roots={roots} />
+        </I18nProvider>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Search in files" }));
+      const searchInput = screen.getByLabelText("Search") as HTMLInputElement;
+      await user.type(searchInput, "workspace");
+      searchInput.blur();
+      expect(searchInput).not.toHaveFocus();
+
+      const prevented = window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "f",
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(prevented).toBe(false);
+
+      expect(screen.getByLabelText("Content search")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Search in files" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.queryByRole("button", { name: "Open file" }),
+      ).not.toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(searchInput).toHaveFocus();
+        expect(searchInput.selectionStart).toBe(0);
+        expect(searchInput.selectionEnd).toBe("workspace".length);
+      });
+    } finally {
+      if (platformDescriptor) {
+        Object.defineProperty(navigator, "platform", platformDescriptor);
+      } else {
+        // @ts-expect-error restore deleted platform in jsdom
+        delete navigator.platform;
+      }
+    }
+  });
+
   it("shows a markdown source/preview toggle on the breadcrumb and switches views", async () => {
     const user = userEvent.setup();
     vi.mocked(readProjectWorktreeFile).mockImplementation(

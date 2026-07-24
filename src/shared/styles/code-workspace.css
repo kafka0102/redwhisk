@@ -541,6 +541,8 @@
 }
 
 .code-workspace__search-file-name {
+  /* 默认尽量完整展示；仅当空间仍不足时才收缩省略（flex-shrink 低于路径）。 */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   font-weight: 500;
@@ -549,6 +551,8 @@
 }
 
 .code-workspace__search-file-path {
+  /* 占剩余宽度并优先收缩，保证文件名与匹配数徽章完整可见。 */
+  flex: 1 999 0%;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-muted);

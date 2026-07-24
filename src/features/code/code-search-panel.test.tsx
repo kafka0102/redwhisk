@@ -11,6 +11,7 @@ import {
   DEFAULT_CODE_CONTENT_SEARCH_STATE,
   type CodeContentSearchState,
 } from "./code-search-state";
+import "../../shared/styles/code-workspace.css";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   searchProjectWorktreeContent: vi.fn(),
@@ -250,6 +251,62 @@ describe("CodeSearchPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Invalid search regular expression.",
     );
+  });
+
+  it("prioritizes full file name over path in result group headers", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchProjectWorktreeContent).mockResolvedValue({
+      fileCount: 1,
+      matchCount: 2,
+      truncated: false,
+      files: [
+        {
+          filePath: "src/features/code/very-long-module-name.ts",
+          fileName: "very-long-module-name.ts",
+          matchCount: 2,
+          matches: [
+            { lineNumber: 1, lineText: "const a = 1;" },
+            { lineNumber: 2, lineText: "const b = 2;" },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <StatefulPanel />
+      </I18nProvider>,
+    );
+
+    await user.type(screen.getByLabelText("Search"), "const");
+    await user.keyboard("{Enter}");
+
+    const name = await screen.findByText("very-long-module-name.ts");
+    const pathEl = screen.getByTitle(
+      "src/features/code/very-long-module-name.ts",
+    );
+    const header = name.closest(".code-workspace__search-file-header");
+    expect(header).toBeTruthy();
+    const count = header!.querySelector(".code-workspace__search-file-count");
+    expect(count).toBeTruthy();
+    expect(count).toHaveTextContent("2");
+
+    expect(name).toHaveClass("code-workspace__search-file-name");
+    expect(pathEl).toHaveClass("code-workspace__search-file-path");
+
+    const nameStyle = window.getComputedStyle(name);
+    const pathStyle = window.getComputedStyle(pathEl);
+    const countStyle = window.getComputedStyle(count!);
+
+    // 路径优先收缩并省略；计数永不收缩；文件名仅作最后手段可收缩。
+    expect(Number.parseFloat(pathStyle.flexShrink)).toBeGreaterThan(
+      Number.parseFloat(nameStyle.flexShrink),
+    );
+    expect(pathStyle.minWidth).toBe("0px");
+    expect(pathStyle.textOverflow).toBe("ellipsis");
+    expect(countStyle.flexShrink).toBe("0");
+    expect(nameStyle.textOverflow).toBe("ellipsis");
+    expect(nameStyle.whiteSpace).toBe("nowrap");
   });
 
   it("keeps match option toggles without auto-search", async () => {
