@@ -557,7 +557,6 @@ export interface I18nMessages {
     contextCompacted: string;
     workspaceLabel: string;
     terminalStatusBar: string;
-    inPlaceTuiScrollHint: string;
     shortcutCommands: string;
     shortcutCommandsManage: string;
     shortcutCommandsEmpty: string;

@@ -93,7 +93,10 @@ TUI 日志几乎没有“按行文本”，`max_bytes` 经常落在：
 ### 4.2 产品层：in-place 刷新本身不产生 scrollback
 
 短 shell 后立刻进入 TUI 时，`baseY === 0`，CUP 首页重绘会覆盖当前屏（测试已锁定：`terminal-scrollback-sequences.test.ts`）。  
-当前缓解：`terminal-inplace-tui-hint.ts` 检测 CUP home 密度并提示用户“当前为原地刷新，无法上滚”。
+**这是协议语义，不是渲染崩溃。** 系统不伪造 pure in-place 被覆盖内容为可滚聊天历史。
+
+已拆除原先顶部 in-place「无法上滚」提示链路（CUP 追踪 / statusSource `inplace` / i18n 文案）：提示存在误报与漏报，干扰判断。  
+可修路径聚焦 host 可靠性，而非 UI 文案掩盖。
 
 这不是解析错误，而是 **TUI 协议语义**。要“永远能上滚看过程”，需要 **应用层历史**（见 §6），不能只靠 xterm buffer。
 
@@ -133,7 +136,9 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 
 1. **安全 tail 截断**（防乱码）— 已实现。  
 2. **文档化机制** — 本文。  
-3. **回归测试** — `terminal_log_tail` 单测 + 既有 `terminal-scrollback-sequences` 锁定 in-place 语义。
+3. **回归测试** — `terminal_log_tail` 单测 + 既有 `terminal-scrollback-sequences` 锁定 in-place 语义。  
+4. **拆除误导性 in-place 顶部提示** — 已实现；不以提示掩盖协议边界。  
+5. **mouse reporting 下 Shift+滚轮访问 scrollback** — 已实现（`terminal-shift-wheel-scroll.ts`）。
 
 ### P1（推荐后续）
 
@@ -156,7 +161,8 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 5. 查隐藏 tab 是否触发了 0×0 fit（应被 `offsetWidth/Height === 0` 挡住）。  
 6. 区分：  
    - **乱码后自愈** → 半截 CSI / 尺寸瞬态；  
-   - **永远滚不动且 baseY=0** → in-place 语义，不是截断 bug。
+   - **永远滚不动且 baseY=0** → in-place 协议语义（不伪造历史），不是截断 bug。  
+   - **baseY>0 但滚轮无效** → 检查是否 mouse reporting 吞滚轮；Shift+滚轮应能滚动 buffer。
 
 ## 8. 相关代码索引
 
@@ -165,7 +171,7 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 | xterm 宿主 | `src/features/terminals/terminal-surface.tsx` |
 | live 状态机 | `src/features/terminals/terminal-live-pipeline.ts` |
 | 历史写入 / 滚动位置 | `src/features/terminals/terminal-history-writer.ts` |
-| in-place 提示 | `src/features/terminals/terminal-inplace-tui-hint.ts` |
+| Shift+滚轮 scrollback | `src/features/terminals/terminal-shift-wheel-scroll.ts` |
 | 序列行为锁定 | `src/features/terminals/terminal-scrollback-sequences.test.ts` |
 | PTY / log | `src-tauri/src/agent/pty_session_manager.rs` |
 | 安全 tail | `src-tauri/src/agent/terminal_log_tail.rs` |
@@ -177,4 +183,5 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 - 长 Codex TUI session：catch-up 后底部 composer **无半截 CSI 乱码**。  
 - 同一 log 连续切 tab 隐藏/显示：不应因 0×0 fit 丢最后一行。  
 - `cargo test terminal_log_tail` / `pnpm test` 中 scrollback 相关用例通过。  
-- 对“过程滚不到”：若 `baseY=0` 且 CUP 密集，应出现 in-place 提示，而不是被当成渲染崩溃。
+- 对“过程滚不到”：若 `baseY=0` 且为 pure in-place CUP 覆盖，属协议边界（无提示、不伪造历史）；若 `baseY>0` 的已有 scrollback，用户应能上滚（含 TUI 开启 mouse reporting 时用 Shift+滚轮访问 buffer）。
+- 运行时不再出现 in-place「无法上滚」顶部提示。

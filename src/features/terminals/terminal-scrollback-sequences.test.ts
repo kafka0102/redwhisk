@@ -309,4 +309,59 @@ describe("terminal scrollback without alternate screen", () => {
     expect(snapshotBuffer(terminal).canScroll).toBe(true);
     expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
   });
+
+  it("long shell history remains reachable by scroll after in-place frames", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    await writeSync(terminal, fillLines(80, "SHELL"));
+    const before = snapshotBuffer(terminal);
+    expect(before.canScroll).toBe(true);
+    expect(before.baseY).toBeGreaterThan(0);
+
+    for (let frame = 0; frame < 8; frame += 1) {
+      await writeSync(
+        terminal,
+        inPlaceRedraw(
+          Array.from(
+            { length: 24 },
+            (_, i) => `UI-${frame}-${String(i).padStart(2, "0")}`,
+          ),
+        ),
+      );
+    }
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.canScroll).toBe(true);
+    expect(snap.baseY).toBeGreaterThan(0);
+    // 已进入 scrollback 的 shell 行仍在 buffer 内（可滚回看），不因 in-place 被擦掉。
+    expect(bufferContains(terminal, "SHELL-0000")).toBe(true);
+    expect(bufferContains(terminal, "UI-7-00")).toBe(true);
+  });
+
+  it("pure in-place session never fabricates scrollable history", async () => {
+    const mounted = mountTerminal();
+    terminal = mounted.terminal;
+    host = mounted.host;
+
+    for (let frame = 0; frame < 15; frame += 1) {
+      await writeSync(
+        terminal,
+        inPlaceRedraw(
+          Array.from(
+            { length: 24 },
+            (_, i) => `PURE-${frame}-${String(i).padStart(2, "0")}`,
+          ),
+        ),
+      );
+    }
+
+    const snap = snapshotBuffer(terminal);
+    expect(snap.type).toBe("normal");
+    expect(snap.baseY).toBe(0);
+    expect(snap.canScroll).toBe(false);
+    expect(bufferContains(terminal, "PURE-14-00")).toBe(true);
+    expect(bufferContains(terminal, "PURE-00-00")).toBe(false);
+  });
 });

@@ -9,6 +9,7 @@ import { attachTerminalDragDrop } from "./terminal-drag-drop";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { persistTerminalViewPosition } from "./terminal-history-writer";
+import { createTerminalShiftWheelScrollHandler } from "./terminal-shift-wheel-scroll";
 import { createTerminalSurfaceLiveHandlers } from "./terminal-surface-live-handlers";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
 import {
@@ -28,7 +29,6 @@ type TerminalStatusSource =
   | "boot"
   | "input"
   | "inactive"
-  | "inplace"
   | "output"
   | "poll"
   | "resize"
@@ -49,7 +49,7 @@ export function TerminalSurface({
   transport,
   transportKey,
 }: TerminalSurfaceProps) {
-  const { theme, contentFontSize, messages, t } = useI18n();
+  const { theme, contentFontSize, t } = useI18n();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -265,6 +265,10 @@ export function TerminalSurface({
       return true;
     });
 
+    terminal.attachCustomWheelEventHandler(
+      createTerminalShiftWheelScrollHandler(terminal),
+    );
+
     statusSourceRef.current = null;
 
     let isDisposed = false;
@@ -298,9 +302,6 @@ export function TerminalSurface({
       pipelineTransport,
       createTerminalSurfaceLiveHandlers({
         clearStatusMessage,
-        getIsDisposed: () => isDisposed,
-        getStatusSource: () => statusSourceRef.current,
-        inPlaceHintMessage: messages.agentsFeature.inPlaceTuiScrollHint,
         setInputSuppressed: (suppressed) => {
           suppressPtyInput = suppressed;
         },
@@ -445,12 +446,7 @@ export function TerminalSurface({
       fitAddonRef.current = null;
       statusSourceRef.current = null;
     };
-  }, [
-    canBootXterm,
-    messages.agentsFeature.inPlaceTuiScrollHint,
-    transportKey,
-    t,
-  ]);
+  }, [canBootXterm, transportKey, t]);
 
   return (
     <div className={shellClassName}>

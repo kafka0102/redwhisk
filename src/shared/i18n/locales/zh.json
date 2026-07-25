@@ -561,7 +561,6 @@
     "contextCompacted": "上下文已压缩",
     "workspaceLabel": "项目终端工作区",
     "terminalStatusBar": "终端状态栏",
-    "inPlaceTuiScrollHint": "当前为 TUI 原地刷新：屏内输出可能被覆盖，暂时无法上滚；出现流式换行输出后会恢复滚动。",
     "shortcutCommands": "常用命令",
     "shortcutCommandsManage": "管理常用命令",
     "shortcutCommandsEmpty": "暂无常用命令。",
