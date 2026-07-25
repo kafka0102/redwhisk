@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { buildFileTreeDecorations } from "../../shared/workspace/file-tree-git-decorations";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
@@ -10,14 +11,18 @@ import {
 } from "../../shared/workspace/workspace-commands";
 
 const FILE_TREE_REFRESH_INTERVAL_MS = 5_000;
-const EMPTY_CHANGE_KINDS: ReadonlyMap<string, WorkspaceChangeKind> = new Map();
+const EMPTY_DECORATIONS = buildFileTreeDecorations([]);
+const EMPTY_CHANGE_KINDS = EMPTY_DECORATIONS.fileKinds;
+const EMPTY_DIRECTORY_KINDS = EMPTY_DECORATIONS.directoryKinds;
 
 export interface UseCodeWorkspaceFileTreeResult {
   tree: WorkspaceFileTreeNode[];
   treeError: string | null;
   isTreeLoading: boolean;
-  /** 文件路径 → 变更类型（git status），驱动文件树 A/M/D 徽标。无变更时为稳定空 Map。 */
+  /** 文件路径 → 变更类型（git status），驱动文件树徽标与文件名着色。无变更时为稳定空 Map。 */
   changedFileKinds: ReadonlyMap<string, WorkspaceChangeKind>;
+  /** 目录路径 → 聚合变更类型，驱动目录名着色。无变更时为稳定空 Map。 */
+  directoryKinds: ReadonlyMap<string, WorkspaceChangeKind>;
 }
 
 /**
@@ -44,6 +49,9 @@ export function useCodeWorkspaceFileTree(
   const [isTreeLoading, setIsTreeLoading] = useState(false);
   const [changedFileKinds, setChangedFileKinds] =
     useState<ReadonlyMap<string, WorkspaceChangeKind>>(EMPTY_CHANGE_KINDS);
+  const [directoryKinds, setDirectoryKinds] = useState<
+    ReadonlyMap<string, WorkspaceChangeKind>
+  >(EMPTY_DIRECTORY_KINDS);
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" || document.visibilityState === "visible",
   );
@@ -110,7 +118,9 @@ export function useCodeWorkspaceFileTree(
             lastChangesSignatureRef.current === response.signature;
           lastChangesSignatureRef.current = response.signature;
           if (!unchanged) {
-            setChangedFileKinds(buildChangeKindMap(response.files));
+            const decorations = buildFileTreeDecorations(response.files);
+            setChangedFileKinds(decorations.fileKinds);
+            setDirectoryKinds(decorations.directoryKinds);
           }
         })
         .catch(() => {
@@ -133,6 +143,7 @@ export function useCodeWorkspaceFileTree(
         setTreeError(null);
         setIsTreeLoading(false);
         setChangedFileKinds(EMPTY_CHANGE_KINDS);
+        setDirectoryKinds(EMPTY_DIRECTORY_KINDS);
         lastTreeSignatureRef.current = null;
         lastChangesSignatureRef.current = null;
       });
@@ -178,16 +189,5 @@ export function useCodeWorkspaceFileTree(
     };
   }, [enabled, isVisible, workspacePath, refresh]);
 
-  return { tree, treeError, isTreeLoading, changedFileKinds };
-}
-
-function buildChangeKindMap(
-  files: { filePath: string; kind: WorkspaceChangeKind }[],
-): ReadonlyMap<string, WorkspaceChangeKind> {
-  if (files.length === 0) return EMPTY_CHANGE_KINDS;
-  const map = new Map<string, WorkspaceChangeKind>();
-  for (const file of files) {
-    map.set(file.filePath, file.kind);
-  }
-  return map;
+  return { tree, treeError, isTreeLoading, changedFileKinds, directoryKinds };
 }

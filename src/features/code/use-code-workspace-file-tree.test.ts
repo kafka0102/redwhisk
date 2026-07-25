@@ -96,6 +96,32 @@ describe("useCodeWorkspaceFileTree", () => {
     expect(result.current.tree).toEqual(treeNodes);
     expect(result.current.changedFileKinds.get("a.ts")).toBe("added");
     expect(result.current.changedFileKinds.get("b.ts")).toBe("modified");
+    expect(result.current.directoryKinds.size).toBe(0);
+  });
+
+  it("exposes directory aggregation kinds for nested changed files", async () => {
+    treeMock.mockResolvedValue({ nodes: treeNodes, signature: "t1" });
+    changesMock.mockResolvedValue({
+      files: [
+        makeChangedFile("src/features/a.ts", "modified"),
+        makeChangedFile("src/features/b.ts", "deleted"),
+      ],
+      signature: "c1",
+    });
+
+    const { result } = renderHook(() =>
+      useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true),
+    );
+    await settle();
+
+    expect(result.current.changedFileKinds.get("src/features/a.ts")).toBe(
+      "modified",
+    );
+    expect(result.current.changedFileKinds.get("src/features/b.ts")).toBe(
+      "deleted",
+    );
+    expect(result.current.directoryKinds.get("src")).toBe("deleted");
+    expect(result.current.directoryKinds.get("src/features")).toBe("deleted");
   });
 
   it("does not fetch when workspacePath is null", async () => {
@@ -107,6 +133,7 @@ describe("useCodeWorkspaceFileTree", () => {
     expect(changesMock).not.toHaveBeenCalled();
     expect(result.current.tree).toEqual([]);
     expect(result.current.changedFileKinds.size).toBe(0);
+    expect(result.current.directoryKinds.size).toBe(0);
   });
 
   it("polls tree and changes every 5s while visible", async () => {
@@ -189,5 +216,6 @@ describe("useCodeWorkspaceFileTree", () => {
     await settle();
     expect(result.current.tree).toEqual([]);
     expect(result.current.changedFileKinds.size).toBe(0);
+    expect(result.current.directoryKinds.size).toBe(0);
   });
 });

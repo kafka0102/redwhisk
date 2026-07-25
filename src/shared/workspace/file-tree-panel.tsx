@@ -50,8 +50,10 @@ export interface FileTreePanelProps {
   onOpenStateChange?: (openState: FileTreeOpenState) => void;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
-  /** 文件路径 → 变更类型（git status），用于在文件名右侧绘制 A/M/D 等状态徽标。 */
+  /** 文件路径 → 变更类型（git status），用于文件名着色与行末 A/M/D 徽标。 */
   changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+  /** 目录路径 → 聚合变更类型，仅用于目录名着色（不渲染汇总字母徽标）。 */
+  directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
 }
 
 interface FileTreeContextMenuState {
@@ -75,6 +77,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onOpenStateChange,
   workspacePath,
   changedFileKinds,
+  directoryKinds,
 }: FileTreePanelProps) {
   const { messages } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -141,11 +144,12 @@ export const FileTreePanel = memo(function FileTreePanel({
       <FileTreeRow
         {...props}
         changedFileKinds={changedFileKinds}
+        directoryKinds={directoryKinds}
         onOpenFile={onOpenFile}
         onContextMenuNode={handleContextMenuNode}
       />
     ),
-    [changedFileKinds, handleContextMenuNode, onOpenFile],
+    [changedFileKinds, directoryKinds, handleContextMenuNode, onOpenFile],
   );
 
   const handleCopy = useCallback(
@@ -248,6 +252,7 @@ export const FileTreePanel = memo(function FileTreePanel({
 
 interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
   changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+  directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onContextMenuNode: (
     node: WorkspaceFileTreeNode,
@@ -259,6 +264,7 @@ interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
 function FileTreeRow({
   node,
   changedFileKinds,
+  directoryKinds,
   onOpenFile,
   onContextMenuNode,
   style,
@@ -269,6 +275,7 @@ function FileTreeRow({
   } as CSSProperties;
 
   if (node.data.kind === "directory") {
+    const directoryKind = directoryKinds?.get(node.data.path);
     return (
       <button
         aria-expanded={node.isOpen}
@@ -297,11 +304,14 @@ function FileTreeRow({
           />
         )}
         <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
-        <span>{node.data.name}</span>
+        <span className={fileTreeNameClassName(directoryKind)}>
+          {node.data.name}
+        </span>
       </button>
     );
   }
 
+  const fileKind = changedFileKinds?.get(node.data.path);
   return (
     <button
       className={`session-file-tree__row${node.data.isIgnored ? " session-file-tree__row--ignored" : ""}`}
@@ -318,12 +328,18 @@ function FileTreeRow({
         className="session-file-tree__chevron session-file-tree__chevron--placeholder"
       />
       <FileTypeIcon fileName={node.data.name} />
-      <span>{node.data.name}</span>
-      {changedFileKinds?.has(node.data.path) ? (
-        <FileTreeStatusBadge kind={changedFileKinds.get(node.data.path)!} />
-      ) : null}
+      <span className={fileTreeNameClassName(fileKind)}>{node.data.name}</span>
+      {fileKind !== undefined ? <FileTreeStatusBadge kind={fileKind} /> : null}
     </button>
   );
+}
+
+/** 文件/目录名 class：基类 + 可选变更状态色。 */
+function fileTreeNameClassName(kind: WorkspaceChangeKind | undefined): string {
+  if (kind === undefined) {
+    return "session-file-tree__name";
+  }
+  return `session-file-tree__name ${getChangeKindStatusClassName(kind)}`;
 }
 
 /** 文件树行尾的变更状态徽标：复用变更视图的 A/M/D 字样与配色（绿 A、金黄 M、红 D）。 */

@@ -1,13 +1,21 @@
-import type { ReactNode } from "react";
-import { act, render, screen } from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { NodeRendererProps } from "react-arborist";
 
 import { I18nProvider } from "../i18n/i18n";
-import type { WorkspaceChangeKind } from "./workspace-commands";
+import type {
+  WorkspaceChangeKind,
+  WorkspaceFileTreeNode,
+} from "./workspace-commands";
 import { FileTreePanel, FileTreeStatusBadge } from "./file-tree-panel";
 
+type FileTreeRowRenderer = (
+  props: NodeRendererProps<WorkspaceFileTreeNode>,
+) => ReactNode;
+
 const treeHeights: number[] = [];
-const treeRowRenderers: ReactNode[] = [];
+const treeRowRenderers: FileTreeRowRenderer[] = [];
 
 vi.mock("react-arborist", () => ({
   Tree: ({
@@ -15,12 +23,14 @@ vi.mock("react-arborist", () => ({
     height,
     "aria-label": ariaLabel,
   }: {
-    children?: ReactNode;
+    children?: FileTreeRowRenderer;
     height: number;
     "aria-label"?: string;
   }) => {
     treeHeights.push(height);
-    treeRowRenderers.push(children);
+    if (children) {
+      treeRowRenderers.push(children);
+    }
     return (
       <div
         aria-label={ariaLabel}
@@ -30,6 +40,25 @@ vi.mock("react-arborist", () => ({
     );
   },
 }));
+
+const sampleTree: WorkspaceFileTreeNode[] = [
+  {
+    id: "src",
+    name: "src",
+    path: "src",
+    kind: "directory",
+    isIgnored: false,
+    children: [
+      {
+        id: "src/a.ts",
+        name: "a.ts",
+        path: "src/a.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+    ],
+  },
+];
 
 describe("FileTreePanel", () => {
   let resizeObserverCallback: ResizeObserverCallback | null = null;
@@ -177,10 +206,133 @@ describe("FileTreePanel", () => {
 
     expect(treeRowRenderers[treeRowRenderers.length - 1]).toBe(firstRenderer);
   });
+
+  it("colors file name and shows letter badge for changed files", () => {
+    const row = renderTreeRow(
+      {
+        changedFileKinds: new Map([["src/a.ts", "modified"]]),
+      },
+      {
+        id: "src/a.ts",
+        name: "a.ts",
+        path: "src/a.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+    );
+
+    const name = within(row).getByText("a.ts");
+    expect(name).toHaveClass("session-file-tree__name");
+    expect(name).toHaveClass("session-commit-file__status--modified");
+
+    const badge = within(row).getByText("M");
+    expect(badge).toHaveClass("session-file-tree__status");
+    expect(badge).toHaveClass("session-commit-file__status--modified");
+  });
+
+  it("colors directory name without aggregated letter badge", () => {
+    const row = renderTreeRow(
+      {
+        directoryKinds: new Map([["src", "deleted"]]),
+      },
+      {
+        id: "src",
+        name: "src",
+        path: "src",
+        kind: "directory",
+        isIgnored: false,
+        children: [],
+      },
+    );
+
+    const name = within(row).getByText("src");
+    expect(name).toHaveClass("session-file-tree__name");
+    expect(name).toHaveClass("session-commit-file__status--deleted");
+    expect(within(row).queryByText("D")).toBeNull();
+    expect(row.querySelector(".session-file-tree__status")).toBeNull();
+  });
+
+  it("keeps default styling for unchanged file and directory rows", () => {
+    const fileRow = renderTreeRow(
+      {
+        changedFileKinds: new Map([["other.ts", "added"]]),
+        directoryKinds: new Map([["other", "added"]]),
+      },
+      {
+        id: "plain.ts",
+        name: "plain.ts",
+        path: "plain.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+    );
+    const fileName = within(fileRow).getByText("plain.ts");
+    expect(fileName).toHaveClass("session-file-tree__name");
+    expect(fileName.className).not.toMatch(/session-commit-file__status--/);
+    expect(fileRow.querySelector(".session-file-tree__status")).toBeNull();
+
+    const directoryRow = renderTreeRow(
+      {
+        changedFileKinds: new Map([["other.ts", "added"]]),
+        directoryKinds: new Map([["other", "added"]]),
+      },
+      {
+        id: "lib",
+        name: "lib",
+        path: "lib",
+        kind: "directory",
+        isIgnored: false,
+        children: [],
+      },
+    );
+    const directoryName = within(directoryRow).getByText("lib");
+    expect(directoryName).toHaveClass("session-file-tree__name");
+    expect(directoryName.className).not.toMatch(
+      /session-commit-file__status--/,
+    );
+    expect(directoryRow.querySelector(".session-file-tree__status")).toBeNull();
+  });
 });
 
 function renderWithI18n(component: ReactNode) {
   return render(<I18nProvider fixedLocale="en">{component}</I18nProvider>);
+}
+
+function renderTreeRow(
+  panelProps: {
+    changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+    directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+  },
+  nodeData: WorkspaceFileTreeNode,
+): HTMLElement {
+  renderWithI18n(
+    <FileTreePanel
+      changedFileKinds={panelProps.changedFileKinds}
+      directoryKinds={panelProps.directoryKinds}
+      errorMessage={null}
+      fileTree={sampleTree}
+      isLoading={false}
+      onOpenFile={() => {}}
+    />,
+  );
+
+  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
+  expect(renderer).toBeTypeOf("function");
+
+  const rowElement = renderer({
+    node: {
+      data: nodeData,
+      level: 0,
+      isOpen: false,
+      toggle: () => {},
+    },
+    style: {},
+  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
+
+  const { container } = render(rowElement);
+  const row = container.firstElementChild;
+  expect(row).toBeInstanceOf(HTMLElement);
+  return row as HTMLElement;
 }
 
 describe("FileTreeStatusBadge", () => {

@@ -678,9 +678,7 @@
   visibility: hidden;
 }
 
-.session-file-tree__folder > span,
-.session-file-tree__row
-  > span:not(.session-file-tree__chevron):not(.session-file-tree__status) {
+.session-file-tree__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

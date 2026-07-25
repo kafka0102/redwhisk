@@ -125,7 +125,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     tabs,
   ]);
 
-  const { tree, treeError, isTreeLoading, changedFileKinds } =
+  const { tree, treeError, isTreeLoading, changedFileKinds, directoryKinds } =
     useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
 
   const activeTab = useMemo(
@@ -388,6 +388,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         ) : (
           <FileTreePanel
             changedFileKinds={changedFileKinds}
+            directoryKinds={directoryKinds}
             errorMessage={treeError}
             fileTree={tree}
             initialOpenState={openFolders}
