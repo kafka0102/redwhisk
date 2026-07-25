@@ -508,6 +508,7 @@ export interface I18nMessages {
     loadingCode: string;
     toggleContentSearch: string;
     toggleMarkdownPreview: string;
+    mermaidRenderFailed: string;
     contentSearchPanel: string;
     contentSearchQuery: string;
     contentSearchQueryPlaceholder: string;

@@ -271,6 +271,42 @@
   color: var(--color-text);
 }
 
+.code-workspace__mermaid {
+  margin: 6px 0;
+  overflow-x: auto;
+  color: var(--color-text);
+}
+
+.code-workspace__mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.code-workspace__mermaid--loading {
+  min-height: 48px;
+}
+
+.code-workspace__mermaid-error {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: var(--color-danger);
+}
+
+.code-workspace__mermaid-error-message {
+  margin: 0 0 8px;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.code-workspace__mermaid-error .agents-message__code-block {
+  margin: 0;
+  color: var(--color-text);
+}
+
 .code-workspace__breadcrumb > span {
   display: inline-flex;
   align-items: center;

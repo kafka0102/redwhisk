@@ -620,6 +620,7 @@
     "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
     "agentTypeAlt": "Agent type: {{label}}",
     "toggleMarkdownPreview": "Markdown preview",
+    "mermaidRenderFailed": "Could not render Mermaid diagram.",
     "toggleContentSearch": "Search in files",
     "contentSearchPanel": "Content search",
     "contentSearchQuery": "Search",

@@ -187,7 +187,7 @@ export function CodeContent({
         className="code-workspace__markdown-preview"
         style={{ fontSize: contentFontSize }}
       >
-        <CodeMarkdownPreview content={tab.content.content} />
+        <CodeMarkdownPreview content={tab.content.content} theme={theme} />
       </div>
     );
   }
