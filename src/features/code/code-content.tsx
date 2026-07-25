@@ -1,6 +1,6 @@
 import { Editor, type OnMount } from "@monaco-editor/react";
 
-import { AgentMarkdown } from "../agents/message-stream/agent-markdown";
+import { CodeMarkdownPreview } from "./code-markdown-preview";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
@@ -187,7 +187,7 @@ export function CodeContent({
         className="code-workspace__markdown-preview"
         style={{ fontSize: contentFontSize }}
       >
-        <AgentMarkdown>{tab.content.content}</AgentMarkdown>
+        <CodeMarkdownPreview content={tab.content.content} />
       </div>
     );
   }
