@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   getCommandErrorMessage,
@@ -10,6 +10,7 @@ import {
   appendUniqueCommitsByHash,
   commitHistoryRefreshLimit,
 } from "../../../shared/workspace/commit-history-pagination";
+import { buildFileTreeDecorations } from "../../../shared/workspace/file-tree-git-decorations";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import {
   COMMIT_HISTORY_PAGE_SIZE,
@@ -736,12 +737,14 @@ export function useSessionWorkspaceCache({
   // 仓库路径不可访问属于不可恢复错误：worktree 目录已被删除或移动，继续轮询只会
   // 反复失败并让错误提示闪烁。此时停止自动刷新，交由用户手动操作；手动刷新成功
   // 后 isChangesUnavailable 会被重置为 false，本 hook 随即恢复轮询。
+  // files tab 也需要未提交变更，用于文件树 Git 装饰；与 changes tab 共用同一轮询族。
   useConditionalPolling({
     refresh: refreshChanges,
     intervalMs: CHANGES_POLL_INTERVAL_MS,
     isActive:
       isSidePanelOpen &&
-      currentCache.sidePanelTab === "changes" &&
+      (currentCache.sidePanelTab === "changes" ||
+        currentCache.sidePanelTab === "files") &&
       !currentCache.isChangesUnavailable,
   });
 
@@ -779,10 +782,17 @@ export function useSessionWorkspaceCache({
     }));
   }, [updateCurrentCache]);
 
+  const fileTreeDecorations = useMemo(
+    () => buildFileTreeDecorations(currentCache.changes),
+    [currentCache.changes],
+  );
+
   return {
     activeWorkspaceTab: currentCache.activeWorkspaceTab,
     changeTab: currentCache.changeTab,
     changes: currentCache.changes,
+    changedFileKinds: fileTreeDecorations.fileKinds,
+    directoryKinds: fileTreeDecorations.directoryKinds,
     changesErrorMessage: currentCache.changesErrorMessage,
     closeWorkspaceTab,
     closeWorkspaceTabForSession,

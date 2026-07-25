@@ -1180,6 +1180,82 @@ describe("AgentsActivity", () => {
     expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
   });
 
+  it("decorates the files tab tree from uncommitted changes", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "decorations",
+      files: [
+        changedFile("src/app.css", "modified"),
+        changedFile("src/features/agents/session-side-panel.tsx", "added"),
+      ],
+    });
+    getProjectWorktreeFileTreeMock.mockResolvedValue({
+      signature: "tree",
+      nodes: [
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          isIgnored: false,
+          children: [
+            {
+              id: "src/app.css",
+              name: "app.css",
+              path: "src/app.css",
+              kind: "file",
+              isIgnored: false,
+            },
+            {
+              id: "src/features/agents/session-side-panel.tsx",
+              name: "session-side-panel.tsx",
+              path: "src/features/agents/session-side-panel.tsx",
+              kind: "file",
+              isIgnored: false,
+            },
+          ],
+        },
+      ],
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
+
+    const directory = await screen.findByRole("button", { name: /^src$/ });
+    expect(within(directory).getByText("src")).toHaveClass(
+      "session-commit-file__status--modified",
+    );
+    expect(within(directory).queryByText("M")).toBeNull();
+    expect(directory.querySelector(".session-file-tree__status")).toBeNull();
+
+    await user.click(directory);
+    const modifiedFile = await screen.findByRole("button", {
+      name: /app\.css/,
+    });
+    expect(within(modifiedFile).getByText("app.css")).toHaveClass(
+      "session-commit-file__status--modified",
+    );
+    expect(within(modifiedFile).getByText("M")).toHaveClass(
+      "session-file-tree__status",
+      "session-commit-file__status--modified",
+    );
+
+    const addedFile = screen.getByRole("button", {
+      name: /session-side-panel\.tsx/,
+    });
+    expect(within(addedFile).getByText("session-side-panel.tsx")).toHaveClass(
+      "session-commit-file__status--added",
+    );
+    expect(within(addedFile).getByText("A")).toHaveClass(
+      "session-file-tree__status",
+      "session-commit-file__status--added",
+    );
+  });
+
   it("opens a read-only file viewer when clicking a file tree file", async () => {
     const user = userEvent.setup();
     getProjectWorktreeChangesMock.mockResolvedValue({

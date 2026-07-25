@@ -5,6 +5,7 @@ import type { LinkedSessionIssue } from "../session-pane/agents-session-pane";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type {
+  WorkspaceChangeKind,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
   WorkspaceChangedFile,
@@ -15,6 +16,10 @@ import type { SessionSidePanelTab } from "../session-workspace/session-workspace
 interface SessionSidePanelProps {
   activeTab: SessionSidePanelTab;
   changes: WorkspaceChangedFile[];
+  /** 文件树装饰：文件路径 → kind（徽标 + 文件名着色）。 */
+  changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+  /** 文件树装饰：目录路径 → 聚合 kind（仅目录名着色）。 */
+  directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
   changesErrorMessage: string | null;
   commitHistory: WorkspaceCommitRecord[];
   isCommitFromWorktree: boolean;
@@ -52,6 +57,8 @@ interface SessionSidePanelProps {
 export function SessionSidePanel({
   activeTab,
   changes,
+  changedFileKinds,
+  directoryKinds,
   changesErrorMessage,
   commitHistory,
   isCommitFromWorktree,
@@ -151,6 +158,8 @@ export function SessionSidePanel({
           />
         ) : (
           <SessionFileTreePanel
+            changedFileKinds={changedFileKinds}
+            directoryKinds={directoryKinds}
             errorMessage={fileTreeErrorMessage}
             fileTree={fileTree}
             isLoading={isFileTreeLoading}

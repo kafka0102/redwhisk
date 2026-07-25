@@ -362,3 +362,166 @@ describe("useSessionWorkspaceCache commit history pagination", () => {
     expect(result.current.isLoadingMoreCommitHistory).toBe(false);
   });
 });
+
+function makeChangedFile(
+  filePath: string,
+  kind:
+    | "added"
+    | "modified"
+    | "deleted"
+    | "renamed"
+    | "copied"
+    | "untracked"
+    | "binary",
+) {
+  return {
+    filePath,
+    oldPath: null,
+    fileName: filePath.split("/").pop() ?? filePath,
+    kind,
+    status: kind === "untracked" ? "??" : " M",
+    additions: 1,
+    deletions: 0,
+    isBinary: false,
+    contentHash: `${filePath}:${kind}`,
+    metadataSignature: `${filePath}:${kind}:meta`,
+  };
+}
+
+describe("useSessionWorkspaceCache uncommitted changes for files decorations", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("loads and polls worktree changes while the files tab is active", async () => {
+    const { result, rerender } = renderHook(
+      ({ isSidePanelOpen }: { isSidePanelOpen: boolean }) =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen,
+        }),
+      { wrapper, initialProps: { isSidePanelOpen: false } },
+    );
+
+    act(() => {
+      result.current.setSidePanelTab("files");
+    });
+    await settle();
+    expect(getProjectWorktreeChangesMock).not.toHaveBeenCalled();
+
+    rerender({ isSidePanelOpen: true });
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 1,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("still loads worktree changes while the changes tab is active", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    // 默认 sidePanelTab 为 changes。
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("builds file and directory decoration maps from session changes", async () => {
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "decorations",
+      files: [
+        makeChangedFile("src/features/a.ts", "modified"),
+        makeChangedFile("src/features/b.ts", "deleted"),
+      ],
+    });
+
+    const { result, rerender } = renderHook(
+      ({ isSidePanelOpen }: { isSidePanelOpen: boolean }) =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen,
+        }),
+      { wrapper, initialProps: { isSidePanelOpen: false } },
+    );
+
+    act(() => {
+      result.current.setSidePanelTab("files");
+    });
+    rerender({ isSidePanelOpen: true });
+    await settle();
+
+    expect(result.current.changedFileKinds.get("src/features/a.ts")).toBe(
+      "modified",
+    );
+    expect(result.current.changedFileKinds.get("src/features/b.ts")).toBe(
+      "deleted",
+    );
+    expect(result.current.directoryKinds.get("src")).toBe("deleted");
+    expect(result.current.directoryKinds.get("src/features")).toBe("deleted");
+  });
+
+  it("stops polling changes after leaving files and changes tabs", async () => {
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.setSidePanelTab("files");
+    });
+    // files 仍属 changes 轮询门控，切换不应停轮询；isActive 保持 true 时不强制补拉。
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      result.current.setSidePanelTab("issue");
+    });
+    const callsAfterLeave = getProjectWorktreeChangesMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(
+      callsAfterLeave,
+    );
+  });
+});

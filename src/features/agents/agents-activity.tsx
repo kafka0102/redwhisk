@@ -521,6 +521,8 @@ export function AgentsActivity({
             <SessionSidePanel
               activeTab={sidePanelTab}
               changes={workspaceCache.changes}
+              changedFileKinds={workspaceCache.changedFileKinds}
+              directoryKinds={workspaceCache.directoryKinds}
               changesErrorMessage={workspaceCache.changesErrorMessage}
               commitHistory={workspaceCache.commitHistory}
               isCommitFromWorktree={workspaceCache.isCommitFromWorktree}
