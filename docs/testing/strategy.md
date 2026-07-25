@@ -21,6 +21,7 @@
 | migration                    | migration runner 或 repository 升级测试                      | `cargo test`，并检查旧数据回填                            |
 | provider stream / reducer    | Rust event mapper + 前端 reducer/卡片测试                    | 相应 Rust 与 Vitest 测试                                  |
 | 纯文档                       | 相对链接、索引、引用与路径                                   | `rg` / 链接检查；无需 lint/typecheck/test                 |
+| 依赖变更（`package.json` / lockfile） | 引用该依赖的模块与测试可解析；必要时补 mock                 | 先 `pnpm install`，再 `pnpm format`、`lint`、`typecheck`、相关 `test`，并必跑 `pnpm build` |
 
 ## 验收重点
 
@@ -31,4 +32,4 @@
 
 ## 完成前
 
-按 [AGENTS.md](../../AGENTS.md) 的门禁执行。运行 `pnpm format`、lint、typecheck、test 后都要复查 `git status --short`；文档改动至少核对内部相对链接、索引和引用。测试命令可能改写快照或生成文件时，同样复查工作区。
+按 [AGENTS.md](../../AGENTS.md) 的门禁执行。依赖变更或切换含依赖 diff 的提交后先 `pnpm install`。运行 `pnpm format`、lint、typecheck、test、（按需）build 后都要复查 `git status --short`；文档改动至少核对内部相对链接、索引和引用。测试命令可能改写快照或生成文件时，同样复查工作区。注意：`vi.mock` 通过不代表真实依赖已安装，`typecheck`/`build` 仍会检查模块解析。

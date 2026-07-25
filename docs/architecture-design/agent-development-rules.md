@@ -335,6 +335,14 @@ Agent command 检测必须考虑桌面应用启动环境与用户终端环境的
 
 ## 测试与验证规则
 
+跑任何前端门禁前，工作区 `node_modules` 必须与 `pnpm-lock.yaml` 一致。改动 `package.json` / `pnpm-lock.yaml`、或拉取/切换到含依赖变更的提交后，先执行：
+
+```bash
+pnpm install
+```
+
+优先用 `pnpm add` / `pnpm remove` 改依赖；禁止只改 `package.json` 却不安装。`vi.mock` 只覆盖测试运行时，不能替代真实依赖安装；缺包时 `pnpm typecheck` / `pnpm build` 仍会失败。
+
 改动 TypeScript / TSX / JavaScript 后，默认至少运行：
 
 ```bash
@@ -348,11 +356,13 @@ pnpm typecheck
 pnpm test
 ```
 
-影响构建、样式、Vite 配置或打包路径时，补充运行：
+改动依赖（`package.json` / `pnpm-lock.yaml`）、样式、Vite/Tauri 构建配置、静态资源路径或打包相关代码时，必须补充运行：
 
 ```bash
 pnpm build
 ```
+
+（`pnpm build` = `typecheck + vite build`，用于捕获仅类型检查抓不到的模块解析与打包失败；与 `AGENTS.md` §5 第 5 项一致。）
 
 改动 Rust / Tauri / SQLite migrations 后，至少运行：
 

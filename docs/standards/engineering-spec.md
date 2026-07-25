@@ -96,3 +96,4 @@
 3. 是否与 Rust DTO 或 command payload 同步
 4. 是否没有引入 `any`、`@ts-ignore` 或局部放宽类型检查
 5. 是否运行了 `pnpm lint` 与 `pnpm typecheck`
+6. 若改动了 `package.json` / `pnpm-lock.yaml`：是否已 `pnpm install`，且 `pnpm typecheck` / `pnpm build` 能解析新增模块（测试里的 `vi.mock` 不能替代安装）

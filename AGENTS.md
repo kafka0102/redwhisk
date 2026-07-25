@@ -82,10 +82,18 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 2. `pnpm lint`
 3. `pnpm typecheck`
 4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑；纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
-5. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后必跑；越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
-6. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
+5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
+6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后必跑；越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
+7. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
 
-纯文档改动（`docs/**`、`*.md`、`AGENTS.md`、`CLAUDE.md`）豁免 lint / typecheck / test，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
+依赖与安装前提（跑门禁前必须满足）：
+
+- 工作区 `node_modules` 必须与 `pnpm-lock.yaml` 一致。改动 `package.json` / `pnpm-lock.yaml` 后，或拉取/切换到含依赖变更的提交后，先执行 `pnpm install`，再跑 typecheck / test / build。
+- 优先用 `pnpm add <pkg>` / `pnpm remove <pkg>` 改依赖（会同步 lockfile 并安装）；禁止只改 `package.json` 却不安装、不更新 lockfile。
+- `vi.mock("某包")` 只替测试运行时，**不能**替代真实依赖安装；缺包时 `pnpm typecheck` / `pnpm build` 仍会报 `Cannot find module`。
+- 若 typecheck 报 `Cannot find module 'X'` 且 `X` 已在 `package.json` 声明：先 `pnpm install` 再重跑，不要把它当成源码逻辑 bug 去改 import 或加 `@ts-ignore`。
+
+纯文档改动（`docs/**`、`*.md`、`AGENTS.md`、`CLAUDE.md`）豁免 lint / typecheck / test / build，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
 
 完成判定（缺一不可）：
 
@@ -95,6 +103,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 每一处 diff 可追溯到用户请求、项目文档或验证失败。
 - 改动 Rust 时，`scripts/check-rust-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 - 改动前端源码时，`scripts/check-frontend-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
+- 改动依赖或构建配置时，`pnpm build` 通过（见上条第 5 项）。
 - 改动 Tauri command / event / 错误码时，复查 `docs/architecture-design/tauri-contract.md` 注册表与错误码分类是否同步。
 
 > 本门禁是 `docs/architecture-design/agent-development-rules.md`「测试与验证规则」与 `docs/standards/{coding-style,git-workflow}.md` 的执行入口；冲突时以本门禁命令顺序为准。
