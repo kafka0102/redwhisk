@@ -153,6 +153,68 @@ describe("installTerminalImeInputGuard", () => {
     guard.dispose();
   });
 
+  it("lets composition Backspace step back preedit without clearing all or sending DEL", () => {
+    const { host, textarea } = createHarness();
+    const guard = installTerminalImeInputGuard(host, textarea);
+
+    textarea.dispatchEvent(new Event("compositionstart", { bubbles: true }));
+    textarea.value = "nihao";
+
+    const backspace = new KeyboardEvent("keydown", {
+      key: "Backspace",
+      keyCode: 8,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+    Object.defineProperty(backspace, "isComposing", { value: true });
+    // simulate IME stepping preedit back one unit when default is allowed
+    textarea.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        if (event.key === "Backspace" && textarea.value.length > 0) {
+          textarea.value = textarea.value.slice(0, -1);
+        }
+      },
+      { once: true },
+    );
+    textarea.dispatchEvent(backspace);
+
+    expect(backspace.defaultPrevented).toBe(false);
+    expect(textarea.value).toBe("niha");
+    expect(guard.filterData("\x7f")).toBeNull();
+
+    // further preedit remains until IME composition ends
+    expect(textarea.value).toBe("niha");
+
+    guard.dispose();
+  });
+
+  it("after composition commits, Backspace on empty textarea forwards DEL", () => {
+    const { host, textarea } = createHarness();
+    const guard = installTerminalImeInputGuard(host, textarea);
+
+    textarea.dispatchEvent(new Event("compositionstart", { bubbles: true }));
+    textarea.value = "你";
+    textarea.dispatchEvent(new Event("compositionend", { bubbles: true }));
+    vi.runAllTimers();
+    expect(textarea.value).toBe("");
+
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Backspace",
+        keyCode: 8,
+        bubbles: true,
+      }),
+    );
+    expect(guard.filterData("\x7f")).toBe("\x7f");
+
+    guard.dispose();
+  });
+
   it("forwards normal data unchanged", () => {
     const { host, textarea } = createHarness();
     const guard = installTerminalImeInputGuard(host, textarea);

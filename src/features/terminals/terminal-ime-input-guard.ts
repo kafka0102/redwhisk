@@ -8,6 +8,7 @@
  *
  * 本 guard：
  * - composition 结束后清残留
+ * - composition 中 Backspace 交给 IME 按步回退，不整段清空 helper
  * - IME 窗口内丢弃误发 DEL/BS；吞掉清残留用 Backspace
  * - 对非 composing 的 insertText 做短延迟兜底，避免 xterm 漏发第一次全角标点
  */
@@ -165,18 +166,30 @@ export function installTerminalImeInputGuard(
     }
 
     if (isBackspace) {
-      if (
-        imeDeleteSuppressDepth > 0 ||
-        isComposing ||
-        event.isComposing ||
-        textarea.value.length > 0
-      ) {
+      // composition 中：交给 IME 按步回退 preedit，禁止整段清空 / 禁止 preventDefault。
+      // 误发到 PTY 的 DEL 仍由 beginImeDeleteSuppress + filterData 吞掉。
+      if (isComposing || event.isComposing) {
+        allowDeleteChars = 0;
+        return;
+      }
+
+      // helper 仍有已确认残留：吞掉这次退格并清残留，避免把 DEL 打进 PTY。
+      if (textarea.value.length > 0) {
         clearResidual();
         allowDeleteChars = 0;
         event.preventDefault();
         event.stopPropagation();
         return;
       }
+
+      // IME 抑制窗内空 helper：继续吞 DEL，不放开 allowDeleteChars。
+      if (imeDeleteSuppressDepth > 0) {
+        allowDeleteChars = 0;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
       allowDeleteChars += 1;
     }
   };
