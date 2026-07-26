@@ -239,10 +239,14 @@ export function useIssueCompletionFlow({
         currentIssue.status === "running" &&
         currentIssue.linkedSessionStatus === "running"
       ) {
+        // markIssueReview（running->review）期间也显示阻塞 loading，避免这段等待无反馈；
+        // 返回后立即关闭，由后续 completion dialog 接管，避免两个 LoadingDialog 同时挂载。
+        setIsAdvancingStatus(true);
         const reviewedIssue = await markIssueReview({
           projectId: requestProjectId,
           issueId: currentIssue.id,
         });
+        setIsAdvancingStatus(false);
         if (activeProjectIdRef.current !== requestProjectId) {
           return;
         }

@@ -3286,6 +3286,50 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a blocking loading dialog while marking a running issue for completion", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [attentionIssue] });
+    // 挂起 markIssueReview，捕获 running->completed 直接完成时第一步（running->review）的 loading。
+    const pendingMarkReview =
+      createDeferred<Awaited<ReturnType<typeof markIssueReview>>>();
+    markIssueReviewMock.mockReturnValue(pendingMarkReview.promise);
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Attention issue" }),
+    );
+    const detail = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "Open status options" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(markIssueReviewMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: attentionIssue.id,
+      }),
+    );
+
+    // markIssueReview 挂起期间：阻塞 loading（与 advance 路径一致的 updatingStatus 文案）。
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Updating status...",
+    );
+
+    pendingMarkReview.resolve({
+      ...attentionIssue,
+      status: "review",
+      updatedAt: attentionIssue.updatedAt + 1_000,
+    });
+
+    // markIssueReview 返回后 completion dialog 接管；默认 completeIssueFlow 完成后所有 dialog 关闭。
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
   it("confirms before moving an issue backward to a non-backlog status", async () => {
     const user = userEvent.setup();
     const reviewWithClosedSession: IssueRecord = {
