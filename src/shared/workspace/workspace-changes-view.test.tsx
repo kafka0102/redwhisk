@@ -1,10 +1,26 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
+import { toast } from "../toast";
 import { CommittedChangesTimeline } from "./workspace-changes-view";
 import type { WorkspaceCommitRecord } from "./workspace-commands";
+
+vi.mock("../toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    loading: vi.fn(),
+    message: vi.fn(),
+    dismiss: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
+const toastSuccessMock = vi.mocked(toast.success);
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
@@ -186,5 +202,149 @@ describe("CommittedChangesTimeline base branch tag", () => {
       rows[0].querySelector(".session-commit-row__remote-tag"),
     ).not.toBeNull();
     expect(rows[1].querySelector(".session-commit-row__remote-tag")).toBeNull();
+  });
+});
+
+describe("CommittedChangesTimeline commit context menu", () => {
+  const writeTextMock = vi.fn();
+
+  beforeEach(() => {
+    toastSuccessMock.mockReset();
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+  });
+
+  function renderTimeline(
+    overrides: Partial<Parameters<typeof CommittedChangesTimeline>[0]> = {},
+  ) {
+    const commits = [
+      makeCommit({
+        hash: "abcdef1234567890",
+        shortHash: "abcdef1",
+        message: "fix: timeline menu",
+      }),
+    ];
+    return render(
+      <CommittedChangesTimeline
+        {...baseProps}
+        commits={commits}
+        isWorktree={false}
+        {...overrides}
+      />,
+      { wrapper },
+    );
+  }
+
+  function openContextMenuOnCommit() {
+    const row = screen.getByRole("button", { name: /fix: timeline menu/i });
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    return row;
+  }
+
+  it("opens menu on right-click with open / copy id / copy message in order", async () => {
+    renderTimeline();
+    openContextMenuOnCommit();
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Open Changes",
+      "Copy Commit ID",
+      "Copy Commit Message",
+    ]);
+  });
+
+  it("does not toggle expand on right-click", () => {
+    const onToggleCommit = vi.fn();
+    renderTimeline({ onToggleCommit });
+    openContextMenuOnCommit();
+    expect(onToggleCommit).not.toHaveBeenCalled();
+  });
+
+  it("still toggles expand on left-click", () => {
+    const onToggleCommit = vi.fn();
+    renderTimeline({ onToggleCommit });
+    fireEvent.click(
+      screen.getByRole("button", { name: /fix: timeline menu/i }),
+    );
+    expect(onToggleCommit).toHaveBeenCalledWith("abcdef1234567890");
+  });
+
+  it("copies full commit hash and toasts on success", async () => {
+    renderTimeline();
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy Commit ID" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("abcdef1234567890");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+  });
+
+  it("copies commit subject message and toasts on success", async () => {
+    renderTimeline();
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy Commit Message" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("fix: timeline menu");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+  });
+
+  it("silently ignores clipboard write failure", async () => {
+    writeTextMock.mockRejectedValue(new Error("denied"));
+    renderTimeline();
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy Commit ID" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalled();
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("calls onOpenCommitChanges and expands collapsed commit", async () => {
+    const onOpenCommitChanges = vi.fn();
+    const onToggleCommit = vi.fn();
+    renderTimeline({
+      onOpenCommitChanges,
+      onToggleCommit,
+      expandedCommitHashes: new Set(),
+    });
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open Changes" }),
+    );
+
+    expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
+    expect(onOpenCommitChanges.mock.calls[0][0]).toMatchObject({
+      hash: "abcdef1234567890",
+      message: "fix: timeline menu",
+    });
+    expect(onToggleCommit).toHaveBeenCalledWith("abcdef1234567890");
+  });
+
+  it("calls onOpenCommitChanges without collapsing an already expanded commit", async () => {
+    const onOpenCommitChanges = vi.fn();
+    const onToggleCommit = vi.fn();
+    renderTimeline({
+      onOpenCommitChanges,
+      onToggleCommit,
+      expandedCommitHashes: new Set(["abcdef1234567890"]),
+    });
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open Changes" }),
+    );
+
+    expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
+    expect(onToggleCommit).not.toHaveBeenCalled();
   });
 });

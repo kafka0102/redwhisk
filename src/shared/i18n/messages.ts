@@ -494,6 +494,9 @@ export interface I18nMessages {
     baseBranchTag: string;
     loadingFileTree: string;
     noFiles: string;
+    openCommitChanges: string;
+    copyCommitId: string;
+    copyCommitMessage: string;
     copyFileName: string;
     copyRelativePath: string;
     copyAbsolutePath: string;

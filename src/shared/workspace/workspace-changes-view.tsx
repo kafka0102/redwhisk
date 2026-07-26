@@ -7,9 +7,15 @@ import {
   Files,
   GitBranch,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "../../components/ui/context-menu";
 import { useI18n } from "../i18n/i18n";
+import { toast } from "../toast";
 import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
@@ -20,6 +26,12 @@ import {
   getChangeKindStatusClassName,
   getChangeKindStatusLabel,
 } from "./workspace-change-status";
+
+interface CommitContextMenuState {
+  commit: WorkspaceCommitRecord;
+  x: number;
+  y: number;
+}
 
 interface CommittedChangesTimelineProps {
   commits: WorkspaceCommitRecord[];
@@ -35,6 +47,8 @@ interface CommittedChangesTimelineProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  /** 提交上下文菜单「打开更改」；后续多 diff 视图由上层接线。 */
+  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
   onToggleCommit: (hash: string) => void;
 }
 
@@ -46,9 +60,34 @@ export function CommittedChangesTimeline({
   isLoading,
   baseBranch,
   onOpenCommittedChangedFile,
+  onOpenCommitChanges,
   onToggleCommit,
 }: CommittedChangesTimelineProps) {
   const { messages } = useI18n();
+  const [menu, setMenu] = useState<CommitContextMenuState | null>(null);
+
+  const handleCopy = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard?.writeText(text);
+        toast.success(messages.agentsFeature.copiedToClipboard);
+      } catch {
+        // 剪贴板写入失败时静默忽略，与文件树 / terminal 既有处理一致。
+      }
+    },
+    [messages.agentsFeature.copiedToClipboard],
+  );
+
+  const handleOpenCommitChanges = useCallback(
+    (commit: WorkspaceCommitRecord) => {
+      onOpenCommitChanges?.(commit);
+      // 「打开更改」顺带展开；已展开则保持，避免 toggle 收起。
+      if (!expandedCommitHashes.has(commit.hash)) {
+        onToggleCommit(commit.hash);
+      }
+    },
+    [expandedCommitHashes, onOpenCommitChanges, onToggleCommit],
+  );
 
   if (commits.length === 0) {
     if (errorMessage) {
@@ -109,6 +148,14 @@ export function CommittedChangesTimeline({
                 className="session-commit-row"
                 type="button"
                 onClick={() => onToggleCommit(commit.hash)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenu({
+                    commit,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
               >
                 <span className="session-commit-row__content">
                   <span className="session-commit-row__message">
@@ -155,6 +202,44 @@ export function CommittedChangesTimeline({
           );
         })}
       </ol>
+      <ContextMenu
+        open={menu !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMenu(null);
+          }
+        }}
+      >
+        <ContextMenuContent anchor={menu ? { x: menu.x, y: menu.y } : null}>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                handleOpenCommitChanges(menu.commit);
+              }
+            }}
+          >
+            {messages.agentsFeature.openCommitChanges}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                void handleCopy(menu.commit.hash);
+              }
+            }}
+          >
+            {messages.agentsFeature.copyCommitId}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                void handleCopy(menu.commit.message);
+              }
+            }}
+          >
+            {messages.agentsFeature.copyCommitMessage}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </>
   );
 }

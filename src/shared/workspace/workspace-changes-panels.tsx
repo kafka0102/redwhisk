@@ -27,6 +27,8 @@ interface WorkspaceChangesPanelsProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  /** 提交上下文菜单「打开更改」；可选，后续多 diff 视图接线。 */
+  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
   commitHistory: WorkspaceCommitRecord[];
   isCommitHistoryLoading: boolean;
   commitHistoryErrorMessage: string | null;
@@ -61,6 +63,7 @@ export function WorkspaceChangesPanels({
   onToggleUncommittedExpanded,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  onOpenCommitChanges,
   commitHistory,
   isCommitHistoryLoading,
   commitHistoryErrorMessage,
@@ -206,6 +209,7 @@ export function WorkspaceChangesPanels({
               isWorktree={isWorktree}
               baseBranch={baseBranch}
               onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+              onOpenCommitChanges={onOpenCommitChanges}
               onToggleCommit={handleToggleCommit}
             />
             {isLoadingMoreCommitHistory ? (
