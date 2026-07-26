@@ -188,6 +188,8 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(screen.getByRole("button", { name: "Issues" }));
     expect(screen.getByText("issues activity")).toBeInTheDocument();
+    // 终端 Activity keep-alive：切走后 xterm 宿主仍挂载（hidden），避免 catch-up 花屏。
+    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Terminals" }));
 

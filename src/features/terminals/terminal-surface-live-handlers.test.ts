@@ -61,3 +61,31 @@ describe("createTerminalSurfaceLiveHandlers", () => {
     expect(terminal.write).toHaveBeenCalledWith(bytes);
   });
 });
+
+it("refreshes terminal viewport after history write and live ready", async () => {
+  const terminal = {
+    write: vi.fn((_data: string, callback?: () => void) => {
+      callback?.();
+    }),
+    reset: vi.fn(),
+    scrollToBottom: vi.fn(),
+    scrollToLine: vi.fn(),
+    refresh: vi.fn(),
+    rows: 24,
+    buffer: { active: { baseY: 0, viewportY: 0 } },
+  };
+  const handlers = createTerminalSurfaceLiveHandlers({
+    clearStatusMessage: vi.fn(),
+    setInputSuppressed: vi.fn(),
+    showStatusMessage: vi.fn(),
+    t: ((key: string) => key) as never,
+    terminal: terminal as never,
+    transportKey: "project:1:2",
+  });
+
+  await handlers.writeHistory("prompt$ ", { restoreSequence: 3 });
+  expect(terminal.refresh).toHaveBeenCalledWith(0, 23);
+
+  handlers.onLiveReady();
+  expect(terminal.refresh).toHaveBeenCalledTimes(2);
+});

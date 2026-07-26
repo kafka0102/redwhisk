@@ -449,14 +449,30 @@ export function ProjectTerminalsActivity({
           className="project-terminals-workspace"
           aria-label={messages.agentsFeature.workspaceLabel}
         >
-          {activeTerminal && activeSessionId !== null ? (
-            <div className="project-terminals-workspace__surface">
-              <ProjectTerminal
-                projectId={projectId}
-                sessionId={activeSessionId}
-              />
+          {/* 所有活跃 session 常驻挂载，用 hidden 切换显隐，避免切终端 Tab 时
+              卸载 xterm → 再 catch-up 整段 log（Codex 花屏/空白的主因之一）。 */}
+          {terminalCards.some((card) => card.sessionId !== 0) ? (
+            <div
+              className="project-terminals-workspace__surface"
+              hidden={activeSessionId === null}
+            >
+              {terminalCards
+                .filter((card) => card.sessionId !== 0)
+                .map((card) => (
+                  <div
+                    key={card.configId}
+                    className="project-terminals-workspace__pane"
+                    hidden={card.configId !== activeTerminal?.configId}
+                  >
+                    <ProjectTerminal
+                      projectId={projectId}
+                      sessionId={card.sessionId}
+                    />
+                  </div>
+                ))}
             </div>
-          ) : (
+          ) : null}
+          {activeSessionId === null ? (
             <div className="project-terminals-workspace__empty">
               <div className="project-terminals-workspace__empty-copy">
                 <h3>{activeTerminal?.name ?? messages.settings.terminals}</h3>
@@ -475,7 +491,7 @@ export function ProjectTerminalsActivity({
                 <span>{messages.settings.newTerminal}</span>
               </Button>
             </div>
-          )}
+          ) : null}
         </section>
       </main>
 

@@ -80,6 +80,9 @@ export class TerminalLivePipeline {
 
     this.phase = "catchingUp";
     const generation = ++this.generation;
+    // 隐藏期间若 sequence 未前进，xterm 缓冲区仍有效；跳过整段 log 回放，
+    // 避免 Codex 等 in-place TUI 切 tab 时 reset+重放导致花屏/空白。
+    const previousSequence = this.latestSequence;
 
     try {
       await this.transport.setLiveSubscription(true);
@@ -92,19 +95,24 @@ export class TerminalLivePipeline {
         return;
       }
 
-      const snapshotResult = await this.transport.readSnapshot(
-        TERMINAL_HISTORY_MAX_BYTES,
-      );
-      if (!this.isCurrentGeneration(generation)) {
-        return;
-      }
+      const viewUnchanged =
+        previousSequence > 0 && restoreResult.sequence === previousSequence;
 
-      if (snapshotResult.snapshot) {
-        await this.callbacks.writeHistory(snapshotResult.snapshot, {
-          restoreSequence: restoreResult.sequence,
-        });
+      if (!viewUnchanged) {
+        const snapshotResult = await this.transport.readSnapshot(
+          TERMINAL_HISTORY_MAX_BYTES,
+        );
         if (!this.isCurrentGeneration(generation)) {
           return;
+        }
+
+        if (snapshotResult.snapshot) {
+          await this.callbacks.writeHistory(snapshotResult.snapshot, {
+            restoreSequence: restoreResult.sequence,
+          });
+          if (!this.isCurrentGeneration(generation)) {
+            return;
+          }
         }
       }
 
@@ -121,6 +129,7 @@ export class TerminalLivePipeline {
 
       // 历史一律从磁盘 log 回放；restore.isComplete 只表示内存缓冲是否自 session
       // 起点完整，不影响可见内容与 live sequence 对齐，故不向用户展示噪音提示。
+      // view 未变时也走 onLiveReady：用于 WebGL 在 display:none 后强制重绘。
       this.callbacks.onLiveReady();
       this.phase = "live";
       this.flushPendingEvents();

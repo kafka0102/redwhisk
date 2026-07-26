@@ -296,3 +296,78 @@ describe("TerminalLivePipeline", () => {
     expect(pipeline.getLatestSequence()).toBe(42);
   });
 });
+
+it("skips history rewrite when re-visible with unchanged sequence", async () => {
+  const writeHistory = vi.fn();
+  const onLiveReady = vi.fn();
+  const transport = createTransport({
+    restore: vi.fn(async () => ({
+      sequence: 10,
+      chunks: [],
+      isComplete: true,
+      isActive: true,
+    })),
+    readSnapshot: vi.fn(async () => ({
+      snapshot: "history-tail",
+      isActive: true,
+    })),
+  });
+  const pipeline = new TerminalLivePipeline(transport, {
+    writeBytes: vi.fn(),
+    writeHistory,
+    onRestoreError: vi.fn(),
+    onInactive: vi.fn(),
+    onLiveReady,
+    onPendingDropped: vi.fn(),
+  });
+
+  await pipeline.becomeVisible();
+  expect(writeHistory).toHaveBeenCalledTimes(1);
+  expect(transport.readSnapshot).toHaveBeenCalledTimes(1);
+
+  await pipeline.becomeHidden();
+  await pipeline.becomeVisible();
+
+  // sequence 未变：保留 xterm 缓冲，避免 TUI log 全量重放花屏
+  expect(writeHistory).toHaveBeenCalledTimes(1);
+  expect(transport.readSnapshot).toHaveBeenCalledTimes(1);
+  expect(onLiveReady).toHaveBeenCalledTimes(2);
+  expect(pipeline.getPhase()).toBe("live");
+  expect(pipeline.getLatestSequence()).toBe(10);
+});
+
+it("rewrites history when sequence advanced while hidden", async () => {
+  const writeHistory = vi.fn();
+  let restoreSequence = 10;
+  const transport = createTransport({
+    restore: vi.fn(async () => ({
+      sequence: restoreSequence,
+      chunks: [],
+      isComplete: true,
+      isActive: true,
+    })),
+    readSnapshot: vi.fn(async () => ({
+      snapshot: `history-${restoreSequence}`,
+      isActive: true,
+    })),
+  });
+  const pipeline = new TerminalLivePipeline(transport, {
+    writeBytes: vi.fn(),
+    writeHistory,
+    onRestoreError: vi.fn(),
+    onInactive: vi.fn(),
+    onLiveReady: vi.fn(),
+    onPendingDropped: vi.fn(),
+  });
+
+  await pipeline.becomeVisible();
+  await pipeline.becomeHidden();
+  restoreSequence = 12;
+  await pipeline.becomeVisible();
+
+  expect(writeHistory).toHaveBeenCalledTimes(2);
+  expect(writeHistory).toHaveBeenLastCalledWith("history-12", {
+    restoreSequence: 12,
+  });
+  expect(pipeline.getLatestSequence()).toBe(12);
+});

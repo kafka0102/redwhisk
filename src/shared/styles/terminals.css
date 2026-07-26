@@ -296,6 +296,21 @@
   background: var(--color-surface);
 }
 
+.project-terminals-workspace__surface[hidden] {
+  display: none;
+}
+
+.project-terminals-workspace__pane {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.project-terminals-workspace__pane[hidden] {
+  display: none;
+}
+
 .project-terminals-workspace__surface .terminal-surface-shell {
   min-height: 0;
   height: 100%;

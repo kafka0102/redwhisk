@@ -426,6 +426,19 @@
   min-height: 0;
 }
 
+/* 终端 Activity 常驻宿主：与当前 Activity 并存时用 hidden 切出布局流。 */
+.activity-keep-alive-host {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.activity-keep-alive-host[hidden] {
+  display: none;
+}
+
 .agent-session-monitor {
   position: fixed;
   z-index: 40;

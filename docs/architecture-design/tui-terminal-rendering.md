@@ -144,7 +144,8 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 
 1. **resize 稳定化**：spawn 前尽量用上次窗口尺寸；首帧 fit 完成前延迟注入 prompt（降低 DECSTBM 错位窗口）。  
 2. **catch-up 与 live 的“半帧”对齐**：若 tail 起点不是 synchronized update 边界，可向前扩到最近的 `CSI ?2026 h`（进一步减少首帧花屏）。  
-3. **可见性/订阅**：保持“隐藏不 fit、隐藏不写 xterm、再可见整段 catch-up”的状态机，禁止在 hidden 时写半屏。
+3. **可见性/订阅**：保持“隐藏不 fit、隐藏不写 xterm”；**sequence 未变时跳过 rewrite**（已实现，见 `TerminalLivePipeline.becomeVisible`），仅在隐藏期间有新输出时整段 catch-up。终端 Activity 与终端卡片均常驻挂载 + `hidden` 切换，避免切 Tab 卸载 xterm。  
+4. **WebGL 重绘**：history 写完 / re-visible 时 `terminal.refresh`，避免空闲 shell「空白直到按键」的假象（已实现）。
 
 ### P2（产品增强，非 bugfix）
 

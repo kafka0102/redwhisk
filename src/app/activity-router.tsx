@@ -1,4 +1,11 @@
-import { lazy, Suspense, type Dispatch, type SetStateAction } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 
 import { IssuesActivity } from "../features/issues/issues-activity";
 import type { IssueOpenRequest } from "../features/issues/issue-open-request";
@@ -89,11 +96,26 @@ export function ActivityRouter({
   requestedIssue,
 }: ActivityRouterProps) {
   const { messages } = useI18n();
+  // 终端 Activity 一旦打开就常驻挂载（hidden 切换），保留 xterm 与 live sequence，
+  // 避免切到 Issues 再回来时整页卸载 → catch-up 重放 Codex log 花屏/空白。
+  const [terminalsMounted, setTerminalsMounted] = useState(
+    () => activeActivity === "terminals",
+  );
+  if (activeActivity === "terminals" && !terminalsMounted) {
+    setTerminalsMounted(true);
+  }
+
+  const loadingFallback = (
+    <p className="activity-surface__loading" role="status">
+      {messages.settings.loading}
+    </p>
+  );
 
   // 默认 issues 保持同步加载；其余 Activity 按需 chunk，避免新项目窗口冷启动
   // 同步解析 Monaco / xterm / Agents 等大依赖。
+  let primaryActivity: ReactNode = null;
   if (activeActivity === "issues") {
-    return (
+    primaryActivity = (
       <IssuesActivity
         key={projectId}
         issuesReturnSignal={issuesReturnSignal}
@@ -104,70 +126,77 @@ export function ActivityRouter({
         worktreeSetupCommand={projectWorktreeSetupCommand}
       />
     );
-  }
-
-  let activity = null;
-  if (activeActivity === "agents") {
-    activity = (
-      <AgentsActivity
-        activeSessionId={activeAgentSessionId}
-        onOpenIssue={onOpenIssue}
-        onSelectSession={onSelectAgentSession}
-        projectId={projectId}
-      />
+  } else if (activeActivity === "agents") {
+    primaryActivity = (
+      <Suspense fallback={loadingFallback}>
+        <AgentsActivity
+          activeSessionId={activeAgentSessionId}
+          onOpenIssue={onOpenIssue}
+          onSelectSession={onSelectAgentSession}
+          projectId={projectId}
+        />
+      </Suspense>
     );
   } else if (activeActivity === "code") {
-    activity = (
-      <CodeActivity
-        key={projectId}
-        projectId={projectId}
-        roots={projectCodeWorkspaces}
-      />
+    primaryActivity = (
+      <Suspense fallback={loadingFallback}>
+        <CodeActivity
+          key={projectId}
+          projectId={projectId}
+          roots={projectCodeWorkspaces}
+        />
+      </Suspense>
     );
   } else if (activeActivity === "changes") {
-    activity = (
-      <ChangesActivity
-        key={projectId}
-        projectId={projectId}
-        roots={projectCodeWorkspaces}
-      />
-    );
-  } else if (activeActivity === "terminals") {
-    activity = (
-      <ProjectTerminalsActivity
-        key={projectId}
-        onStateChange={onProjectTerminalsStateChange}
-        projectId={projectId}
-        projectName={projectName}
-        projectPath={projectPath}
-        state={projectTerminalsState}
-      />
+    primaryActivity = (
+      <Suspense fallback={loadingFallback}>
+        <ChangesActivity
+          key={projectId}
+          projectId={projectId}
+          roots={projectCodeWorkspaces}
+        />
+      </Suspense>
     );
   } else if (activeActivity === "settings") {
-    activity = (
-      <ProjectSettingsActivity
-        activeMenu={activeProjectSettingsMenu}
-        key={projectId}
-        onMenuChange={onProjectSettingsMenuChange}
-        onProjectUpdated={onProjectUpdated}
-        projectId={projectId}
-        projectName={projectName}
-        projectPath={projectPath}
-        worktreeLocation={projectWorktreeLocation}
-        worktreeSetupCommand={projectWorktreeSetupCommand}
-      />
+    primaryActivity = (
+      <Suspense fallback={loadingFallback}>
+        <ProjectSettingsActivity
+          activeMenu={activeProjectSettingsMenu}
+          key={projectId}
+          onMenuChange={onProjectSettingsMenuChange}
+          onProjectUpdated={onProjectUpdated}
+          projectId={projectId}
+          projectName={projectName}
+          projectPath={projectPath}
+          worktreeLocation={projectWorktreeLocation}
+          worktreeSetupCommand={projectWorktreeSetupCommand}
+        />
+      </Suspense>
     );
   }
 
   return (
-    <Suspense
-      fallback={
-        <p className="activity-surface__loading" role="status">
-          {messages.settings.loading}
-        </p>
-      }
-    >
-      {activity}
-    </Suspense>
+    <>
+      {primaryActivity}
+      {terminalsMounted ? (
+        <Suspense
+          fallback={activeActivity === "terminals" ? loadingFallback : null}
+        >
+          <div
+            className="activity-keep-alive-host"
+            hidden={activeActivity !== "terminals"}
+          >
+            <ProjectTerminalsActivity
+              key={projectId}
+              onStateChange={onProjectTerminalsStateChange}
+              projectId={projectId}
+              projectName={projectName}
+              projectPath={projectPath}
+              state={projectTerminalsState}
+            />
+          </div>
+        </Suspense>
+      ) : null}
+    </>
   );
 }

@@ -225,9 +225,12 @@ describe("ProjectTerminalsActivity", () => {
     expect(
       screen.getByText("This terminal is not running right now."),
     ).toBeInTheDocument();
+    // 其它仍在跑的 terminal 常驻挂载（surface hidden），避免切回时 catch-up 花屏。
+    const kept = screen.getByTestId("project-terminal:1:-1");
+    expect(kept).toBeInTheDocument();
     expect(
-      screen.queryByTestId("project-terminal:1:-1"),
-    ).not.toBeInTheDocument();
+      kept.closest(".project-terminals-workspace__surface"),
+    ).toHaveAttribute("hidden");
   });
 
   it("opens the edit dialog and saves terminal config updates", async () => {
@@ -339,4 +342,51 @@ describe("ProjectTerminalsActivity", () => {
     ).not.toBeInTheDocument();
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
   });
+});
+
+it("keeps inactive terminal surfaces mounted while switching cards", async () => {
+  const user = userEvent.setup();
+  listProjectTerminalsMock.mockResolvedValue({
+    terminals: [
+      {
+        configId: 101,
+        sessionId: -1,
+        name: "API",
+        workingDir: "/tmp/redwhisk/apps/api",
+        launchCommand: "pnpm dev",
+      },
+      {
+        configId: 102,
+        sessionId: -2,
+        name: "Worker",
+        workingDir: "/tmp/redwhisk/apps/worker",
+        launchCommand: "pnpm worker",
+      },
+    ],
+  });
+
+  renderProjectTerminalsActivity();
+
+  await waitFor(() => {
+    expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+  });
+  expect(screen.getByTestId("project-terminal:1:-2")).toBeInTheDocument();
+  expect(
+    screen.getByTestId("project-terminal:1:-2").parentElement,
+  ).toHaveAttribute("hidden");
+
+  await user.click(
+    within(screen.getByLabelText("Project terminals")).getByRole("button", {
+      name: "Worker",
+    }),
+  );
+
+  expect(screen.getByTestId("project-terminal:1:-1")).toBeInTheDocument();
+  expect(screen.getByTestId("project-terminal:1:-2")).toBeInTheDocument();
+  expect(
+    screen.getByTestId("project-terminal:1:-1").parentElement,
+  ).toHaveAttribute("hidden");
+  expect(
+    screen.getByTestId("project-terminal:1:-2").parentElement,
+  ).not.toHaveAttribute("hidden");
 });
