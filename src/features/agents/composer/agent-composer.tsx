@@ -119,11 +119,8 @@ export function AgentComposer({
           if (event.nativeEvent.isComposing) {
             return;
           }
-          // Ctrl/Cmd+Enter、Shift+Enter 提交；纯 Enter 保持换行。
-          if (
-            event.key === "Enter" &&
-            (event.ctrlKey || event.metaKey || event.shiftKey)
-          ) {
+          // Enter 提交；Shift+Enter 保持换行。
+          if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             void handleSubmit();
           }
