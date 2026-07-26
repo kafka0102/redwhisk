@@ -1,4 +1,12 @@
-import { Button, Empty, EmptyTitle } from "@/components/ui";
+import {
+  Button,
+  Empty,
+  EmptyTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui";
 import {
   Table,
   TableBody,
@@ -7,10 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { cn } from "@/lib/utils";
 import { type SavedAgentSkillRecord } from "./settings-commands";
 import { SavedAgentSkillForm } from "./saved-agent-skill-form";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
+import { groupSupportedAgents } from "./saved-agent-skill-display";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface AddSkillFormState {
@@ -84,7 +92,7 @@ export function SkillsSettingsPanel({
                   {messages.settings.scope}
                 </TableHead>
                 <TableHead className="w-80">
-                  {messages.settings.skillPaths}
+                  {messages.settings.supportedAgents}
                 </TableHead>
                 <TableHead className="w-40">
                   {messages.settings.actions}
@@ -97,6 +105,7 @@ export function SkillsSettingsPanel({
                   onEditingSkillChange({ contextProjectId: projectId, skill });
                   onAddFormChange(null);
                 };
+                const supportedAgents = groupSupportedAgents(skill.skillPaths);
 
                 return (
                   <TableRow key={skill.id}>
@@ -117,43 +126,68 @@ export function SkillsSettingsPanel({
                         : messages.settings.projectScope}
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <div className="flex flex-col gap-1">
-                        {skill.skillPaths.map((path, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                          >
-                            <img
-                              alt={formatAgentTypeLabel(path.agentType)}
-                              className="block size-3 shrink-0"
-                              src={getAgentLogoSrc(path.agentType)}
-                            />
-                            <span className="truncate">{path.path}</span>
-                          </span>
-                        ))}
-                      </div>
+                      {supportedAgents.length === 0 ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              type="button"
+                              className="inline-flex max-w-full items-center rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                            >
+                              {messages.settings.notDetected}
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              {messages.settings.notDetectedTooltip}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {supportedAgents.map((agent) => (
+                            <TooltipProvider key={agent.agentType}>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  type="button"
+                                  className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                                >
+                                  <img
+                                    alt={formatAgentTypeLabel(agent.agentType)}
+                                    className="block size-3 shrink-0"
+                                    src={getAgentLogoSrc(agent.agentType)}
+                                  />
+                                  <span className="truncate">
+                                    {formatAgentTypeLabel(agent.agentType)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-sm whitespace-pre-line">
+                                  {agent.paths.join("\n")}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ))}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Button
                           type="button"
-                          variant="link"
+                          variant="ghost"
+                          size="sm"
                           aria-label={`${messages.settings.edit} ${skill.name}`}
-                          className="h-auto p-0 font-semibold hover:no-underline"
+                          className="h-auto px-0"
                           onClick={handleEdit}
                         >
                           {messages.settings.edit}
                         </Button>
                         <Button
                           type="button"
-                          variant="link"
+                          variant="ghost"
+                          size="sm"
                           aria-label={`${messages.settings.delete} ${skill.name}`}
+                          className="h-auto px-0 text-destructive hover:text-destructive"
                           disabled={deletingSkillId === skill.id}
-                          className={cn(
-                            "h-auto p-0 font-semibold text-destructive hover:no-underline",
-                          )}
                           onClick={() => {
-                            onDeleteSkill(skill);
+                            void onDeleteSkill(skill);
                           }}
                         >
                           {messages.settings.delete}
@@ -169,24 +203,58 @@ export function SkillsSettingsPanel({
       )}
 
       {addForm ? (
-        <SavedAgentSkillForm
-          key={`create-skill-${addForm.projectId}`}
-          mode="create"
-          projectId={addForm.projectId}
-          onCancel={() => onAddFormChange(null)}
-          onSaved={onSkillSaved}
-        />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              onAddFormChange(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-label={messages.settings.newSkill}
+            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
+          >
+            <SavedAgentSkillForm
+              mode="create"
+              projectId={projectId}
+              onCancel={() => {
+                onAddFormChange(null);
+              }}
+              onSaved={onSkillSaved}
+            />
+          </div>
+        </div>
       ) : null}
 
       {editingSkill ? (
-        <SavedAgentSkillForm
-          key={`edit-skill-${editingSkill.skill.id}`}
-          skill={editingSkill.skill}
-          mode="edit"
-          projectId={projectId}
-          onCancel={() => onEditingSkillChange(null)}
-          onSaved={onSkillSaved}
-        />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              onEditingSkillChange(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-label={messages.settings.editSkill}
+            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
+          >
+            <SavedAgentSkillForm
+              mode="edit"
+              skill={editingSkill.skill}
+              projectId={projectId}
+              onCancel={() => {
+                onEditingSkillChange(null);
+              }}
+              onSaved={onSkillSaved}
+            />
+          </div>
+        </div>
       ) : null}
     </>
   );

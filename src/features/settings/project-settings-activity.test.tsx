@@ -12,6 +12,8 @@ import {
   listProjectLabels,
   listSavedAgentSkills,
   previewAgentCommandArgs,
+  reconcileSavedAgentSkills,
+  refreshAgentSkills,
   saveAgentProfile,
   saveProjectLabel,
   testAgentCommand,
@@ -46,6 +48,8 @@ vi.mock("./settings-commands", async (importOriginal) => {
     listProjectLabels: vi.fn(),
     listSavedAgentSkills: vi.fn(),
     previewAgentCommandArgs: vi.fn(),
+    reconcileSavedAgentSkills: vi.fn(),
+    refreshAgentSkills: vi.fn(),
     saveAgentProfile: vi.fn(),
     saveProjectLabel: vi.fn(),
   };
@@ -99,6 +103,8 @@ const testAgentCommandMock = vi.mocked(testAgentCommand);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listAgentSkillsMock = vi.mocked(listAgentSkills);
 const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
+const reconcileSavedAgentSkillsMock = vi.mocked(reconcileSavedAgentSkills);
+const refreshAgentSkillsMock = vi.mocked(refreshAgentSkills);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const saveProjectLabelMock = vi.mocked(saveProjectLabel);
@@ -180,6 +186,8 @@ describe("ProjectSettingsActivity", () => {
     listAgentProfilesMock.mockReset();
     listAgentSkillsMock.mockReset();
     listSavedAgentSkillsMock.mockReset();
+    reconcileSavedAgentSkillsMock.mockReset();
+    refreshAgentSkillsMock.mockReset();
     listProjectLabelsMock.mockReset();
     saveAgentProfileMock.mockReset();
     saveProjectLabelMock.mockReset();
@@ -270,6 +278,8 @@ describe("ProjectSettingsActivity", () => {
               },
             ],
     }));
+    reconcileSavedAgentSkillsMock.mockResolvedValue({ changedCount: 0 });
+    refreshAgentSkillsMock.mockResolvedValue({ changedCount: 0 });
   });
 
   it("renders two-column layout with general menu active by default", async () => {
@@ -778,6 +788,205 @@ describe("ProjectSettingsActivity", () => {
     expect(
       screen.getByRole("dialog", { name: "Edit skill" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows Add skill / Refresh skills actions and Supported agents column", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Refresh skills" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add skill" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Supported agents" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.queryByText("Not detected")).not.toBeInTheDocument();
+  });
+
+  it("shows Not detected when a saved skill has empty paths", async () => {
+    const user = userEvent.setup();
+    listSavedAgentSkillsMock.mockImplementation(async ({ scope }) => ({
+      skills:
+        scope === "project"
+          ? []
+          : [
+              {
+                id: 2,
+                name: "missing-skill",
+                scope: "global",
+                projectId: null,
+                skillPaths: [],
+              },
+            ],
+    }));
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    expect(await screen.findByText("Not detected")).toBeInTheDocument();
+  });
+
+  it("silently reconciles saved skills when opening the skills menu", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+
+    await waitFor(() => {
+      expect(reconcileSavedAgentSkillsMock).toHaveBeenCalledWith({
+        scope: "project",
+        projectId: 1,
+      });
+      expect(reconcileSavedAgentSkillsMock).toHaveBeenCalledWith({
+        scope: "global",
+        projectId: null,
+      });
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes skills with a non-dismissible dialog and success toast", async () => {
+    const user = userEvent.setup();
+    const deferred: {
+      resolve: ((value: { changedCount: number }) => void) | undefined;
+    } = { resolve: undefined };
+    refreshAgentSkillsMock.mockImplementation(
+      () =>
+        new Promise<{ changedCount: number }>((resolve) => {
+          deferred.resolve = resolve;
+        }),
+    );
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh skills" }),
+    );
+
+    expect(screen.getByText("Scanning skills…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /close/i }),
+    ).not.toBeInTheDocument();
+
+    listSavedAgentSkillsMock.mockImplementation(async ({ scope }) => ({
+      skills:
+        scope === "project"
+          ? []
+          : [
+              {
+                id: 1,
+                name: "codex-global",
+                scope: "global",
+                projectId: null,
+                skillPaths: [
+                  {
+                    agentType: "codex",
+                    path: "/home/me/.agents/skills/codex-global/SKILL.md",
+                  },
+                  {
+                    agentType: "opencode",
+                    path: "/home/me/.agents/skills/codex-global/SKILL.md",
+                  },
+                ],
+              },
+            ],
+    }));
+
+    expect(deferred.resolve).toBeDefined();
+    deferred.resolve!({ changedCount: 0 });
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("Skills refreshed");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Scanning skills…")).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText("OpenCode")).toBeInTheDocument();
+  });
+
+  it("shows changed-count toast after refresh when reconcile updates skills", async () => {
+    const user = userEvent.setup();
+    refreshAgentSkillsMock.mockResolvedValue({ changedCount: 3 });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh skills" }),
+    );
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        "Skills refreshed. Support info updated for 3 skill(s).",
+      );
+    });
+  });
+
+  it("shows error toast when refresh fails", async () => {
+    const user = userEvent.setup();
+    refreshAgentSkillsMock.mockRejectedValue(new Error("scan failed"));
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Skills" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Refresh skills" }),
+    );
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalled();
+    });
   });
 
   it("shows agents in a table below the header action", async () => {

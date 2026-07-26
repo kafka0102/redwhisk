@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +22,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -35,10 +40,10 @@ import {
   saveSavedAgentSkill,
   type AgentSkillRecord,
   type AgentSkillScope,
-  type SavedAgentSkillPath,
   type SavedAgentSkillRecord,
 } from "./settings-commands";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
+import { orderSkillPathEntries } from "./saved-agent-skill-display";
 
 interface SavedAgentSkillFormProps {
   skill?: SavedAgentSkillRecord;
@@ -60,113 +65,77 @@ export function SavedAgentSkillForm({
   const [searchValue, setSearchValue] = useState("");
   const [scope, setScope] = useState<AgentSkillScope>(skill?.scope ?? "global");
   const [skillName, setSkillName] = useState(skill?.name ?? "");
-  const [selectedPaths, setSelectedPaths] = useState<SavedAgentSkillPath[]>(
-    skill?.skillPaths ?? [],
-  );
   const [availableSkills, setAvailableSkills] = useState<AgentSkillRecord[]>(
     [],
   );
   const [skillsLoadState, setSkillsLoadState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
+    "loading" | "ready" | "error"
+  >("loading");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
 
-  const loadSkills = useCallback(
-    async (targetScope: AgentSkillScope) => {
-      setSkillsLoadState("loading");
-      try {
-        const result = await listAgentSkills({
-          projectId: targetScope === "project" ? projectId : null,
-        });
+  useEffect(() => {
+    let mounted = true;
+    void listAgentSkills({
+      projectId: scope === "project" ? projectId : null,
+    })
+      .then((result) => {
+        if (!mounted) {
+          return;
+        }
         setAvailableSkills(result.skills);
         setSkillsLoadState("ready");
-      } catch {
+      })
+      .catch(() => {
+        if (!mounted) {
+          return;
+        }
         setSkillsLoadState("error");
-      }
-    },
-    [projectId],
-  );
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [projectId, scope]);
 
   const handleScopeChange = useCallback((newScope: AgentSkillScope) => {
     setScope(newScope);
     setSkillName("");
-    setSelectedPaths([]);
     setNameError(null);
+    setAvailableSkills([]);
+    setSkillsLoadState("loading");
   }, []);
 
   const normalizedSkills = useMemo(() => {
     const skillMap = new Map<string, AgentSkillRecord[]>();
-    for (const skill of availableSkills) {
-      const existing = skillMap.get(skill.name) ?? [];
-      existing.push(skill);
-      skillMap.set(skill.name, existing);
+    for (const item of availableSkills) {
+      const existing = skillMap.get(item.name) ?? [];
+      existing.push(item);
+      skillMap.set(item.name, existing);
     }
     return skillMap;
   }, [availableSkills]);
 
   const availableSkillNames = Array.from(normalizedSkills.keys()).sort();
 
-  const selectedSkillPaths = useMemo(() => {
-    if (!skillName) return [];
-    return normalizedSkills.get(skillName) ?? [];
-  }, [skillName, normalizedSkills]);
-
-  const pathSelectionMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-    for (const path of selectedPaths) {
-      map.set(`${path.agentType}:${path.path}`, true);
+  const scannedPaths = useMemo(() => {
+    if (!skillName) {
+      return [];
     }
-    return map;
-  }, [selectedPaths]);
-
-  const allPathsSelected =
-    selectedSkillPaths.length > 0 &&
-    selectedSkillPaths.every((path) =>
-      pathSelectionMap.get(`${path.agentType}:${path.path}`),
+    const records = normalizedSkills.get(skillName) ?? [];
+    return orderSkillPathEntries(
+      records.map((record) => ({
+        agentType: record.agentType,
+        path: record.path,
+      })),
     );
+  }, [skillName, normalizedSkills]);
 
   const handleSelectSkillName = (name: string) => {
     setSkillName(name);
     setSearchValue("");
     setOpen(false);
-    const paths = normalizedSkills.get(name) ?? [];
-    const newSelectedPaths = paths.map((p) => ({
-      agentType: p.agentType,
-      path: p.path,
-    }));
-    setSelectedPaths(newSelectedPaths);
     setNameError(null);
-  };
-
-  const togglePath = (path: AgentSkillRecord) => {
-    const key = `${path.agentType}:${path.path}`;
-    if (pathSelectionMap.get(key)) {
-      setSelectedPaths((prev) =>
-        prev.filter(
-          (p) => !(p.agentType === path.agentType && p.path === path.path),
-        ),
-      );
-    } else {
-      setSelectedPaths((prev) => [
-        ...prev,
-        { agentType: path.agentType, path: path.path },
-      ]);
-    }
-  };
-
-  const toggleAllPaths = () => {
-    if (allPathsSelected) {
-      setSelectedPaths([]);
-    } else {
-      setSelectedPaths(
-        selectedSkillPaths.map((p) => ({
-          agentType: p.agentType,
-          path: p.path,
-        })),
-      );
-    }
   };
 
   function validateName(name: string): string | null {
@@ -181,7 +150,7 @@ export function SavedAgentSkillForm({
     event.preventDefault();
     const nextNameError = validateName(skillName);
     setNameError(nextNameError);
-    if (nextNameError) {
+    if (nextNameError || scannedPaths.length === 0) {
       return;
     }
 
@@ -194,12 +163,12 @@ export function SavedAgentSkillForm({
         name: skillName.trim(),
         scope,
         projectId: scope === "project" ? projectId : null,
-        skillPaths: selectedPaths,
+        skillPaths: scannedPaths,
       });
       onSaved(saved);
     } catch (error: unknown) {
-      const err = toCommandError(error);
-      if (err.code === "duplicate_name") {
+      const commandError = toCommandError(error);
+      if (commandError?.code === "DUPLICATE_NAME") {
         setNameError(messages.settings.skillNameDuplicate);
       } else {
         setStatusMessage(getCommandErrorMessage(error, t));
@@ -215,34 +184,25 @@ export function SavedAgentSkillForm({
       : messages.settings.editSkill;
 
   return (
-    <div
-      className="issue-dialog-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-    >
-      <form
-        className="issue-dialog"
-        aria-label={dialogTitle}
-        aria-modal="true"
-        role="dialog"
-        onSubmit={handleSubmit}
-      >
-        <div className="issue-dialog__header">
-          <h3>{dialogTitle}</h3>
-          <button
-            aria-label={messages.settings.close}
-            className="issue-dialog__close"
-            type="button"
-            onClick={onCancel}
-          >
-            &times;
-          </button>
-        </div>
+    <div className="grid gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold">{dialogTitle}</h4>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={messages.settings.close}
+          onClick={onCancel}
+        >
+          {messages.settings.close}
+        </Button>
+      </div>
 
-        <div className="agent-dialog__body">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => void handleSubmit(event)}
+      >
+        <div className="grid gap-3">
           <div className="grid gap-1.5">
             <Label
               htmlFor="skill-scope"
@@ -257,9 +217,7 @@ export function SavedAgentSkillForm({
               ]}
               value={scope}
               onValueChange={(value) => {
-                const nextScope = value as AgentSkillScope;
-                handleScopeChange(nextScope);
-                void loadSkills(nextScope);
+                handleScopeChange(value as AgentSkillScope);
               }}
             >
               <SelectTrigger
@@ -295,11 +253,6 @@ export function SavedAgentSkillForm({
                   aria-expanded={open}
                   className="w-full justify-between"
                   id="skill-name"
-                  onClick={() => {
-                    if (skillsLoadState === "idle") {
-                      void loadSkills(scope);
-                    }
-                  }}
                 >
                   {skillName || messages.settings.selectSkillName}
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -364,48 +317,37 @@ export function SavedAgentSkillForm({
             ) : null}
           </div>
 
-          {selectedSkillPaths.length > 0 ? (
+          {skillName && skillsLoadState === "ready" ? (
             <div className="grid gap-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">
-                  {messages.settings.skillPaths}
-                </Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  onClick={toggleAllPaths}
-                  className="h-auto px-2 py-1 text-xs"
-                >
-                  {allPathsSelected ? "Deselect All" : "Select All"}
-                </Button>
-              </div>
-              <div className="max-h-48 overflow-auto rounded border border-border p-2">
-                {selectedSkillPaths.map((path, index) => {
-                  const key = `${path.agentType}:${path.path}`;
-                  const isSelected = pathSelectionMap.get(key) ?? false;
-                  return (
-                    <div key={index} className="flex items-center gap-2 py-1.5">
-                      <Checkbox
-                        id={`path-${index}`}
-                        checked={isSelected}
-                        onCheckedChange={() => togglePath(path)}
-                      />
+              <Label className="text-xs text-muted-foreground">
+                {messages.settings.skillPaths}
+              </Label>
+              {scannedPaths.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {messages.settings.notDetected}
+                </p>
+              ) : (
+                <div className="max-h-48 overflow-auto rounded border border-border p-2">
+                  {scannedPaths.map((path, index) => (
+                    <div
+                      key={`${path.agentType}:${path.path}:${index}`}
+                      className="flex items-center gap-2 py-1.5"
+                    >
                       <img
                         alt={formatAgentTypeLabel(path.agentType)}
-                        className="block size-4"
+                        className="block size-4 shrink-0"
                         src={getAgentLogoSrc(path.agentType)}
                       />
-                      <label
-                        htmlFor={`path-${index}`}
-                        className="text-sm text-muted-foreground cursor-pointer flex-1 truncate"
-                      >
+                      <span className="shrink-0 text-sm font-medium">
+                        {formatAgentTypeLabel(path.agentType)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                         {path.path}
-                      </label>
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
         </div>
@@ -424,7 +366,7 @@ export function SavedAgentSkillForm({
           <button
             className="issues-button issues-button--primary"
             type="submit"
-            disabled={isSaving || selectedPaths.length === 0}
+            disabled={isSaving || scannedPaths.length === 0}
           >
             {isSaving ? messages.settings.saving : messages.settings.save}
           </button>

@@ -10,6 +10,7 @@ import { Bot, Info, Tag, Wrench } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
+import { LoadingDialog } from "@/components/ui/loading-dialog";
 import {
   deleteAgentProfile,
   deleteProjectLabel,
@@ -17,6 +18,8 @@ import {
   listAgentProfiles,
   listProjectLabels,
   listSavedAgentSkills,
+  reconcileSavedAgentSkills,
+  refreshAgentSkills,
   type AgentProfileRecord,
   type ProjectLabelRecord,
   type SavedAgentSkillRecord,
@@ -179,6 +182,7 @@ export function ProjectSettingsActivity({
     null,
   );
   const [deletingSkillId, setDeletingSkillId] = useState<number | null>(null);
+  const [isRefreshingSkills, setIsRefreshingSkills] = useState(false);
   const dragStateRef = useRef<{
     startWidth: number;
     startX: number;
@@ -331,6 +335,47 @@ export function ProjectSettingsActivity({
     };
   }, [projectId, t]);
 
+  // 进入技能页：静默对账项目 + 全局已添加技能后重拉列表，不弹 toast。
+  useEffect(() => {
+    if (activeMenu !== "skills") {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function reconcileAndReload() {
+      try {
+        await Promise.all([
+          reconcileSavedAgentSkills({ scope: "project", projectId }),
+          reconcileSavedAgentSkills({ scope: "global", projectId: null }),
+        ]);
+        if (!isMounted) {
+          return;
+        }
+        const [projectResponse, globalResponse] = await Promise.all([
+          listSavedAgentSkills({ scope: "project", projectId }),
+          listSavedAgentSkills({ scope: "global", projectId: null }),
+        ]);
+        if (!isMounted) {
+          return;
+        }
+        setProjectSkills(projectResponse.skills);
+        setGlobalSkills(globalResponse.skills);
+        setSkillsErrorMessage(null);
+        setSkillsProjectId(projectId);
+        setSkillsLoadState("ready");
+      } catch {
+        // 静默对账失败不打断页面；保留已加载列表，用户可手动刷新。
+      }
+    }
+
+    void reconcileAndReload();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeMenu, projectId]);
+
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
       if (!dragStateRef.current) {
@@ -399,6 +444,38 @@ export function ProjectSettingsActivity({
     });
     setAddSkillForm(null);
     setEditingSkill(null);
+  }
+
+  async function handleRefreshSkills() {
+    if (isRefreshingSkills) {
+      return;
+    }
+
+    setIsRefreshingSkills(true);
+    try {
+      const result = await refreshAgentSkills({ projectId });
+      const [projectResponse, globalResponse] = await Promise.all([
+        listSavedAgentSkills({ scope: "project", projectId }),
+        listSavedAgentSkills({ scope: "global", projectId: null }),
+      ]);
+      setProjectSkills(projectResponse.skills);
+      setGlobalSkills(globalResponse.skills);
+      setSkillsErrorMessage(null);
+      setSkillsProjectId(projectId);
+      setSkillsLoadState("ready");
+
+      if (result.changedCount >= 1) {
+        toast.success(
+          messages.settings.skillsRefreshedWithChanges(result.changedCount),
+        );
+      } else {
+        toast.success(messages.settings.skillsRefreshed);
+      }
+    } catch (error: unknown) {
+      toast.error(getCommandErrorMessage(error, t));
+    } finally {
+      setIsRefreshingSkills(false);
+    }
   }
 
   async function handleDeleteProfile(profile: AgentProfileRecord) {
@@ -631,17 +708,30 @@ export function ProjectSettingsActivity({
                   <span>{messages.settings.newLabel}</span>
                 </Button>
               ) : activeMenu === "skills" ? (
-                <Button
-                  variant="outline"
-                  type="button"
-                  aria-label={messages.settings.newSkill}
-                  onClick={() => {
-                    setAddSkillForm({ projectId });
-                    setEditingSkill(null);
-                  }}
-                >
-                  <span>{messages.settings.newSkill}</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    aria-label={messages.settings.refreshSkills}
+                    disabled={isRefreshingSkills}
+                    onClick={() => {
+                      void handleRefreshSkills();
+                    }}
+                  >
+                    <span>{messages.settings.refreshSkills}</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    aria-label={messages.settings.newSkill}
+                    onClick={() => {
+                      setAddSkillForm({ projectId });
+                      setEditingSkill(null);
+                    }}
+                  >
+                    <span>{messages.settings.newSkill}</span>
+                  </Button>
+                </div>
               ) : null
             }
           >
@@ -707,6 +797,11 @@ export function ProjectSettingsActivity({
           </SettingsContentFrame>
         </div>
       </div>
+      <LoadingDialog
+        dismissible={false}
+        message={messages.settings.scanningSkills}
+        open={isRefreshingSkills}
+      />
       {confirmationDialog}
     </main>
   );

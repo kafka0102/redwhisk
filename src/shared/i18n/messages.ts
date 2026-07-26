@@ -160,6 +160,13 @@ export interface I18nMessages {
     editSkill: string;
     manageSkills: string;
     skillPaths: string;
+    supportedAgents: string;
+    refreshSkills: string;
+    scanningSkills: string;
+    skillsRefreshed: string;
+    skillsRefreshedWithChanges: (count: number) => string;
+    notDetected: string;
+    notDetectedTooltip: string;
     selectSkillName: string;
     searchSkillName: string;
     skillNameDuplicate: string;
