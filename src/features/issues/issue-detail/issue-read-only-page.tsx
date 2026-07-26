@@ -541,17 +541,21 @@ function StatusMenu({
         <div className="issue-dialog__status-popup" role="menu">
           {ISSUE_STATUS_ORDER.map((status) => {
             const isCurrent = status === currentStatus;
+            // 已完成 Issue 只能回退到 backlog，不允许改到 running/review。
+            const isBlockedFromCompleted =
+              currentStatus === "completed" &&
+              (status === "running" || status === "review");
 
             return (
               <button
                 key={status}
                 className="issue-dialog__status-option"
-                disabled={isSaving || isCurrent}
+                disabled={isSaving || isCurrent || isBlockedFromCompleted}
                 role="menuitem"
                 type="button"
                 onClick={() => {
                   setIsStatusMenuOpen(false);
-                  if (!isCurrent) {
+                  if (!isCurrent && !isBlockedFromCompleted) {
                     onAdvanceStatus(status);
                   }
                 }}

@@ -667,6 +667,29 @@ impl<'connection> IssueService<'connection> {
             return self.hydrate_issue(issue);
         }
 
+        // 已完成 Issue 只允许回退到 backlog，禁止直接改到 running/review。
+        if issue.status == IssueStatus::Completed
+            && matches!(
+                input.target_status,
+                IssueStatus::Running | IssueStatus::Review
+            )
+        {
+            return Err(CommandError::new(
+                CommandErrorCode::IssueValidationFailed,
+                "已完成的 Issue 只能回退到待办，不能标记为进行中或待审核。",
+            )
+            .with_reason("completedCanOnlyReturnToBacklog")
+            .with_detail(
+                ErrorDetail::new("IssueStatus")
+                    .with_value("issueId", input.issue_id)
+                    .with_value("status", issue_status_to_str(&issue.status))
+                    .with_value(
+                        "targetStatus",
+                        issue_status_to_str(&input.target_status),
+                    ),
+            ));
+        }
+
         match input.target_status {
             IssueStatus::Backlog => self.rollback_issue_to_backlog_with_transaction(input, issue),
             IssueStatus::Running | IssueStatus::Review | IssueStatus::Completed => {

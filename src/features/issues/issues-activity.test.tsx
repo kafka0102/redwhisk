@@ -3327,6 +3327,44 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("only allows completed issues to return to backlog from the status menu", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [completedIssue] });
+    advanceIssueStatusMock.mockResolvedValueOnce({
+      ...completedIssue,
+      status: "backlog",
+      updatedAt: completedIssue.updatedAt + 1_000,
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Completed issue" }),
+    );
+    const dialog = screen.getByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Open status options" }),
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Backlog" })).toBeEnabled();
+    expect(
+      screen.getByRole("menuitem", { name: "In Progress" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Review" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Done" })).toBeDisabled();
+
+    await user.click(screen.getByRole("menuitem", { name: "Backlog" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueId: completedIssue.id,
+        targetStatus: "backlog",
+      }),
+    );
+  });
+
   it("shows a blocking loading dialog while advancing status and hides it when done", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [runningIssue] });

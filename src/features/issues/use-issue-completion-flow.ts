@@ -151,6 +151,14 @@ export function useIssueCompletionFlow({
       return;
     }
 
+    // 已完成 Issue 只能回退到 backlog（后端同步强校验）。
+    if (
+      selectedIssue.status === "completed" &&
+      (targetStatus === "running" || targetStatus === "review")
+    ) {
+      return;
+    }
+
     const currentIssue = selectedIssue;
     const isBackwardTransition =
       issueStatusRank(targetStatus) < issueStatusRank(currentIssue.status);

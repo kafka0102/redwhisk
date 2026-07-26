@@ -4146,6 +4146,108 @@ fn advance_issue_status_allows_backward_transition_to_running() {
 }
 
 #[test]
+fn advance_issue_status_rejects_completed_to_running_or_review() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "completed-no-mid-status-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Done only to backlog".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'completed' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set completed");
+
+    let running_error = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Running,
+        })
+        .expect_err("completed -> running should fail");
+    assert_eq!(running_error.code, CommandErrorCode::IssueValidationFailed);
+    assert_eq!(
+        running_error.reason.as_deref(),
+        Some("completedCanOnlyReturnToBacklog")
+    );
+
+    let review_error = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Review,
+        })
+        .expect_err("completed -> review should fail");
+    assert_eq!(review_error.code, CommandErrorCode::IssueValidationFailed);
+    assert_eq!(
+        review_error.reason.as_deref(),
+        Some("completedCanOnlyReturnToBacklog")
+    );
+
+    let stored_status: String = database
+        .connection
+        .query_row(
+            "SELECT status FROM issues WHERE id = ?1",
+            [issue.id],
+            |row| row.get(0),
+        )
+        .expect("read status");
+    assert_eq!(stored_status, "completed");
+}
+
+#[test]
+fn advance_issue_status_allows_completed_to_backlog() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "completed-to-backlog-repo");
+    let service = IssueService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+    );
+    let issue = service
+        .create_issue(CreateIssueInput {
+            project_id,
+            title: "Reopen via backlog".to_string(),
+            description: "".to_string(),
+            attachments: Vec::new(),
+            label_ids: Vec::new(),
+        })
+        .expect("created issue");
+    database
+        .connection
+        .execute(
+            "UPDATE issues SET status = 'completed' WHERE id = ?1",
+            [issue.id],
+        )
+        .expect("set completed");
+
+    let updated = service
+        .advance_issue_status(AdvanceIssueStatusInput {
+            project_id,
+            issue_id: issue.id,
+            target_status: IssueStatus::Backlog,
+        })
+        .expect("completed -> backlog should succeed");
+
+    assert_eq!(updated.status, IssueStatus::Backlog);
+    assert_eq!(updated.id, issue.id);
+}
+
+
+#[test]
 fn advance_issue_status_returns_running_issue_to_backlog_and_soft_deletes_session() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

@@ -803,6 +803,7 @@
     },
     "ISSUE_VALIDATION_FAILED": {
       "alreadyCompleted": "已完成 Issue 不能重复完成。",
+      "completedCanOnlyReturnToBacklog": "已完成的 Issue 只能回退到待办，不能标记为进行中或待审核。",
       "attachmentParamsInvalid": "附件预览或导出参数无效。",
       "attachmentPreviewUnsupported": "当前附件不支持预览。",
       "attachmentSourceNotFound": "附件源文件不存在。",

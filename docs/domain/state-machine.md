@@ -9,7 +9,7 @@
 | Issue         | `backlog`                        | 创建；成功启动关联会话后进入 `running`                                       | 启动失败仍保持 `backlog`                                  |
 | Issue         | `running`                        | `mark_issue_review` → `review`                                               | 同一活动 Issue 最多一个未软删除的关联 session             |
 | Issue         | `review`                         | 经统一 completion flow → `completed`                                         | 继续给 Agent 发消息不退回 `running`，不创建第二个 session |
-| Issue         | `completed`                      | 终态                                                                         | 不提供 Run/Reopen/再次完成主路径；仅 summary、日志与诊断  |
+| Issue         | `completed`                      | 仅可回退到 `backlog`                                                         | 不可进入 `running`/`review`；不提供 Run/再次完成主路径；可 summary、日志、诊断与退回待办 |
 | Agent Session | `running`                        | provider 正常关闭 → `closed`；异常退出 → `crashed`；重启无法恢复 → `stopped` | session 状态不等同 Issue `review`                         |
 | Agent Session | `closed` / `crashed` / `stopped` | 终态事实                                                                     | 不自动完成关联 Issue                                      |
 | Attention     | `none` / `requested`             | `set_agent_session_attention`                                                | 仅会话提示状态，不是 Issue 状态                           |

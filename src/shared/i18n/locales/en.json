@@ -803,6 +803,7 @@
     },
     "ISSUE_VALIDATION_FAILED": {
       "alreadyCompleted": "Completed Issues cannot be completed again.",
+      "completedCanOnlyReturnToBacklog": "Completed Issues can only return to Backlog, not In Progress or Review.",
       "attachmentParamsInvalid": "Attachment preview or export parameters are invalid.",
       "attachmentPreviewUnsupported": "The selected attachment is not previewable.",
       "attachmentSourceNotFound": "Attachment source file not found.",
