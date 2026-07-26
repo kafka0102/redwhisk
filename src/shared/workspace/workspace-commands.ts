@@ -18,6 +18,11 @@ export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
   commitHash?: string | null;
 }
 
+export interface ProjectWorkspaceWriteFileInput extends ProjectWorkspaceInput {
+  filePath: string;
+  content: string;
+}
+
 export interface WorkspaceFileTreeNode {
   id: string;
   name: string;
@@ -97,6 +102,14 @@ export function readProjectWorktreeFile(
   input: ProjectWorkspacePathInput,
 ): Promise<WorkspaceFileContent> {
   return invokeCommand<WorkspaceFileContent>("read_project_worktree_file", {
+    input,
+  });
+}
+
+export function writeProjectWorktreeFile(
+  input: ProjectWorkspaceWriteFileInput,
+): Promise<WorkspaceFileContent> {
+  return invokeCommand<WorkspaceFileContent>("write_project_worktree_file", {
     input,
   });
 }

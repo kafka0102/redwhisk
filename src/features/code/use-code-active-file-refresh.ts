@@ -140,16 +140,23 @@ export function useCodeActiveFileRefresh({
             ),
           };
           setTabsRef.current((currentTabs) =>
-            currentTabs.map((tab) =>
-              tab.filePath === path
-                ? {
-                    ...tab,
-                    content,
-                    errorMessage: null,
-                    isLoading: false,
-                  }
-                : tab,
-            ),
+            currentTabs.map((tab) => {
+              if (tab.filePath !== path) {
+                return tab;
+              }
+              // dirty 缓冲不静默覆盖（冲突交互见后续 ticket）。
+              if (tab.isDirty) {
+                return tab;
+              }
+              return {
+                ...tab,
+                content,
+                errorMessage: null,
+                isDirty: false,
+                isLoading: false,
+                savedContent: content.content,
+              };
+            }),
           );
         } catch (error) {
           if (checkGenRef.current !== gen) return;

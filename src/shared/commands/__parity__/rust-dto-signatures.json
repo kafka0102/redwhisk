@@ -881,6 +881,15 @@
         "workspacePath": "optional"
       }
     },
+    "ProjectWorkspaceWriteFileInput": {
+      "fields": {
+        "content": "required",
+        "filePath": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "workspacePath": "optional"
+      }
+    },
     "ProjectWorktreeChangesResponse": {
       "fields": {
         "files": "required",

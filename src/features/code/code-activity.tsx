@@ -11,8 +11,11 @@ import {
   useWorkspaceShell,
 } from "../../shared/workspace/use-workspace-shell";
 import { WorkspaceShell } from "../../shared/workspace/workspace-shell";
+import { useAlertDialog } from "../../components/ui/use-alert-dialog";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import {
   readProjectWorktreeFile,
+  writeProjectWorktreeFile,
   type CodeWorkspaceRoot,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
@@ -25,6 +28,7 @@ import {
   type CodeSidebarMode,
 } from "./code-search-state";
 import { isContentSearchShortcut } from "./is-content-search-shortcut";
+import { isFileSaveShortcut } from "./is-file-save-shortcut";
 import {
   type CodeFileTab,
   clearCodeEditorViewStates,
@@ -32,6 +36,7 @@ import {
   deleteCodeEditorViewState,
 } from "./code-workspace-cache";
 import {
+  canEditCodeFileTab,
   isMarkdownPreviewable,
   resolveFileLoadErrorMessage,
 } from "./code-workspace-helpers";
@@ -42,6 +47,16 @@ import {
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
+
+function normalizeCodeFileTab(tab: CodeFileTab): CodeFileTab {
+  return {
+    ...tab,
+    isDirty: tab.isDirty ?? false,
+    isEditable: tab.isEditable ?? false,
+    savedContent:
+      tab.savedContent ?? (tab.isDirty ? null : (tab.content?.content ?? null)),
+  };
+}
 
 interface CodeActivityProps {
   projectId: number;
@@ -56,8 +71,11 @@ interface CodeActivityProps {
  */
 export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
+  const { alertDialog, showAlert } = useAlertDialog();
   const cached = codeWorkspaceCache.get(projectId);
-  const [tabs, setTabs] = useState<CodeFileTab[]>(() => cached?.tabs ?? []);
+  const [tabs, setTabs] = useState<CodeFileTab[]>(() =>
+    (cached?.tabs ?? []).map(normalizeCodeFileTab),
+  );
   const [activePath, setActivePath] = useState<string | null>(
     () => cached?.activePath ?? null,
   );
@@ -78,6 +96,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     "source" | "preview"
   >("source");
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
+  const tabsRef = useRef<CodeFileTab[]>(
+    (cached?.tabs ?? []).map(normalizeCodeFileTab),
+  );
   const openFilePathsRef = useRef(
     new Set((cached?.tabs ?? []).map((tab) => tab.filePath)),
   );
@@ -103,6 +124,10 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     onRootChange: clearCodeState,
   });
   const { selectedRoot, selectedRootWorkspacePath, selectRoot } = shell;
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   useEffect(() => {
     codeWorkspaceCache.set(projectId, {
@@ -196,11 +221,16 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         currentTabs.map((tab) => {
           const result = resultByPath.get(tab.filePath);
           if (!result) return tab;
+          if (tab.isDirty) {
+            return { ...tab, isLoading: false };
+          }
           return {
             ...tab,
             content: result.content,
             errorMessage: result.errorMessage,
+            isDirty: false,
             isLoading: false,
+            savedContent: result.content?.content ?? null,
           };
         }),
       );
@@ -240,8 +270,11 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           errorMessage: null,
           fileName: file.name,
           filePath: file.path,
+          isDirty: false,
+          isEditable: false,
           isLoading: true,
           lastActiveAt: now,
+          savedContent: null,
         };
         const retained =
           currentTabs.length < MAX_FILE_TABS
@@ -276,7 +309,14 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           setTabs((currentTabs) =>
             currentTabs.map((tab) =>
               tab.filePath === file.path
-                ? { ...tab, content, errorMessage: null, isLoading: false }
+                ? {
+                    ...tab,
+                    content,
+                    errorMessage: null,
+                    isDirty: false,
+                    isLoading: false,
+                    savedContent: content.content,
+                  }
                 : tab,
             ),
           );
@@ -321,20 +361,102 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     [openFile],
   );
 
+  const handleActiveTabContentChange = useCallback((value: string) => {
+    const path = activePathRef.current;
+    if (!path) return;
+    setTabs((currentTabs) =>
+      currentTabs.map((tab) => {
+        if (tab.filePath !== path || !tab.content || !tab.isEditable) {
+          return tab;
+        }
+        return {
+          ...tab,
+          content: { ...tab.content, content: value },
+          isDirty: value !== (tab.savedContent ?? ""),
+        };
+      }),
+    );
+  }, []);
+
+  const toggleActiveTabEditable = useCallback(() => {
+    const path = activePathRef.current;
+    if (!path) return;
+    setTabs((currentTabs) =>
+      currentTabs.map((tab) => {
+        if (tab.filePath !== path || !canEditCodeFileTab(tab)) {
+          return tab;
+        }
+        return { ...tab, isEditable: !tab.isEditable };
+      }),
+    );
+  }, []);
+
+  const saveActiveTab = useCallback(async () => {
+    const path = activePathRef.current;
+    const rootPath = selectedRoot?.path;
+    if (!path || !rootPath) return;
+    const tab = tabsRef.current.find((item) => item.filePath === path);
+    if (
+      !tab ||
+      !tab.isEditable ||
+      !tab.content ||
+      tab.content.isBinary ||
+      tab.content.isTooLarge
+    ) {
+      return;
+    }
+    if (isMarkdownPreviewable(tab) && markdownViewMode === "preview") {
+      return;
+    }
+    try {
+      const written = await writeProjectWorktreeFile({
+        projectId,
+        workspacePath: rootPath,
+        filePath: path,
+        content: tab.content.content,
+      });
+      setTabs((currentTabs) =>
+        currentTabs.map((item) =>
+          item.filePath === path
+            ? {
+                ...item,
+                content: written,
+                errorMessage: null,
+                isDirty: false,
+                isEditable: true,
+                isLoading: false,
+                savedContent: written.content,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      showAlert({
+        message: getCommandErrorMessage(error, t),
+        type: "error",
+      });
+    }
+  }, [markdownViewMode, projectId, selectedRoot?.path, showAlert, t]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isContentSearchShortcut(event)) {
+      if (isContentSearchShortcut(event)) {
+        event.preventDefault();
+        setSidebarMode("search");
+        setQueryFocusRequest((token) => token + 1);
+        return;
+      }
+      if (!isFileSaveShortcut(event)) {
         return;
       }
       event.preventDefault();
-      setSidebarMode("search");
-      setQueryFocusRequest((token) => token + 1);
+      void saveActiveTab();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [saveActiveTab]);
 
   const closeTab = (filePath: string) => {
     openFilePathsRef.current.delete(filePath);
@@ -351,122 +473,140 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   };
 
   return (
-    <WorkspaceShell
-      ariaLabel={messages.agentsFeature.codeTab}
-      loadingBranchText={messages.agentsFeature.loadingCode}
-      roots={shell.roots}
-      selectedRoot={selectedRoot}
-      onSelectRoot={selectRoot}
-      sidebarWidth={shell.sidebarWidth}
-      onBeginResize={shell.beginResize}
-      branchBarTrailing={
-        <button
-          type="button"
-          className="code-workspace__refresh"
-          aria-label={messages.agentsFeature.toggleContentSearch}
-          aria-pressed={sidebarMode === "search"}
-          onClick={() =>
-            setSidebarMode((current) =>
-              current === "search" ? "fileTree" : "search",
-            )
-          }
-        >
-          <Search aria-hidden="true" size={14} strokeWidth={1.8} />
-        </button>
-      }
-      sidebar={
-        sidebarMode === "search" ? (
-          <CodeSearchPanel
-            state={contentSearch}
-            onChange={setContentSearch}
-            projectId={projectId}
-            workspacePath={selectedRootWorkspacePath}
-            fileTree={tree}
-            onOpenMatch={openMatchFromSearch}
-            queryFocusRequest={queryFocusRequest}
-          />
-        ) : (
-          <FileTreePanel
-            changedFileKinds={changedFileKinds}
-            directoryKinds={directoryKinds}
-            errorMessage={treeError}
-            fileTree={tree}
-            initialOpenState={openFolders}
-            isLoading={isTreeLoading}
-            workspacePath={selectedRoot?.path}
-            onOpenFile={openFile}
-            onOpenStateChange={setOpenFolders}
-          />
-        )
-      }
-      main={
-        <>
-          <div className="code-workspace__tabs" role="tablist">
-            {tabs.map((tab) => (
-              <button
-                key={tab.filePath}
-                aria-selected={activePath === tab.filePath}
-                className="code-workspace__tab"
-                role="tab"
-                type="button"
-                onClick={() => {
-                  activateFilePath(tab.filePath);
-                  setTabs((current) =>
-                    current.map((item) =>
-                      item.filePath === tab.filePath
-                        ? { ...item, lastActiveAt: Date.now() }
-                        : item,
-                    ),
-                  );
-                }}
-              >
-                <span>{tab.fileName}</span>
-                <X
-                  aria-label={messages.agentsFeature.closeTab(tab.fileName)}
-                  size={13}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    closeTab(tab.filePath);
+    <>
+      <WorkspaceShell
+        ariaLabel={messages.agentsFeature.codeTab}
+        loadingBranchText={messages.agentsFeature.loadingCode}
+        roots={shell.roots}
+        selectedRoot={selectedRoot}
+        onSelectRoot={selectRoot}
+        sidebarWidth={shell.sidebarWidth}
+        onBeginResize={shell.beginResize}
+        branchBarTrailing={
+          <button
+            type="button"
+            className="code-workspace__refresh"
+            aria-label={messages.agentsFeature.toggleContentSearch}
+            aria-pressed={sidebarMode === "search"}
+            onClick={() =>
+              setSidebarMode((current) =>
+                current === "search" ? "fileTree" : "search",
+              )
+            }
+          >
+            <Search aria-hidden="true" size={14} strokeWidth={1.8} />
+          </button>
+        }
+        sidebar={
+          sidebarMode === "search" ? (
+            <CodeSearchPanel
+              state={contentSearch}
+              onChange={setContentSearch}
+              projectId={projectId}
+              workspacePath={selectedRootWorkspacePath}
+              fileTree={tree}
+              onOpenMatch={openMatchFromSearch}
+              queryFocusRequest={queryFocusRequest}
+            />
+          ) : (
+            <FileTreePanel
+              changedFileKinds={changedFileKinds}
+              directoryKinds={directoryKinds}
+              errorMessage={treeError}
+              fileTree={tree}
+              initialOpenState={openFolders}
+              isLoading={isTreeLoading}
+              workspacePath={selectedRoot?.path}
+              onOpenFile={openFile}
+              onOpenStateChange={setOpenFolders}
+            />
+          )
+        }
+        main={
+          <>
+            <div className="code-workspace__tabs" role="tablist">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.filePath}
+                  aria-selected={activePath === tab.filePath}
+                  className="code-workspace__tab"
+                  role="tab"
+                  type="button"
+                  onClick={() => {
+                    activateFilePath(tab.filePath);
+                    setTabs((current) =>
+                      current.map((item) =>
+                        item.filePath === tab.filePath
+                          ? { ...item, lastActiveAt: Date.now() }
+                          : item,
+                      ),
+                    );
                   }}
+                >
+                  <span>{tab.fileName}</span>
+                  {tab.isDirty ? (
+                    <span
+                      aria-label={messages.agentsFeature.fileTabUnsaved}
+                      className="code-workspace__tab-dirty"
+                    />
+                  ) : null}
+                  <X
+                    aria-label={messages.agentsFeature.closeTab(tab.fileName)}
+                    size={13}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeTab(tab.filePath);
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+            {activeTab ? (
+              <>
+                <CodeBreadcrumb
+                  filePath={activeTab.filePath}
+                  tree={tree}
+                  onOpenFile={openFile}
+                  editToggle={{
+                    disabled: !canEditCodeFileTab(activeTab),
+                    label: messages.agentsFeature.toggleFileEdit,
+                    onToggle: toggleActiveTabEditable,
+                    pressed: activeTab.isEditable,
+                  }}
+                  markdownPreviewToggle={
+                    isMarkdownPreviewable(activeTab)
+                      ? {
+                          label: messages.agentsFeature.toggleMarkdownPreview,
+                          onToggle: () =>
+                            setMarkdownViewMode((current) =>
+                              current === "preview" ? "source" : "preview",
+                            ),
+                          pressed: markdownViewMode === "preview",
+                        }
+                      : null
+                  }
                 />
-              </button>
-            ))}
-          </div>
-          {activeTab ? (
-            <>
-              <CodeBreadcrumb
-                filePath={activeTab.filePath}
-                tree={tree}
-                onOpenFile={openFile}
-                markdownPreviewToggle={
-                  isMarkdownPreviewable(activeTab)
-                    ? {
-                        label: messages.agentsFeature.toggleMarkdownPreview,
-                        onToggle: () =>
-                          setMarkdownViewMode((current) =>
-                            current === "preview" ? "source" : "preview",
-                          ),
-                        pressed: markdownViewMode === "preview",
-                      }
-                    : null
-                }
-              />
-              <CodeContent
-                key={activeTab.filePath}
-                projectId={projectId}
-                tab={activeTab}
-                contentFontSize={contentFontSize}
-                messages={messages}
-                revealRequest={revealRequest}
-                theme={theme}
-                viewMode={
-                  isMarkdownPreviewable(activeTab) ? markdownViewMode : "source"
-                }
-              />
-            </>
-          ) : null}
-        </>
-      }
-    />
+                <CodeContent
+                  key={activeTab.filePath}
+                  projectId={projectId}
+                  tab={activeTab}
+                  contentFontSize={contentFontSize}
+                  messages={messages}
+                  onContentChange={handleActiveTabContentChange}
+                  revealRequest={revealRequest}
+                  theme={theme}
+                  viewMode={
+                    isMarkdownPreviewable(activeTab)
+                      ? markdownViewMode
+                      : "source"
+                  }
+                />
+              </>
+            ) : null}
+          </>
+        }
+      />
+      {alertDialog}
+    </>
   );
 }

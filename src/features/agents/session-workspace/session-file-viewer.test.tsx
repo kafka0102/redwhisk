@@ -10,6 +10,10 @@ const { editorThemeProp } = vi.hoisted(() => ({
   editorThemeProp: { current: undefined as string | undefined },
 }));
 
+vi.mock("../../../shared/use-monaco-editor-ready", () => ({
+  useMonacoEditorReady: () => true,
+}));
+
 vi.mock("@monaco-editor/react", () => ({
   Editor: ({ theme }: { theme?: string }) => {
     editorThemeProp.current = theme;

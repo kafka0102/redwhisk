@@ -525,6 +525,8 @@ export interface I18nMessages {
     loadingCode: string;
     toggleContentSearch: string;
     toggleMarkdownPreview: string;
+    toggleFileEdit: string;
+    fileTabUnsaved: string;
     mermaidRenderFailed: string;
     contentSearchPanel: string;
     contentSearchQuery: string;

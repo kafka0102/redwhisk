@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronRight, Eye, EyeOff, Folder } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Folder,
+  Pencil,
+} from "lucide-react";
 import { type CSSProperties, useCallback, useState } from "react";
 
 import {
@@ -15,15 +22,24 @@ export interface CodeMarkdownPreviewToggle {
   pressed: boolean;
 }
 
+export interface CodeEditToggle {
+  disabled: boolean;
+  label: string;
+  onToggle: () => void;
+  pressed: boolean;
+}
+
 export function CodeBreadcrumb({
   filePath,
   tree,
   onOpenFile,
+  editToggle = null,
   markdownPreviewToggle = null,
 }: {
   filePath: string;
   tree: WorkspaceFileTreeNode[];
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  editToggle?: CodeEditToggle | null;
   markdownPreviewToggle?: CodeMarkdownPreviewToggle | null;
 }) {
   // 受控弹层：同一时间只展开一个目录段。打开文件后立即关闭，回到面包屑。
@@ -64,6 +80,18 @@ export function CodeBreadcrumb({
           );
         })}
       </nav>
+      {editToggle ? (
+        <button
+          type="button"
+          className="code-workspace__edit-toggle"
+          aria-label={editToggle.label}
+          aria-pressed={editToggle.pressed}
+          disabled={editToggle.disabled}
+          onClick={editToggle.onToggle}
+        >
+          <Pencil aria-hidden="true" size={14} strokeWidth={1.9} />
+        </button>
+      ) : null}
       {markdownPreviewToggle ? (
         <button
           type="button"

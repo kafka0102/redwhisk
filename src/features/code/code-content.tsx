@@ -33,6 +33,7 @@ export function CodeContent({
   contentFontSize,
   messages,
   theme,
+  onContentChange,
   revealRequest = null,
   viewMode = "source",
 }: {
@@ -41,6 +42,7 @@ export function CodeContent({
   contentFontSize: number;
   messages: ReturnType<typeof useI18n>["messages"];
   theme: "light" | "dark";
+  onContentChange?: (value: string) => void;
   revealRequest?: CodeRevealRequest | null;
   viewMode?: "source" | "preview";
 }) {
@@ -202,18 +204,26 @@ export function CodeContent({
     );
   }
 
+  const isReadOnly = !tab.isEditable;
+
   return (
     <Editor
       height="100%"
       theme={theme === "dark" ? "vs-dark" : "light"}
       language={tab.content.language ?? undefined}
       options={{
-        readOnly: true,
+        readOnly: isReadOnly,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         fontSize: contentFontSize,
       }}
       value={tab.content.content}
+      onChange={(value) => {
+        if (isReadOnly || value == null) {
+          return;
+        }
+        onContentChange?.(value);
+      }}
       onMount={onMount}
     />
   );

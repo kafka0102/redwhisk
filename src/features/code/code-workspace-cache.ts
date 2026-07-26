@@ -13,8 +13,14 @@ export interface CodeFileTab {
   errorMessage: string | null;
   fileName: string;
   filePath: string;
+  /** 缓冲相对最近一次成功加载/保存的磁盘正文是否有未保存改动。 */
+  isDirty: boolean;
+  /** 当前 Tab 是否处于用户显式开启的可编辑态。 */
+  isEditable: boolean;
   isLoading: boolean;
   lastActiveAt: number;
+  /** 最近一次成功加载/保存的磁盘正文，用于 dirty 判定。 */
+  savedContent: string | null;
 }
 
 /** 代码 Activity 按 projectId 持久化的工作区状态。 */

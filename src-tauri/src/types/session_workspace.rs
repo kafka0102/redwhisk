@@ -40,6 +40,17 @@ pub struct ProjectWorkspacePathInput {
     pub workspace_path: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectWorkspaceWriteFileInput {
+    pub project_id: i64,
+    pub session_id: Option<i64>,
+    pub file_path: String,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceChangedFile {

@@ -13,6 +13,7 @@ use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
+    ProjectWorkspaceWriteFileInput,
     ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
     ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
     WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceContentSearchInput,
@@ -165,6 +166,18 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.workspace_path.as_deref(),
         )?;
         read_workspace_file(&root, &input.file_path)
+    }
+
+    pub fn write_file(
+        &self,
+        input: ProjectWorkspaceWriteFileInput,
+    ) -> Result<WorkspaceFileContent, CommandError> {
+        let root = self.resolve_workspace_root(
+            input.project_id,
+            input.session_id,
+            input.workspace_path.as_deref(),
+        )?;
+        write_workspace_file(&root, &input.file_path, &input.content)
     }
 
     pub fn stat_file(
@@ -961,6 +974,44 @@ fn read_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileCont
     })
 }
 
+fn write_workspace_file(
+    root: &Path,
+    file_path: &str,
+    content: &str,
+) -> Result<WorkspaceFileContent, CommandError> {
+    let workspace_file = resolve_workspace_file(root, file_path)?;
+    let content_bytes = content.as_bytes();
+    if content_bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err(
+            workspace_validation_error("文件内容过大，无法写入。", file_path)
+                .with_reason("fileContentTooLarge"),
+        );
+    }
+    if content_bytes.contains(&0) {
+        return Err(
+            workspace_validation_error("不能写入二进制内容。", file_path)
+                .with_reason("fileContentBinary"),
+        );
+    }
+
+    let existing = fs::read(&workspace_file.absolute_path).map_err(workspace_io_error)?;
+    if is_binary_bytes(&existing) {
+        return Err(
+            workspace_validation_error("二进制文件不可编辑。", file_path)
+                .with_reason("fileIsBinary"),
+        );
+    }
+    if existing.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err(
+            workspace_validation_error("文件过大，不可编辑。", file_path)
+                .with_reason("fileIsTooLarge"),
+        );
+    }
+
+    fs::write(&workspace_file.absolute_path, content_bytes).map_err(workspace_io_error)?;
+    read_workspace_file(root, file_path)
+}
+
 fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffContent, CommandError> {
     let changes = read_workspace_changes(root)?;
     let change = changes
@@ -1628,6 +1679,71 @@ mod tests {
 
         assert_eq!(stat_err.code, read_err.code);
         assert_eq!(stat_err.reason, read_err.reason);
+    }
+
+    #[test]
+    fn write_workspace_file_overwrites_utf8_text_and_returns_metadata() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("note.txt"), "hello\n").expect("seed file");
+
+        let written = write_workspace_file(root, "note.txt", "hello world\n").expect("write");
+
+        assert_eq!(written.file_path, "note.txt");
+        assert_eq!(written.content, "hello world\n");
+        assert_eq!(written.size_bytes, "hello world\n".len() as u64);
+        assert!(!written.is_binary);
+        assert!(!written.is_too_large);
+        assert!(written.modified_at.is_some());
+        assert_eq!(
+            fs::read_to_string(root.join("note.txt")).expect("read disk"),
+            "hello world\n"
+        );
+    }
+
+    #[test]
+    fn write_workspace_file_rejects_path_escape_like_read() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("note.txt"), "hello\n").expect("seed file");
+
+        let write_err =
+            write_workspace_file(root, "../outside.txt", "x").expect_err("escape write");
+        let read_err = read_workspace_file(root, "../outside.txt").expect_err("escape read");
+
+        assert_eq!(write_err.code, read_err.code);
+        assert_eq!(write_err.reason, read_err.reason);
+    }
+
+    #[test]
+    fn write_workspace_file_rejects_binary_target_and_nul_content() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("payload.bin"), b"hello\0world\n").expect("seed binary");
+        fs::write(root.join("note.txt"), "hello\n").expect("seed text");
+
+        let binary_err =
+            write_workspace_file(root, "payload.bin", "text").expect_err("binary write");
+        assert_eq!(binary_err.reason.as_deref(), Some("fileIsBinary"));
+
+        let nul_err =
+            write_workspace_file(root, "note.txt", "has\0nul").expect_err("nul content");
+        assert_eq!(nul_err.reason.as_deref(), Some("fileContentBinary"));
+    }
+
+    #[test]
+    fn write_workspace_file_rejects_oversized_content() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("note.txt"), "hello\n").expect("seed file");
+        let oversized = "a".repeat((MAX_TEXT_FILE_BYTES + 1) as usize);
+
+        let err = write_workspace_file(root, "note.txt", &oversized).expect_err("too large");
+        assert_eq!(err.reason.as_deref(), Some("fileContentTooLarge"));
+        assert_eq!(
+            fs::read_to_string(root.join("note.txt")).expect("unchanged"),
+            "hello\n"
+        );
     }
 
     #[cfg(unix)]

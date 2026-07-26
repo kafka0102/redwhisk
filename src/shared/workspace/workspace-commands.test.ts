@@ -5,6 +5,7 @@ import {
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
+  writeProjectWorktreeFile,
   deleteCodeWorkspaceWorktree,
   pullProjectWorktree,
   pushProjectWorktree,
@@ -102,6 +103,29 @@ describe("workspace commands", () => {
         input: {
           projectId: 1,
           workspacePath: "/tmp/root.wt/issue-1",
+        },
+      },
+    );
+  });
+
+  it("invokes write_project_worktree_file with path and content envelope", async () => {
+    await expect(
+      writeProjectWorktreeFile({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "src/main.ts",
+        content: "export const value = 2;\n",
+      }),
+    ).resolves.toEqual({ command: "write_project_worktree_file" });
+
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "write_project_worktree_file",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          filePath: "src/main.ts",
+          content: "export const value = 2;\n",
         },
       },
     );

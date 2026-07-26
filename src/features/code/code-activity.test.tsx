@@ -10,6 +10,7 @@ import {
   readProjectWorktreeFile,
   searchProjectWorktreeContent,
   statProjectWorktreeFile,
+  writeProjectWorktreeFile,
 } from "../../shared/workspace/workspace-commands";
 import {
   codeWorkspaceCache,
@@ -51,17 +52,25 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
   };
 });
 
+vi.mock("../../shared/use-monaco-editor-ready", () => ({
+  useMonacoEditorReady: () => true,
+}));
+
 vi.mock("@monaco-editor/react", () => ({
   DiffEditor: () => null,
   Editor: ({
     theme,
     language,
     value,
+    options,
+    onChange,
     onMount,
   }: {
     theme?: string;
     language?: string;
     value?: string;
+    options?: { readOnly?: boolean };
+    onChange?: (value: string | undefined) => void;
     onMount?: (editor: {
       revealLineInCenter: (line: number) => void;
       setPosition: (pos: { lineNumber: number; column: number }) => void;
@@ -88,8 +97,17 @@ vi.mock("@monaco-editor/react", () => ({
       <div
         data-testid="monaco-editor"
         data-language={language ?? ""}
+        data-readonly={String(options?.readOnly ?? false)}
         data-value={value ?? ""}
-      />
+      >
+        <button
+          type="button"
+          data-testid="monaco-edit"
+          onClick={() => onChange?.("export const value = 2;\n")}
+        >
+          Simulate edit
+        </button>
+      </div>
     );
   },
 }));
@@ -102,6 +120,7 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   readProjectWorktreeFile: vi.fn(),
   searchProjectWorktreeContent: vi.fn(),
   statProjectWorktreeFile: vi.fn(),
+  writeProjectWorktreeFile: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -230,6 +249,14 @@ describe("CodeActivity", () => {
       sizeBytes: fileContent.sizeBytes,
       modifiedAt: fileContent.modifiedAt,
     });
+    vi.mocked(writeProjectWorktreeFile).mockReset();
+    vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => ({
+      ...fileContent,
+      content: input.content,
+      filePath: input.filePath,
+      modifiedAt: 99,
+      sizeBytes: input.content.length,
+    }));
   });
 
   afterEach(() => {
@@ -1129,5 +1156,244 @@ describe("CodeActivity", () => {
     expect(alert).toHaveTextContent("文件不存在");
     expect(alert).toHaveClass("code-workspace__file-error");
     expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows a disabled edit toggle until a text file is ready", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveRead: ((value: typeof fileContent) => void) | undefined;
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      () =>
+        new Promise<typeof fileContent>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    const editWhileLoading = await screen.findByRole("button", {
+      name: "Edit file",
+    });
+    expect(editWhileLoading).toBeDisabled();
+    expect(editWhileLoading).toHaveAttribute("aria-pressed", "false");
+
+    resolveRead!(fileContent);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Edit file" })).toBeEnabled();
+    });
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "true",
+    );
+  });
+
+  it("marks the tab dirty while editable and saves with Cmd/Ctrl+S", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    Object.defineProperty(navigator, "platform", {
+      configurable: true,
+      get: () => "MacIntel",
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    const editButton = await screen.findByRole("button", { name: "Edit file" });
+    await waitFor(() => {
+      expect(editButton).toBeEnabled();
+    });
+    await user.click(editButton);
+    expect(editButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "false",
+    );
+
+    await user.click(screen.getByTestId("monaco-edit"));
+    const fileTab = screen.getByRole("tab", { name: /file\.ts/ });
+    expect(within(fileTab).getByLabelText("Unsaved changes")).toHaveClass(
+      "code-workspace__tab-dirty",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "s",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        filePath: "src/file.ts",
+        content: "export const value = 2;\n",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        within(screen.getByRole("tab", { name: /file\.ts/ })).queryByLabelText(
+          "Unsaved changes",
+        ),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "false",
+    );
+  });
+
+  it("keeps dirty buffer and shows an alert when save fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    Object.defineProperty(navigator, "platform", {
+      configurable: true,
+      get: () => "MacIntel",
+    });
+    vi.mocked(writeProjectWorktreeFile).mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "disk full",
+      reason: "workspaceFileWriteFailed",
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "s",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("disk full")).toBeInTheDocument();
+    // AlertDialog 打开时主区可能 aria-hidden；用 querySelector 断言 dirty 保留。
+    const dirty = document.querySelector(
+      ".code-workspace__tab .code-workspace__tab-dirty",
+    );
+    expect(dirty).not.toBeNull();
+    expect(dirty).toHaveAttribute("aria-label", "Unsaved changes");
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+  });
+
+  it("remembers editable state and dirty buffer per tab", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(async (input) => {
+      if (input.filePath.endsWith(".md")) {
+        return markdownContent;
+      }
+      return fileContent;
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    const dirtyFileTab = screen.getByRole("tab", { name: /file\.ts/ });
+    expect(
+      within(dirtyFileTab).getByLabelText("Unsaved changes"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /readme\.md/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      within(screen.getByRole("tab", { name: /readme\.md/ })).queryByLabelText(
+        "Unsaved changes",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /file\.ts/ }));
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "false",
+    );
+  });
+
+  it("disables the edit toggle for binary content", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue({
+      ...fileContent,
+      content: "",
+      isBinary: true,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    const editButton = await screen.findByRole("button", { name: "Edit file" });
+    await waitFor(() => {
+      expect(editButton).toBeDisabled();
+    });
   });
 });

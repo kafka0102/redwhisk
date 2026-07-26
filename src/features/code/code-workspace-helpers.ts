@@ -40,3 +40,14 @@ export function isMarkdownPreviewable(tab: CodeFileTab): boolean {
   }
   return tab.content.language === "markdown";
 }
+
+/** 当前 tab 是否允许进入轻量可编辑态（已成功加载的可预览文本）。 */
+export function canEditCodeFileTab(tab: CodeFileTab): boolean {
+  if (tab.isLoading || tab.errorMessage || !tab.content) {
+    return false;
+  }
+  if (tab.content.isBinary || tab.content.isTooLarge) {
+    return false;
+  }
+  return true;
+}

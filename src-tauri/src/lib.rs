@@ -175,6 +175,7 @@ pub fn run() {
             features::agent_session::workspace_commands::push_project_worktree,
             features::agent_session::workspace_commands::delete_code_workspace_worktree,
             features::agent_session::workspace_commands::read_project_worktree_file,
+            features::agent_session::workspace_commands::write_project_worktree_file,
             features::agent_session::workspace_commands::stat_project_worktree_file,
             features::agent_session::workspace_commands::read_project_worktree_diff,
             features::agent_session::workspace_commands::resolve_workspace_github_remote,

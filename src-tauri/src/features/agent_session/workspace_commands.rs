@@ -6,7 +6,8 @@ use super::workspace::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
-    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
+    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorkspaceWriteFileInput,
+    ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
     ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
     WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
@@ -83,6 +84,16 @@ pub async fn read_project_worktree_file(
 ) -> Result<WorkspaceFileContent, CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
     run_workspace_blocking(data_dir, move |service| service.read_file(input)).await
+}
+
+#[tauri::command]
+pub async fn write_project_worktree_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceWriteFileInput,
+) -> Result<WorkspaceFileContent, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.write_file(input)).await
 }
 
 #[tauri::command]

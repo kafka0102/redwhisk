@@ -110,8 +110,11 @@ describe("useCodeActiveFileRefresh", () => {
         errorMessage: null,
         fileName: "file.ts",
         filePath: "src/file.ts",
+        isDirty: false,
+        isEditable: false,
         isLoading: false,
         lastActiveAt: 1,
+        savedContent: fileContent.content,
       },
     ];
     const setTabs = vi.fn(
@@ -175,8 +178,11 @@ describe("useCodeActiveFileRefresh", () => {
         errorMessage: null,
         fileName: "file.ts",
         filePath: "src/file.ts",
+        isDirty: false,
+        isEditable: false,
         isLoading: false,
         lastActiveAt: 1,
+        savedContent: fileContent.content,
       },
     ];
     const setTabs = vi.fn(
@@ -227,8 +233,11 @@ describe("useCodeActiveFileRefresh", () => {
         errorMessage: null,
         fileName: "file.ts",
         filePath: "src/file.ts",
+        isDirty: false,
+        isEditable: false,
         isLoading: false,
         lastActiveAt: 1,
+        savedContent: fileContent.content,
       },
     ];
     const setTabs = vi.fn(
