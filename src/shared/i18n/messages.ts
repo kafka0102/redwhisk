@@ -527,6 +527,15 @@ export interface I18nMessages {
     toggleMarkdownPreview: string;
     toggleFileEdit: string;
     fileTabUnsaved: string;
+    unsavedChangesTitle: string;
+    unsavedChangesMessage: (fileName: string) => string;
+    unsavedChangesSave: string;
+    unsavedChangesDontSave: string;
+    unsavedChangesCancel: string;
+    unsavedChangesBulkTitle: string;
+    unsavedChangesBulkMessage: string;
+    unsavedChangesSaveAll: string;
+    unsavedChangesDontSaveAll: string;
     mermaidRenderFailed: string;
     contentSearchPanel: string;
     contentSearchQuery: string;

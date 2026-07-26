@@ -40,6 +40,7 @@ import {
   isMarkdownPreviewable,
   resolveFileLoadErrorMessage,
 } from "./code-workspace-helpers";
+import { useCodeUnsavedConfirm } from "./use-code-unsaved-confirm";
 import {
   buildActiveFileSignature,
   useCodeActiveFileRefresh,
@@ -47,6 +48,21 @@ import {
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
+
+function pickLruVictimPath(
+  tabs: CodeFileTab[],
+  previousActivePath: string | null,
+): string | null {
+  if (tabs.length < MAX_FILE_TABS) {
+    return null;
+  }
+  return (
+    tabs
+      .filter((candidate) => candidate.filePath !== previousActivePath)
+      .sort((left, right) => left.lastActiveAt - right.lastActiveAt)[0]
+      ?.filePath ?? null
+  );
+}
 
 function normalizeCodeFileTab(tab: CodeFileTab): CodeFileTab {
   return {
@@ -72,6 +88,8 @@ interface CodeActivityProps {
 export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
   const { alertDialog, showAlert } = useAlertDialog();
+  const { confirmBulkUnsaved, confirmSingleUnsaved, unsavedConfirmDialog } =
+    useCodeUnsavedConfirm();
   const cached = codeWorkspaceCache.get(projectId);
   const [tabs, setTabs] = useState<CodeFileTab[]>(() =>
     (cached?.tabs ?? []).map(normalizeCodeFileTab),
@@ -250,18 +268,104 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setMarkdownViewMode("source");
   }, []);
 
+  const saveTabByPath = useCallback(
+    async (filePath: string): Promise<boolean> => {
+      const rootPath = selectedRoot?.path;
+      if (!rootPath) {
+        return false;
+      }
+      const tab = tabsRef.current.find((item) => item.filePath === filePath);
+      if (
+        !tab ||
+        !tab.content ||
+        tab.content.isBinary ||
+        tab.content.isTooLarge
+      ) {
+        return false;
+      }
+      try {
+        const written = await writeProjectWorktreeFile({
+          projectId,
+          workspacePath: rootPath,
+          filePath,
+          content: tab.content.content,
+        });
+        const nextTabs = tabsRef.current.map((item) =>
+          item.filePath === filePath
+            ? {
+                ...item,
+                content: written,
+                errorMessage: null,
+                isDirty: false,
+                isLoading: false,
+                savedContent: written.content,
+              }
+            : item,
+        );
+        tabsRef.current = nextTabs;
+        setTabs(nextTabs);
+        return true;
+      } catch (error) {
+        showAlert({
+          message: getCommandErrorMessage(error, t),
+          type: "error",
+        });
+        return false;
+      }
+    },
+    [projectId, selectedRoot?.path, showAlert, t],
+  );
+
+  const saveAllDirtyTabs = useCallback(async (): Promise<boolean> => {
+    const dirtyPaths = tabsRef.current
+      .filter((tab) => tab.isDirty)
+      .map((tab) => tab.filePath);
+    for (const filePath of dirtyPaths) {
+      const saved = await saveTabByPath(filePath);
+      if (!saved) {
+        return false;
+      }
+    }
+    return true;
+  }, [saveTabByPath]);
+
   const openFile = useCallback(
-    (file: WorkspaceFileTreeNode) => {
+    async (file: WorkspaceFileTreeNode) => {
       if (!selectedRoot || file.kind !== "file") return;
       const now = Date.now();
       const previousActivePath = activePathRef.current;
       const isAlreadyOpen = openFilePathsRef.current.has(file.path);
+      if (isAlreadyOpen) {
+        activateFilePath(file.path);
+        setTabs((currentTabs) =>
+          currentTabs.map((tab) =>
+            tab.filePath === file.path ? { ...tab, lastActiveAt: now } : tab,
+          ),
+        );
+        return;
+      }
+
+      const currentTabs = tabsRef.current;
+      const victimPath = pickLruVictimPath(currentTabs, previousActivePath);
+      if (victimPath !== null && currentTabs.some((tab) => tab.isDirty)) {
+        const choice = await confirmBulkUnsaved();
+        if (choice === "cancel") {
+          return;
+        }
+        if (choice === "saveAll") {
+          const saved = await saveAllDirtyTabs();
+          if (!saved) {
+            return;
+          }
+        }
+      }
+
       openFilePathsRef.current.add(file.path);
       activateFilePath(file.path);
-      setTabs((currentTabs) => {
-        const existing = currentTabs.find((tab) => tab.filePath === file.path);
+      setTabs((latestTabs) => {
+        const existing = latestTabs.find((tab) => tab.filePath === file.path);
         if (existing) {
-          return currentTabs.map((tab) =>
+          return latestTabs.map((tab) =>
             tab.filePath === file.path ? { ...tab, lastActiveAt: now } : tab,
           );
         }
@@ -276,30 +380,20 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           lastActiveAt: now,
           savedContent: null,
         };
+        const nextVictimPath = pickLruVictimPath(
+          latestTabs,
+          previousActivePath,
+        );
         const retained =
-          currentTabs.length < MAX_FILE_TABS
-            ? currentTabs
-            : currentTabs.filter(
-                (tab) =>
-                  tab.filePath !==
-                  currentTabs
-                    .filter(
-                      (candidate) => candidate.filePath !== previousActivePath,
-                    )
-                    .sort(
-                      (left, right) => left.lastActiveAt - right.lastActiveAt,
-                    )[0]?.filePath,
-              );
-        const evicted = currentTabs.filter((tab) => !retained.includes(tab));
-        if (evicted.length > 0) {
-          for (const tab of evicted) {
-            openFilePathsRef.current.delete(tab.filePath);
-            deleteCodeEditorViewState(projectId, tab.filePath);
-          }
+          nextVictimPath === null
+            ? latestTabs
+            : latestTabs.filter((tab) => tab.filePath !== nextVictimPath);
+        if (nextVictimPath !== null) {
+          openFilePathsRef.current.delete(nextVictimPath);
+          deleteCodeEditorViewState(projectId, nextVictimPath);
         }
         return [...retained, nextTab];
       });
-      if (isAlreadyOpen) return;
       void readProjectWorktreeFile({
         projectId,
         workspacePath: selectedRoot.path,
@@ -339,7 +433,15 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           );
         });
     },
-    [activateFilePath, fileNotFoundMessage, projectId, selectedRoot, t],
+    [
+      activateFilePath,
+      confirmBulkUnsaved,
+      fileNotFoundMessage,
+      projectId,
+      saveAllDirtyTabs,
+      selectedRoot,
+      t,
+    ],
   );
 
   const openMatchFromSearch = useCallback(
@@ -378,23 +480,64 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     );
   }, []);
 
-  const toggleActiveTabEditable = useCallback(() => {
+  const toggleActiveTabEditable = useCallback(async () => {
     const path = activePathRef.current;
     if (!path) return;
-    setTabs((currentTabs) =>
-      currentTabs.map((tab) => {
-        if (tab.filePath !== path || !canEditCodeFileTab(tab)) {
-          return tab;
+    const tab = tabsRef.current.find((item) => item.filePath === path);
+    if (!tab || !canEditCodeFileTab(tab)) {
+      return;
+    }
+
+    if (tab.isEditable && tab.isDirty) {
+      const choice = await confirmSingleUnsaved(tab.fileName);
+      if (choice === "cancel") {
+        return;
+      }
+      if (choice === "save") {
+        const saved = await saveTabByPath(path);
+        if (!saved) {
+          return;
         }
-        return { ...tab, isEditable: !tab.isEditable };
+        setTabs((currentTabs) =>
+          currentTabs.map((item) =>
+            item.filePath === path ? { ...item, isEditable: false } : item,
+          ),
+        );
+        return;
+      }
+      setTabs((currentTabs) =>
+        currentTabs.map((item) => {
+          if (item.filePath !== path || !item.content) {
+            return item;
+          }
+          const restored =
+            item.savedContent === null
+              ? item.content.content
+              : item.savedContent;
+          return {
+            ...item,
+            content: { ...item.content, content: restored },
+            isDirty: false,
+            isEditable: false,
+          };
+        }),
+      );
+      return;
+    }
+
+    setTabs((currentTabs) =>
+      currentTabs.map((item) => {
+        if (item.filePath !== path || !canEditCodeFileTab(item)) {
+          return item;
+        }
+        return { ...item, isEditable: !item.isEditable };
       }),
     );
-  }, []);
+  }, [confirmSingleUnsaved, saveTabByPath]);
 
   const saveActiveTab = useCallback(async () => {
     const path = activePathRef.current;
-    const rootPath = selectedRoot?.path;
-    if (!path || !rootPath) return;
+    if (!path) return;
     const tab = tabsRef.current.find((item) => item.filePath === path);
     if (
       !tab ||
@@ -408,35 +551,8 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     if (isMarkdownPreviewable(tab) && markdownViewMode === "preview") {
       return;
     }
-    try {
-      const written = await writeProjectWorktreeFile({
-        projectId,
-        workspacePath: rootPath,
-        filePath: path,
-        content: tab.content.content,
-      });
-      setTabs((currentTabs) =>
-        currentTabs.map((item) =>
-          item.filePath === path
-            ? {
-                ...item,
-                content: written,
-                errorMessage: null,
-                isDirty: false,
-                isEditable: true,
-                isLoading: false,
-                savedContent: written.content,
-              }
-            : item,
-        ),
-      );
-    } catch (error) {
-      showAlert({
-        message: getCommandErrorMessage(error, t),
-        type: "error",
-      });
-    }
-  }, [markdownViewMode, projectId, selectedRoot?.path, showAlert, t]);
+    await saveTabByPath(path);
+  }, [markdownViewMode, saveTabByPath]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -458,11 +574,26 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     };
   }, [saveActiveTab]);
 
-  const closeTab = (filePath: string) => {
+  const closeTab = async (filePath: string) => {
+    const tab = tabsRef.current.find((item) => item.filePath === filePath);
+    if (tab?.isDirty) {
+      const choice = await confirmSingleUnsaved(tab.fileName);
+      if (choice === "cancel") {
+        return;
+      }
+      if (choice === "save") {
+        const saved = await saveTabByPath(filePath);
+        if (!saved) {
+          return;
+        }
+      }
+    }
     openFilePathsRef.current.delete(filePath);
     deleteCodeEditorViewState(projectId, filePath);
     setTabs((currentTabs) => {
-      const remaining = currentTabs.filter((tab) => tab.filePath !== filePath);
+      const remaining = currentTabs.filter(
+        (item) => item.filePath !== filePath,
+      );
       if (activePathRef.current === filePath) {
         const nextActivePath =
           remaining[remaining.length - 1]?.filePath ?? null;
@@ -472,6 +603,25 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     });
   };
 
+  const handleSelectRoot = async (root: CodeWorkspaceRoot) => {
+    if (root.path === selectedRoot?.path) {
+      return;
+    }
+    if (tabsRef.current.some((tab) => tab.isDirty)) {
+      const choice = await confirmBulkUnsaved();
+      if (choice === "cancel") {
+        return;
+      }
+      if (choice === "saveAll") {
+        const saved = await saveAllDirtyTabs();
+        if (!saved) {
+          return;
+        }
+      }
+    }
+    selectRoot(root);
+  };
+
   return (
     <>
       <WorkspaceShell
@@ -479,7 +629,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         loadingBranchText={messages.agentsFeature.loadingCode}
         roots={shell.roots}
         selectedRoot={selectedRoot}
-        onSelectRoot={selectRoot}
+        onSelectRoot={handleSelectRoot}
         sidebarWidth={shell.sidebarWidth}
         onBeginResize={shell.beginResize}
         branchBarTrailing={
@@ -607,6 +757,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         }
       />
       {alertDialog}
+      {unsavedConfirmDialog}
     </>
   );
 }

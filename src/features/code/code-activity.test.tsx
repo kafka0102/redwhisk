@@ -171,6 +171,26 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
         >
           Open markdown
         </button>
+        {Array.from({ length: 12 }, (_, index) => {
+          const n = index + 1;
+          const path = `src/file-${n}.ts`;
+          return (
+            <button
+              key={path}
+              type="button"
+              onClick={() =>
+                onOpenFile({
+                  id: path,
+                  kind: "file",
+                  name: `file-${n}.ts`,
+                  path,
+                })
+              }
+            >
+              {`Open file ${n}`}
+            </button>
+          );
+        })}
       </>
     ),
   };
@@ -1395,5 +1415,500 @@ describe("CodeActivity", () => {
     await waitFor(() => {
       expect(editButton).toBeDisabled();
     });
+  });
+
+  async function makeActiveTabDirty(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    const editButton = await screen.findByRole("button", { name: "Edit file" });
+    await waitFor(() => {
+      expect(editButton).toBeEnabled();
+    });
+    await user.click(editButton);
+    await user.click(screen.getByTestId("monaco-edit"));
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+  }
+
+  it("asks Save / Don't Save / Cancel before closing a dirty tab", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByLabelText("Close file.ts"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    expect(dialog).toHaveTextContent(
+      "Do you want to save the changes you made to file.ts?",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Save" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Don't Save" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("tab", { name: /file\.ts/ })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+    expect(writeProjectWorktreeFile).not.toHaveBeenCalled();
+  });
+
+  it("closes a dirty tab without writing when Don't Save is chosen", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByLabelText("Close file.ts"));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Don't Save" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    expect(writeProjectWorktreeFile).not.toHaveBeenCalled();
+  });
+
+  it("saves then closes a dirty tab when Save is chosen", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByLabelText("Close file.ts"));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        filePath: "src/file.ts",
+        content: "export const value = 2;\n",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps a dirty tab open when Save fails from the close confirm", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(writeProjectWorktreeFile).mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "disk full",
+      reason: "workspaceFileWriteFailed",
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByLabelText("Close file.ts"));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("disk full")).toBeInTheDocument();
+    // AlertDialog 打开时主区可能 aria-hidden。
+    expect(
+      document.querySelector(".code-workspace__tab span")?.textContent,
+    ).toBe("file.ts");
+    const dirty = document.querySelector(
+      ".code-workspace__tab .code-workspace__tab-dirty",
+    );
+    expect(dirty).not.toBeNull();
+  });
+
+  it("asks before leaving edit mode while dirty and can discard local edits", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    const editButton = screen.getByRole("button", { name: "Edit file" });
+    await user.click(editButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Don't Save" }),
+    );
+
+    await waitFor(() => {
+      expect(editButton).toHaveAttribute("aria-pressed", "false");
+    });
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "true",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 1;\n",
+    );
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).queryByLabelText(
+        "Unsaved changes",
+      ),
+    ).not.toBeInTheDocument();
+    expect(writeProjectWorktreeFile).not.toHaveBeenCalled();
+  });
+
+  it("saves then exits edit mode when Save is chosen on the exit confirm", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByRole("button", { name: "Edit file" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).queryByLabelText(
+        "Unsaved changes",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks Save All / Don't Save All / Cancel before switching roots with dirty tabs", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const multiRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "feature",
+        path: "/tmp/redwhisk-feature",
+        isProjectRoot: false,
+      },
+    ];
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots: multiRoots });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={multiRoots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByText("main"));
+    await user.click(await screen.findByRole("menuitem", { name: "feature" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    expect(dialog).toHaveTextContent(
+      "You have unsaved changes in open files. What do you want to do?",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Save All" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Don't Save All" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("tab", { name: /file\.ts/ })).toBeInTheDocument();
+    expect(screen.getByText("main")).toBeInTheDocument();
+    expect(writeProjectWorktreeFile).not.toHaveBeenCalled();
+  });
+
+  it("clears tabs after Don't Save All when switching roots", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const multiRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "feature",
+        path: "/tmp/redwhisk-feature",
+        isProjectRoot: false,
+      },
+    ];
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots: multiRoots });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={multiRoots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByText("main"));
+    await user.click(await screen.findByRole("menuitem", { name: "feature" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Don't Save All" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("feature")).toBeInTheDocument();
+    expect(writeProjectWorktreeFile).not.toHaveBeenCalled();
+  });
+
+  it("saves all dirty tabs before switching roots when Save All succeeds", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const multiRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "feature",
+        path: "/tmp/redwhisk-feature",
+        isProjectRoot: false,
+      },
+    ];
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots: multiRoots });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(async (input) => {
+      if (input.filePath.endsWith(".md")) {
+        return markdownContent;
+      }
+      return fileContent;
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={multiRoots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+
+    await user.click(screen.getByText("main"));
+    await user.click(await screen.findByRole("menuitem", { name: "feature" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Save All" }));
+
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("feature")).toBeInTheDocument();
+  });
+
+  it("stops Save All on first failure and keeps remaining dirty tabs", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const multiRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "feature",
+        path: "/tmp/redwhisk-feature",
+        isProjectRoot: false,
+      },
+    ];
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots: multiRoots });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(async (input) => {
+      if (input.filePath.endsWith(".md")) {
+        return markdownContent;
+      }
+      return fileContent;
+    });
+    vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => {
+      if (input.filePath.endsWith(".md")) {
+        throw {
+          code: "AGENT_SESSION_VALIDATION_FAILED",
+          message: "readme write failed",
+          reason: "workspaceFileWriteFailed",
+        };
+      }
+      return {
+        ...fileContent,
+        content: input.content,
+        filePath: input.filePath,
+        modifiedAt: 99,
+        sizeBytes: input.content.length,
+      };
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={multiRoots} />
+      </I18nProvider>,
+    );
+
+    await makeActiveTabDirty(user);
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+
+    await user.click(screen.getByText("main"));
+    await user.click(await screen.findByRole("menuitem", { name: "feature" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Save All" }));
+
+    expect(await screen.findByText("readme write failed")).toBeInTheDocument();
+    // Root switch aborted; tabs remain (Alert 可能让 role 查询失败，改查 DOM)。
+    const tabLabels = Array.from(
+      document.querySelectorAll(".code-workspace__tab span"),
+    ).map((node) => node.textContent);
+    expect(tabLabels).toEqual(expect.arrayContaining(["file.ts", "readme.md"]));
+    expect(
+      document.querySelector(".code-workspace__branch")?.textContent,
+    ).toContain("main");
+    // First dirty may have been saved; second failed. At least one write attempted.
+    expect(writeProjectWorktreeFile).toHaveBeenCalled();
+    // Remaining dirty for the failed file.
+    expect(document.querySelector(".code-workspace__tab-dirty")).not.toBeNull();
+  });
+
+  it("asks before LRU eviction when any tab is dirty", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(async (input) => ({
+      ...fileContent,
+      filePath: input.filePath,
+      content: `// ${input.filePath}\n`,
+    }));
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    // Open 10 files (max), dirty the active one, then open an 11th to force LRU.
+    for (let n = 1; n <= 10; n += 1) {
+      await user.click(screen.getByRole("button", { name: `Open file ${n}` }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("tab", { name: new RegExp(`file-${n}\\.ts`) }),
+        ).toBeInTheDocument();
+      });
+    }
+    const editButton = await screen.findByRole("button", { name: "Edit file" });
+    await waitFor(() => {
+      expect(editButton).toBeEnabled();
+    });
+    await user.click(editButton);
+    await user.click(screen.getByTestId("monaco-edit"));
+
+    await user.click(screen.getByRole("button", { name: "Open file 11" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Save All" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("tab", { name: /file-11\.ts/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(10);
+  });
+
+  it("proceeds with LRU eviction after Don't Save All", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(async (input) => ({
+      ...fileContent,
+      filePath: input.filePath,
+      content: `// ${input.filePath}\n`,
+    }));
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    for (let n = 1; n <= 10; n += 1) {
+      await user.click(screen.getByRole("button", { name: `Open file ${n}` }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("tab", { name: new RegExp(`file-${n}\\.ts`) }),
+        ).toBeInTheDocument();
+      });
+    }
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+
+    await user.click(screen.getByRole("button", { name: "Open file 11" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Unsaved Changes",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Don't Save All" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: /file-11\.ts/ }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getAllByRole("tab")).toHaveLength(10);
   });
 });
