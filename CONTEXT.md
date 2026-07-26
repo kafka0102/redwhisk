@@ -137,8 +137,8 @@ Agent Session 启动瞬间从所属 Agent profile 拷贝并持久化的 displayM
 _Avoid_: 实时跟随 profile、内存-only 运行时标记
 
 **Issue Session 归档**：
-Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为过滤后的 timeline JSONL，tui 为轻清理后的纯文本终端 transcript。历史错误形态的 TUI 归档不自动迁移。
-_Avoid_: 运行中 live log、完整审计仓、SQLite 中的会话正文
+Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为过滤后的 timeline JSONL；tui 为写侧提取后的纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考与 TUI chrome 不入档），并按固定块间距排版。历史错误形态的 TUI 归档不自动迁移。
+_Avoid_: 运行中 live log、完整审计仓、完整过程 transcript、SQLite 中的会话正文
 
 **Agent TUI 会话视图**：
 Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区：交互式 xterm 终端 surface，输入直达 PTY，不使用结构化消息流与底部 composer。

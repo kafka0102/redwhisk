@@ -10,7 +10,7 @@ use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
 use super::terminal_archive_clean::{
-    latest_output_from_cleaned_archive_text, light_clean_terminal_archive_text,
+    extract_tui_archive_conclusion_text, latest_output_from_archive_text,
 };
 use super::timeline::{
     latest_output_from_timeline_item, read_timeline_from_log_path, should_archive_timeline_item,
@@ -161,7 +161,7 @@ fn build_tui_issue_session_archive(
         build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
     let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
     let stripped = strip_terminal_control_sequences(&snapshot).replace('\r', "\n");
-    let cleaned = light_clean_terminal_archive_text(&stripped);
+    let cleaned = extract_tui_archive_conclusion_text(&stripped);
     let file_content = if cleaned.is_empty() {
         String::new()
     } else {
@@ -172,7 +172,7 @@ fn build_tui_issue_session_archive(
     Ok(IssueSessionArchive {
         archive_path,
         runtime_path: runtime_log_path.to_string(),
-        latest_output: latest_output_from_cleaned_archive_text(&cleaned),
+        latest_output: latest_output_from_archive_text(&cleaned),
     })
 }
 
