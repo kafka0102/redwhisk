@@ -42,6 +42,7 @@ interface SessionSidePanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
   onOpenIssue: (issueId: number) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onToggleCommittedChangesExpanded: () => void;
@@ -76,6 +77,7 @@ export function SessionSidePanel({
   onActiveTabChange,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  onOpenCommitChanges,
   onOpenIssue,
   onOpenFile,
   onToggleCommittedChangesExpanded,
@@ -149,6 +151,7 @@ export function SessionSidePanel({
             onToggleCommittedExpanded={onToggleCommittedChangesExpanded}
             onOpenChangedFile={onOpenChangedFile}
             onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+            onOpenCommitChanges={onOpenCommitChanges}
             workspaceInput={{
               projectId,
               sessionId: session?.sessionId ?? null,

@@ -26,6 +26,7 @@ interface SessionChangesPanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
   /** 解析 github remote；缺省不显示「在 GitHub 上打开」。 */
   workspaceInput?: ProjectWorkspaceInput | null;
   hasMoreCommitHistory?: boolean;
@@ -49,6 +50,7 @@ export function SessionChangesPanel({
   onToggleCommittedExpanded,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  onOpenCommitChanges,
   workspaceInput = null,
   hasMoreCommitHistory,
   isLoadingMoreCommitHistory,
@@ -71,6 +73,7 @@ export function SessionChangesPanel({
       isCommittedExpanded={isCommittedExpanded}
       onToggleCommittedExpanded={onToggleCommittedExpanded}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+      onOpenCommitChanges={onOpenCommitChanges}
       workspaceInput={workspaceInput}
       hasMoreCommitHistory={hasMoreCommitHistory}
       isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}

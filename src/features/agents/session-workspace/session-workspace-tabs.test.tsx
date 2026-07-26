@@ -24,6 +24,7 @@ describe("SessionWorkspaceTabs", () => {
       errorMessage: null,
     };
     const changeTab: SessionWorkspaceChangeTab = {
+      mode: "file",
       fileName: "changes.ts",
       filePath: "src/changes.ts",
       change: {
@@ -94,5 +95,89 @@ describe("SessionWorkspaceTabs", () => {
         .querySelector(".session-workspace-tabs__agent-icon")
         ?.getAttribute("src"),
     ).toBe("/logos/claude_code.svg");
+  });
+
+  it("renders multi-diff change tab label as short hash plus subject", () => {
+    const changeTab: SessionWorkspaceChangeTab = {
+      mode: "multi",
+      label: "abcdef1 feat: open all changes",
+      commitHash: "abcdef123456",
+      multiDiff: {
+        commitHash: "abcdef123456",
+        files: [
+          {
+            fileName: "a.ts",
+            filePath: "src/a.ts",
+            status: "M",
+            kind: "modified",
+            diff: null,
+            isLoading: true,
+            errorMessage: null,
+          },
+        ],
+      },
+    };
+
+    render(
+      <SessionWorkspaceTabs
+        activeTab="changes"
+        changeTab={changeTab}
+        fileTab={null}
+        sessionAgentType="claude_code"
+        sessionContent={<div>Session content</div>}
+        toolTabs={[]}
+        onCloseTab={vi.fn()}
+        onCreateBrowserTab={vi.fn()}
+        onCreateTerminalTab={vi.fn()}
+        onSelectTab={vi.fn()}
+      />,
+    );
+
+    const tablist = screen.getByRole("tablist");
+    expect(
+      within(tablist)
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Session", "abcdef1 feat: open all changes"]);
+    expect(
+      screen.getByRole("button", {
+        name: "Close abcdef1 feat: open all changes",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Commit all changes")).toBeInTheDocument();
+  });
+
+  it("shows only one change tab for multi-diff (slot exclusive with single file)", () => {
+    const changeTab: SessionWorkspaceChangeTab = {
+      mode: "multi",
+      label: "deadbee chore: exclusivity",
+      commitHash: "deadbeef",
+      multiDiff: { commitHash: "deadbeef", files: [] },
+    };
+
+    render(
+      <SessionWorkspaceTabs
+        activeTab="changes"
+        changeTab={changeTab}
+        fileTab={null}
+        sessionAgentType="claude_code"
+        sessionContent={<div>Session content</div>}
+        toolTabs={[]}
+        onCloseTab={vi.fn()}
+        onCreateBrowserTab={vi.fn()}
+        onCreateTerminalTab={vi.fn()}
+        onSelectTab={vi.fn()}
+      />,
+    );
+
+    const changeTabs = within(screen.getByRole("tablist"))
+      .getAllByRole("tab")
+      .filter((tab) => tab.textContent !== "Session");
+    expect(changeTabs).toHaveLength(1);
+    expect(changeTabs[0]?.textContent).toBe("deadbee chore: exclusivity");
+    // multi empty state, not single-file DiffViewer empty prompt
+    expect(
+      screen.getByText("This commit has no file changes."),
+    ).toBeInTheDocument();
   });
 });

@@ -540,6 +540,7 @@ export function AgentsActivity({
               onActiveTabChange={workspaceCache.setSidePanelTab}
               onOpenChangedFile={workspaceCache.openChange}
               onOpenCommittedChangedFile={workspaceCache.openCommittedChange}
+              onOpenCommitChanges={workspaceCache.openCommitChanges}
               onOpenIssue={(issueId) => {
                 if (selectedSession) {
                   setSessionReturnState(projectId, {

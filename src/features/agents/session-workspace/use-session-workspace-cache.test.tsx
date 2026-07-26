@@ -7,6 +7,11 @@ import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
+  readProjectWorktreeDiff,
+  type WorkspaceChangedFile,
+  type WorkspaceCommitChangedFile,
+  type WorkspaceCommitRecord,
+  type WorkspaceDiffContent,
 } from "./session-workspace-commands";
 
 vi.mock("../session-workspace/session-workspace-commands", () => ({
@@ -24,6 +29,7 @@ const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
 const getProjectWorktreeCommitHistoryMock = vi.mocked(
   getProjectWorktreeCommitHistory,
 );
+const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
@@ -523,5 +529,215 @@ describe("useSessionWorkspaceCache uncommitted changes for files decorations", (
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(
       callsAfterLeave,
     );
+  });
+});
+
+describe("useSessionWorkspaceCache multi-diff change tab", () => {
+  beforeEach(() => {
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+    readProjectWorktreeDiffMock.mockReset();
+  });
+
+  it("openCommitChanges opens multi tab labeled short hash plus subject", async () => {
+    const fileA: WorkspaceCommitChangedFile = {
+      filePath: "src/a.ts",
+      oldPath: null,
+      fileName: "a.ts",
+      kind: "modified",
+      status: "M",
+    };
+    const fileB: WorkspaceCommitChangedFile = {
+      filePath: "src/b.ts",
+      oldPath: null,
+      fileName: "b.ts",
+      kind: "added",
+      status: "A",
+    };
+    const commit: WorkspaceCommitRecord = {
+      hash: "fullhash123456",
+      shortHash: "fullhash",
+      message: "feat: multi tab",
+      authorName: "dev",
+      committedAt: 1,
+      files: [fileA, fileB],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    const diffContent: WorkspaceDiffContent = {
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "old",
+      modifiedContent: "new",
+      isBinary: false,
+      isTooLarge: false,
+    };
+    readProjectWorktreeDiffMock.mockImplementation(async ({ filePath }) => ({
+      ...diffContent,
+      filePath,
+    }));
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+
+    expect(result.current.changeTab).toMatchObject({
+      mode: "multi",
+      label: "fullhash feat: multi tab",
+      commitHash: "fullhash123456",
+    });
+    expect(result.current.activeWorkspaceTab).toBe("changes");
+    expect(result.current.changeTab?.mode).toBe("multi");
+    if (result.current.changeTab?.mode === "multi") {
+      expect(result.current.changeTab.multiDiff.files).toHaveLength(2);
+    }
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    if (result.current.changeTab?.mode === "multi") {
+      expect(
+        result.current.changeTab.multiDiff.files.every((f) => !f.isLoading),
+      ).toBe(true);
+      expect(result.current.changeTab.multiDiff.files[0]?.diff).not.toBeNull();
+    }
+    expect(readProjectWorktreeDiffMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("openCommitChanges and single-file change tab are mutually exclusive", async () => {
+    const changed: WorkspaceChangedFile = {
+      filePath: "src/a.ts",
+      oldPath: null,
+      fileName: "a.ts",
+      kind: "modified",
+      status: "M",
+      additions: 1,
+      deletions: 0,
+      isBinary: false,
+      contentHash: "h",
+      metadataSignature: "s",
+    };
+    const commit: WorkspaceCommitRecord = {
+      hash: "abc123",
+      shortHash: "abc123",
+      message: "chore: exclusivity",
+      authorName: "dev",
+      committedAt: 1,
+      files: [
+        {
+          filePath: "src/b.ts",
+          oldPath: null,
+          fileName: "b.ts",
+          kind: "modified",
+          status: "M",
+        },
+      ],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "o",
+      modifiedContent: "n",
+      isBinary: false,
+      isTooLarge: false,
+    });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.openChange(changed);
+    });
+    expect(result.current.changeTab?.mode).toBe("file");
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+    expect(result.current.changeTab?.mode).toBe("multi");
+    expect(result.current.changeTab).toMatchObject({
+      label: "abc123 chore: exclusivity",
+    });
+
+    await act(async () => {
+      await result.current.openCommittedChange("abc123", {
+        filePath: "src/b.ts",
+        oldPath: null,
+        fileName: "b.ts",
+        kind: "modified",
+        status: "M",
+      });
+    });
+    expect(result.current.changeTab?.mode).toBe("file");
+    if (result.current.changeTab?.mode === "file") {
+      expect(result.current.changeTab.fileName).toBe("b.ts");
+    }
+  });
+
+  it("closing changes tab clears multi-diff residual", async () => {
+    const commit: WorkspaceCommitRecord = {
+      hash: "zzz",
+      shortHash: "zzz",
+      message: "clear me",
+      authorName: "dev",
+      committedAt: 1,
+      files: [],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+    expect(result.current.changeTab?.mode).toBe("multi");
+
+    await act(async () => {
+      result.current.closeWorkspaceTab("changes");
+    });
+    expect(result.current.changeTab).toBeNull();
+    expect(result.current.activeWorkspaceTab).toBe("session");
   });
 });

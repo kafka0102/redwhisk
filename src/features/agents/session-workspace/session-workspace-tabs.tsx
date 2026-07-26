@@ -12,12 +12,14 @@ import { DiffViewer } from "../../../shared/workspace/diff-viewer";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { AgentType } from "../agent-session-commands";
 import { getAgentLogoSrc } from "../agent-visuals";
+import { MultiDiffViewer } from "../../../shared/workspace/multi-diff-viewer";
 import type {
   SessionWorkspaceChangeTab,
   SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
   SessionWorkspaceToolTabKind,
 } from "./session-workspace-types";
+import { getChangeTabLabel } from "./session-workspace-types";
 
 export interface SessionWorkspaceToolTab {
   id: SessionWorkspaceToolTabKind;
@@ -102,9 +104,11 @@ export function SessionWorkspaceTabs({
         ) : null}
         {changeTab ? (
           <ClosableWorkspaceTab
-            closeLabel={messages.agentsFeature.closeTab(changeTab.fileName)}
+            closeLabel={messages.agentsFeature.closeTab(
+              getChangeTabLabel(changeTab),
+            )}
             icon={<GitBranch aria-hidden="true" size={14} strokeWidth={1.8} />}
-            label={changeTab.fileName}
+            label={getChangeTabLabel(changeTab)}
             selected={selectedTab === "changes"}
             tab="changes"
             onCloseTab={onCloseTab}
@@ -168,7 +172,14 @@ export function SessionWorkspaceTabs({
             className="session-workspace-tabs__pane"
             hidden={selectedTab !== "changes"}
           >
-            <DiffViewer tab={changeTab} />
+            {changeTab.mode === "multi" ? (
+              <MultiDiffViewer
+                key={changeTab.commitHash}
+                state={changeTab.multiDiff}
+              />
+            ) : (
+              <DiffViewer tab={changeTab} />
+            )}
           </div>
         ) : null}
       </div>

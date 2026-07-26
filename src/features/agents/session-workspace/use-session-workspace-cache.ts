@@ -30,10 +30,18 @@ import type {
   SessionWorkspaceFileTab,
   SessionWorkspaceTabKind,
 } from "./session-workspace-types";
+import {
+  formatCommitChangeTabLabel,
+  isSingleFileChangeTab,
+} from "./session-workspace-types";
+import { mapPool } from "../../../shared/workspace/map-pool";
+import type { MultiDiffFileState } from "../../../shared/workspace/multi-diff-types";
 
 const CHANGES_POLL_INTERVAL_MS = 2_000;
 const COMMIT_HISTORY_POLL_INTERVAL_MS = 5_000;
 const FILE_TREE_POLL_INTERVAL_MS = 5_000;
+/** 提交全部更改多文件 diff 有界并发上限。 */
+const MULTI_DIFF_CONCURRENCY = 5;
 
 interface UseSessionWorkspaceCacheInput {
   projectId: number;
@@ -538,12 +546,14 @@ export function useSessionWorkspaceCache({
         ...cache,
         activeWorkspaceTab: "changes",
         changeTab: {
+          mode: "file",
           fileName: change.fileName,
           filePath: change.filePath,
           change,
           commitHash: null,
           diff:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash == null
               ? cache.changeTab.diff
               : null,
@@ -562,7 +572,8 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash == null
               ? {
                   ...cache.changeTab,
@@ -576,7 +587,8 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash == null
               ? {
                   ...cache.changeTab,
@@ -600,12 +612,14 @@ export function useSessionWorkspaceCache({
         ...cache,
         activeWorkspaceTab: "changes",
         changeTab: {
+          mode: "file",
           fileName: change.fileName,
           filePath: change.filePath,
           change,
           commitHash,
           diff:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash === commitHash
               ? cache.changeTab.diff
               : null,
@@ -625,7 +639,8 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash === commitHash
               ? {
                   ...cache.changeTab,
@@ -639,7 +654,8 @@ export function useSessionWorkspaceCache({
         updateCurrentCache((cache) => ({
           ...cache,
           changeTab:
-            cache.changeTab?.filePath === change.filePath &&
+            isSingleFileChangeTab(cache.changeTab) &&
+            cache.changeTab.filePath === change.filePath &&
             cache.changeTab.commitHash === commitHash
               ? {
                   ...cache.changeTab,
@@ -651,6 +667,113 @@ export function useSessionWorkspaceCache({
       }
     },
     [projectId, sessionId, updateCurrentCache, t],
+  );
+
+  const openCommitChanges = useCallback(
+    (commit: WorkspaceCommitRecord) => {
+      if (sessionId == null) {
+        return;
+      }
+
+      const requestSessionId = sessionId;
+      const initialFiles: MultiDiffFileState[] = commit.files.map((file) => ({
+        fileName: file.fileName,
+        filePath: file.filePath,
+        status: file.status,
+        kind: file.kind,
+        diff: null,
+        isLoading: true,
+        errorMessage: null,
+      }));
+
+      updateSessionCache(requestSessionId, (cache) => ({
+        ...cache,
+        activeWorkspaceTab: "changes",
+        changeTab: {
+          mode: "multi",
+          label: formatCommitChangeTabLabel(commit.shortHash, commit.message),
+          commitHash: commit.hash,
+          multiDiff: {
+            commitHash: commit.hash,
+            files: initialFiles,
+          },
+        },
+      }));
+
+      if (commit.files.length === 0) {
+        return;
+      }
+
+      void mapPool(
+        commit.files,
+        MULTI_DIFF_CONCURRENCY,
+        async (file: WorkspaceCommitChangedFile) => {
+          try {
+            const diff = await readProjectWorktreeDiff({
+              projectId,
+              sessionId: requestSessionId,
+              filePath: file.filePath,
+              commitHash: commit.hash,
+            });
+            updateSessionCache(requestSessionId, (cache) => {
+              if (
+                cache.changeTab?.mode !== "multi" ||
+                cache.changeTab.commitHash !== commit.hash
+              ) {
+                return cache;
+              }
+              return {
+                ...cache,
+                changeTab: {
+                  ...cache.changeTab,
+                  multiDiff: {
+                    ...cache.changeTab.multiDiff,
+                    files: cache.changeTab.multiDiff.files.map((entry) =>
+                      entry.filePath === file.filePath
+                        ? {
+                            ...entry,
+                            diff,
+                            errorMessage: null,
+                            isLoading: false,
+                          }
+                        : entry,
+                    ),
+                  },
+                },
+              };
+            });
+          } catch (error) {
+            updateSessionCache(requestSessionId, (cache) => {
+              if (
+                cache.changeTab?.mode !== "multi" ||
+                cache.changeTab.commitHash !== commit.hash
+              ) {
+                return cache;
+              }
+              return {
+                ...cache,
+                changeTab: {
+                  ...cache.changeTab,
+                  multiDiff: {
+                    ...cache.changeTab.multiDiff,
+                    files: cache.changeTab.multiDiff.files.map((entry) =>
+                      entry.filePath === file.filePath
+                        ? {
+                            ...entry,
+                            errorMessage: getCommandErrorMessage(error, t),
+                            isLoading: false,
+                          }
+                        : entry,
+                    ),
+                  },
+                },
+              };
+            });
+          }
+        },
+      );
+    },
+    [projectId, sessionId, updateSessionCache, t],
   );
 
   const openFile = useCallback(
@@ -814,6 +937,7 @@ export function useSessionWorkspaceCache({
     isFileTreeLoading: currentCache.isFileTreeLoading,
     openChange,
     openCommittedChange,
+    openCommitChanges,
     openFile,
     refreshCommitHistory,
     loadMoreCommitHistory,
