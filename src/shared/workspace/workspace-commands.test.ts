@@ -10,6 +10,8 @@ import {
   pushProjectWorktree,
   searchProjectWorktreeContent,
   statProjectWorktreeFile,
+  resolveWorkspaceGithubRemote,
+  probeGithubCommit,
 } from "./workspace-commands";
 
 vi.mock("../commands/command-client", () => ({
@@ -124,5 +126,29 @@ describe("workspace commands", () => {
         },
       },
     );
+  });
+
+  it("invokes github remote resolve and commit probe commands", async () => {
+    await expect(
+      resolveWorkspaceGithubRemote({
+        projectId: 1,
+        workspacePath: "/tmp/repo",
+      }),
+    ).resolves.toEqual({ command: "resolve_workspace_github_remote" });
+    await expect(
+      probeGithubCommit({
+        owner: "acme",
+        repo: "widgets",
+        commitHash: "abc",
+      }),
+    ).resolves.toEqual({ command: "probe_github_commit" });
+
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "resolve_workspace_github_remote",
+      { input: { projectId: 1, workspacePath: "/tmp/repo" } },
+    );
+    expect(invokeCommandMock).toHaveBeenCalledWith("probe_github_commit", {
+      input: { owner: "acme", repo: "widgets", commitHash: "abc" },
+    });
   });
 });

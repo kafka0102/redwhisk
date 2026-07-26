@@ -1,5 +1,7 @@
 pub mod command;
 pub mod remote;
+pub mod github_remote;
+pub mod github_commit_probe;
 pub mod operation_state;
 pub mod repository;
 pub mod status;

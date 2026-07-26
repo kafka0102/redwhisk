@@ -92,6 +92,11 @@ export function CodeWorkspaceChangesView({
       onOpenChangedFile={onOpenChangedFile}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
       onToggleUncommittedExpanded={onToggleUncommitted}
+      workspaceInput={
+        selectedRootWorkspacePath
+          ? { projectId, workspacePath: selectedRootWorkspacePath }
+          : null
+      }
       commitHistory={commitHistory}
       commitHistoryErrorMessage={commitHistoryErrorMessage}
       isCommitHistoryLoading={isCommitHistoryLoading}

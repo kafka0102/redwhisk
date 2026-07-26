@@ -240,3 +240,42 @@ pub struct WorkspaceContentSearchResponse {
     pub match_count: u32,
     pub truncated: bool,
 }
+
+/// workspace 远程解析出的 github.com owner/repo（仅公共 github.com）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceGithubRemote {
+    pub owner: String,
+    pub repo: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveWorkspaceGithubRemoteResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote: Option<WorkspaceGithubRemote>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeGithubCommitInput {
+    pub owner: String,
+    pub repo: String,
+    pub commit_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GithubCommitProbeStatus {
+    Exists,
+    NotFound,
+    NetworkError,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeGithubCommitResponse {
+    pub status: GithubCommitProbeStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_url: Option<String>,
+}

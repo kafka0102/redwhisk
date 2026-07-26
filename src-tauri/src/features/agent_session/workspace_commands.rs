@@ -5,9 +5,10 @@ use crate::app_state::AppState;
 use super::workspace::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
-    CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
-    ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
-    ProjectWorktreeFileTreeResponse, WorkspaceContentSearchInput,
+    CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
+    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorktreeChangesResponse,
+    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
+    ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
     WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
     WorkspaceFileStat,
 };
@@ -136,6 +137,35 @@ pub async fn delete_code_workspace_worktree(
     run_workspace_blocking(data_dir, move |service| service.delete_worktree(input)).await?;
     emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn resolve_workspace_github_remote(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<ResolveWorkspaceGithubRemoteResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.resolve_github_remote(input)).await
+}
+
+/// 探测 github.com 上 commit 是否存在。不读本地 git；纯 HTTP。
+#[tauri::command]
+pub async fn probe_github_commit(
+    input: ProbeGithubCommitInput,
+) -> Result<ProbeGithubCommitResponse, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        super::workspace_github::probe_github_commit_for_input(input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "探测 GitHub 提交失败。",
+        )
+        .with_reason("githubCommitProbeFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })
 }
 
 /// 解析 data_dir 并完成幂等本地数据初始化。仅目录解析与迁移幂等检查，轻量，留在

@@ -11,10 +11,12 @@ import {
   CommittedChangesTimeline,
 } from "./workspace-changes-view";
 import type {
+  ProjectWorkspaceInput,
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
 } from "./workspace-commands";
+import { useWorkspaceGithubRemote } from "./use-workspace-github-remote";
 
 interface WorkspaceChangesPanelsProps {
   changes: WorkspaceChangedFile[];
@@ -29,6 +31,8 @@ interface WorkspaceChangesPanelsProps {
   ) => void;
   /** 提交上下文菜单「打开更改」；可选，后续多 diff 视图接线。 */
   onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  /** 用于解析 github.com remote 以显示「在 GitHub 上打开」；缺省不显示。 */
+  workspaceInput?: ProjectWorkspaceInput | null;
   commitHistory: WorkspaceCommitRecord[];
   isCommitHistoryLoading: boolean;
   commitHistoryErrorMessage: string | null;
@@ -64,6 +68,7 @@ export function WorkspaceChangesPanels({
   onOpenChangedFile,
   onOpenCommittedChangedFile,
   onOpenCommitChanges,
+  workspaceInput = null,
   commitHistory,
   isCommitHistoryLoading,
   commitHistoryErrorMessage,
@@ -81,6 +86,7 @@ export function WorkspaceChangesPanels({
   const [expandedCommitHashes, setExpandedCommitHashes] = useState<Set<string>>(
     () => new Set(),
   );
+  const githubRemote = useWorkspaceGithubRemote(workspaceInput);
 
   const handleToggleCommit = useCallback((hash: string) => {
     setExpandedCommitHashes((current) => {
@@ -210,6 +216,7 @@ export function WorkspaceChangesPanels({
               baseBranch={baseBranch}
               onOpenCommittedChangedFile={onOpenCommittedChangedFile}
               onOpenCommitChanges={onOpenCommitChanges}
+              githubRemote={githubRemote}
               onToggleCommit={handleToggleCommit}
             />
             {isLoadingMoreCommitHistory ? (

@@ -1,5 +1,6 @@
 import { WorkspaceChangesPanels } from "../../../shared/workspace/workspace-changes-panels";
 import type {
+  ProjectWorkspaceInput,
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
@@ -25,6 +26,8 @@ interface SessionChangesPanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  /** 解析 github remote；缺省不显示「在 GitHub 上打开」。 */
+  workspaceInput?: ProjectWorkspaceInput | null;
   hasMoreCommitHistory?: boolean;
   isLoadingMoreCommitHistory?: boolean;
   loadMoreCommitHistoryErrorMessage?: string | null;
@@ -46,6 +49,7 @@ export function SessionChangesPanel({
   onToggleCommittedExpanded,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  workspaceInput = null,
   hasMoreCommitHistory,
   isLoadingMoreCommitHistory,
   loadMoreCommitHistoryErrorMessage,
@@ -67,6 +71,7 @@ export function SessionChangesPanel({
       isCommittedExpanded={isCommittedExpanded}
       onToggleCommittedExpanded={onToggleCommittedExpanded}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+      workspaceInput={workspaceInput}
       hasMoreCommitHistory={hasMoreCommitHistory}
       isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
       loadMoreCommitHistoryErrorMessage={loadMoreCommitHistoryErrorMessage}

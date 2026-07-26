@@ -495,6 +495,9 @@ export interface I18nMessages {
     loadingFileTree: string;
     noFiles: string;
     openCommitChanges: string;
+    openCommitOnGithub: string;
+    commitNotFoundOnGithub: string;
+    openCommitOnGithubNetworkError: string;
     copyCommitId: string;
     copyCommitMessage: string;
     copyFileName: string;

@@ -274,3 +274,42 @@ export function deleteCodeWorkspaceWorktree(
 ): Promise<void> {
   return invokeCommand<void>("delete_code_workspace_worktree", { input });
 }
+
+export interface WorkspaceGithubRemote {
+  owner: string;
+  repo: string;
+}
+
+export interface ResolveWorkspaceGithubRemoteResponse {
+  remote?: WorkspaceGithubRemote | null;
+}
+
+export interface ProbeGithubCommitInput {
+  owner: string;
+  repo: string;
+  commitHash: string;
+}
+
+export type GithubCommitProbeStatus = "exists" | "not_found" | "network_error";
+
+export interface ProbeGithubCommitResponse {
+  status: GithubCommitProbeStatus;
+  commitUrl?: string | null;
+}
+
+export function resolveWorkspaceGithubRemote(
+  input: ProjectWorkspaceInput,
+): Promise<ResolveWorkspaceGithubRemoteResponse> {
+  return invokeCommand<ResolveWorkspaceGithubRemoteResponse>(
+    "resolve_workspace_github_remote",
+    { input },
+  );
+}
+
+export function probeGithubCommit(
+  input: ProbeGithubCommitInput,
+): Promise<ProbeGithubCommitResponse> {
+  return invokeCommand<ProbeGithubCommitResponse>("probe_github_commit", {
+    input,
+  });
+}

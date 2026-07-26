@@ -149,6 +149,11 @@ export function SessionSidePanel({
             onToggleCommittedExpanded={onToggleCommittedChangesExpanded}
             onOpenChangedFile={onOpenChangedFile}
             onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+            workspaceInput={{
+              projectId,
+              sessionId: session?.sessionId ?? null,
+              workspacePath: workspacePath ?? null,
+            }}
             hasMoreCommitHistory={hasMoreCommitHistory}
             isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
             loadMoreCommitHistoryErrorMessage={

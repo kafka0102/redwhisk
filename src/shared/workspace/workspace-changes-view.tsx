@@ -13,9 +13,12 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
 } from "../../components/ui/context-menu";
 import { useI18n } from "../i18n/i18n";
 import { toast } from "../toast";
+import { openCommitOnGithub } from "./open-commit-on-github";
+import type { WorkspaceGithubRemote } from "./workspace-commands";
 import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
@@ -49,6 +52,8 @@ interface CommittedChangesTimelineProps {
   ) => void;
   /** 提交上下文菜单「打开更改」；后续多 diff 视图由上层接线。 */
   onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  /** 可解析的 github.com remote；有值时显示「在 GitHub 上打开」，与 isPushed 无关。 */
+  githubRemote?: WorkspaceGithubRemote | null;
   onToggleCommit: (hash: string) => void;
 }
 
@@ -61,6 +66,7 @@ export function CommittedChangesTimeline({
   baseBranch,
   onOpenCommittedChangedFile,
   onOpenCommitChanges,
+  githubRemote = null,
   onToggleCommit,
 }: CommittedChangesTimelineProps) {
   const { messages } = useI18n();
@@ -87,6 +93,31 @@ export function CommittedChangesTimeline({
       }
     },
     [expandedCommitHashes, onOpenCommitChanges, onToggleCommit],
+  );
+
+  const handleOpenOnGithub = useCallback(
+    async (commit: WorkspaceCommitRecord) => {
+      if (!githubRemote) {
+        return;
+      }
+      const outcome = await openCommitOnGithub({
+        owner: githubRemote.owner,
+        repo: githubRemote.repo,
+        commitHash: commit.hash,
+      });
+      if (outcome === "not_found") {
+        toast.error(messages.agentsFeature.commitNotFoundOnGithub);
+        return;
+      }
+      if (outcome === "network_error" || outcome === "open_failed") {
+        toast.error(messages.agentsFeature.openCommitOnGithubNetworkError);
+      }
+    },
+    [
+      githubRemote,
+      messages.agentsFeature.commitNotFoundOnGithub,
+      messages.agentsFeature.openCommitOnGithubNetworkError,
+    ],
   );
 
   if (commits.length === 0) {
@@ -220,6 +251,18 @@ export function CommittedChangesTimeline({
           >
             {messages.agentsFeature.openCommitChanges}
           </ContextMenuItem>
+          {githubRemote ? (
+            <ContextMenuItem
+              onClick={() => {
+                if (menu) {
+                  void handleOpenOnGithub(menu.commit);
+                }
+              }}
+            >
+              {messages.agentsFeature.openCommitOnGithub}
+            </ContextMenuItem>
+          ) : null}
+          {githubRemote ? <ContextMenuSeparator /> : null}
           <ContextMenuItem
             onClick={() => {
               if (menu) {

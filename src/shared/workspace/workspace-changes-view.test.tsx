@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
 import { toast } from "../toast";
+import { openCommitOnGithub } from "./open-commit-on-github";
 import { CommittedChangesTimeline } from "./workspace-changes-view";
 import type { WorkspaceCommitRecord } from "./workspace-commands";
 
@@ -20,7 +21,12 @@ vi.mock("../toast", () => ({
   },
 }));
 
+vi.mock("./open-commit-on-github", () => ({
+  openCommitOnGithub: vi.fn(),
+}));
+
 const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
@@ -346,5 +352,83 @@ describe("CommittedChangesTimeline commit context menu", () => {
 
     expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
     expect(onToggleCommit).not.toHaveBeenCalled();
+  });
+
+  it("hides Open on GitHub when githubRemote is absent regardless of isPushed", async () => {
+    renderTimeline({
+      commits: [
+        makeCommit({
+          hash: "abcdef1234567890",
+          shortHash: "abcdef1",
+          message: "fix: timeline menu",
+          isPushed: true,
+          pushedTo: "origin/main",
+        }),
+      ],
+      githubRemote: null,
+    });
+    openContextMenuOnCommit();
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Open Changes",
+      "Copy Commit ID",
+      "Copy Commit Message",
+    ]);
+  });
+
+  it("shows Open on GitHub between open and copy when githubRemote is set", async () => {
+    renderTimeline({
+      commits: [
+        makeCommit({
+          hash: "abcdef1234567890",
+          shortHash: "abcdef1",
+          message: "fix: timeline menu",
+          isPushed: false,
+          pushedTo: null,
+        }),
+      ],
+      githubRemote: { owner: "acme", repo: "widgets" },
+    });
+    openContextMenuOnCommit();
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Open Changes",
+      "Open on GitHub",
+      "Copy Commit ID",
+      "Copy Commit Message",
+    ]);
+  });
+
+  it("opens on github and toasts not_found / network_error outcomes", async () => {
+    const openOnGithubMock = vi.mocked(openCommitOnGithub);
+    openOnGithubMock.mockReset();
+    toastErrorMock.mockReset();
+
+    openOnGithubMock.mockResolvedValueOnce("not_found");
+    renderTimeline({
+      githubRemote: { owner: "acme", repo: "widgets" },
+    });
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open on GitHub" }),
+    );
+    await waitFor(() => {
+      expect(openOnGithubMock).toHaveBeenCalledWith({
+        owner: "acme",
+        repo: "widgets",
+        commitHash: "abcdef1234567890",
+      });
+      expect(toastErrorMock).toHaveBeenCalledWith("Commit not found on GitHub");
+    });
+
+    openOnGithubMock.mockResolvedValueOnce("network_error");
+    toastErrorMock.mockReset();
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open on GitHub" }),
+    );
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not reach GitHub");
+    });
   });
 });

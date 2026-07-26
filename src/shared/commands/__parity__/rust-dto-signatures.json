@@ -765,6 +765,19 @@
         "sourcePath": "optional"
       }
     },
+    "ProbeGithubCommitInput": {
+      "fields": {
+        "commitHash": "required",
+        "owner": "required",
+        "repo": "required"
+      }
+    },
+    "ProbeGithubCommitResponse": {
+      "fields": {
+        "commitUrl": "optional",
+        "status": "required"
+      }
+    },
     "ProjectGitBranchListInput": {
       "fields": {
         "projectId": "required"
@@ -941,9 +954,20 @@
         "snapshot": "required"
       }
     },
+    "ReconcileSavedAgentSkillsInput": {
+      "fields": {
+        "projectId": "optional",
+        "scope": "required"
+      }
+    },
     "RefreshAgentSkillsInput": {
       "fields": {
         "projectId": "optional"
+      }
+    },
+    "RefreshAgentSkillsResult": {
+      "fields": {
+        "changedCount": "required"
       }
     },
     "RemoveProjectFromListInput": {
@@ -965,6 +989,11 @@
         "projectId": "required",
         "rows": "required",
         "sessionId": "required"
+      }
+    },
+    "ResolveWorkspaceGithubRemoteResponse": {
+      "fields": {
+        "remote": "optional"
       }
     },
     "RespondAgentPermissionInput": {
@@ -1393,6 +1422,13 @@
         "sizeBytes": "required"
       }
     },
+    "WorkspaceFileStat": {
+      "fields": {
+        "filePath": "required",
+        "modifiedAt": "required",
+        "sizeBytes": "required"
+      }
+    },
     "WorkspaceFileTreeNode": {
       "fields": {
         "children": "optional",
@@ -1403,6 +1439,12 @@
         "name": "required",
         "path": "required",
         "sizeBytes": "optional"
+      }
+    },
+    "WorkspaceGithubRemote": {
+      "fields": {
+        "owner": "required",
+        "repo": "required"
       }
     },
     "WriteAgentSessionTerminalInput": {
@@ -1617,6 +1659,14 @@
       "variants": [
         "snooze7Days",
         "ignoreVersion"
+      ]
+    },
+    "GithubCommitProbeStatus": {
+      "rename": "snake_case",
+      "variants": [
+        "exists",
+        "not_found",
+        "network_error"
       ]
     },
     "IssueActionType": {
