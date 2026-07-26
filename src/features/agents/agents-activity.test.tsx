@@ -151,6 +151,14 @@ vi.mock("@monaco-editor/react", () => ({
     }),
 }));
 
+// 生产侧 Monaco 经 useMonacoEditorReady 懒加载就绪后才渲染 DiffEditor/Editor
+//（见 83e09bf）。jsdom 里该就绪态不会在超时内置 true，导致被 mock 的
+// @monaco-editor/react（带 monaco-diff / monaco-editor testid）永不挂载。
+// 测试只关心 viewer/diff 的接入与 tab 行为，直接置就绪即可。
+vi.mock("../../shared/use-monaco-editor-ready", () => ({
+  useMonacoEditorReady: () => true,
+}));
+
 vi.mock("./agent-session-commands", () => ({
   deleteAgentSession: vi.fn(),
   injectAgentSessionPrompt: vi.fn(),
