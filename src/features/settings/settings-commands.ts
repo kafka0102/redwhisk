@@ -85,6 +85,15 @@ export interface RefreshAgentSkillsInput {
   projectId?: number | null;
 }
 
+export interface RefreshAgentSkillsResult {
+  changedCount: number;
+}
+
+export interface ReconcileSavedAgentSkillsInput {
+  scope: AgentSkillScope;
+  projectId?: number | null;
+}
+
 export interface AgentSkillListResponse {
   skills: AgentSkillRecord[];
   globalStatus: AgentSkillRefreshStatus;
@@ -262,10 +271,21 @@ export function listAgentSkills(
 
 export function refreshAgentSkills(
   input: RefreshAgentSkillsInput,
-): Promise<void> {
-  return invokeCommand("refresh_agent_skills", {
+): Promise<RefreshAgentSkillsResult> {
+  return invokeCommand<RefreshAgentSkillsResult>("refresh_agent_skills", {
     input,
   });
+}
+
+export function reconcileSavedAgentSkills(
+  input: ReconcileSavedAgentSkillsInput,
+): Promise<RefreshAgentSkillsResult> {
+  return invokeCommand<RefreshAgentSkillsResult>(
+    "reconcile_saved_agent_skills",
+    {
+      input,
+    },
+  );
 }
 
 export function listProjectLabels(

@@ -63,3 +63,17 @@ pub struct AgentSkillsUpdatedEvent {
     pub scope: AgentSkillScope,
     pub project_id: Option<i64>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshAgentSkillsResult {
+    pub changed_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileSavedAgentSkillsInput {
+    pub scope: AgentSkillScope,
+    pub project_id: Option<i64>,
+}
+

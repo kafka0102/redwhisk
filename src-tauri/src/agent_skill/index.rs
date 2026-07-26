@@ -111,6 +111,37 @@ impl AgentSkillIndex {
             .insert(project_id, AgentSkillRefreshStatus::Failed);
         state.project_errors.insert(project_id, error.into());
     }
+
+    /// 返回当前缓存的全局 skill 快照（未按 agent_type 过滤）。
+    pub fn snapshot_global(&self) -> Vec<AgentSkillRecord> {
+        let state = self.inner.read().expect("agent skill index poisoned");
+        state.global_skills.clone()
+    }
+
+    /// 返回当前缓存的项目 skill 快照（未按 agent_type 过滤）；未知项目返回空。
+    pub fn snapshot_project(&self, project_id: i64) -> Vec<AgentSkillRecord> {
+        let state = self.inner.read().expect("agent skill index poisoned");
+        state
+            .project_skills
+            .get(&project_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// 项目 skill 索引状态；从未刷新过时为 Idle。
+    pub fn project_status(&self, project_id: i64) -> AgentSkillRefreshStatus {
+        let state = self.inner.read().expect("agent skill index poisoned");
+        state
+            .project_statuses
+            .get(&project_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn global_status(&self) -> AgentSkillRefreshStatus {
+        let state = self.inner.read().expect("agent skill index poisoned");
+        state.global_status.clone()
+    }
 }
 
 fn filter_skills(

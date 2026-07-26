@@ -96,6 +96,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             features::settings::agent_skill_commands::list_agent_skills,
             features::settings::agent_skill_commands::refresh_agent_skills,
+            features::settings::agent_skill_commands::reconcile_saved_agent_skills,
             commands::core_commands::initialize_local_data,
             features::project::commands::create_project,
             features::project::commands::list_projects,
