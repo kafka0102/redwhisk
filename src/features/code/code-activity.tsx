@@ -37,42 +37,19 @@ import {
 } from "./code-workspace-cache";
 import {
   canEditCodeFileTab,
+  getCodeFileEditBlockReason,
   isMarkdownPreviewable,
+  normalizeCodeFileTab,
+  pickLruVictimPath,
+  resolveEditDisabledTitle,
   resolveFileLoadErrorMessage,
 } from "./code-workspace-helpers";
 import { useCodeUnsavedConfirm } from "./use-code-unsaved-confirm";
-import {
-  buildActiveFileSignature,
-  useCodeActiveFileRefresh,
-} from "./use-code-active-file-refresh";
+import { buildActiveFileSignature } from "./use-code-active-file-refresh";
+import { useCodeActiveFileRefreshBinding } from "./use-code-active-file-refresh-binding";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
-
-function pickLruVictimPath(
-  tabs: CodeFileTab[],
-  previousActivePath: string | null,
-): string | null {
-  if (tabs.length < MAX_FILE_TABS) {
-    return null;
-  }
-  return (
-    tabs
-      .filter((candidate) => candidate.filePath !== previousActivePath)
-      .sort((left, right) => left.lastActiveAt - right.lastActiveAt)[0]
-      ?.filePath ?? null
-  );
-}
-
-function normalizeCodeFileTab(tab: CodeFileTab): CodeFileTab {
-  return {
-    ...tab,
-    isDirty: tab.isDirty ?? false,
-    isEditable: tab.isEditable ?? false,
-    savedContent:
-      tab.savedContent ?? (tab.isDirty ? null : (tab.content?.content ?? null)),
-  };
-}
 
 interface CodeActivityProps {
   projectId: number;
@@ -88,8 +65,12 @@ interface CodeActivityProps {
 export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
   const { alertDialog, showAlert } = useAlertDialog();
-  const { confirmBulkUnsaved, confirmSingleUnsaved, unsavedConfirmDialog } =
-    useCodeUnsavedConfirm();
+  const {
+    confirmBulkUnsaved,
+    confirmExternalConflict,
+    confirmSingleUnsaved,
+    unsavedConfirmDialog,
+  } = useCodeUnsavedConfirm();
   const cached = codeWorkspaceCache.get(projectId);
   const [tabs, setTabs] = useState<CodeFileTab[]>(() =>
     (cached?.tabs ?? []).map(normalizeCodeFileTab),
@@ -187,7 +168,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       resolveFileLoadErrorMessage(error, fileNotFoundMessage, t),
     [fileNotFoundMessage, t],
   );
-  useCodeActiveFileRefresh({
+  useCodeActiveFileRefreshBinding({
     projectId,
     workspacePath: selectedRootWorkspacePath,
     activePath,
@@ -195,9 +176,10 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     knownSignature: knownActiveSignature,
     setTabs,
     resolveErrorMessage: resolveActiveFileErrorMessage,
+    confirmExternalConflict,
+    tabsRef,
   });
 
-  // 切回代码页时复检已打开文件：缓存内容先展示，再异步校验是否被删除。
   useEffect(() => {
     if (!selectedRoot || tabs.length === 0) return;
 
@@ -346,7 +328,11 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       }
 
       const currentTabs = tabsRef.current;
-      const victimPath = pickLruVictimPath(currentTabs, previousActivePath);
+      const victimPath = pickLruVictimPath(
+        currentTabs,
+        previousActivePath,
+        MAX_FILE_TABS,
+      );
       if (victimPath !== null && currentTabs.some((tab) => tab.isDirty)) {
         const choice = await confirmBulkUnsaved();
         if (choice === "cancel") {
@@ -383,6 +369,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         const nextVictimPath = pickLruVictimPath(
           latestTabs,
           previousActivePath,
+          MAX_FILE_TABS,
         );
         const retained =
           nextVictimPath === null
@@ -525,12 +512,25 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       return;
     }
 
+    if (!tab.isEditable) {
+      setMarkdownViewMode("source");
+      setTabs((currentTabs) =>
+        currentTabs.map((item) => {
+          if (item.filePath !== path || !canEditCodeFileTab(item)) {
+            return item;
+          }
+          return { ...item, isEditable: true };
+        }),
+      );
+      return;
+    }
+
     setTabs((currentTabs) =>
       currentTabs.map((item) => {
         if (item.filePath !== path || !canEditCodeFileTab(item)) {
           return item;
         }
-        return { ...item, isEditable: !item.isEditable };
+        return { ...item, isEditable: false };
       }),
     );
   }, [confirmSingleUnsaved, saveTabByPath]);
@@ -722,6 +722,10 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                     label: messages.agentsFeature.toggleFileEdit,
                     onToggle: toggleActiveTabEditable,
                     pressed: activeTab.isEditable,
+                    title: resolveEditDisabledTitle(
+                      getCodeFileEditBlockReason(activeTab),
+                      messages.agentsFeature,
+                    ),
                   }}
                   markdownPreviewToggle={
                     isMarkdownPreviewable(activeTab)

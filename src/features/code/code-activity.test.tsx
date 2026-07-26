@@ -1911,4 +1911,244 @@ describe("CodeActivity", () => {
     });
     expect(screen.getAllByRole("tab")).toHaveLength(10);
   });
+
+  it("prompts to use disk or keep local when dirty file changes externally", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+
+    const updatedContent = {
+      ...fileContent,
+      content: "export const value = 99;\n",
+      modifiedAt: 2,
+      sizeBytes: 26,
+    };
+    vi.mocked(statProjectWorktreeFile).mockResolvedValue({
+      filePath: updatedContent.filePath,
+      sizeBytes: updatedContent.sizeBytes,
+      modifiedAt: updatedContent.modifiedAt,
+    });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(updatedContent);
+    vi.mocked(readProjectWorktreeFile).mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settleMicrotasks();
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "File Changed on Disk",
+    });
+    expect(dialog).toHaveTextContent("file.ts has changed on disk");
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep Local Version" }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      "export const value = 2;\n",
+    );
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("loads the disk version when choosing Use Disk Version on conflict", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+
+    const updatedContent = {
+      ...fileContent,
+      content: "export const value = 99;\n",
+      modifiedAt: 2,
+      sizeBytes: 26,
+    };
+    vi.mocked(statProjectWorktreeFile).mockResolvedValue({
+      filePath: updatedContent.filePath,
+      sizeBytes: updatedContent.sizeBytes,
+      modifiedAt: updatedContent.modifiedAt,
+    });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(updatedContent);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settleMicrotasks();
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "File Changed on Disk",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Use Disk Version" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        updatedContent.content,
+      );
+    });
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).queryByLabelText(
+        "Unsaved changes",
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("switches markdown preview back to source when entering edit mode", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+    expect(
+      screen.getByRole("heading", { name: "Hello Markdown" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+
+    const editButton = screen.getByRole("button", { name: "Edit file" });
+    await user.click(editButton);
+    expect(editButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "false",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Hello Markdown" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Markdown preview" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("renders the current unsaved markdown buffer in preview mode", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    expect(
+      within(screen.getByRole("tab", { name: /readme\.md/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+    // mock edit writes typescript-like buffer; preview still reflects current buffer text.
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+    expect(screen.getByText("export const value = 2;")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tab", { name: /readme\.md/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("exposes disabled edit reasons for loading and binary files", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveRead: ((value: typeof fileContent) => void) | undefined;
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      () =>
+        new Promise<typeof fileContent>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    const loadingEdit = await screen.findByRole("button", {
+      name: "Edit file",
+    });
+    expect(loadingEdit).toBeDisabled();
+    expect(loadingEdit).toHaveAttribute(
+      "title",
+      "Edit unavailable while the file is loading",
+    );
+
+    resolveRead!({
+      ...fileContent,
+      content: "",
+      isBinary: true,
+      language: "plaintext",
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Edit file" })).toBeDisabled();
+    });
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "title",
+      "Binary files cannot be edited",
+    );
+  });
 });

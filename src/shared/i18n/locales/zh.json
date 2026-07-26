@@ -675,7 +675,15 @@
     "contentSearchSuffixPicker": "常见文件后缀",
     "contentSearchSuffixOption": ".{{suffix}}",
     "contentSearchNoSuffixes": "暂无后缀统计",
-    "loadingMoreCommitHistory": "正在加载更多提交..."
+    "loadingMoreCommitHistory": "正在加载更多提交...",
+    "fileEditDisabledLoading": "文件加载中，无法编辑",
+    "fileEditDisabledUnavailable": "当前文件无法编辑",
+    "fileEditDisabledBinary": "二进制文件无法编辑",
+    "fileEditDisabledTooLarge": "文件过大，无法编辑",
+    "externalFileConflictTitle": "磁盘文件已更改",
+    "externalFileConflictMessage": "磁盘上的 {{fileName}} 已更改。你想怎么做？",
+    "externalFileConflictUseDisk": "用磁盘版",
+    "externalFileConflictKeepLocal": "保留本地版"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

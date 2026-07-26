@@ -675,7 +675,15 @@
     "contentSearchSuffixPicker": "Common file extensions",
     "contentSearchSuffixOption": ".{{suffix}}",
     "contentSearchNoSuffixes": "No extensions yet",
-    "loadingMoreCommitHistory": "Loading more commits..."
+    "loadingMoreCommitHistory": "Loading more commits...",
+    "fileEditDisabledLoading": "Edit unavailable while the file is loading",
+    "fileEditDisabledUnavailable": "Edit unavailable for this file",
+    "fileEditDisabledBinary": "Binary files cannot be edited",
+    "fileEditDisabledTooLarge": "Large files cannot be edited",
+    "externalFileConflictTitle": "File Changed on Disk",
+    "externalFileConflictMessage": "{{fileName}} has changed on disk. What do you want to do?",
+    "externalFileConflictUseDisk": "Use Disk Version",
+    "externalFileConflictKeepLocal": "Keep Local Version"
   },
   "errors": {
     "AGENT_COMMAND_UNAVAILABLE": {

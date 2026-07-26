@@ -7,12 +7,19 @@ import { useI18n } from "@/shared/i18n/i18n";
 
 export type SingleUnsavedChoice = "save" | "discard" | "cancel";
 export type BulkUnsavedChoice = "saveAll" | "discardAll" | "cancel";
+export type ExternalConflictChoice = "useDisk" | "keepLocal";
 
-type PendingDialog = { kind: "single"; fileName: string } | { kind: "bulk" };
+type PendingDialog =
+  | { kind: "single"; fileName: string }
+  | { kind: "bulk" }
+  | { kind: "externalConflict"; fileName: string };
 
 export function useCodeUnsavedConfirm(): {
   confirmSingleUnsaved: (fileName: string) => Promise<SingleUnsavedChoice>;
   confirmBulkUnsaved: () => Promise<BulkUnsavedChoice>;
+  confirmExternalConflict: (
+    fileName: string,
+  ) => Promise<ExternalConflictChoice>;
   unsavedConfirmDialog: ReactNode;
 } {
   const { messages } = useI18n();
@@ -23,28 +30,56 @@ export function useCodeUnsavedConfirm(): {
   const bulkResolverRef = useRef<((choice: BulkUnsavedChoice) => void) | null>(
     null,
   );
+  const externalResolverRef = useRef<
+    ((choice: ExternalConflictChoice) => void) | null
+  >(null);
 
-  const confirmSingleUnsaved = useCallback((fileName: string) => {
-    return new Promise<SingleUnsavedChoice>((resolve) => {
-      if (singleResolverRef.current || bulkResolverRef.current) {
-        resolve("cancel");
-        return;
-      }
-      singleResolverRef.current = resolve;
-      setPending({ kind: "single", fileName });
-    });
+  const hasPendingResolver = useCallback(() => {
+    return (
+      singleResolverRef.current != null ||
+      bulkResolverRef.current != null ||
+      externalResolverRef.current != null
+    );
   }, []);
+
+  const confirmSingleUnsaved = useCallback(
+    (fileName: string) => {
+      return new Promise<SingleUnsavedChoice>((resolve) => {
+        if (hasPendingResolver()) {
+          resolve("cancel");
+          return;
+        }
+        singleResolverRef.current = resolve;
+        setPending({ kind: "single", fileName });
+      });
+    },
+    [hasPendingResolver],
+  );
 
   const confirmBulkUnsaved = useCallback(() => {
     return new Promise<BulkUnsavedChoice>((resolve) => {
-      if (singleResolverRef.current || bulkResolverRef.current) {
+      if (hasPendingResolver()) {
         resolve("cancel");
         return;
       }
       bulkResolverRef.current = resolve;
       setPending({ kind: "bulk" });
     });
-  }, []);
+  }, [hasPendingResolver]);
+
+  const confirmExternalConflict = useCallback(
+    (fileName: string) => {
+      return new Promise<ExternalConflictChoice>((resolve) => {
+        if (hasPendingResolver()) {
+          resolve("keepLocal");
+          return;
+        }
+        externalResolverRef.current = resolve;
+        setPending({ kind: "externalConflict", fileName });
+      });
+    },
+    [hasPendingResolver],
+  );
 
   const closeSingle = useCallback((choice: SingleUnsavedChoice) => {
     const resolve = singleResolverRef.current;
@@ -56,6 +91,13 @@ export function useCodeUnsavedConfirm(): {
   const closeBulk = useCallback((choice: BulkUnsavedChoice) => {
     const resolve = bulkResolverRef.current;
     bulkResolverRef.current = null;
+    setPending(null);
+    resolve?.(choice);
+  }, []);
+
+  const closeExternal = useCallback((choice: ExternalConflictChoice) => {
+    const resolve = externalResolverRef.current;
+    externalResolverRef.current = null;
     setPending(null);
     resolve?.(choice);
   }, []);
@@ -145,11 +187,48 @@ export function useCodeUnsavedConfirm(): {
         />
       </Dialog>
     );
+  } else if (pending?.kind === "externalConflict") {
+    unsavedConfirmDialog = (
+      <Dialog
+        open
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            closeExternal("keepLocal");
+          }
+        }}
+      >
+        <ConfirmContent
+          message={messages.agentsFeature.externalFileConflictMessage(
+            pending.fileName,
+          )}
+          title={messages.agentsFeature.externalFileConflictTitle}
+          footer={
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => closeExternal("keepLocal")}
+              >
+                {messages.agentsFeature.externalFileConflictKeepLocal}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => closeExternal("useDisk")}
+              >
+                {messages.agentsFeature.externalFileConflictUseDisk}
+              </Button>
+            </DialogFooter>
+          }
+        />
+      </Dialog>
+    );
   }
 
   return {
     confirmSingleUnsaved,
     confirmBulkUnsaved,
+    confirmExternalConflict,
     unsavedConfirmDialog,
   };
 }

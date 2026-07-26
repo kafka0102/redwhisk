@@ -527,6 +527,10 @@ export interface I18nMessages {
     toggleMarkdownPreview: string;
     toggleFileEdit: string;
     fileTabUnsaved: string;
+    fileEditDisabledLoading: string;
+    fileEditDisabledUnavailable: string;
+    fileEditDisabledBinary: string;
+    fileEditDisabledTooLarge: string;
     unsavedChangesTitle: string;
     unsavedChangesMessage: (fileName: string) => string;
     unsavedChangesSave: string;
@@ -536,6 +540,10 @@ export interface I18nMessages {
     unsavedChangesBulkMessage: string;
     unsavedChangesSaveAll: string;
     unsavedChangesDontSaveAll: string;
+    externalFileConflictTitle: string;
+    externalFileConflictMessage: (fileName: string) => string;
+    externalFileConflictUseDisk: string;
+    externalFileConflictKeepLocal: string;
     mermaidRenderFailed: string;
     contentSearchPanel: string;
     contentSearchQuery: string;

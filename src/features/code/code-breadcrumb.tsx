@@ -27,6 +27,8 @@ export interface CodeEditToggle {
   label: string;
   onToggle: () => void;
   pressed: boolean;
+  /** 禁用时展示原因（title / 辅助提示）。 */
+  title?: string;
 }
 
 export function CodeBreadcrumb({
@@ -87,6 +89,7 @@ export function CodeBreadcrumb({
           aria-label={editToggle.label}
           aria-pressed={editToggle.pressed}
           disabled={editToggle.disabled}
+          title={editToggle.title}
           onClick={editToggle.onToggle}
         >
           <Pencil aria-hidden="true" size={14} strokeWidth={1.9} />

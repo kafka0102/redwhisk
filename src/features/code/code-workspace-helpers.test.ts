@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canEditCodeFileTab,
+  getCodeFileEditBlockReason,
   isMarkdownPreviewable,
 } from "./code-workspace-helpers";
 import type { CodeFileTab } from "./code-workspace-cache";
@@ -155,5 +156,52 @@ describe("canEditCodeFileTab", () => {
         }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("getCodeFileEditBlockReason", () => {
+  it("returns null when the tab is editable", () => {
+    expect(getCodeFileEditBlockReason(tab())).toBeNull();
+  });
+
+  it("maps loading, binary, too-large, and unavailable states", () => {
+    expect(getCodeFileEditBlockReason(tab({ isLoading: true }))).toBe(
+      "loading",
+    );
+    expect(
+      getCodeFileEditBlockReason(
+        tab({
+          content: {
+            content: "",
+            filePath: "docs/readme.md",
+            isBinary: true,
+            isTooLarge: false,
+            language: "markdown",
+            modifiedAt: 1,
+            sizeBytes: 8,
+          },
+        }),
+      ),
+    ).toBe("binary");
+    expect(
+      getCodeFileEditBlockReason(
+        tab({
+          content: {
+            content: "# big",
+            filePath: "docs/readme.md",
+            isBinary: false,
+            isTooLarge: true,
+            language: "markdown",
+            modifiedAt: 1,
+            sizeBytes: 8,
+          },
+        }),
+      ),
+    ).toBe("tooLarge");
+    expect(
+      getCodeFileEditBlockReason(
+        tab({ content: null, errorMessage: "File does not exist" }),
+      ),
+    ).toBe("unavailable");
   });
 });

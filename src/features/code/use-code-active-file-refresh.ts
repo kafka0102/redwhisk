@@ -10,8 +10,14 @@ import {
 import {
   readProjectWorktreeFile,
   statProjectWorktreeFile,
+  type WorkspaceFileContent,
 } from "../../shared/workspace/workspace-commands";
 import type { CodeFileTab } from "./code-workspace-cache";
+
+export interface CodeExternalFileConflict {
+  content: WorkspaceFileContent;
+  filePath: string;
+}
 
 const ACTIVE_FILE_REFRESH_INTERVAL_MS = 5_000;
 
@@ -31,6 +37,10 @@ export interface UseCodeActiveFileRefreshOptions {
   knownSignature: string | null;
   setTabs: Dispatch<SetStateAction<CodeFileTab[]>>;
   resolveErrorMessage: (error: unknown) => string;
+  /** 判断指定 tab 是否 dirty；用于外部变更时避免静默覆盖。 */
+  isTabDirty?: (filePath: string) => boolean;
+  /** dirty 时外部签名变化：不覆盖缓冲，改由调用方弹出冲突确认。 */
+  onExternalConflict?: (conflict: CodeExternalFileConflict) => void;
 }
 
 /**
@@ -46,6 +56,8 @@ export function useCodeActiveFileRefresh({
   knownSignature,
   setTabs,
   resolveErrorMessage,
+  isTabDirty,
+  onExternalConflict,
 }: UseCodeActiveFileRefreshOptions): void {
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" || document.visibilityState === "visible",
@@ -56,6 +68,8 @@ export function useCodeActiveFileRefresh({
   );
   const resolveErrorMessageRef = useRef(resolveErrorMessage);
   const setTabsRef = useRef(setTabs);
+  const isTabDirtyRef = useRef(isTabDirty);
+  const onExternalConflictRef = useRef(onExternalConflict);
 
   useEffect(() => {
     resolveErrorMessageRef.current = resolveErrorMessage;
@@ -64,6 +78,14 @@ export function useCodeActiveFileRefresh({
   useEffect(() => {
     setTabsRef.current = setTabs;
   }, [setTabs]);
+
+  useEffect(() => {
+    isTabDirtyRef.current = isTabDirty;
+  }, [isTabDirty]);
+
+  useEffect(() => {
+    onExternalConflictRef.current = onExternalConflict;
+  }, [onExternalConflict]);
 
   // 切换 workspace / 激活路径时丢弃在途请求。
   useEffect(() => {
@@ -139,12 +161,20 @@ export function useCodeActiveFileRefresh({
               content.modifiedAt,
             ),
           };
+          if (isTabDirtyRef.current?.(path)) {
+            // dirty 缓冲不静默覆盖；交由 onExternalConflict 二选一。
+            onExternalConflictRef.current?.({
+              content,
+              filePath: path,
+            });
+            return;
+          }
           setTabsRef.current((currentTabs) =>
             currentTabs.map((tab) => {
               if (tab.filePath !== path) {
                 return tab;
               }
-              // dirty 缓冲不静默覆盖（冲突交互见后续 ticket）。
+              // 防御：无 isTabDirty 回调时仍不覆盖 dirty 缓冲。
               if (tab.isDirty) {
                 return tab;
               }

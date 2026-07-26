@@ -302,6 +302,142 @@ describe("useCodeActiveFileRefresh", () => {
     expect(tabs[0]?.errorMessage).toBeNull();
   });
 
+  it("does not overwrite a dirty buffer and invokes onExternalConflict when the signature changes", async () => {
+    const localContent = "local dirty buffer\n";
+    let tabs: CodeFileTab[] = [
+      {
+        content: { ...fileContent, content: localContent },
+        errorMessage: null,
+        fileName: "file.ts",
+        filePath: "src/file.ts",
+        isDirty: true,
+        isEditable: true,
+        isLoading: false,
+        lastActiveAt: 1,
+        savedContent: fileContent.content,
+      },
+    ];
+    const setTabs = vi.fn(
+      (value: CodeFileTab[] | ((current: CodeFileTab[]) => CodeFileTab[])) => {
+        tabs = typeof value === "function" ? value(tabs) : value;
+      },
+    ) as unknown as Dispatch<SetStateAction<CodeFileTab[]>> &
+      ReturnType<typeof vi.fn>;
+    const onExternalConflict = vi.fn();
+    const knownSignature = buildActiveFileSignature(
+      fileContent.sizeBytes,
+      fileContent.modifiedAt,
+    );
+
+    renderHook(() =>
+      useCodeActiveFileRefresh({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        activePath: "src/file.ts",
+        enabled: true,
+        knownSignature,
+        setTabs,
+        resolveErrorMessage: () => "err",
+        isTabDirty: (filePath) =>
+          tabs.some((tab) => tab.filePath === filePath && tab.isDirty),
+        onExternalConflict,
+      }),
+    );
+    await settle();
+    readMock.mockClear();
+    onExternalConflict.mockClear();
+
+    const updated = {
+      ...fileContent,
+      content: "export const value = 2;\n",
+      modifiedAt: 2,
+      sizeBytes: 25,
+    };
+    statMock.mockResolvedValue({
+      filePath: updated.filePath,
+      sizeBytes: updated.sizeBytes,
+      modifiedAt: updated.modifiedAt,
+    });
+    readMock.mockResolvedValue(updated);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settle();
+
+    expect(readMock).toHaveBeenCalled();
+    expect(tabs[0]?.content?.content).toBe(localContent);
+    expect(tabs[0]?.isDirty).toBe(true);
+    expect(onExternalConflict).toHaveBeenCalledWith({
+      content: updated,
+      filePath: "src/file.ts",
+    });
+  });
+
+  it("does not invoke onExternalConflict when a clean tab reloads after signature change", async () => {
+    let tabs: CodeFileTab[] = [
+      {
+        content: fileContent,
+        errorMessage: null,
+        fileName: "file.ts",
+        filePath: "src/file.ts",
+        isDirty: false,
+        isEditable: false,
+        isLoading: false,
+        lastActiveAt: 1,
+        savedContent: fileContent.content,
+      },
+    ];
+    const setTabs = vi.fn(
+      (value: CodeFileTab[] | ((current: CodeFileTab[]) => CodeFileTab[])) => {
+        tabs = typeof value === "function" ? value(tabs) : value;
+      },
+    ) as unknown as Dispatch<SetStateAction<CodeFileTab[]>> &
+      ReturnType<typeof vi.fn>;
+    const onExternalConflict = vi.fn();
+    const knownSignature = buildActiveFileSignature(
+      fileContent.sizeBytes,
+      fileContent.modifiedAt,
+    );
+
+    renderHook(() =>
+      useCodeActiveFileRefresh({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        activePath: "src/file.ts",
+        enabled: true,
+        knownSignature,
+        setTabs,
+        resolveErrorMessage: () => "err",
+        isTabDirty: () => false,
+        onExternalConflict,
+      }),
+    );
+    await settle();
+
+    const updated = {
+      ...fileContent,
+      content: "export const value = 2;\n",
+      modifiedAt: 2,
+      sizeBytes: 25,
+    };
+    statMock.mockResolvedValue({
+      filePath: updated.filePath,
+      sizeBytes: updated.sizeBytes,
+      modifiedAt: updated.modifiedAt,
+    });
+    readMock.mockResolvedValue(updated);
+    onExternalConflict.mockClear();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    await settle();
+
+    expect(tabs[0]?.content?.content).toBe(updated.content);
+    expect(onExternalConflict).not.toHaveBeenCalled();
+  });
+
   it("pauses polling while the document is hidden and checks immediately when visible again", async () => {
     const setTabs = vi.fn();
     const knownSignature = buildActiveFileSignature(

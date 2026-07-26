@@ -51,3 +51,80 @@ export function canEditCodeFileTab(tab: CodeFileTab): boolean {
   }
   return true;
 }
+
+/** 编辑按钮禁用原因；可编辑时返回 null。 */
+export type CodeFileEditBlockReason =
+  | "loading"
+  | "unavailable"
+  | "binary"
+  | "tooLarge";
+
+export function getCodeFileEditBlockReason(
+  tab: CodeFileTab,
+): CodeFileEditBlockReason | null {
+  if (canEditCodeFileTab(tab)) {
+    return null;
+  }
+  if (tab.isLoading) {
+    return "loading";
+  }
+  if (tab.content?.isBinary) {
+    return "binary";
+  }
+  if (tab.content?.isTooLarge) {
+    return "tooLarge";
+  }
+  return "unavailable";
+}
+
+/** 兼容旧缓存：补齐 isDirty / isEditable / savedContent。 */
+export function normalizeCodeFileTab(tab: CodeFileTab): CodeFileTab {
+  return {
+    ...tab,
+    isDirty: tab.isDirty ?? false,
+    isEditable: tab.isEditable ?? false,
+    savedContent:
+      tab.savedContent ?? (tab.isDirty ? null : (tab.content?.content ?? null)),
+  };
+}
+
+/** 按 lastActiveAt 选出 LRU 淘汰候选（优先非当前激活）。 */
+export function pickLruVictimPath(
+  tabs: CodeFileTab[],
+  previousActivePath: string | null,
+  maxTabs: number,
+): string | null {
+  if (tabs.length < maxTabs) {
+    return null;
+  }
+  return (
+    tabs
+      .filter((candidate) => candidate.filePath !== previousActivePath)
+      .sort((left, right) => left.lastActiveAt - right.lastActiveAt)[0]
+      ?.filePath ?? null
+  );
+}
+
+/** 编辑按钮禁用原因对应的 title 文案。 */
+export function resolveEditDisabledTitle(
+  reason: CodeFileEditBlockReason | null,
+  agentsFeature: {
+    fileEditDisabledBinary: string;
+    fileEditDisabledLoading: string;
+    fileEditDisabledTooLarge: string;
+    fileEditDisabledUnavailable: string;
+  },
+): string | undefined {
+  switch (reason) {
+    case "loading":
+      return agentsFeature.fileEditDisabledLoading;
+    case "binary":
+      return agentsFeature.fileEditDisabledBinary;
+    case "tooLarge":
+      return agentsFeature.fileEditDisabledTooLarge;
+    case "unavailable":
+      return agentsFeature.fileEditDisabledUnavailable;
+    default:
+      return undefined;
+  }
+}
