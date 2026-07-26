@@ -2,6 +2,7 @@ import { Editor } from "@monaco-editor/react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { useMonacoEditorReady } from "../../../shared/use-monaco-editor-ready";
 
 interface SessionFileViewerProps {
   tab: SessionWorkspaceFileTab;
@@ -9,6 +10,7 @@ interface SessionFileViewerProps {
 
 export function SessionFileViewer({ tab }: SessionFileViewerProps) {
   const { messages, contentFontSize, theme } = useI18n();
+  const isMonacoReady = useMonacoEditorReady();
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -46,6 +48,14 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
             : messages.agentsFeature.largeFilePreviewUnavailable}
         </p>
       </section>
+    );
+  }
+
+  if (!isMonacoReady) {
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.loadingFile}
+      </p>
     );
   }
 

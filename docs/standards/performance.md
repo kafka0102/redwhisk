@@ -46,3 +46,17 @@
 - 命令体内有 `Command::new("git")` / `Connection::open` / `fs::read_dir` 吗？→ `spawn_blocking`。
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
 - 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？
+
+## 5. 新窗口 / 默认 Issues 首屏禁止同步拉起重依赖
+
+**判据**：项目窗口冷启动（`open_project_window` → `index.html?projectId=`）默认进入 Issues，主入口与 Issues 渲染路径不得同步 `import` Monaco、xterm、Agents/Code/Changes/Terminals 等非默认 Activity 的重模块。
+
+**为什么**：生产构建中曾出现主 chunk ≈5.8MB（含 `monaco-editor`），新窗口需在首屏可交互前解析整包，表现为「正在打开项目…」或白屏卡住十多秒；后端 `open_project` 本身通常在百毫秒级。
+
+**做法**：
+
+- `src/main.tsx` 不调用 / 不静态 import Monaco 配置；首次真正渲染 Editor/DiffEditor 前再 `import("./monaco-editor-setup")`。
+- `ActivityRouter` 对非 `issues` Activity 使用 `React.lazy` + `Suspense`；Issues 保持同步 import。
+- URL 带 `projectId` 时，`openProject` 与 `listProjects` 并行，避免列表 IPC 串行拖长打开空态。
+- 回归：`src/app/main-entry-budget.test.ts`；本地可用 `pnpm exec vite build` 核对 `dist/assets/index-*.js` 体积与是否含 `monaco`。
+

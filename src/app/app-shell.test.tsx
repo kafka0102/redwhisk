@@ -174,7 +174,9 @@ describe("AppShell terminals activity persistence", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Terminals" }));
-    await user.click(screen.getByRole("button", { name: "+ New terminal" }));
+    await user.click(
+      await screen.findByRole("button", { name: "+ New terminal" }),
+    );
 
     await waitFor(() => {
       expect(createProjectTerminalMock).toHaveBeenCalledWith({ projectId: 1 });
@@ -259,7 +261,7 @@ describe("AppShell terminals activity persistence", () => {
     );
 
     expect(
-      screen.getByText("project settings activity labels"),
+      await screen.findByText("project settings activity labels"),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Project Settings" }),
@@ -355,7 +357,7 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(screen.getByRole("button", { name: "Code" }));
 
-    expect(screen.getByText("code activity 1")).toBeInTheDocument();
+    expect(await screen.findByText("code activity 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -412,7 +414,7 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(changesButton);
 
-    expect(screen.getByText("changes activity 1")).toBeInTheDocument();
+    expect(await screen.findByText("changes activity 1")).toBeInTheDocument();
     expect(changesButton).toHaveAttribute("aria-pressed", "true");
   });
 });

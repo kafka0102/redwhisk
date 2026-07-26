@@ -109,10 +109,6 @@ function ProjectApp() {
     async function initializeApp() {
       try {
         await initializeLocalData();
-        const response = await listProjects();
-        if (isMounted) {
-          setProjects(response.projects.map(toProjectSummary));
-        }
       } catch (error: unknown) {
         if (isMounted) {
           setLocalDataError(getCommandErrorMessage(error, translate));
@@ -120,6 +116,20 @@ function ProjectApp() {
 
         return;
       }
+
+      // 项目列表与 openProject 并行：新窗口 ?projectId= 路径不应被 listProjects 串行拖住，
+      // 以便尽快结束「正在打开项目…」并进入默认 Issues 工作台。
+      const listProjectsTask = listProjects()
+        .then((response) => {
+          if (isMounted) {
+            setProjects(response.projects.map(toProjectSummary));
+          }
+        })
+        .catch((error: unknown) => {
+          if (isMounted) {
+            setLocalDataError(getCommandErrorMessage(error, translate));
+          }
+        });
 
       try {
         const project = await openInitialProjectFromUrl();
@@ -135,6 +145,8 @@ function ProjectApp() {
           setProjectOpenError(getCommandErrorMessage(error, translate));
         }
       }
+
+      await listProjectsTask;
     }
 
     void initializeApp();

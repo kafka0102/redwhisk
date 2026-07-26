@@ -1,6 +1,7 @@
 import { DiffEditor } from "@monaco-editor/react";
 
 import { useI18n } from "../i18n/i18n";
+import { useMonacoEditorReady } from "../use-monaco-editor-ready";
 import type {
   WorkspaceChangeKind,
   WorkspaceDiffContent,
@@ -35,6 +36,7 @@ const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
 
 export function DiffViewer({ tab }: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
+  const isMonacoReady = useMonacoEditorReady();
 
   if (!tab) {
     return (
@@ -81,6 +83,14 @@ export function DiffViewer({ tab }: DiffViewerProps) {
             : messages.agentsFeature.largeFilePreviewUnavailable}
         </p>
       </section>
+    );
+  }
+
+  if (!isMonacoReady) {
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.loadingDiff}
+      </p>
     );
   }
 

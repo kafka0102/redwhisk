@@ -4,6 +4,7 @@ import { CodeMarkdownPreview } from "./code-markdown-preview";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
+import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import {
   getCodeEditorViewState,
   setCodeEditorViewState,
@@ -47,6 +48,7 @@ export function CodeContent({
   const appliedRevealTokenRef = useRef<number | null>(null);
   const projectIdRef = useRef(projectId);
   const filePathRef = useRef(tab.filePath);
+  const isMonacoReady = useMonacoEditorReady();
 
   useEffect(() => {
     projectIdRef.current = projectId;
@@ -189,6 +191,14 @@ export function CodeContent({
       >
         <CodeMarkdownPreview content={tab.content.content} theme={theme} />
       </div>
+    );
+  }
+
+  if (!isMonacoReady) {
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.loadingFile}
+      </p>
     );
   }
 

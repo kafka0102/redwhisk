@@ -554,6 +554,45 @@ describe("App project entry", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens URL project workbench without waiting for a slow listProjects", async () => {
+    window.history.replaceState(null, "", "/?projectId=1");
+
+    let resolveListProjects: (response: ProjectListResponse) => void = () => {};
+    listProjectsMock.mockImplementation(
+      () =>
+        new Promise<ProjectListResponse>((resolve) => {
+          resolveListProjects = resolve;
+        }),
+    );
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "当前项目 RedWhisk" },
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+    expect(openProjectMock).toHaveBeenCalledWith({ projectId: 1 });
+
+    resolveListProjects({
+      projects: [
+        {
+          id: 1,
+          name: "RedWhisk",
+          repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          createdAt: 1_780_581_600_000,
+          lastOpenedAt: 1_780_628_400_000,
+          pathStatus: "available",
+          hasOpenWindow: false,
+        },
+      ],
+    });
+  });
+
   it("opens a monitored session from the desktop monitor while on Project Home", async () => {
     render(<App />);
 
@@ -738,7 +777,7 @@ describe("App project entry", () => {
     await user.click(screen.getByRole("button", { name: "全局设置" }));
 
     expect(
-      screen.getByRole("heading", { name: "个人资料" }),
+      await screen.findByRole("heading", { name: "个人资料" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全局设置" })).toHaveAttribute(
       "aria-pressed",

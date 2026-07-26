@@ -1,18 +1,39 @@
-import { AgentsActivity } from "../features/agents/agents-activity";
-import { ChangesActivity } from "../features/changes/changes-activity";
-import { CodeActivity } from "../features/code/code-activity";
+import { lazy, Suspense, type Dispatch, type SetStateAction } from "react";
+
 import { IssuesActivity } from "../features/issues/issues-activity";
-import {
-  ProjectSettingsActivity,
-  type SettingsMenu,
-} from "../features/settings/project-settings-activity";
 import type { IssueOpenRequest } from "../features/issues/issue-open-request";
-import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
-import { ProjectTerminalsActivity } from "../features/terminals/project-terminals-activity";
 import type { ProjectWorktreeLocation } from "../features/project/project-commands";
+import type { SettingsMenu } from "../features/settings/project-settings-activity";
+import type { ProjectTerminalsActivityState } from "../features/terminals/project-terminals-activity-state";
+import { useI18n } from "../shared/i18n/i18n";
 import type { CodeWorkspaceRoot } from "../shared/workspace/workspace-commands";
 import type { ProjectSummary } from "./app";
-import type { Dispatch, SetStateAction } from "react";
+
+const AgentsActivity = lazy(async () => {
+  const module = await import("../features/agents/agents-activity");
+  return { default: module.AgentsActivity };
+});
+
+const ChangesActivity = lazy(async () => {
+  const module = await import("../features/changes/changes-activity");
+  return { default: module.ChangesActivity };
+});
+
+const CodeActivity = lazy(async () => {
+  const module = await import("../features/code/code-activity");
+  return { default: module.CodeActivity };
+});
+
+const ProjectSettingsActivity = lazy(async () => {
+  const module = await import("../features/settings/project-settings-activity");
+  return { default: module.ProjectSettingsActivity };
+});
+
+const ProjectTerminalsActivity = lazy(async () => {
+  const module =
+    await import("../features/terminals/project-terminals-activity");
+  return { default: module.ProjectTerminalsActivity };
+});
 
 export type ActivityKey =
   | "issues"
@@ -67,8 +88,27 @@ export function ActivityRouter({
   projectTerminalsState,
   requestedIssue,
 }: ActivityRouterProps) {
-  if (activeActivity === "agents") {
+  const { messages } = useI18n();
+
+  // 默认 issues 保持同步加载；其余 Activity 按需 chunk，避免新项目窗口冷启动
+  // 同步解析 Monaco / xterm / Agents 等大依赖。
+  if (activeActivity === "issues") {
     return (
+      <IssuesActivity
+        key={projectId}
+        issuesReturnSignal={issuesReturnSignal}
+        onOpenAgentsActivity={onOpenAgentsActivity}
+        onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
+        projectId={projectId}
+        requestedIssue={requestedIssue}
+        worktreeSetupCommand={projectWorktreeSetupCommand}
+      />
+    );
+  }
+
+  let activity = null;
+  if (activeActivity === "agents") {
+    activity = (
       <AgentsActivity
         activeSessionId={activeAgentSessionId}
         onOpenIssue={onOpenIssue}
@@ -76,30 +116,24 @@ export function ActivityRouter({
         projectId={projectId}
       />
     );
-  }
-
-  if (activeActivity === "code") {
-    return (
+  } else if (activeActivity === "code") {
+    activity = (
       <CodeActivity
         key={projectId}
         projectId={projectId}
         roots={projectCodeWorkspaces}
       />
     );
-  }
-
-  if (activeActivity === "changes") {
-    return (
+  } else if (activeActivity === "changes") {
+    activity = (
       <ChangesActivity
         key={projectId}
         projectId={projectId}
         roots={projectCodeWorkspaces}
       />
     );
-  }
-
-  if (activeActivity === "terminals") {
-    return (
+  } else if (activeActivity === "terminals") {
+    activity = (
       <ProjectTerminalsActivity
         key={projectId}
         onStateChange={onProjectTerminalsStateChange}
@@ -109,10 +143,8 @@ export function ActivityRouter({
         state={projectTerminalsState}
       />
     );
-  }
-
-  if (activeActivity === "settings") {
-    return (
+  } else if (activeActivity === "settings") {
+    activity = (
       <ProjectSettingsActivity
         activeMenu={activeProjectSettingsMenu}
         key={projectId}
@@ -128,14 +160,14 @@ export function ActivityRouter({
   }
 
   return (
-    <IssuesActivity
-      key={projectId}
-      issuesReturnSignal={issuesReturnSignal}
-      onOpenAgentsActivity={onOpenAgentsActivity}
-      onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
-      projectId={projectId}
-      requestedIssue={requestedIssue}
-      worktreeSetupCommand={projectWorktreeSetupCommand}
-    />
+    <Suspense
+      fallback={
+        <p className="activity-surface__loading" role="status">
+          {messages.settings.loading}
+        </p>
+      }
+    >
+      {activity}
+    </Suspense>
   );
 }

@@ -8,7 +8,7 @@ import {
   UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { ActivityRouter, type ActivityKey } from "./activity-router";
@@ -16,7 +16,6 @@ import type { ProjectSummary } from "./app";
 import { UpdatePromptBadge } from "../features/app-update/update-prompt-badge";
 import { useUpdateStatus } from "../features/app-update/use-update-status";
 import { ProjectSwitcher } from "../features/project/project-switcher";
-import { GlobalSettingsActivity } from "../features/settings/global-settings-activity";
 import type { IssueOpenRequest } from "../features/issues/issue-open-request";
 import { useAgentSessionNotifications } from "../features/agents/session-notifications/use-agent-session-notifications";
 import type { SettingsMenu } from "../features/settings/project-settings-activity";
@@ -25,6 +24,11 @@ import {
   type ProjectTerminalsActivityState,
 } from "../features/terminals/project-terminals-activity-state";
 import { useI18n } from "../shared/i18n/i18n";
+
+const GlobalSettingsActivity = lazy(async () => {
+  const module = await import("../features/settings/global-settings-activity");
+  return { default: module.GlobalSettingsActivity };
+});
 
 interface AppShellProps {
   onCreateProject: () => void;
@@ -234,7 +238,15 @@ export function AppShell({
         </header>
         <div className="workbench__content">
           {isGlobalSettingsOpen ? (
-            <GlobalSettingsActivity />
+            <Suspense
+              fallback={
+                <p className="activity-surface__loading" role="status">
+                  {messages.settings.loading}
+                </p>
+              }
+            >
+              <GlobalSettingsActivity />
+            </Suspense>
           ) : (
             <ActivityRouter
               activeActivity={activeActivity}

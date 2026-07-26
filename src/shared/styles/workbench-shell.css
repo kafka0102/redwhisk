@@ -64,6 +64,13 @@
 
 .project-home h1,
 .workbench__header h1,
+.activity-surface__loading {
+  margin: 0;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .activity-surface h2 {
   margin: 0;
   color: var(--color-text);
