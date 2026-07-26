@@ -8,12 +8,13 @@
 
 当前仓库已包含以下发版基础设施：
 
-- `scripts/build-macos.sh`：本地构建 Universal Mac 可执行文件（`.app`）。
+- `scripts/build-macos.sh`：本地构建 Universal Mac 包（`.app` + DMG）。
+- `scripts/build-dmg.sh`：基于已生成的 `.app` 手工生成 Universal DMG（绕过 Tauri 原生 dmg bundler）。
 - `scripts/bump-version.mjs`：统一同步多文件版本号。
 - `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
 - `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
-- `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app"]`，`build:macos` 与 CI 发布都仅产出 `.app`；CI 再把 `.app` 压成 `.app.zip` 作为 GitHub Release 资源。
+- `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app"]`：Tauri 仅产出 `.app`；`build:macos` 随后调用 `build-dmg.sh` 生成 DMG。Release 附件目标为 **DMG + `.app.zip`**。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
 
 ## 适用范围
@@ -72,11 +73,14 @@ pnpm build:macos
 
 ### 产物
 
-`pnpm build:macos` 构建的是 Universal 包，单个产物同时支持 Intel（x86_64）与 Apple Silicon（aarch64）：
+`pnpm build:macos` 构建的是 Universal 包：同一份同时支持 Intel（x86_64）与 Apple Silicon（aarch64）。产物包括：
 
 - `src-tauri/target/universal-apple-darwin/release/bundle/macos/RedWhisk.app`
+- `src-tauri/target/universal-apple-darwin/release/bundle/dmg/RedWhisk_<version>_universal.dmg`
 
-> 安装包（dmg）实测存在问题，已从构建流程中移除；当前只产出可直接运行的 `.app`。
+其中 `<version>` 与 `src-tauri/tauri.conf.json` 的 `version` 一致。
+
+日常 `pnpm tauri build` 默认仍只产出 `.app`（`bundle.targets` 仅含 `app`）。完整安装包请走 `pnpm build:macos`，由仓库脚本基于 `.app` 打 DMG，而不是启用 Tauri 原生 `--bundles dmg`。决策背景见 [ADR 0026](../adr/0026-macos-dmg-via-repo-script.md)。
 
 ### 脚本流程
 
@@ -85,19 +89,34 @@ pnpm build:macos
 1. `rustup target add aarch64-apple-darwin x86_64-apple-darwin`（幂等，已安装会跳过）
 2. `pnpm install --frozen-lockfile`
 3. `pnpm tauri build --target universal-apple-darwin --bundles app`（Tauri 自动编译双架构并 `lipo` 合并，仅产出 `.app`）
-4. 打印产物路径
+4. `bash scripts/build-dmg.sh`：基于上一步 `.app` 创建可写 HFS+ 临时镜像、拷贝 app、添加 `/Applications` 符号链接、压缩为 UDZO DMG
+5. 打印 `.app` 与 DMG 产物路径
 
 任意步骤失败脚本立即退出。首次执行需要编译两份 Rust 产物，耗时较长（通常 15–25 分钟），后续增量构建会显著加快。
 
+也可单独对已有 `.app` 调用：
+
+```bash
+bash scripts/build-dmg.sh
+# 或指定路径
+bash scripts/build-dmg.sh /path/to/RedWhisk.app /path/to/RedWhisk_0.0.2_universal.dmg
+```
+
 ### 本地构建的限制
 
-当前本地构建产出的是 **ad-hoc 签名** 包：
+当前本地与 CI 构建产出的都是 **未签名 / 未公证** 包（ad-hoc 签名）：
 
 - 不带 Apple Developer 证书签名
 - 未经过 notarization
-- 用户首次打开需右键 → 打开，或执行 `xattr -dr com.apple.quarantine /Applications/RedWhisk.app`
+- Gatekeeper 可能拦截首次打开；「已损坏」提示通常是 quarantine 属性，不等于产物损坏
 
-需要完整签名与公证的版本请通过 tag 触发 CI 发布（见下文），并在 GitHub Secrets 中配置 Apple 凭据（当前未配置，CI 同样产出未签名包）。
+用户侧处理见仓库根目录 [README「安装与首次打开」](../../README.md#安装与首次打开)：
+
+1. 右键 → 打开
+2. 系统设置 → 隐私与安全性 → 仍要打开
+3. 必要时：`xattr -dr com.apple.quarantine /Applications/RedWhisk.app`
+
+需要完整签名与公证的版本，须在 GitHub Secrets 中配置 Apple 凭据并扩展 CI（当前未配置，CI 同样产出未签名包）。
 
 ## Tag 触发自动发布
 
@@ -150,15 +169,18 @@ git push origin v0.1.0
 
 1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
-3. `pnpm build:macos`（仅产出 `.app`）
-4. 将 `.app` 打包为 `.app.zip`，作为 GitHub Release 单文件资源上传
-5. 上传构建产物为 workflow artifact（保留构建历史）
-6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release 并附带 `.app.zip`
+3. `pnpm build:macos`（产出 Universal `.app` + Universal DMG）
+4. 将 `.app` 打包为 `.app.zip`
+5. 上传构建产物为 workflow artifact（保留构建历史，含 `.app` / zip / DMG 路径约定）
+6. 通过 `softprops/action-gh-release@v2` 创建 **draft** Release，附件同时包含 **DMG** 与 **`.app.zip`**
 7. 启用 `generate_release_notes: true`，自动按 commit 历史生成 changelog
 
-发布后产物为 **draft** 状态，需要人工审核 changelog 与产物后，在 GitHub Releases 页面点 Publish 才对外可见。Release asset 包含：
+发布后产物为 **draft** 状态，需要人工审核 changelog 与产物后，在 GitHub Releases 页面点 Publish 才对外可见。Release asset 目标包含：
 
-- `RedWhisk_<version>_universal.app.zip`
+- `RedWhisk_<version>_universal.dmg`（推荐用户安装路径）
+- `RedWhisk_<version>_universal.app.zip`（保留更新外链与解压安装习惯）
+
+当前产物仍为未签名 / 未公证；Release 描述应提示 Gatekeeper 与 quarantine 处理（见 README「安装与首次打开」）。
 
 ### 应用内版本检测
 
@@ -213,7 +235,8 @@ PR 检查不产出可执行包，主要用于防止发版前出现基础构建�
 必须遵守：
 
 - 本地构建与 CI 发布都使用 `universal-apple-darwin` target
-- 单个产物（`.app`）同时支持 Intel 与 Apple Silicon，不让用户选架构
+- `.app` 与 DMG 均为 Universal，同时支持 Intel 与 Apple Silicon，不让用户选架构
+- Release 附件同时提供 DMG 与 `.app.zip`；默认用户安装路径以 DMG 为准
 
 如未来需要分架构产出（减小体积），应作为独立任务更新本文档。
 
