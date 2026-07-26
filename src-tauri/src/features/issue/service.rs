@@ -952,7 +952,7 @@ impl<'connection> IssueService<'connection> {
         &self,
         input: CompleteIssueFlowInput,
         _data_dir: impl AsRef<Path>,
-        _pty_sessions: &PtySessionManager,
+        pty_sessions: &PtySessionManager,
         agent_registry: &AgentSessionRegistry,
         forced_option: Option<CompletionAttemptOption>,
     ) -> Result<CompleteIssueFlowResult, CommandError> {
@@ -1002,6 +1002,10 @@ impl<'connection> IssueService<'connection> {
             )
             .with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
+        }
+        // TUI 归档读磁盘 runtime log：完成前 flush，降低 BufWriter 未落盘导致空/截断归档概率。
+        if session.display_mode == "tui" {
+            let _ = pty_sessions.flush_log(session.id);
         }
         crate::features::issue::completion::use_case::CompletionFlow::new(self).drive(
             input,

@@ -1,4 +1,5 @@
 //! TUI Issue Session 归档：结论向提取纯函数（ADR-0023 / ADR-0025）。
+//! 无顶格用户 turn 时回退轻清理，避免完成归档写空。
 
 const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 
@@ -6,6 +7,7 @@ const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 /// - 保留真实用户输入块与每个用户 turn 之后的最后一段连续非过程正文
 /// - 丢弃 chrome / 工具过程 / 首用户前残留 / 中间思考
 /// - 按固定块间距排版（无 User/Assistant 标签）
+/// - 若找不到顶格真实用户 turn，回退轻清理（去 spinner/Working、压空行），避免空归档
 pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     let lines: Vec<&str> = normalized.lines().map(|line| line.trim_end()).collect();
@@ -19,7 +21,9 @@ pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
         .filter_map(|(index, line)| is_real_user_prompt_line(line).then_some(index))
         .collect();
     if user_starts.is_empty() {
-        return String::new();
+        // Issue 初始 prompt 常被折叠为状态头；PTY 剥 CSI 后 › 也常粘在行中。
+        // 结论提取前提（顶格 › 用户 turn）不成立时回退轻清理，避免完成归档写空。
+        return light_clean_terminal_archive_text(&normalized);
     }
 
     let mut output_blocks: Vec<String> = Vec::new();
@@ -161,6 +165,41 @@ fn format_block_lines(lines: &[&str]) -> String {
     }
 
     cleaned.join("\n")
+}
+
+/// 无可用用户 turn 时的回退清理：去掉 spinner / Working 状态行，合并过多空行。
+fn light_clean_terminal_archive_text(text: &str) -> String {
+    let mut cleaned_lines: Vec<String> = Vec::new();
+    let mut blank_run = 0usize;
+
+    for line in text.lines() {
+        let trimmed_end = line.trim_end();
+        let trimmed = trimmed_end.trim();
+        if !trimmed.is_empty()
+            && (is_working_status_line(trimmed) || is_spinner_only_line(trimmed))
+        {
+            continue;
+        }
+        if trimmed.is_empty() {
+            blank_run += 1;
+            if blank_run > 1 {
+                continue;
+            }
+            cleaned_lines.push(String::new());
+            continue;
+        }
+        blank_run = 0;
+        cleaned_lines.push(trimmed_end.to_string());
+    }
+
+    while cleaned_lines.first().is_some_and(|line| line.is_empty()) {
+        cleaned_lines.remove(0);
+    }
+    while cleaned_lines.last().is_some_and(|line| line.is_empty()) {
+        cleaned_lines.pop();
+    }
+
+    cleaned_lines.join("\n")
 }
 
 fn is_real_user_prompt_line(line: &str) -> bool {

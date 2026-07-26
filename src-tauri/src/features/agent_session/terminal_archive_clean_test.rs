@@ -208,3 +208,46 @@ fn ascii_gt_shell_echo_is_not_user_turn() {
     assert!(!got.contains("> tsc"), "shell 回显不应成为用户块: {got:?}");
     assert!(!got.contains("中间进度"), "工具前的中间发言不应保留: {got:?}");
 }
+
+
+#[test]
+fn without_user_prompt_falls_back_to_light_clean_not_empty() {
+    let input = "\
+$ ls
+file.txt
+
+• Working(on it...)
+
+Done with archive.
+";
+    let got = extract_tui_archive_conclusion_text(input);
+    assert!(!got.trim().is_empty(), "fallback must not empty archive: {got:?}");
+    assert!(got.contains("$ ls"), "fallback keeps shell output: {got:?}");
+    assert!(got.contains("Done with archive."), "fallback keeps final text: {got:?}");
+    assert!(!got.contains("Working("), "fallback drops Working status: {got:?}");
+    assert_eq!(
+        latest_output_from_archive_text(&got).as_deref(),
+        Some("Done with archive.")
+    );
+}
+
+#[test]
+fn status_header_only_session_falls_back_instead_of_empty() {
+    let input = "\
+› Find and fix a bug in @filename grok-4.5 high · ~/workspace/kafka/redwhisk
+
+• Ran noise
+  └ x
+
+• 自动阶段完成，请验收
+";
+    let got = extract_tui_archive_conclusion_text(input);
+    assert!(
+        !got.trim().is_empty(),
+        "status-header-only session must not archive empty: {got:?}"
+    );
+    assert!(
+        got.contains("自动阶段完成，请验收"),
+        "fallback should keep final speech: {got:?}"
+    );
+}
