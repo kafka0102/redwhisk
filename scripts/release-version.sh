@@ -105,11 +105,20 @@ fi
 
 shopt -s nullglob
 app_files=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
+dmg_files=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
 shopt -u nullglob
 
 if (( ${#app_files[@]} == 0 )); then
   fail "未找到 .app 产物"
 fi
+
+if (( ${#dmg_files[@]} == 0 )); then
+  fail "未找到 .dmg 产物"
+fi
+
+echo "==> 本地产物"
+echo "  .app: ${app_files[*]}"
+echo "  DMG:  ${dmg_files[*]}"
 
 echo "==> 暂存版本文件"
 git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
@@ -139,4 +148,5 @@ cat <<EOF
 
 本地产物：
   ${app_files[*]}
+  ${dmg_files[*]}
 EOF
