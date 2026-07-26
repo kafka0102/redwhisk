@@ -22,6 +22,8 @@ export interface WorkspaceDiffTab {
 interface DiffViewerProps {
   /** null 表示尚未选中变更文件，渲染空态提示。 */
   tab: WorkspaceDiffTab | null;
+  /** 是否显示顶部 kind + path 状态条；多 diff 面板头已含路径时传 false。默认 true。 */
+  showStatusBar?: boolean;
 }
 
 const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
@@ -34,7 +36,7 @@ const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
   modified: "agentsFeature.changeKindModified",
 };
 
-export function DiffViewer({ tab }: DiffViewerProps) {
+export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
 
@@ -97,11 +99,17 @@ export function DiffViewer({ tab }: DiffViewerProps) {
   return (
     <section
       aria-label={messages.agentsFeature.diffView(tab.fileName)}
-      className="session-diff-viewer"
+      className={
+        showStatusBar
+          ? "session-diff-viewer"
+          : "session-diff-viewer session-diff-viewer--bare"
+      }
     >
-      <div className="session-diff-viewer__status">
-        {t(CHANGE_KIND_KEY[tab.diff.kind])} {tab.filePath}
-      </div>
+      {showStatusBar ? (
+        <div className="session-diff-viewer__status">
+          {t(CHANGE_KIND_KEY[tab.diff.kind])} {tab.filePath}
+        </div>
+      ) : null}
       <DiffEditor
         height="100%"
         theme={theme === "dark" ? "vs-dark" : "light"}

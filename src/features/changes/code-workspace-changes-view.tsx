@@ -4,6 +4,7 @@ import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes
 import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
+  WorkspaceCommitRecord,
 } from "../../shared/workspace/workspace-commands";
 import {
   useChangesAutoRefresh,
@@ -25,6 +26,7 @@ interface CodeWorkspaceChangesViewProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
 }
 
 /**
@@ -43,6 +45,7 @@ export function CodeWorkspaceChangesView({
   onToggleCommitted,
   onOpenChangedFile,
   onOpenCommittedChangedFile,
+  onOpenCommitChanges,
 }: CodeWorkspaceChangesViewProps) {
   const {
     changes,
@@ -91,6 +94,7 @@ export function CodeWorkspaceChangesView({
       isUncommittedExpanded={uncommittedExpanded}
       onOpenChangedFile={onOpenChangedFile}
       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+      onOpenCommitChanges={onOpenCommitChanges}
       onToggleUncommittedExpanded={onToggleUncommitted}
       workspaceInput={
         selectedRootWorkspacePath

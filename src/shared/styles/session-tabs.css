@@ -231,3 +231,105 @@
   font-size: 12px;
   line-height: 1.35;
 }
+
+.session-diff-viewer--bare {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* 提交全部更改视图（变更 Activity 主体多 diff） */
+.multi-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.multi-diff-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.multi-diff-panel__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.multi-diff-panel__toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.multi-diff-panel__toggle:hover,
+.multi-diff-panel__toggle:focus-visible {
+  color: var(--color-text);
+  outline: none;
+}
+
+.multi-diff-panel__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.multi-diff-panel__name {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-diff-panel__path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-diff-panel__body {
+  min-width: 0;
+  height: 360px;
+  min-height: 240px;
+}
+
+.multi-diff-panel__body .session-diff-viewer {
+  height: 100%;
+}
+
+.multi-diff-panel__body .session-viewer-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}

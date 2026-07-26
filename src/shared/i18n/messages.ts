@@ -495,6 +495,10 @@ export interface I18nMessages {
     loadingFileTree: string;
     noFiles: string;
     openCommitChanges: string;
+    noCommitFileChanges: string;
+    commitAllChangesView: string;
+    expandDiffPanel: (fileName: string) => string;
+    collapseDiffPanel: (fileName: string) => string;
     openCommitOnGithub: string;
     commitNotFoundOnGithub: string;
     openCommitOnGithubNetworkError: string;

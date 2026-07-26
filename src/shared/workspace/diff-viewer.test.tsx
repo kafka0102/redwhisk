@@ -16,6 +16,10 @@ vi.mock("@monaco-editor/react", () => ({
   },
 }));
 
+vi.mock("../use-monaco-editor-ready", () => ({
+  useMonacoEditorReady: () => true,
+}));
+
 const diffTab: WorkspaceDiffTab = {
   fileName: "a.ts",
   filePath: "a.ts",

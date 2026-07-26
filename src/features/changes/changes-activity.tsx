@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import { DiffViewer } from "../../shared/workspace/diff-viewer";
+import { MultiDiffViewer } from "../../shared/workspace/multi-diff-viewer";
 import {
   DEFAULT_SIDEBAR_WIDTH,
   useWorkspaceShell,
@@ -24,7 +25,7 @@ interface ChangesActivityProps {
  *
  * `useCodeWorkspaceDiff` 在本 Activity 实例化——切换到 code 时本 Activity 卸载，
  * diff 面板随之重置（每个 Activity 独立状态，不再跨 code↔changes 保留 diff；
- * 详见 ADR-0018）。root 切换时经 onRootChange → diff.clear() 清空。
+ * 详见 ADR-0018）。root 切换时经 onRootChange → diff.clear() 清空单/多 diff。
  */
 export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
   const { messages } = useI18n();
@@ -72,6 +73,13 @@ export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
     committedExpanded,
   ]);
 
+  const main =
+    diff.multiDiff != null ? (
+      <MultiDiffViewer key={diff.multiDiff.commitHash} state={diff.multiDiff} />
+    ) : (
+      <DiffViewer tab={diff.diffTab} />
+    );
+
   return (
     <WorkspaceShell
       ariaLabel={messages.app.changes}
@@ -101,9 +109,10 @@ export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
           onToggleCommitted={() => setCommittedExpanded((current) => !current)}
           onOpenChangedFile={diff.openChange}
           onOpenCommittedChangedFile={diff.openCommittedChange}
+          onOpenCommitChanges={diff.openCommitChanges}
         />
       }
-      main={<DiffViewer tab={diff.diffTab} />}
+      main={main}
     />
   );
 }

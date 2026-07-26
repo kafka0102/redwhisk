@@ -6,6 +6,7 @@ import { I18nProvider } from "../../shared/i18n/i18n";
 import {
   type WorkspaceChangedFile,
   type WorkspaceCommitChangedFile,
+  type WorkspaceCommitRecord,
   type WorkspaceDiffContent,
   readProjectWorktreeDiff,
 } from "../../shared/workspace/workspace-commands";
@@ -152,6 +153,184 @@ describe("useCodeWorkspaceDiff", () => {
     act(() => {
       result.current.clear();
     });
+    expect(result.current.diffTab).toBeNull();
+  });
+
+  it("openCommitChanges loads all files and clears single-file mode", async () => {
+    const fileB: WorkspaceCommitChangedFile = {
+      filePath: "src/b.ts",
+      oldPath: null,
+      fileName: "b.ts",
+      kind: "added",
+      status: "A",
+    };
+    const commit: WorkspaceCommitRecord = {
+      hash: "fullhash123",
+      shortHash: "fullhash",
+      message: "feat: multi",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile, fileB],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockImplementation(async ({ filePath }) => ({
+      ...diffContent,
+      filePath,
+    }));
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openChange(changedFile);
+    });
+    expect(result.current.diffTab).not.toBeNull();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+
+    expect(result.current.diffTab).toBeNull();
+    expect(result.current.multiDiff?.commitHash).toBe("fullhash123");
+    expect(result.current.multiDiff?.files).toHaveLength(2);
+
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files.every((f) => !f.isLoading)).toBe(
+        true,
+      ),
+    );
+    expect(readDiffMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitHash: "fullhash123",
+        filePath: "src/a.ts",
+      }),
+    );
+    expect(readDiffMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitHash: "fullhash123",
+        filePath: "src/b.ts",
+      }),
+    );
+    expect(result.current.multiDiff?.files[0].diff).not.toBeNull();
+    expect(result.current.multiDiff?.files[1].diff).not.toBeNull();
+  });
+
+  it("openCommitChanges with zero files shows empty multiDiff without IPC", async () => {
+    const commit: WorkspaceCommitRecord = {
+      hash: "emptyhash",
+      shortHash: "empty",
+      message: "empty",
+      authorName: "dev",
+      committedAt: 1,
+      files: [],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+
+    expect(result.current.multiDiff).toEqual({
+      commitHash: "emptyhash",
+      files: [],
+    });
+    expect(readDiffMock).not.toHaveBeenCalled();
+  });
+
+  it("opening a single file clears multi-diff mode", async () => {
+    const commit: WorkspaceCommitRecord = {
+      hash: "h1",
+      shortHash: "h1",
+      message: "m",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockResolvedValue(diffContent);
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files[0].isLoading).toBe(false),
+    );
+
+    await act(async () => {
+      result.current.openCommittedChange("h1", committedFile);
+    });
+
+    expect(result.current.multiDiff).toBeNull();
+    expect(result.current.diffTab?.filePath).toBe("src/a.ts");
+  });
+
+  it("surfaces per-file error in multi-diff without failing siblings", async () => {
+    const fileB: WorkspaceCommitChangedFile = {
+      filePath: "src/b.ts",
+      oldPath: null,
+      fileName: "b.ts",
+      kind: "modified",
+      status: "M",
+    };
+    const commit: WorkspaceCommitRecord = {
+      hash: "h2",
+      shortHash: "h2",
+      message: "m",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile, fileB],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockImplementation(async ({ filePath }) => {
+      if (filePath === "src/a.ts") {
+        throw { code: "WORKSPACE_DIFF_FAILED", message: "boom-a" };
+      }
+      return { ...diffContent, filePath: "src/b.ts" };
+    });
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files.every((f) => !f.isLoading)).toBe(
+        true,
+      ),
+    );
+    expect(result.current.multiDiff?.files[0].errorMessage).not.toBeNull();
+    expect(result.current.multiDiff?.files[0].diff).toBeNull();
+    expect(result.current.multiDiff?.files[1].diff).not.toBeNull();
+    expect(result.current.multiDiff?.files[1].errorMessage).toBeNull();
+  });
+
+  it("clear wipes both single and multi diff", async () => {
+    const commit: WorkspaceCommitRecord = {
+      hash: "h3",
+      shortHash: "h3",
+      message: "m",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockResolvedValue(diffContent);
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit);
+    });
+    expect(result.current.multiDiff).not.toBeNull();
+
+    act(() => {
+      result.current.clear();
+    });
+    expect(result.current.multiDiff).toBeNull();
     expect(result.current.diffTab).toBeNull();
   });
 });

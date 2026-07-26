@@ -1,12 +1,4 @@
-import {
-  Cloud,
-  FileIcon,
-  FilePenLine,
-  FilePlus,
-  FileX,
-  Files,
-  GitBranch,
-} from "lucide-react";
+import { Cloud, GitBranch } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import {
@@ -23,12 +15,15 @@ import type {
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
-  WorkspaceCommitStatus,
 } from "./workspace-commands";
 import {
   getChangeKindStatusClassName,
   getChangeKindStatusLabel,
 } from "./workspace-change-status";
+import {
+  getCommitFileStatusClassName,
+  renderCommitFileStatusIcon,
+} from "./workspace-commit-file-status";
 
 interface CommitContextMenuState {
   commit: WorkspaceCommitRecord;
@@ -329,7 +324,7 @@ function CommittedFileRow({
         onMouseEnter={() => setIsTooltipVisible(true)}
         onMouseLeave={() => setIsTooltipVisible(false)}
       >
-        {renderCommitFileIcon(file.status)}
+        {renderCommitFileStatusIcon(file.status)}
         <span className="session-commit-file__identity">
           <span className="session-commit-file__name">{file.fileName}</span>
           {parentPath ? (
@@ -337,7 +332,7 @@ function CommittedFileRow({
           ) : null}
         </span>
         <span
-          className={`session-commit-file__status ${getCommitStatusClassName(file.status)}`}
+          className={`session-commit-file__status ${getCommitFileStatusClassName(file.status)}`}
         >
           {file.status}
         </span>
@@ -403,50 +398,4 @@ export function ChangedFileRow({
 function getParentPath(filePath: string): string {
   const lastSlashIndex = filePath.lastIndexOf("/");
   return lastSlashIndex >= 0 ? filePath.slice(0, lastSlashIndex) : "";
-}
-
-function renderCommitFileIcon(status: WorkspaceCommitStatus) {
-  const iconProps = {
-    "aria-hidden": "true" as const,
-    className: "session-commit-file__icon",
-    size: 15,
-    strokeWidth: 1.8,
-  };
-
-  switch (status) {
-    case "A":
-      return <FilePlus {...iconProps} />;
-    case "D":
-      return <FileX {...iconProps} />;
-    case "R":
-    case "C":
-      return <Files {...iconProps} />;
-    case "M":
-      return <FilePenLine {...iconProps} />;
-    case "T":
-    case "U":
-    case "X":
-      return <FileIcon {...iconProps} />;
-  }
-}
-
-function getCommitStatusClassName(status: WorkspaceCommitStatus): string {
-  switch (status) {
-    case "M":
-      return "session-commit-file__status--modified";
-    case "A":
-      return "session-commit-file__status--added";
-    case "R":
-      return "session-commit-file__status--renamed";
-    case "C":
-      return "session-commit-file__status--copied";
-    case "D":
-      return "session-commit-file__status--deleted";
-    case "T":
-      return "session-commit-file__status--type-changed";
-    case "U":
-      return "session-commit-file__status--unmerged";
-    case "X":
-      return "session-commit-file__status--unknown";
-  }
 }
