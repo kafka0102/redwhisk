@@ -3835,7 +3835,9 @@ describe("IssuesActivity", () => {
     await user.click(screen.getByRole("menuitem", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     await user.click(
-      await screen.findByRole("button", { name: "Complete without commit" }),
+      await screen.findByRole("button", {
+        name: "Discard & complete without commit",
+      }),
     );
 
     await waitFor(() =>

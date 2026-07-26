@@ -4736,7 +4736,7 @@ describe("AgentsActivity", () => {
     ).toBeInTheDocument();
     expect(
       within(dialog).getByRole("button", {
-        name: "Complete without commit",
+        name: "Discard & complete without commit",
       }),
     ).toBeInTheDocument();
     expect(
@@ -4828,7 +4828,7 @@ describe("AgentsActivity", () => {
     });
     await user.click(
       within(dialog).getByRole("button", {
-        name: "Complete without commit",
+        name: "Discard & complete without commit",
       }),
     );
 
