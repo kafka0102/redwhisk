@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 本地构建 Universal Mac 可执行文件（同时含 Intel 与 Apple Silicon）
-# 产出：src-tauri/target/universal-apple-darwin/release/bundle/macos/RedWhisk.app
+# 本地构建 Universal Mac 安装包（同时含 Intel 与 Apple Silicon）
+# 产出：src-tauri/target/universal-apple-darwin/release/bundle/{dmg,macos}/
 #
 # 用法：
 #   pnpm build:macos        # 推荐
@@ -33,14 +33,23 @@ echo "==> pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
 # 5. 构建 Universal .app：Tauri 内部会编译两份并 lipo 合并
+#    DMG 改由 scripts/build-dmg.sh 手工生成，绕过 macOS 26 上 hdiutil 的只读回归
 echo "==> pnpm tauri build --target universal-apple-darwin --bundles app"
 pnpm tauri build --target universal-apple-darwin --bundles app
 
-# 6. 打印产物路径
+# 6. 基于已生成的 .app 手工打包 DMG
+echo "==> bash scripts/build-dmg.sh"
+bash scripts/build-dmg.sh
+
+# 7. 打印产物路径
 bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle"
 echo
 echo "✅ 构建完成"
 echo "产物目录：${bundle_dir}"
+if [[ -d "${bundle_dir}/dmg" ]]; then
+  echo "DMG 包："
+  ls -lh "${bundle_dir}/dmg"
+fi
 if [[ -d "${bundle_dir}/macos" ]]; then
   echo "APP 包："
   ls -lh "${bundle_dir}/macos"
