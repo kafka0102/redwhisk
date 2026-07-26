@@ -18,7 +18,8 @@ use crate::features::issue::completion::state_machine::{
 };
 use crate::features::issue::completion::formatting::build_agent_commit_completion_prompt;
 use crate::features::issue::completion::git_reconcile::{
-    merge_block_from_worktree_error, reconcile_session_worktree, WorktreeMergeBlockDescription,
+    discard_session_workspace_changes, merge_block_from_worktree_error,
+    reconcile_session_worktree, WorktreeMergeBlockDescription,
 };
 use crate::features::issue::time::current_epoch_millis;
 use super::use_case::CompletionFlow;
@@ -166,7 +167,14 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                     transaction.commit().map_err(issue_database_error)?;
                 }
                 Effect::AttemptRebaseAndCleanup { on_failure } => {
-                    if let Err(error) = reconcile_session_worktree(ctx.repo_path, ctx.session) {
+                    // Skip / ignore_dirty：对账前先丢弃 Agent worktree 未提交改动（ADR-0026）。
+                    let reconcile_result = if new_state.dirty_already_skipped() {
+                        discard_session_workspace_changes(ctx.session)
+                            .and_then(|_| reconcile_session_worktree(ctx.repo_path, ctx.session))
+                    } else {
+                        reconcile_session_worktree(ctx.repo_path, ctx.session)
+                    };
+                    if let Err(error) = reconcile_result {
                         match on_failure {
                             FailurePolicy::Block => {
                                 merge_block = Some(merge_block_from_worktree_error(&error));

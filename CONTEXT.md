@@ -28,6 +28,10 @@ _Avoid_: 原始最终答复、会话转录
 Issue 从待验收标记为已完成的多步状态机流程；以实际执行路径、未提交改动与 Worktree 所有权为决策依据，经检测、dirty 三选（自动提交 / 不提交 / 取消）、自动提交后确认、Worktree 对账等阶段推进。phase 迁移由纯状态机模块决定，副作用以 effect 枚举由 service 解释执行；`detecting_workspace` 与 `reconciling_worktree` 是单次 command 内穿越的瞬态逻辑态（不持久化）。
 _Avoid_: completion policy、手动 / 自动提交二分
 
+**完成流程 dirty 三选 · 不提交（Skip）**：
+用户选择不把未提交改动做成新 commit 即继续完成；当后续需要 Worktree 对账合入时，系统在对账前丢弃 **Agent worktree** 上的未提交改动（含未跟踪临时文件），仅合入已提交内容；目标分支工作区 dirty 仍阻断；无需对账的当前分支路径则直接标记完成且不改写工作区文件。
+_Avoid_: 跳过合入、stash 保留、忽略 ensure_clean、清扫目标主工作区
+
 **Worktree 所有权**：
 某一 Agent worktree 由谁负责自动清理：RedWhisk 托管，或外部 / 用户提供。仅 RedWhisk 托管的 worktree 在完成流程中可被自动对账清理；外部 worktree 需用户确认。
 _Avoid_: workspace mode、session 工作目录归属

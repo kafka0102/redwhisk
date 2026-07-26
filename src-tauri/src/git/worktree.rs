@@ -271,6 +271,21 @@ pub fn cleanup_worktree(
     Ok(())
 }
 
+
+/// 丢弃 worktree 工作区内未提交改动（tracked + untracked；不加 `-x`）。
+///
+/// 路径不存在时 no-op，与 `reconcile_worktree` 一致。
+pub fn discard_worktree_changes(worktree_path: impl AsRef<Path>) -> Result<(), GitWorktreeError> {
+    let worktree_path = worktree_path.as_ref();
+    if !worktree_path.exists() {
+        return Ok(());
+    }
+    let worktree_path = ensure_repo_dir(worktree_path)?;
+    run_git(&worktree_path, &["reset", "--hard"])?;
+    run_git(&worktree_path, &["clean", "-fd"])?;
+    Ok(())
+}
+
 pub fn restore_worktree_for_branch(
     repo_path: impl AsRef<Path>,
     workspace_path: impl AsRef<Path>,
@@ -951,6 +966,38 @@ mod tests {
         assert!(!branch_exists(&repo_dir, "issue-10").expect("branch gone"));
         assert_eq!(current_branch(&repo_dir).expect("branch"), "main");
         assert!(repo_dir.join("feature.txt").is_file());
+    }
+
+
+    #[test]
+    fn discard_worktree_changes_resets_tracked_and_removes_untracked() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        create_repo(&repo_dir);
+        write_file(&repo_dir, "tracked.txt", "clean\n");
+        git(&repo_dir, &["add", "tracked.txt"]);
+        git(&repo_dir, &["commit", "-m", "initial"]);
+
+        write_file(&repo_dir, "tracked.txt", "dirty\n");
+        write_file(&repo_dir, "scratch.txt", "untracked\n");
+
+        discard_worktree_changes(&repo_dir).expect("discard");
+
+        assert_eq!(
+            fs::read_to_string(repo_dir.join("tracked.txt")).expect("tracked"),
+            "clean\n"
+        );
+        assert!(!repo_dir.join("scratch.txt").exists());
+        let status = git_output(&repo_dir, &["status", "--porcelain"]);
+        assert!(status.is_empty(), "worktree should be clean, got {status}");
+    }
+
+    #[test]
+    fn discard_worktree_changes_is_noop_when_path_missing() {
+        let temp_dir = tempdir().expect("temp dir");
+        let missing = temp_dir.path().join("missing-worktree");
+        discard_worktree_changes(&missing).expect("missing path is noop");
+        assert!(!missing.exists());
     }
 
     fn create_repo(repo_dir: &Path) {

@@ -2733,6 +2733,93 @@ fn complete_issue_flow_redwhisk_worktree_rebases_fast_forwards_and_cleans_up() {
 }
 
 #[test]
+fn complete_issue_flow_redwhisk_worktree_skip_discards_dirty_then_reconciles() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("flow-redwhisk-skip-dirty-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "flow-redwhisk-skip-dirty-repo",
+        &repo_dir,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "redwhisk skip dirty flow",
+        "running",
+    );
+    let worktree_root = temp_dir.path().join("worktrees");
+    let workspace_path = worktree_root.join("issue-flow-skip-dirty");
+    git(
+        &repo_dir,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            "issue-flow-skip-dirty",
+            workspace_path.to_string_lossy().as_ref(),
+            "main",
+        ],
+    );
+    update_session_worktree(
+        &database.connection,
+        session_id,
+        &workspace_path,
+        &worktree_root,
+        "issue-flow-skip-dirty",
+        WorktreeOwner::Redwhisk,
+    );
+    // 已提交内容应合入目标分支。
+    write_file(&workspace_path, "tracked.txt", "worktree committed\n");
+    git(&workspace_path, &["commit", "-am", "worktree committed change"]);
+    // 未提交改动（tracked 修改 + untracked 临时文件）应被 Skip 丢弃，不得进入目标。
+    write_file(&workspace_path, "tracked.txt", "worktree dirty uncommitted\n");
+    write_file(&workspace_path, "tmp-scratch.txt", "scratch should be discarded\n");
+
+    let result = service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: Some(DirtyWorkspaceOption::Skip),
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
+        .expect("skip dirty completes");
+
+    assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+    assert_eq!(result.issue.status, IssueStatus::Completed);
+    assert!(!workspace_path.exists(), "worktree should be cleaned up");
+    assert_eq!(
+        fs::read_to_string(repo_dir.join("tracked.txt")).expect("main content"),
+        "worktree committed\n",
+        "only committed worktree changes should land on target"
+    );
+    assert!(
+        !repo_dir.join("tmp-scratch.txt").exists(),
+        "untracked scratch must not appear on target"
+    );
+    assert_eq!(
+        git_output(&repo_dir, &["branch", "--list", "issue-flow-skip-dirty"]),
+        ""
+    );
+}
+
+#[test]
 fn complete_issue_flow_blocks_missing_redwhisk_worktree_with_unmerged_branch() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let repo_dir = temp_dir.path().join("flow-missing-redwhisk-worktree-repo");

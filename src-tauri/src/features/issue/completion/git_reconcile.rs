@@ -3,11 +3,22 @@ use std::path::Path;
 use crate::git::operation_state::GitOperationState;
 use crate::git::status::GitSnapshot;
 use crate::git::worktree::{
-    assess_missing_worktree, classify_merge_block, current_branch, reconcile_worktree,
-    GitWorktreeError, MergeBlockClassification, MissingWorktreeAssessment, WorktreeReconcileRequest,
+    assess_missing_worktree, classify_merge_block, current_branch, discard_worktree_changes,
+    reconcile_worktree, GitWorktreeError, MergeBlockClassification, MissingWorktreeAssessment,
+    WorktreeReconcileRequest,
 };
 use crate::types::agent_session::AgentSessionRecord;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+
+
+pub(crate) fn discard_session_workspace_changes(
+    session: &AgentSessionRecord,
+) -> Result<(), GitWorktreeError> {
+    let Some(workspace_path) = session.workspace_path.as_deref() else {
+        return Ok(());
+    };
+    discard_worktree_changes(Path::new(workspace_path))
+}
 
 pub(crate) fn reconcile_session_worktree(
     repo_path: &str,
