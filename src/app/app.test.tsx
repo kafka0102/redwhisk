@@ -406,7 +406,7 @@ describe("App project entry", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("marks the Project Home window header as draggable and toggles maximize on double-click", async () => {
+  it("marks the Project Home window header as a Tauri drag region without React maximize handlers", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -416,33 +416,18 @@ describe("App project entry", () => {
 
     expect(header).toHaveAttribute("data-tauri-drag-region");
     getCurrentWindowMock.mockClear();
+    mockAppWindow.isMaximized.mockClear();
+    mockAppWindow.maximize.mockClear();
+    mockAppWindow.unmaximize.mockClear();
 
+    // 回归：Tauri drag.js 已在 double-click 时 internal_toggle_maximize；
+    // React 再 toggle 会把刚最大化的窗口立刻 unmaximize。
     await user.dblClick(header!);
 
-    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
-    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.maximize).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
-  });
-
-  it("restores the Project Home window from its draggable header", async () => {
-    mockAppWindow.isMaximized.mockResolvedValue(true);
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    await screen.findByRole("searchbox", { name: "搜索项目" });
-    const header = document.querySelector(".project-home__window-header");
-
-    expect(header).toHaveAttribute("data-tauri-drag-region");
-    getCurrentWindowMock.mockClear();
-
-    await user.dblClick(header!);
-
-    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
-    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.unmaximize).toHaveBeenCalledTimes(1);
+    expect(getCurrentWindowMock).not.toHaveBeenCalled();
+    expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
     expect(mockAppWindow.maximize).not.toHaveBeenCalled();
+    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
   });
 
   it("opens directly to a project workbench when the window URL carries a project id", async () => {
@@ -612,7 +597,7 @@ describe("App project entry", () => {
     );
   });
 
-  it("maximizes the current window when double-clicking empty header space", async () => {
+  it("keeps workbench header maximize ownership on Tauri drag-region only", async () => {
     window.history.replaceState(null, "", "/?projectId=1");
     const user = userEvent.setup();
 
@@ -624,37 +609,20 @@ describe("App project entry", () => {
     const header = switcher.closest(".workbench__header");
 
     expect(header).not.toBeNull();
+    expect(header).toHaveAttribute("data-tauri-drag-region");
     getCurrentWindowMock.mockClear();
+    mockAppWindow.isMaximized.mockClear();
+    mockAppWindow.maximize.mockClear();
+    mockAppWindow.unmaximize.mockClear();
 
+    // 回归：原生 drag-region 已 maximize 后，React onDoubleClick 再读 isMaximized
+    // 并 unmaximize，用户看到「最大化后又缩回来」。
     await user.dblClick(header!);
 
-    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
-    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.maximize).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
-  });
-
-  it("restores the current window when double-clicking a maximized header", async () => {
-    window.history.replaceState(null, "", "/?projectId=1");
-    mockAppWindow.isMaximized.mockResolvedValue(true);
-    const user = userEvent.setup();
-
-    render(<App />);
-
-    const switcher = await screen.findByRole("button", {
-      name: "当前项目 RedWhisk",
-    });
-    const header = switcher.closest(".workbench__header");
-
-    expect(header).not.toBeNull();
-    getCurrentWindowMock.mockClear();
-
-    await user.dblClick(header!);
-
-    await waitFor(() => expect(getCurrentWindowMock).toHaveBeenCalledTimes(1));
-    expect(mockAppWindow.isMaximized).toHaveBeenCalledTimes(1);
-    expect(mockAppWindow.unmaximize).toHaveBeenCalledTimes(1);
+    expect(getCurrentWindowMock).not.toHaveBeenCalled();
+    expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
     expect(mockAppWindow.maximize).not.toHaveBeenCalled();
+    expect(mockAppWindow.unmaximize).not.toHaveBeenCalled();
   });
 
   it("does not maximize the window when clicking the project switcher trigger", async () => {

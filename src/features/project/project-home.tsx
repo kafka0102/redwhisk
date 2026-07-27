@@ -1,5 +1,3 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-
 import type { ProjectSummary } from "../../app/app";
 import { ProjectList } from "./project-list";
 
@@ -20,26 +18,9 @@ export function ProjectHome({
   onOpenInCurrentWindow,
   onProjectOpen,
 }: ProjectHomeProps) {
-  async function handleWindowHeaderDoubleClick() {
-    const currentWindow = getCurrentWindow();
-
-    if (await currentWindow.isMaximized()) {
-      await currentWindow.unmaximize();
-      return;
-    }
-
-    await currentWindow.maximize();
-  }
-
   return (
     <main className="project-home">
-      <header
-        className="project-home__window-header"
-        data-tauri-drag-region
-        onDoubleClick={() => {
-          void handleWindowHeaderDoubleClick();
-        }}
-      />
+      <header className="project-home__window-header" data-tauri-drag-region />
       <ProjectList
         isCreatingProject={isCreatingProject}
         projects={projects}

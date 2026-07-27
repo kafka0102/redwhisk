@@ -9,8 +9,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-
 import { ActivityRouter, type ActivityKey } from "./activity-router";
 import type { ProjectSummary } from "./app";
 import { UpdatePromptBadge } from "../features/app-update/update-prompt-badge";
@@ -133,27 +131,6 @@ export function AppShell({
     [project.id],
   );
 
-  async function handleWorkbenchHeaderDoubleClick(
-    event: React.MouseEvent<HTMLElement>,
-  ) {
-    if (
-      event.target instanceof Element &&
-      (event.target.closest(".project-switcher") ||
-        event.target.closest(".update-prompt"))
-    ) {
-      return;
-    }
-
-    const currentWindow = getCurrentWindow();
-
-    if (await currentWindow.isMaximized()) {
-      await currentWindow.unmaximize();
-      return;
-    }
-
-    await currentWindow.maximize();
-  }
-
   return (
     <div className="app-shell">
       <nav className="activity-bar" aria-label={messages.app.activityBarLabel}>
@@ -215,13 +192,7 @@ export function AppShell({
         className="workbench"
         aria-label={messages.app.workbench(project.name)}
       >
-        <header
-          className="workbench__header"
-          data-tauri-drag-region
-          onDoubleClick={(event) => {
-            void handleWorkbenchHeaderDoubleClick(event);
-          }}
-        >
+        <header className="workbench__header" data-tauri-drag-region>
           <ProjectSwitcher
             onOpenInCurrentWindow={onOpenInCurrentWindow}
             currentProject={project}
