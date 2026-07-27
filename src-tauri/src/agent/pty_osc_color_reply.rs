@@ -7,6 +7,10 @@
 //! Agent Session TUI 常在前端 xterm 挂载 / restore 之前就完成首次查询；restore
 //! 期间前端还会抑制 onData→PTY 转发（避免历史里的查询被二次应答成乱码），因此
 //! 仅靠 xterm 应答不可靠。本模块在 PTY reader 路径上就地应答，不依赖前端。
+//!
+//! 额外约束：reader 必须在 `spawn_pending` 当下启动（而非等 DB `register`），
+//! 因为 Codex 探测预算仅约 100ms，而 Agent Session 的 spawn→register 含
+//! `ensure_child_started` 与事务，经常超过该窗口。
 
 use super::pty_session_manager::TerminalBackgroundTheme;
 

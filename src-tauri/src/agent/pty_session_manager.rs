@@ -7,6 +7,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,8 +37,27 @@ struct PtySessionStore {
     pending_emits: Mutex<HashMap<i64, PendingEmit>>,
     app_theme: Mutex<TerminalBackgroundTheme>,
     interactive_path: Mutex<Option<OsString>>,
+    /// 递减的负 id，专供 spawn→register 窗口内挂载 reader。
+    next_pending_id: AtomicI64,
     #[cfg(test)]
     kill_failures: Mutex<HashSet<i64>>,
+}
+
+/// reader 线程的路由：spawn 即启动，register 时改写为真实 session/project id。
+struct PtySessionRouting {
+    project_id: AtomicI64,
+    session_id: AtomicI64,
+    registered: AtomicBool,
+}
+
+impl PtySessionRouting {
+    fn snapshot(&self) -> (i64, i64, bool) {
+        (
+            self.project_id.load(Ordering::Acquire),
+            self.session_id.load(Ordering::Acquire),
+            self.registered.load(Ordering::Acquire),
+        )
+    }
 }
 
 struct PtySessionHandle {
@@ -46,6 +66,7 @@ struct PtySessionHandle {
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     restore_buffer: Mutex<PtyRestoreBuffer>,
     log: Mutex<PtyLogWriter>,
+    routing: Arc<PtySessionRouting>,
 }
 
 struct PtyLogWriter {
@@ -106,12 +127,13 @@ pub struct PtySpawnRequest {
 }
 
 pub struct PendingPtySession {
-    child: Box<dyn Child + Send + Sync>,
-    killer: Box<dyn ChildKiller + Send + Sync>,
-    master: Box<dyn MasterPty + Send>,
-    reader: Box<dyn Read + Send>,
-    writer: Box<dyn Write + Send>,
-    log_path: String,
+    /// spawn 时分配的临时负 id；register 会 rekey 到真实 session_id。
+    pending_id: i64,
+    child: Option<Box<dyn Child + Send + Sync>>,
+    killer: Option<Box<dyn ChildKiller + Send + Sync>>,
+    store: Arc<PtySessionStore>,
+    /// register 成功后 disarm，Drop 不再 kill 已 rekey 的 live session。
+    disarmed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -168,6 +190,8 @@ impl PtySessionManager {
             // 避免极端时序下误判为 light 导致深色背景上输出不可见。
             app_theme: Mutex::new(TerminalBackgroundTheme::Dark),
             interactive_path: Mutex::new(None),
+            // 负 id 从 -1 递减，避免与真实 DB session id（正整数）冲突。
+            next_pending_id: AtomicI64::new(-1),
             #[cfg(test)]
             kill_failures: Mutex::new(HashSet::new()),
         });
@@ -290,29 +314,72 @@ impl PtySessionManager {
             .slave
             .spawn_command(command)
             .map_err(|error| error.to_string())?;
-        ensure_child_started(
+
+        File::create(&request.log_path).map_err(|error| error.to_string())?;
+        let log_writer = PtyLogWriter::open(Path::new(&request.log_path))?;
+
+        let master = pair.master;
+        let mut reader = master
+            .try_clone_reader()
+            .map_err(|error| error.to_string())?;
+        let writer = master.take_writer().map_err(|error| error.to_string())?;
+        let mut killer = child.clone_killer();
+
+        // Codex TUI 启动后约 100ms 内会发 OSC 10/11 探测默认色；若等到 DB register
+        // 再开 reader，探测必超时，底部 composer 退回默认背景与输出区同色。
+        // 因此 spawn 后立刻挂载 reader（临时负 id），register 时 rekey。
+        let pending_id = self.store.next_pending_id.fetch_sub(1, Ordering::AcqRel);
+        let routing = Arc::new(PtySessionRouting {
+            project_id: AtomicI64::new(0),
+            session_id: AtomicI64::new(pending_id),
+            registered: AtomicBool::new(false),
+        });
+        let handle = Arc::new(PtySessionHandle {
+            master: Mutex::new(master),
+            writer: Mutex::new(writer),
+            killer: Mutex::new(child.clone_killer()),
+            restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
+            log: Mutex::new(log_writer),
+            routing: Arc::clone(&routing),
+        });
+
+        {
+            let mut sessions = self
+                .store
+                .sessions
+                .lock()
+                .map_err(|_| "failed to lock PTY sessions".to_string())?;
+            sessions.insert(pending_id, Arc::clone(&handle));
+        }
+
+        let reader_store = Arc::clone(&self.store);
+        let reader_handle = Arc::clone(&handle);
+        thread::spawn(move || {
+            run_reader_loop(reader_store, reader_handle, &mut reader);
+        });
+
+        // 启动探测窗口内 reader 已在应答 OSC；此处稳定性等待不再饿死颜色探测。
+        if let Err(error) = ensure_child_started(
             child.as_mut(),
             &request.command,
             request.startup_check_total_ms,
             request.startup_check_interval_ms,
-        )?;
-
-        File::create(&request.log_path).map_err(|error| error.to_string())?;
-
-        let master = pair.master;
-        let reader = master
-            .try_clone_reader()
-            .map_err(|error| error.to_string())?;
-        let writer = master.take_writer().map_err(|error| error.to_string())?;
-        let killer = child.clone_killer();
+        ) {
+            let _ = killer.kill();
+            let _ = child.wait();
+            if let Ok(mut sessions) = self.store.sessions.lock() {
+                sessions.remove(&pending_id);
+            }
+            discard_pending_session(&self.store, pending_id);
+            return Err(error);
+        }
 
         Ok(PendingPtySession {
-            child,
-            killer,
-            master,
-            reader,
-            writer,
-            log_path: request.log_path.clone(),
+            pending_id,
+            child: Some(child),
+            killer: Some(killer),
+            store: Arc::clone(&self.store),
+            disarmed: false,
         })
     }
 
@@ -332,58 +399,64 @@ impl PtySessionManager {
         &self,
         project_id: i64,
         session_id: i64,
-        pending: PendingPtySession,
+        mut pending: PendingPtySession,
         on_exit: F,
     ) -> Result<(), PtyRegisterError>
     where
         F: FnOnce(PtyExitStatus) + Send + 'static,
     {
-        let mut sessions = match self.store.sessions.lock() {
-            Ok(sessions) => sessions,
-            Err(_) => {
+        let pending_id = pending.pending_id;
+        let handle = {
+            let mut sessions = match self.store.sessions.lock() {
+                Ok(sessions) => sessions,
+                Err(_) => {
+                    return Err(PtyRegisterError {
+                        message: "failed to lock PTY sessions".to_string(),
+                        pending,
+                    });
+                }
+            };
+
+            let Some(handle) = sessions.remove(&pending_id) else {
                 return Err(PtyRegisterError {
-                    message: "failed to lock PTY sessions".to_string(),
+                    message: format!("pending PTY session {pending_id} not found"),
+                    pending,
+                });
+            };
+
+            if sessions.contains_key(&session_id) {
+                // 回滚：把 pending handle 放回原 key，避免泄漏 reader。
+                sessions.insert(pending_id, Arc::clone(&handle));
+                return Err(PtyRegisterError {
+                    message: format!("PTY session {session_id} already registered"),
                     pending,
                 });
             }
+
+            sessions.insert(session_id, Arc::clone(&handle));
+            handle
         };
 
-        let log_writer = match PtyLogWriter::open(Path::new(&pending.log_path)) {
-            Ok(log_writer) => log_writer,
-            Err(error) => {
-                return Err(PtyRegisterError {
-                    message: error,
-                    pending,
-                });
-            }
-        };
-
-        let handle = Arc::new(PtySessionHandle {
-            master: Mutex::new(pending.master),
-            writer: Mutex::new(pending.writer),
-            killer: Mutex::new(pending.killer),
-            restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
-            log: Mutex::new(log_writer),
-        });
-
-        sessions.insert(session_id, Arc::clone(&handle));
-        drop(sessions);
-
-        let reader_store = Arc::clone(&self.store);
-        let reader_handle = Arc::clone(&handle);
-        let mut reader = pending.reader;
-        thread::spawn(move || {
-            run_reader_loop(
-                reader_store,
-                reader_handle,
-                project_id,
-                session_id,
-                &mut reader,
-            );
-        });
+        handle.routing.project_id.store(project_id, Ordering::Release);
+        handle.routing.session_id.store(session_id, Ordering::Release);
+        handle.routing.registered.store(true, Ordering::Release);
 
         let store = Arc::clone(&self.store);
-        let mut child = pending.child;
+        // 取出 child 用于 wait；disarm 防止 Drop 误杀已 rekey 的 live session。
+        let mut child = match pending.child.take() {
+            Some(child) => child,
+            None => {
+                return Err(PtyRegisterError {
+                    message: "pending PTY child missing".to_string(),
+                    pending,
+                });
+            }
+        };
+        let _ = pending.killer.take();
+        pending.disarmed = true;
+        // disarmed pending 仅在函数结束时 drop；避免 live session 被二次清理。
+        drop(pending);
+
         thread::spawn(move || {
             let exit_code = child
                 .wait()
@@ -532,14 +605,13 @@ impl PtySessionManager {
 fn run_reader_loop(
     store: Arc<PtySessionStore>,
     handle: Arc<PtySessionHandle>,
-    project_id: i64,
-    session_id: i64,
     reader: &mut Box<dyn Read + Send>,
 ) {
     let mut buffer = [0_u8; 4096];
     let mut sequence = 0_u64;
     // Codex / Claude TUI 启动时的 OSC 10/11/12 颜色查询：在前端挂载前即时应答，
     // 避免 restore 抑制 onData 导致 composer 背景与输出区无法区分。
+    // spawn 即启动本循环，覆盖 Agent Session 在 DB register 前的探测窗口。
     let mut osc_color_scanner = crate::agent::pty_osc_color_reply::OscColorQueryScanner::new();
 
     loop {
@@ -573,7 +645,9 @@ fn run_reader_loop(
                     restore_buffer.push(sequence, data);
                 }
 
-                if has_output_subscribers(&store, session_id) {
+                let (project_id, session_id, registered) = handle.routing.snapshot();
+                // register 前不向外 emit（尚无真实 session 订阅）；restore_buffer 已保留。
+                if registered && has_output_subscribers(&store, session_id) {
                     queue_output_chunk(&store, project_id, session_id, sequence, data);
                 }
             }
@@ -581,11 +655,12 @@ fn run_reader_loop(
         }
     }
 
+    let (_project_id, session_id, registered) = handle.routing.snapshot();
     if let Ok(mut log) = handle.log.lock() {
         let _ = log.flush();
         let _ = log.trim_if_needed(true);
     }
-    if has_output_subscribers(&store, session_id) {
+    if registered && has_output_subscribers(&store, session_id) {
         flush_pending_session(&store, session_id);
     } else {
         discard_pending_session(&store, session_id);
@@ -824,15 +899,48 @@ impl PtyRestoreBuffer {
 
 impl PendingPtySession {
     pub fn write_input(&mut self, data: &str) -> Result<(), String> {
-        self.writer
+        let handle = {
+            let sessions = self
+                .store
+                .sessions
+                .lock()
+                .map_err(|_| "failed to lock PTY sessions".to_string())?;
+            sessions
+                .get(&self.pending_id)
+                .cloned()
+                .ok_or_else(|| format!("pending PTY session {} not found", self.pending_id))?
+        };
+        let mut writer = handle
+            .writer
+            .lock()
+            .map_err(|_| "failed to lock PTY writer".to_string())?;
+        writer
             .write_all(data.as_bytes())
             .map_err(|error| error.to_string())?;
-        self.writer.flush().map_err(|error| error.to_string())
+        writer.flush().map_err(|error| error.to_string())
     }
 
-    pub fn terminate(mut self) {
-        let _ = self.killer.kill();
-        let _ = self.child.wait();
+    pub fn terminate(self) {
+        // 清理由 Drop 统一完成。
+        drop(self);
+    }
+}
+
+impl Drop for PendingPtySession {
+    fn drop(&mut self) {
+        if self.disarmed {
+            return;
+        }
+        if let Some(mut killer) = self.killer.take() {
+            let _ = killer.kill();
+        }
+        if let Some(mut child) = self.child.take() {
+            let _ = child.wait();
+        }
+        if let Ok(mut sessions) = self.store.sessions.lock() {
+            sessions.remove(&self.pending_id);
+        }
+        discard_pending_session(&self.store, self.pending_id);
     }
 }
 
@@ -1077,4 +1185,6 @@ mod tests {
         assert!(content.len() <= 10);
         assert!(content.contains("dddd") || content.ends_with("dddd\n") || content.contains("ccc"));
     }
+
+
 }
