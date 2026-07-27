@@ -946,5 +946,23 @@
     "deleteSuccess": "Deleted successfully",
     "deleteConfirm": "Are you sure you want to delete?",
     "cannotDeleteWhileRunning": "This workspace still has a running agent turn and cannot be deleted."
+  },
+  "changesSync": {
+    "syncChangesBehind": "Sync Changes {{count}}↓",
+    "syncChangesAhead": "Sync Changes {{count}}↑",
+    "syncChangesBoth": "Sync Changes {{behind}}↓ {{ahead}}↑",
+    "confirmTitle": "Sync Changes",
+    "confirmBoth": "This will pull commits from \"{{upstream}}\" and push commits to it.",
+    "confirmPull": "This will pull commits from \"{{upstream}}\".",
+    "confirmPush": "This will push commits to \"{{upstream}}\".",
+    "confirm": "OK",
+    "confirmAndDismiss": "OK and don't show again",
+    "cancel": "Cancel",
+    "syncing": "Syncing…",
+    "pulling": "Pulling…",
+    "pushing": "Pushing…",
+    "syncSuccess": "Synced successfully",
+    "pullSuccess": "Pulled successfully",
+    "pushSuccess": "Pushed successfully"
   }
 }

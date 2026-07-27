@@ -120,3 +120,141 @@ describe("WorkspaceChangesPanels commit history infinite scroll", () => {
     );
   });
 });
+
+describe("WorkspaceChangesPanels uncommitted empty sync button", () => {
+  it("replaces empty copy with sync button for project root when branch is ahead or behind", () => {
+    render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        isUncommittedExpanded={true}
+        isProjectRoot={true}
+        branchSync={{ upstream: "origin/main", ahead: 0, behind: 2 }}
+        onSyncChanges={() => {}}
+      />,
+      { wrapper },
+    );
+
+    expect(
+      screen.queryByText("No uncommitted changes."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sync Changes 2↓" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders ahead-only and both label shapes", () => {
+    const { rerender } = render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        isUncommittedExpanded={true}
+        isProjectRoot={true}
+        branchSync={{ upstream: "origin/main", ahead: 3, behind: 0 }}
+        onSyncChanges={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(
+      screen.getByRole("button", { name: "Sync Changes 3↑" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <WorkspaceChangesPanels
+          {...baseProps}
+          isUncommittedExpanded={true}
+          isProjectRoot={true}
+          branchSync={{ upstream: "origin/main", ahead: 1, behind: 4 }}
+          onSyncChanges={() => {}}
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByRole("button", { name: "Sync Changes 4↓ 1↑" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps empty copy for worktree, dirty tree, loading, or missing handler", () => {
+    const cases = [
+      {
+        isProjectRoot: false,
+        branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+        onSyncChanges: () => {},
+        changes: [] as [],
+        isChangesLoading: false,
+      },
+      {
+        isProjectRoot: true,
+        branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+        onSyncChanges: () => {},
+        changes: [
+          {
+            filePath: "a.ts",
+            oldPath: null,
+            fileName: "a.ts",
+            kind: "modified" as const,
+            status: "M",
+            additions: 1,
+            deletions: 0,
+            isBinary: false,
+            contentHash: "h",
+            metadataSignature: "m",
+          },
+        ],
+        isChangesLoading: false,
+      },
+      {
+        isProjectRoot: true,
+        branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+        onSyncChanges: () => {},
+        changes: [],
+        isChangesLoading: true,
+      },
+      {
+        isProjectRoot: true,
+        branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+        onSyncChanges: undefined,
+        changes: [],
+        isChangesLoading: false,
+      },
+    ];
+
+    for (const props of cases) {
+      const { unmount } = render(
+        <WorkspaceChangesPanels
+          {...baseProps}
+          isUncommittedExpanded={true}
+          isProjectRoot={props.isProjectRoot}
+          branchSync={props.branchSync}
+          onSyncChanges={props.onSyncChanges}
+          changes={props.changes}
+          isChangesLoading={props.isChangesLoading}
+        />,
+        { wrapper },
+      );
+      expect(
+        screen.queryByRole("button", { name: /Sync Changes/ }),
+      ).not.toBeInTheDocument();
+      if (props.changes.length === 0 && !props.isChangesLoading) {
+        expect(screen.getByText("No uncommitted changes.")).toBeInTheDocument();
+      }
+      unmount();
+    }
+  });
+
+  it("invokes onSyncChanges when the sync button is clicked", () => {
+    const onSyncChanges = vi.fn();
+    render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        isUncommittedExpanded={true}
+        isProjectRoot={true}
+        branchSync={{ upstream: "origin/main", ahead: 1, behind: 2 }}
+        onSyncChanges={onSyncChanges}
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync Changes 2↓ 1↑" }));
+    expect(onSyncChanges).toHaveBeenCalledTimes(1);
+  });
+});

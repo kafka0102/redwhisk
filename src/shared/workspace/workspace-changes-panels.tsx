@@ -1,5 +1,10 @@
-import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "../i18n/i18n";
 import {
@@ -11,12 +16,17 @@ import {
   CommittedChangesTimeline,
 } from "./workspace-changes-view";
 import type {
+  BranchSyncStatus,
   ProjectWorkspaceInput,
   WorkspaceChangedFile,
   WorkspaceCommitChangedFile,
   WorkspaceCommitRecord,
 } from "./workspace-commands";
 import { useWorkspaceGithubRemote } from "./use-workspace-github-remote";
+import {
+  formatSyncChangesLabel,
+  shouldShowSyncChangesButton,
+} from "./sync-changes";
 
 interface WorkspaceChangesPanelsProps {
   changes: WorkspaceChangedFile[];
@@ -46,6 +56,12 @@ interface WorkspaceChangesPanelsProps {
   isLoadingMoreCommitHistory?: boolean;
   loadMoreCommitHistoryErrorMessage?: string | null;
   onLoadMoreCommitHistory?: () => void;
+  /** 项目主 checkout 相对 upstream 的同步状态；缺省不展示同步按钮。 */
+  branchSync?: BranchSyncStatus | null;
+  /** 当前选中根是否为项目主 checkout；Agent 会话侧不传。 */
+  isProjectRoot?: boolean;
+  /** 点击「同步更改」；缺省不展示按钮。 */
+  onSyncChanges?: () => void;
 }
 
 /**
@@ -80,13 +96,37 @@ export function WorkspaceChangesPanels({
   isLoadingMoreCommitHistory = false,
   loadMoreCommitHistoryErrorMessage = null,
   onLoadMoreCommitHistory,
+  branchSync = null,
+  isProjectRoot = false,
+  onSyncChanges,
 }: WorkspaceChangesPanelsProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedCommitHashes, setExpandedCommitHashes] = useState<Set<string>>(
     () => new Set(),
   );
   const githubRemote = useWorkspaceGithubRemote(workspaceInput);
+
+  const showSyncChanges = shouldShowSyncChangesButton({
+    fileCount: changes.length,
+    isLoading: isChangesLoading,
+    hasError: changesErrorMessage != null,
+    isProjectRoot,
+    branchSync,
+    hasSyncHandler: onSyncChanges != null,
+  });
+
+  const syncChangesLabel = useMemo(() => {
+    if (!showSyncChanges || branchSync == null) {
+      return null;
+    }
+    return formatSyncChangesLabel(branchSync, {
+      behindOnly: (count) => t("changesSync.syncChangesBehind", { count }),
+      aheadOnly: (count) => t("changesSync.syncChangesAhead", { count }),
+      both: (behind, ahead) =>
+        t("changesSync.syncChangesBoth", { behind, ahead }),
+    });
+  }, [branchSync, showSyncChanges, t]);
 
   const handleToggleCommit = useCallback((hash: string) => {
     setExpandedCommitHashes((current) => {
@@ -171,11 +211,27 @@ export function WorkspaceChangesPanels({
               </p>
             ) : null}
             {changes.length === 0 && !changesErrorMessage ? (
-              <p className="code-workspace__panel-empty">
-                {isChangesLoading
-                  ? messages.agentsFeature.loadingChanges
-                  : messages.agentsFeature.noUncommittedChanges}
-              </p>
+              showSyncChanges && syncChangesLabel && onSyncChanges ? (
+                <button
+                  className="code-workspace__sync-changes"
+                  type="button"
+                  onClick={onSyncChanges}
+                >
+                  <RefreshCw
+                    aria-hidden="true"
+                    className="code-workspace__sync-changes-icon"
+                    size={14}
+                    strokeWidth={1.9}
+                  />
+                  <span>{syncChangesLabel}</span>
+                </button>
+              ) : (
+                <p className="code-workspace__panel-empty">
+                  {isChangesLoading
+                    ? messages.agentsFeature.loadingChanges
+                    : messages.agentsFeature.noUncommittedChanges}
+                </p>
+              )
             ) : null}
             {!changesErrorMessage ? (
               <div className="code-workspace__changes-list">

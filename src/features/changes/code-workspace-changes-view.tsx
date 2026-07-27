@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
 import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
 import type {
@@ -11,10 +11,13 @@ import {
   useWorktreeRunningSession,
 } from "./use-changes-auto-refresh";
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
+import { useSyncChangesAction } from "./use-sync-changes-action";
 
 interface CodeWorkspaceChangesViewProps {
   projectId: number;
   selectedRootWorkspacePath: string | null;
+  /** 当前选中根是否为项目主 checkout；linked worktree 为 false。 */
+  isProjectRoot?: boolean;
   /** 外部递增时立即刷新未提交与已提交列表（拉取/推送成功）。 */
   refreshTick?: number;
   uncommittedExpanded: boolean;
@@ -38,6 +41,7 @@ interface CodeWorkspaceChangesViewProps {
 export function CodeWorkspaceChangesView({
   projectId,
   selectedRootWorkspacePath,
+  isProjectRoot = false,
   refreshTick = 0,
   uncommittedExpanded,
   committedExpanded,
@@ -49,6 +53,7 @@ export function CodeWorkspaceChangesView({
 }: CodeWorkspaceChangesViewProps) {
   const {
     changes,
+    branchSync,
     isChangesLoading,
     changesErrorMessage,
     isChangesUnavailable,
@@ -86,32 +91,56 @@ export function CodeWorkspaceChangesView({
     refreshCommitHistory();
   }, [refreshTick, refreshChanges, refreshCommitHistory]);
 
+  const handleRemoteSuccess = useCallback(() => {
+    refreshChanges();
+    refreshCommitHistory();
+  }, [refreshChanges, refreshCommitHistory]);
+
+  const { requestSync, dialogs: syncDialogs } = useSyncChangesAction({
+    projectId,
+    workspacePath: selectedRootWorkspacePath,
+    onSuccess: handleRemoteSuccess,
+  });
+
+  const handleSyncChanges = useCallback(() => {
+    if (branchSync == null) {
+      return;
+    }
+    requestSync(branchSync);
+  }, [branchSync, requestSync]);
+
   return (
-    <WorkspaceChangesPanels
-      changes={changes}
-      changesErrorMessage={changesErrorMessage}
-      isChangesLoading={isChangesLoading}
-      isUncommittedExpanded={uncommittedExpanded}
-      onOpenChangedFile={onOpenChangedFile}
-      onOpenCommittedChangedFile={onOpenCommittedChangedFile}
-      onOpenCommitChanges={onOpenCommitChanges}
-      onToggleUncommittedExpanded={onToggleUncommitted}
-      workspaceInput={
-        selectedRootWorkspacePath
-          ? { projectId, workspacePath: selectedRootWorkspacePath }
-          : null
-      }
-      commitHistory={commitHistory}
-      commitHistoryErrorMessage={commitHistoryErrorMessage}
-      isCommitHistoryLoading={isCommitHistoryLoading}
-      isWorktree={isWorktree}
-      baseBranch={baseBranch}
-      isCommittedExpanded={committedExpanded}
-      onToggleCommittedExpanded={onToggleCommitted}
-      hasMoreCommitHistory={hasMoreCommitHistory}
-      isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
-      loadMoreCommitHistoryErrorMessage={loadMoreCommitHistoryErrorMessage}
-      onLoadMoreCommitHistory={loadMoreCommitHistory}
-    />
+    <>
+      <WorkspaceChangesPanels
+        changes={changes}
+        changesErrorMessage={changesErrorMessage}
+        isChangesLoading={isChangesLoading}
+        isUncommittedExpanded={uncommittedExpanded}
+        onOpenChangedFile={onOpenChangedFile}
+        onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+        onOpenCommitChanges={onOpenCommitChanges}
+        onToggleUncommittedExpanded={onToggleUncommitted}
+        workspaceInput={
+          selectedRootWorkspacePath
+            ? { projectId, workspacePath: selectedRootWorkspacePath }
+            : null
+        }
+        commitHistory={commitHistory}
+        commitHistoryErrorMessage={commitHistoryErrorMessage}
+        isCommitHistoryLoading={isCommitHistoryLoading}
+        isWorktree={isWorktree}
+        baseBranch={baseBranch}
+        isCommittedExpanded={committedExpanded}
+        onToggleCommittedExpanded={onToggleCommitted}
+        hasMoreCommitHistory={hasMoreCommitHistory}
+        isLoadingMoreCommitHistory={isLoadingMoreCommitHistory}
+        loadMoreCommitHistoryErrorMessage={loadMoreCommitHistoryErrorMessage}
+        onLoadMoreCommitHistory={loadMoreCommitHistory}
+        branchSync={branchSync}
+        isProjectRoot={isProjectRoot}
+        onSyncChanges={isProjectRoot ? handleSyncChanges : undefined}
+      />
+      {syncDialogs}
+    </>
   );
 }

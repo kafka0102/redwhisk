@@ -100,6 +100,7 @@ export function ChangesActivity({ projectId, roots }: ChangesActivityProps) {
         <CodeWorkspaceChangesView
           projectId={projectId}
           selectedRootWorkspacePath={shell.selectedRootWorkspacePath}
+          isProjectRoot={shell.selectedRoot?.isProjectRoot === true}
           refreshTick={changesRefreshTick}
           uncommittedExpanded={uncommittedExpanded}
           committedExpanded={committedExpanded}
