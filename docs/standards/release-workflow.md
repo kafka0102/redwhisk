@@ -167,7 +167,7 @@ git push origin v0.1.0
 
 `release-macos` job 在 `macos-latest` 上执行：
 
-1. 安装 pnpm 9、Node 20、Rust stable 与两个 Apple target
+1. 安装 pnpm 10、Node 22、Rust stable 与两个 Apple target
 2. `pnpm install --frozen-lockfile`
 3. `pnpm build:macos`（产出 Universal `.app` + Universal DMG）
 4. 将 `.app` 打包为 `.app.zip`
