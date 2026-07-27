@@ -43,7 +43,10 @@ import {
   type SavedAgentSkillRecord,
 } from "./settings-commands";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
-import { orderSkillPathEntries } from "./saved-agent-skill-display";
+import {
+  orderSkillPathEntries,
+  preferredSkillPathEntries,
+} from "./saved-agent-skill-display";
 
 interface SavedAgentSkillFormProps {
   skill?: SavedAgentSkillRecord;
@@ -130,6 +133,11 @@ export function SavedAgentSkillForm({
       })),
     );
   }, [skillName, normalizedSkills]);
+
+  const displayPaths = useMemo(
+    () => preferredSkillPathEntries(scannedPaths),
+    [scannedPaths],
+  );
 
   const handleSelectSkillName = (name: string) => {
     setSkillName(name);
@@ -322,13 +330,13 @@ export function SavedAgentSkillForm({
               <Label className="text-xs text-muted-foreground">
                 {messages.settings.skillPaths}
               </Label>
-              {scannedPaths.length === 0 ? (
+              {displayPaths.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {messages.settings.notDetected}
                 </p>
               ) : (
                 <div className="max-h-48 overflow-auto rounded border border-border p-2">
-                  {scannedPaths.map((path, index) => (
+                  {displayPaths.map((path, index) => (
                     <div
                       key={`${path.agentType}:${path.path}:${index}`}
                       className="flex items-center gap-2 py-1.5"

@@ -18,7 +18,10 @@ import {
 import { type SavedAgentSkillRecord } from "./settings-commands";
 import { SavedAgentSkillForm } from "./saved-agent-skill-form";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
-import { groupSupportedAgents } from "./saved-agent-skill-display";
+import {
+  groupSupportedAgents,
+  selectPreferredSkillPath,
+} from "./saved-agent-skill-display";
 import { useI18n } from "../../shared/i18n/i18n";
 
 interface AddSkillFormState {
@@ -159,7 +162,10 @@ export function SkillsSettingsPanel({
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent className="max-w-sm whitespace-pre-line">
-                                  {agent.paths.join("\n")}
+                                  {selectPreferredSkillPath(
+                                    agent.agentType,
+                                    agent.paths,
+                                  ) ?? agent.paths[0]}
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>

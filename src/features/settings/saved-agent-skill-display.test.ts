@@ -4,6 +4,8 @@ import {
   groupSupportedAgents,
   normalizeSkillAgentType,
   orderSkillPathEntries,
+  preferredSkillPathEntries,
+  selectPreferredSkillPath,
 } from "./saved-agent-skill-display";
 
 describe("normalizeSkillAgentType", () => {
@@ -82,6 +84,154 @@ describe("orderSkillPathEntries", () => {
       "claude:/c",
       "grok:/g-a",
       "grok:/g-b",
+    ]);
+  });
+});
+
+describe("selectPreferredSkillPath", () => {
+  it("prefers OpenCode dedicated root over .agents/skills and .claude/skills", () => {
+    const preferred = selectPreferredSkillPath("opencode", [
+      "/home/me/.agents/skills/demo/SKILL.md",
+      "/home/me/.claude/skills/demo/SKILL.md",
+      "/home/me/.config/opencode/skills/demo/SKILL.md",
+      "/repo/.opencode/skills/demo/SKILL.md",
+    ]);
+
+    // 同级专属根取字典序第一条
+    expect(preferred).toBe("/home/me/.config/opencode/skills/demo/SKILL.md");
+  });
+
+  it("prefers Grok dedicated root over shared roots", () => {
+    const preferred = selectPreferredSkillPath("grok", [
+      "/home/me/.agents/skills/demo/SKILL.md",
+      "/home/me/.claude/skills/demo/SKILL.md",
+      "/home/me/.grok/skills/demo/SKILL.md",
+    ]);
+
+    expect(preferred).toBe("/home/me/.grok/skills/demo/SKILL.md");
+  });
+
+  it("prefers Codex dedicated roots including superpowers and /etc", () => {
+    expect(
+      selectPreferredSkillPath("codex", [
+        "/home/me/.agents/skills/demo/SKILL.md",
+        "/home/me/.codex/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.codex/skills/demo/SKILL.md");
+
+    expect(
+      selectPreferredSkillPath("codex", [
+        "/home/me/.agents/skills/demo/SKILL.md",
+        "/home/me/.codex/superpowers/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.codex/superpowers/skills/demo/SKILL.md");
+
+    expect(
+      selectPreferredSkillPath("codex", [
+        "/home/me/.agents/skills/demo/SKILL.md",
+        "/etc/codex/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/etc/codex/skills/demo/SKILL.md");
+  });
+
+  it("prefers Claude dedicated root over other paths", () => {
+    expect(
+      selectPreferredSkillPath("claude", [
+        "/tmp/other/demo/SKILL.md",
+        "/home/me/.claude/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.claude/skills/demo/SKILL.md");
+
+    expect(
+      selectPreferredSkillPath("claude_code", [
+        "/tmp/other/demo/SKILL.md",
+        "/home/me/.claude/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.claude/skills/demo/SKILL.md");
+  });
+
+  it("falls back to .agents/skills before other shared and remainder", () => {
+    expect(
+      selectPreferredSkillPath("opencode", [
+        "/tmp/custom/demo/SKILL.md",
+        "/home/me/.claude/skills/demo/SKILL.md",
+        "/home/me/.agents/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.agents/skills/demo/SKILL.md");
+
+    expect(
+      selectPreferredSkillPath("opencode", [
+        "/tmp/custom/demo/SKILL.md",
+        "/home/me/.claude/skills/demo/SKILL.md",
+      ]),
+    ).toBe("/home/me/.claude/skills/demo/SKILL.md");
+
+    expect(
+      selectPreferredSkillPath("opencode", [
+        "/tmp/z-custom/demo/SKILL.md",
+        "/tmp/a-custom/demo/SKILL.md",
+      ]),
+    ).toBe("/tmp/a-custom/demo/SKILL.md");
+  });
+
+  it("returns null for empty paths and first lexical when single", () => {
+    expect(selectPreferredSkillPath("codex", [])).toBeNull();
+    expect(selectPreferredSkillPath("codex", ["/only/path/SKILL.md"])).toBe(
+      "/only/path/SKILL.md",
+    );
+  });
+});
+
+describe("preferredSkillPathEntries", () => {
+  it("returns one preferred path per agent in display order", () => {
+    const preferred = preferredSkillPathEntries([
+      {
+        agentType: "opencode",
+        path: "/home/me/.agents/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "opencode",
+        path: "/home/me/.config/opencode/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "grok",
+        path: "/home/me/.agents/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "grok",
+        path: "/home/me/.grok/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "codex",
+        path: "/home/me/.agents/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "codex",
+        path: "/home/me/.codex/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "claude",
+        path: "/home/me/.claude/skills/demo/SKILL.md",
+      },
+    ]);
+
+    expect(preferred).toEqual([
+      {
+        agentType: "codex",
+        path: "/home/me/.codex/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "claude",
+        path: "/home/me/.claude/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "opencode",
+        path: "/home/me/.config/opencode/skills/demo/SKILL.md",
+      },
+      {
+        agentType: "grok",
+        path: "/home/me/.grok/skills/demo/SKILL.md",
+      },
     ]);
   });
 });

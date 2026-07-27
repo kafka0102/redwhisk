@@ -44,6 +44,14 @@ const scannedSkills = [
   },
   {
     name: "demo-skill",
+    path: "/home/me/.codex/skills/demo-skill/SKILL.md",
+    agentType: "codex" as const,
+    scope: "global" as const,
+    projectId: null,
+    sourceRoot: "/home/me/.codex/skills",
+  },
+  {
+    name: "demo-skill",
     path: "/home/me/.agents/skills/demo-skill/SKILL.md",
     agentType: "opencode" as const,
     scope: "global" as const,
@@ -52,11 +60,35 @@ const scannedSkills = [
   },
   {
     name: "demo-skill",
+    path: "/home/me/.config/opencode/skills/demo-skill/SKILL.md",
+    agentType: "opencode" as const,
+    scope: "global" as const,
+    projectId: null,
+    sourceRoot: "/home/me/.config/opencode/skills",
+  },
+  {
+    name: "demo-skill",
     path: "/home/me/.claude/skills/demo-skill/SKILL.md",
     agentType: "claude" as const,
     scope: "global" as const,
     projectId: null,
     sourceRoot: "/home/me/.claude/skills",
+  },
+  {
+    name: "demo-skill",
+    path: "/home/me/.agents/skills/demo-skill/SKILL.md",
+    agentType: "grok" as const,
+    scope: "global" as const,
+    projectId: null,
+    sourceRoot: "/home/me/.agents/skills",
+  },
+  {
+    name: "demo-skill",
+    path: "/home/me/.grok/skills/demo-skill/SKILL.md",
+    agentType: "grok" as const,
+    scope: "global" as const,
+    projectId: null,
+    sourceRoot: "/home/me/.grok/skills",
   },
 ];
 
@@ -101,7 +133,7 @@ describe("SavedAgentSkillForm", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("shows read-only scanned path rows in agent order for edit mode", async () => {
+  it("shows read-only preferred path rows one per agent for edit mode", async () => {
     const skill: SavedAgentSkillRecord = {
       id: 3,
       name: "demo-skill",
@@ -131,6 +163,19 @@ describe("SavedAgentSkillForm", () => {
     expect(await screen.findByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("Claude")).toBeInTheDocument();
     expect(screen.getByText("OpenCode")).toBeInTheDocument();
+    expect(screen.getByText("Grok")).toBeInTheDocument();
+    expect(
+      screen.getByText("/home/me/.codex/skills/demo-skill/SKILL.md"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("/home/me/.config/opencode/skills/demo-skill/SKILL.md"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("/home/me/.grok/skills/demo-skill/SKILL.md"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("/home/me/.agents/skills/demo-skill/SKILL.md"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Select All")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
@@ -191,12 +236,28 @@ describe("SavedAgentSkillForm", () => {
             path: "/home/me/.agents/skills/demo-skill/SKILL.md",
           },
           {
+            agentType: "codex",
+            path: "/home/me/.codex/skills/demo-skill/SKILL.md",
+          },
+          {
             agentType: "claude",
             path: "/home/me/.claude/skills/demo-skill/SKILL.md",
           },
           {
             agentType: "opencode",
             path: "/home/me/.agents/skills/demo-skill/SKILL.md",
+          },
+          {
+            agentType: "opencode",
+            path: "/home/me/.config/opencode/skills/demo-skill/SKILL.md",
+          },
+          {
+            agentType: "grok",
+            path: "/home/me/.agents/skills/demo-skill/SKILL.md",
+          },
+          {
+            agentType: "grok",
+            path: "/home/me/.grok/skills/demo-skill/SKILL.md",
           },
         ],
       });
