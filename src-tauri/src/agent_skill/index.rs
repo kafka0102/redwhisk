@@ -164,7 +164,7 @@ fn filter_skills(
 /// 当某个 skill（以 name + agent_type 唯一标识）在项目内已存在时，视为与全局中的同名同类
 /// skill 是同一条记录，优先保留项目路径下的版本，丢弃全局中的重复项；不同 agent_type 的
 /// 同名 skill（例如项目 Codex 与全局 Claude）互为独立记录，都会保留。
-fn merge_global_with_project(
+pub fn merge_global_with_project(
     global_skills: Vec<AgentSkillRecord>,
     project_skills: Vec<AgentSkillRecord>,
 ) -> Vec<AgentSkillRecord> {

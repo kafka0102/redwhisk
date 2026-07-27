@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use tauri::{Emitter, State};
 
 use crate::agent_skill::index::AgentSkillIndex;
-use crate::agent_skill::reconcile::reconcile_saved_skills_in_data_dir;
+use crate::agent_skill::reconcile::{
+    reconcile_saved_skills_in_data_dir, scanned_skills_for_reconcile,
+};
 use crate::agent_skill::service::AgentSkillService;
 use crate::app_state::AppState;
 use crate::features::project::ProjectService;
@@ -159,7 +161,17 @@ pub async fn reconcile_saved_agent_skills(
                         &repo_path,
                     );
                 }
-                let scanned = index_for_worker.snapshot_project(project_id);
+                if matches!(
+                    index_for_worker.global_status(),
+                    crate::types::agent_skill::AgentSkillRefreshStatus::Idle
+                ) {
+                    AgentSkillService::refresh_global_from_home(&index_for_worker, None);
+                }
+                let scanned = scanned_skills_for_reconcile(
+                    &AgentSkillScope::Project,
+                    &index_for_worker.snapshot_global(),
+                    &index_for_worker.snapshot_project(project_id),
+                );
                 reconcile_saved_skills_in_data_dir(
                     &data_dir_for_worker,
                     &scanned,
@@ -254,9 +266,14 @@ fn refresh_and_reconcile_blocking(
 
     if let Some((project_id, repo_path)) = project {
         AgentSkillService::refresh_project(index, project_id, repo_path);
+        let project_scanned = scanned_skills_for_reconcile(
+            &AgentSkillScope::Project,
+            &index.snapshot_global(),
+            &index.snapshot_project(project_id),
+        );
         changed_count += reconcile_saved_skills_in_data_dir(
             data_dir,
-            &index.snapshot_project(project_id),
+            &project_scanned,
             &AgentSkillScope::Project,
             Some(project_id),
         )?;

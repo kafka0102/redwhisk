@@ -1,5 +1,7 @@
     use crate::agent_skill::index::AgentSkillIndex;
-    use crate::agent_skill::reconcile::reconcile_saved_skills_in_data_dir;
+    use crate::agent_skill::reconcile::{
+        reconcile_saved_skills_in_data_dir, scanned_skills_for_reconcile,
+    };
     use crate::agent_skill::service::AgentSkillService;
     use crate::db::connection::DatabaseConfig;
     use crate::db::migrations::MigrationRunner;
@@ -154,9 +156,14 @@
         )
         .expect("global reconcile");
         AgentSkillService::refresh_project(&index, 42, project_dir.path());
+        let project_scanned = scanned_skills_for_reconcile(
+            &AgentSkillScope::Project,
+            &index.snapshot_global(),
+            &index.snapshot_project(42),
+        );
         let project_changed = reconcile_saved_skills_in_data_dir(
             data_dir.path(),
-            &index.snapshot_project(42),
+            &project_scanned,
             &AgentSkillScope::Project,
             Some(42),
         )
@@ -209,14 +216,155 @@
             None,
         )
         .expect("again global");
+        let again_project_scanned = scanned_skills_for_reconcile(
+            &AgentSkillScope::Project,
+            &index.snapshot_global(),
+            &index.snapshot_project(42),
+        );
         let again_project = reconcile_saved_skills_in_data_dir(
             data_dir.path(),
-            &index.snapshot_project(42),
+            &again_project_scanned,
             &AgentSkillScope::Project,
             Some(42),
         )
         .expect("again project");
         assert_eq!(again_global + again_project, 0);
+    }
+
+
+    #[test]
+    fn project_reconcile_fills_paths_from_global_when_absent_in_project() {
+        let data_dir = tempfile::tempdir().expect("data");
+        let database = DatabaseConfig::new(data_dir.path()).open().expect("db");
+        MigrationRunner::default()
+            .run(&database.connection)
+            .expect("migrate");
+        let repository = SavedAgentSkillRepository::new(&database.connection);
+        repository
+            .save_skill(
+                None,
+                "shared-skill",
+                &AgentSkillScope::Project,
+                Some(7),
+                &[],
+            )
+            .expect("save project skill empty paths");
+        drop(repository);
+        drop(database);
+
+        let index = AgentSkillIndex::default();
+        index.replace_global(vec![AgentSkillRecord {
+            name: "shared-skill".to_string(),
+            path: "/home/u/.agents/skills/shared-skill/SKILL.md".to_string(),
+            agent_type: AgentType::Codex,
+            scope: AgentSkillScope::Global,
+            project_id: None,
+            source_root: "/home/u/.agents/skills".to_string(),
+        }]);
+        // 项目扫描未检出该 skill
+        index.replace_project(7, vec![]);
+
+        let scanned = scanned_skills_for_reconcile(
+            &AgentSkillScope::Project,
+            &index.snapshot_global(),
+            &index.snapshot_project(7),
+        );
+        let changed = reconcile_saved_skills_in_data_dir(
+            data_dir.path(),
+            &scanned,
+            &AgentSkillScope::Project,
+            Some(7),
+        )
+        .expect("project reconcile with global fallback");
+        assert_eq!(changed, 1);
+
+        let database = DatabaseConfig::new(data_dir.path()).open().expect("db");
+        let repository = SavedAgentSkillRepository::new(&database.connection);
+        let rows = repository
+            .list_skills(Some(&AgentSkillScope::Project), Some(7))
+            .expect("list");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, "shared-skill");
+        assert_eq!(rows[0].del, 0);
+        assert_eq!(
+            rows[0].skill_paths,
+            vec![SavedAgentSkillPath {
+                agent_type: AgentType::Codex,
+                path: "/home/u/.agents/skills/shared-skill/SKILL.md".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn project_reconcile_prefers_project_path_when_global_has_same_key() {
+        let data_dir = tempfile::tempdir().expect("data");
+        let database = DatabaseConfig::new(data_dir.path()).open().expect("db");
+        MigrationRunner::default()
+            .run(&database.connection)
+            .expect("migrate");
+        let repository = SavedAgentSkillRepository::new(&database.connection);
+        repository
+            .save_skill(
+                None,
+                "review",
+                &AgentSkillScope::Project,
+                Some(7),
+                &[SavedAgentSkillPath {
+                    agent_type: AgentType::Codex,
+                    path: "/stale".to_string(),
+                }],
+            )
+            .expect("save");
+        drop(repository);
+        drop(database);
+
+        let index = AgentSkillIndex::default();
+        index.replace_global(vec![AgentSkillRecord {
+            name: "review".to_string(),
+            path: "/global/review/SKILL.md".to_string(),
+            agent_type: AgentType::Codex,
+            scope: AgentSkillScope::Global,
+            project_id: None,
+            source_root: "/global".to_string(),
+        }]);
+        index.replace_project(
+            7,
+            vec![AgentSkillRecord {
+                name: "review".to_string(),
+                path: "/project/review/SKILL.md".to_string(),
+                agent_type: AgentType::Codex,
+                scope: AgentSkillScope::Project,
+                project_id: Some(7),
+                source_root: "/project".to_string(),
+            }],
+        );
+
+        let scanned = scanned_skills_for_reconcile(
+            &AgentSkillScope::Project,
+            &index.snapshot_global(),
+            &index.snapshot_project(7),
+        );
+        let changed = reconcile_saved_skills_in_data_dir(
+            data_dir.path(),
+            &scanned,
+            &AgentSkillScope::Project,
+            Some(7),
+        )
+        .expect("reconcile");
+        assert_eq!(changed, 1);
+
+        let database = DatabaseConfig::new(data_dir.path()).open().expect("db");
+        let repository = SavedAgentSkillRepository::new(&database.connection);
+        let rows = repository
+            .list_skills(Some(&AgentSkillScope::Project), Some(7))
+            .expect("list");
+        assert_eq!(
+            rows[0].skill_paths,
+            vec![SavedAgentSkillPath {
+                agent_type: AgentType::Codex,
+                path: "/project/review/SKILL.md".to_string(),
+            }]
+        );
     }
 
     fn write_skill(skill_dir: &Path) {
