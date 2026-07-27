@@ -5,6 +5,7 @@ export type {
   CodeWorkspaceRoot,
   CodeWorkspaceRootsResponse,
   CodeWorkspaceRootsUpdatedEvent,
+  BranchSyncStatus,
   ProjectWorktreeChangesResponse,
   ProjectWorktreeCommitHistoryResponse,
   ProjectWorktreeFileTreeResponse,

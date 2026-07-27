@@ -1,3 +1,4 @@
+pub mod branch_sync;
 pub mod command;
 pub mod remote;
 pub mod github_remote;

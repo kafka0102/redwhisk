@@ -32,6 +32,7 @@ vi.mock("../../shared/workspace/diff-viewer", () => ({
 vi.mock("./use-code-workspace-changes", () => ({
   useCodeWorkspaceChanges: () => ({
     changes: [],
+    branchSync: null,
     isChangesLoading: false,
     changesErrorMessage: null,
     isChangesUnavailable: false,

@@ -68,9 +68,23 @@ pub struct WorkspaceChangedFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BranchSyncStatus {
+    /// 当前分支跟踪的 upstream 缩写名，如 `origin/main`。
+    pub upstream: String,
+    /// 本地相对 upstream 超前的提交数（`HEAD` 有、upstream 无）。
+    pub ahead: u64,
+    /// 本地相对 upstream 落后的提交数（upstream 有、`HEAD` 无）。
+    pub behind: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectWorktreeChangesResponse {
     pub files: Vec<WorkspaceChangedFile>,
     pub signature: String,
+    /// 相对 upstream 的本地同步状态。无 upstream / detached / 解析失败时为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch_sync: Option<BranchSyncStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

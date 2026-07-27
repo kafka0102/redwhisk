@@ -8,6 +8,7 @@ use std::time::UNIX_EPOCH;
 
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::branch_sync::read_branch_sync_status;
 use crate::git::command::{self, GitCommandError};
 use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -385,9 +386,15 @@ fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse,
     }
 
     files.sort_by(|left, right| left.file_path.cmp(&right.file_path));
-    let signature = hash_string(&format!("{files:?}"));
+    let branch_sync = read_branch_sync_status(root);
+    // signature 纳入 branch_sync，ahead/behind 变化能驱动前端 signature 去重刷新。
+    let signature = hash_string(&format!("{files:?}:{branch_sync:?}"));
 
-    Ok(ProjectWorktreeChangesResponse { files, signature })
+    Ok(ProjectWorktreeChangesResponse {
+        files,
+        signature,
+        branch_sync,
+    })
 }
 
 /// 单次 `git log --name-status` 解析出的一条提交：表头字段 + 该提交的变更文件。

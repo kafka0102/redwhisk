@@ -174,9 +174,18 @@ export interface WorkspaceCommitRecord {
   isCreatedInWorktree: boolean;
 }
 
+/** 本地相对 upstream 的同步状态（无 fetch；不可同步时为 null/缺省）。 */
+export interface BranchSyncStatus {
+  upstream: string;
+  ahead: number;
+  behind: number;
+}
+
 export interface ProjectWorktreeChangesResponse {
   files: WorkspaceChangedFile[];
   signature: string;
+  /** 无 upstream / detached / 解析失败时为 null 或省略。 */
+  branchSync?: BranchSyncStatus | null;
 }
 
 export interface ProjectWorktreeCommitHistoryResponse {

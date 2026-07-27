@@ -14,12 +14,15 @@ import {
   COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
+  type BranchSyncStatus,
   type WorkspaceChangedFile,
   type WorkspaceCommitRecord,
 } from "../../shared/workspace/workspace-commands";
 
 export interface UseCodeWorkspaceChangesResult {
   changes: WorkspaceChangedFile[];
+  /** 相对 upstream 的同步状态；不可同步时为 null。 */
+  branchSync: BranchSyncStatus | null;
   isChangesLoading: boolean;
   changesErrorMessage: string | null;
   isChangesUnavailable: boolean;
@@ -61,6 +64,7 @@ export function useCodeWorkspaceChanges(
 ): UseCodeWorkspaceChangesResult {
   const { t } = useI18n();
   const [changes, setChanges] = useState<WorkspaceChangedFile[]>([]);
+  const [branchSync, setBranchSync] = useState<BranchSyncStatus | null>(null);
   const [isChangesLoading, setIsChangesLoading] = useState(false);
   const [changesErrorMessage, setChangesErrorMessage] = useState<string | null>(
     null,
@@ -115,6 +119,7 @@ export function useCodeWorkspaceChanges(
           // 切换工作区时丢弃旧根数据与 signature，避免短暂展示他根变更 / 误命中去重。
           if (options.clearStale) {
             setChanges([]);
+            setBranchSync(null);
             setIsChangesUnavailable(false);
             lastChangesSignatureRef.current = null;
           }
@@ -132,6 +137,7 @@ export function useCodeWorkspaceChanges(
           lastChangesSignatureRef.current = response.signature;
           if (!unchanged) {
             setChanges(response.files);
+            setBranchSync(response.branchSync ?? null);
           }
           setIsChangesLoading(false);
           setChangesErrorMessage(null);
@@ -273,6 +279,7 @@ export function useCodeWorkspaceChanges(
 
   return {
     changes,
+    branchSync,
     isChangesLoading,
     changesErrorMessage,
     isChangesUnavailable,

@@ -11,6 +11,7 @@ vi.mock("../../shared/workspace/workspace-changes-panels", () => ({
 vi.mock("./use-code-workspace-changes", () => ({
   useCodeWorkspaceChanges: () => ({
     changes: [],
+    branchSync: null,
     isChangesLoading: false,
     changesErrorMessage: null,
     isChangesUnavailable: false,

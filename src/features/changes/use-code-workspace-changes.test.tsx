@@ -75,6 +75,46 @@ describe("useCodeWorkspaceChanges", () => {
     });
     expect(result.current.isChangesLoading).toBe(false);
     expect(result.current.changesErrorMessage).toBeNull();
+    expect(result.current.branchSync).toBeNull();
+  });
+
+  it("exposes branchSync from getProjectWorktreeChanges and updates when signature changes", async () => {
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-sync-1",
+      branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+    });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.branchSync).toEqual({
+        upstream: "origin/main",
+        ahead: 1,
+        behind: 0,
+      });
+    });
+
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-sync-2",
+      branchSync: { upstream: "origin/main", ahead: 1, behind: 2 },
+    });
+
+    await act(async () => {
+      result.current.refreshChanges();
+    });
+
+    await waitFor(() => {
+      expect(result.current.branchSync).toEqual({
+        upstream: "origin/main",
+        ahead: 1,
+        behind: 2,
+      });
+    });
   });
 
   it("does not fetch while the changes view is disabled", () => {
