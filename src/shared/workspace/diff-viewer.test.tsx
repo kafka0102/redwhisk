@@ -3,15 +3,24 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
 import { DiffViewer, type WorkspaceDiffTab } from "./diff-viewer";
+import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
 
 // 捕获 Monaco DiffEditor 实际接收到的 theme prop，用于断言 diff 查看器跟随应用明暗主题。
-const { editorThemeProp } = vi.hoisted(() => ({
+const { editorThemeProp, editorHeightProp } = vi.hoisted(() => ({
   editorThemeProp: { current: undefined as string | undefined },
+  editorHeightProp: { current: undefined as string | number | undefined },
 }));
 
 vi.mock("@monaco-editor/react", () => ({
-  DiffEditor: ({ theme }: { theme?: string }) => {
+  DiffEditor: ({
+    theme,
+    height,
+  }: {
+    theme?: string;
+    height?: string | number;
+  }) => {
     editorThemeProp.current = theme;
+    editorHeightProp.current = height;
     return null;
   },
 }));
@@ -40,6 +49,7 @@ const diffTab: WorkspaceDiffTab = {
 describe("DiffViewer", () => {
   beforeEach(() => {
     editorThemeProp.current = undefined;
+    editorHeightProp.current = undefined;
     window.localStorage.clear();
   });
 
@@ -72,5 +82,47 @@ describe("DiffViewer", () => {
     );
 
     expect(editorThemeProp.current).toBe("vs-dark");
+  });
+
+  it("fills the parent with height 100% by default", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DiffViewer tab={diffTab} />
+      </I18nProvider>,
+    );
+
+    expect(editorHeightProp.current).toBe("100%");
+  });
+
+  it("uses a content-derived pixel height in content height mode", () => {
+    const multiLineTab: WorkspaceDiffTab = {
+      ...diffTab,
+      diff: {
+        ...diffTab.diff!,
+        originalContent: "line1\nline2\nline3",
+        modifiedContent: "line1\nline2",
+      },
+    };
+
+    render(
+      <I18nProvider initialLocale="en">
+        <DiffViewer tab={multiLineTab} heightMode="content" />
+      </I18nProvider>,
+    );
+
+    const expected = estimateDiffEditorContentHeightPx(
+      "line1\nline2\nline3",
+      "line1\nline2",
+      14,
+    );
+    expect(editorHeightProp.current).toBe(`${expected}px`);
+    expect(expected).toBeGreaterThan(0);
+  });
+
+  it("estimateDiffEditorContentHeightPx takes the larger side line count", () => {
+    // 3 vs 5 lines → 5; fontSize 14 → ceil(14 * 1.5)=21; +12 chrome
+    expect(
+      estimateDiffEditorContentHeightPx("a\nb\nc", "1\n2\n3\n4\n5", 14),
+    ).toBe(5 * 21 + 12);
   });
 });

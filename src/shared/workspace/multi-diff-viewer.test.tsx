@@ -3,11 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
+import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
 import type { MultiDiffViewState } from "./multi-diff-types";
 import { MultiDiffViewer } from "./multi-diff-viewer";
 
+const { multiDiffEditorHeightProp } = vi.hoisted(() => ({
+  multiDiffEditorHeightProp: {
+    current: undefined as string | number | undefined,
+  },
+}));
+
 vi.mock("@monaco-editor/react", () => ({
-  DiffEditor: () => null,
+  DiffEditor: ({ height }: { height?: string | number }) => {
+    multiDiffEditorHeightProp.current = height;
+    return null;
+  },
 }));
 
 vi.mock("../use-monaco-editor-ready", () => ({
@@ -27,8 +37,8 @@ const loadedState: MultiDiffViewState = {
         oldPath: null,
         kind: "modified",
         language: "typescript",
-        originalContent: "old",
-        modifiedContent: "new",
+        originalContent: "old\nline2\nline3\nline4",
+        modifiedContent: "new\nline2\nline3",
         isBinary: false,
         isTooLarge: false,
       },
@@ -125,5 +135,42 @@ describe("MultiDiffViewer", () => {
     expect(
       document.querySelector(".session-diff-viewer__status"),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses content-height Monaco panes so outer multi-diff is the only scroller", () => {
+    multiDiffEditorHeightProp.current = undefined;
+    render(
+      <I18nProvider initialLocale="en">
+        <MultiDiffViewer state={loadedState} />
+      </I18nProvider>,
+    );
+
+    expect(document.querySelector(".multi-diff-viewer")).toBeInTheDocument();
+    const body = document.querySelector(".multi-diff-panel__body");
+    expect(body).toBeInTheDocument();
+    // body is a layout shell, not an inline fixed 360px window
+    expect((body as HTMLElement).style.height).not.toBe("360px");
+
+    const expected = estimateDiffEditorContentHeightPx(
+      "old\nline2\nline3\nline4",
+      "new\nline2\nline3",
+      14,
+    );
+    expect(multiDiffEditorHeightProp.current).toBe(`${expected}px`);
+    expect(multiDiffEditorHeightProp.current).not.toBe("100%");
+  });
+
+  it("keeps sticky panel headers for VSCode-style top replacement", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <MultiDiffViewer state={loadedState} />
+      </I18nProvider>,
+    );
+
+    const headers = document.querySelectorAll(".multi-diff-panel__header");
+    expect(headers.length).toBe(2);
+    headers.forEach((header) => {
+      expect(header).toHaveClass("multi-diff-panel__header");
+    });
   });
 });

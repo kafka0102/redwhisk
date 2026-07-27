@@ -2,6 +2,7 @@ import { DiffEditor } from "@monaco-editor/react";
 
 import { useI18n } from "../i18n/i18n";
 import { useMonacoEditorReady } from "../use-monaco-editor-ready";
+import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
 import type {
   WorkspaceChangeKind,
   WorkspaceDiffContent,
@@ -24,6 +25,12 @@ interface DiffViewerProps {
   tab: WorkspaceDiffTab | null;
   /** 是否显示顶部 kind + path 状态条；多 diff 面板头已含路径时传 false。默认 true。 */
   showStatusBar?: boolean;
+  /**
+   * 高度模式：
+   * - `fill`（默认）：`height: 100%` 填满父级（单文件 diff）
+   * - `content`：按行数 × 字号推算像素高度（multi-diff 内容撑开）
+   */
+  heightMode?: "fill" | "content";
 }
 
 const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
@@ -36,7 +43,11 @@ const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
   modified: "agentsFeature.changeKindModified",
 };
 
-export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
+export function DiffViewer({
+  tab,
+  showStatusBar = true,
+  heightMode = "fill",
+}: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
 
@@ -96,6 +107,15 @@ export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
     );
   }
 
+  const editorHeight =
+    heightMode === "content"
+      ? `${estimateDiffEditorContentHeightPx(
+          tab.diff.originalContent,
+          tab.diff.modifiedContent,
+          contentFontSize,
+        )}px`
+      : "100%";
+
   return (
     <section
       aria-label={messages.agentsFeature.diffView(tab.fileName)}
@@ -104,6 +124,7 @@ export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
           ? "session-diff-viewer"
           : "session-diff-viewer session-diff-viewer--bare"
       }
+      style={heightMode === "content" ? { height: editorHeight } : undefined}
     >
       {showStatusBar ? (
         <div className="session-diff-viewer__status">
@@ -111,7 +132,7 @@ export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
         </div>
       ) : null}
       <DiffEditor
-        height="100%"
+        height={editorHeight}
         theme={theme === "dark" ? "vs-dark" : "light"}
         language={tab.diff.language ?? undefined}
         modified={tab.diff.modifiedContent}
@@ -123,6 +144,15 @@ export function DiffViewer({ tab, showStatusBar = true }: DiffViewerProps) {
           renderSideBySide:
             tab.diff.kind !== "added" && tab.diff.kind !== "untracked",
           scrollBeyondLastLine: false,
+          ...(heightMode === "content"
+            ? {
+                scrollbar: {
+                  vertical: "hidden" as const,
+                  handleMouseWheel: false,
+                },
+                overviewRulerLanes: 0,
+              }
+            : {}),
         }}
       />
     </section>

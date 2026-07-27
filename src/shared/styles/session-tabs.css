@@ -319,16 +319,16 @@
 
 .multi-diff-panel__body {
   min-width: 0;
-  height: 360px;
-  min-height: 240px;
 }
 
+/* 真实 diff：由 DiffViewer content 高度模式撑开；loading/error 保留适中 min-height */
 .multi-diff-panel__body .session-diff-viewer {
-  height: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 .multi-diff-panel__body .session-viewer-state {
-  height: 100%;
+  min-height: 140px;
   display: flex;
   flex-direction: column;
   justify-content: center;

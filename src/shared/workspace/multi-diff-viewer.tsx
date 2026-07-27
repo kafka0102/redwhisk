@@ -118,6 +118,7 @@ function MultiDiffPanel({ file, isCollapsed, onToggle }: MultiDiffPanelProps) {
               errorMessage: file.errorMessage,
             }}
             showStatusBar={false}
+            heightMode="content"
           />
         </div>
       )}
