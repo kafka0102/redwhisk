@@ -763,9 +763,13 @@ describe("ProjectSettingsActivity", () => {
       await screen.findByRole("button", { name: "Edit codex-global" }),
     );
 
+    const dialog = screen.getByRole("dialog", { name: "Edit skill" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.className).toContain("max-w-[712px]");
     expect(
-      screen.getByRole("dialog", { name: "Edit skill" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
   it("opens the edit skill dialog when clicking the skill name in the first column", async () => {

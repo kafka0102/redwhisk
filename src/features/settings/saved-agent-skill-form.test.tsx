@@ -118,6 +118,64 @@ describe("SavedAgentSkillForm", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("shows footer cancel instead of header close and invokes onCancel", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+
+    render(
+      <SavedAgentSkillForm
+        mode="create"
+        projectId={1}
+        onCancel={onCancel}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelButton).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+
+    await user.click(cancelButton);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps cancel and save chrome for edit mode", async () => {
+    const skill: SavedAgentSkillRecord = {
+      id: 3,
+      name: "demo-skill",
+      scope: "global",
+      projectId: null,
+      skillPaths: [
+        {
+          agentType: "codex",
+          path: "/old/path/SKILL.md",
+        },
+      ],
+    };
+
+    render(
+      <SavedAgentSkillForm
+        mode="edit"
+        skill={skill}
+        projectId={1}
+        onCancel={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Edit skill" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
   it("disables save when no scanned paths are available", async () => {
     listAgentSkillsMock.mockResolvedValue(skillResponse([]));
 

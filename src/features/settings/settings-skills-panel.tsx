@@ -221,7 +221,7 @@ export function SkillsSettingsPanel({
           <div
             role="dialog"
             aria-label={messages.settings.newSkill}
-            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
+            className="max-h-[90vh] w-full max-w-[712px] overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
           >
             <SavedAgentSkillForm
               mode="create"
@@ -248,7 +248,7 @@ export function SkillsSettingsPanel({
           <div
             role="dialog"
             aria-label={messages.settings.editSkill}
-            className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
+            className="max-h-[90vh] w-full max-w-[712px] overflow-auto rounded-[var(--radius-card)] border border-border bg-card p-4 shadow-lg"
           >
             <SavedAgentSkillForm
               mode="edit"

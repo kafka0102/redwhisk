@@ -193,18 +193,7 @@ export function SavedAgentSkillForm({
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-sm font-semibold">{dialogTitle}</h4>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={messages.settings.close}
-          onClick={onCancel}
-        >
-          {messages.settings.close}
-        </Button>
-      </div>
+      <h4 className="text-sm font-semibold">{dialogTitle}</h4>
 
       <form
         className="grid gap-4"
@@ -371,6 +360,14 @@ export function SavedAgentSkillForm({
         ) : null}
 
         <div className="issue-dialog__footer issue-dialog__footer--end">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            {messages.settings.cancel}
+          </Button>
           <button
             className="issues-button issues-button--primary"
             type="submit"
