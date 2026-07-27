@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   listIssues,
@@ -41,9 +41,7 @@ import {
 } from "./use-issue-completion-flow";
 import { useIssueDialogLifecycle } from "./use-issue-dialog-lifecycle";
 import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
-import { IssueEditablePage } from "./issue-detail/issue-editable-page";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
-import { IssueReadOnlyPage } from "./issue-detail/issue-read-only-page";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
 import { IssueRunDialog } from "./issue-run/issue-run-dialog";
@@ -62,6 +60,18 @@ import {
   getIssueOpenRequestId,
   type IssueOpenRequest,
 } from "./issue-open-request";
+
+// 详情编辑 / 只读页含 Quill 与 react-markdown，按需 chunk，避免项目窗口冷启动
+// 同步解析重依赖（看板首屏不需要编辑器与 Markdown 渲染栈）。
+const IssueEditablePage = lazy(async () => {
+  const module = await import("./issue-detail/issue-editable-page");
+  return { default: module.IssueEditablePage };
+});
+
+const IssueReadOnlyPage = lazy(async () => {
+  const module = await import("./issue-detail/issue-read-only-page");
+  return { default: module.IssueReadOnlyPage };
+});
 
 interface IssuesActivityProps {
   projectId: number;
@@ -642,62 +652,78 @@ export function IssuesActivity({
       ) : null}
 
       {dialogMode && isEditablePageOpen ? (
-        <IssueEditablePage
-          mode={dialogMode}
-          form={form}
-          selectedIssue={selectedIssue}
-          isSaving={isSaving}
-          errorMessage={dialogErrorMessage}
-          titleError={titleError}
-          availableLabels={currentAvailableLabels}
-          isLoadingLabels={isLoadingLabels}
-          labelsErrorMessage={currentLabelsErrorMessage}
-          titleInputRef={titleInputRef}
-          onCancel={handleCancelEditable}
-          onSubmit={handleSubmit}
-          onFormChange={handleFormChange}
-          onSelectAttachment={handleSelectAttachment}
-          onPreviewAttachment={(attachment) =>
-            void handlePreviewAttachment(attachment)
+        <Suspense
+          fallback={
+            <p className="activity-surface__loading" role="status">
+              {messages.settings.loading}
+            </p>
           }
-          onDownloadAttachment={(attachment) =>
-            void handleDownloadAttachment(attachment)
-          }
-          onRemoveAttachment={handleRemoveAttachment}
-          onDeleteIssue={() => void handleDeleteIssue()}
-          onRunIssue={
-            selectedIssue && canRunIssueFor(selectedIssue)
-              ? (trigger) => void confirmRunIssueFromEditPage(trigger)
-              : undefined
-          }
-          onOpenProjectLabelsSettings={() => {
-            onOpenProjectSettingsLabels?.();
-          }}
-        />
+        >
+          <IssueEditablePage
+            mode={dialogMode}
+            form={form}
+            selectedIssue={selectedIssue}
+            isSaving={isSaving}
+            errorMessage={dialogErrorMessage}
+            titleError={titleError}
+            availableLabels={currentAvailableLabels}
+            isLoadingLabels={isLoadingLabels}
+            labelsErrorMessage={currentLabelsErrorMessage}
+            titleInputRef={titleInputRef}
+            onCancel={handleCancelEditable}
+            onSubmit={handleSubmit}
+            onFormChange={handleFormChange}
+            onSelectAttachment={handleSelectAttachment}
+            onPreviewAttachment={(attachment) =>
+              void handlePreviewAttachment(attachment)
+            }
+            onDownloadAttachment={(attachment) =>
+              void handleDownloadAttachment(attachment)
+            }
+            onRemoveAttachment={handleRemoveAttachment}
+            onDeleteIssue={() => void handleDeleteIssue()}
+            onRunIssue={
+              selectedIssue && canRunIssueFor(selectedIssue)
+                ? (trigger) => void confirmRunIssueFromEditPage(trigger)
+                : undefined
+            }
+            onOpenProjectLabelsSettings={() => {
+              onOpenProjectSettingsLabels?.();
+            }}
+          />
+        </Suspense>
       ) : null}
 
       {dialogMode && !isEditablePageOpen ? (
-        <IssueReadOnlyPage
-          form={form}
-          selectedIssue={selectedIssue}
-          isSaving={isSaving}
-          errorMessage={dialogErrorMessage}
-          hasLinkedSession={hasLinkedSession}
-          canOpenAgentsActivity={canOpenLinkedSession}
-          onBack={handleBackFromReadOnlyIssue}
-          onPreviewAttachment={(attachment) =>
-            void handlePreviewAttachment(attachment)
+        <Suspense
+          fallback={
+            <p className="activity-surface__loading" role="status">
+              {messages.settings.loading}
+            </p>
           }
-          onDownloadAttachment={(attachment) =>
-            void handleDownloadAttachment(attachment)
-          }
-          onAdvanceStatus={(targetStatus) =>
-            void handleAdvanceStatus(targetStatus)
-          }
-          onDeleteIssue={() => void handleDeleteIssue()}
-          onEditIssue={editSelectedIssue}
-          onOpenLinkedSession={openLinkedSession}
-        />
+        >
+          <IssueReadOnlyPage
+            form={form}
+            selectedIssue={selectedIssue}
+            isSaving={isSaving}
+            errorMessage={dialogErrorMessage}
+            hasLinkedSession={hasLinkedSession}
+            canOpenAgentsActivity={canOpenLinkedSession}
+            onBack={handleBackFromReadOnlyIssue}
+            onPreviewAttachment={(attachment) =>
+              void handlePreviewAttachment(attachment)
+            }
+            onDownloadAttachment={(attachment) =>
+              void handleDownloadAttachment(attachment)
+            }
+            onAdvanceStatus={(targetStatus) =>
+              void handleAdvanceStatus(targetStatus)
+            }
+            onDeleteIssue={() => void handleDeleteIssue()}
+            onEditIssue={editSelectedIssue}
+            onOpenLinkedSession={openLinkedSession}
+          />
+        </Suspense>
       ) : null}
 
       {runDialogIssue ? (

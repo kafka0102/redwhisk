@@ -808,11 +808,13 @@ describe("App project entry", () => {
       await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
     );
     await user.click(await screen.findByRole("button", { name: "新建 Issue" }));
-    expect(screen.getByPlaceholderText("Issue 标题")).toBeInTheDocument();
-    expect(screen.getByLabelText("描述")).toBeInTheDocument();
-    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("标题"), "draft local issue");
-    await user.type(screen.getByLabelText("描述"), "small task shape");
+    expect(
+      await screen.findByPlaceholderText("Issue 标题"),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("描述")).toBeInTheDocument();
+    expect(await screen.findByLabelText("添加标签")).toBeInTheDocument();
+    await user.type(await screen.findByLabelText("标题"), "draft local issue");
+    await user.type(await screen.findByLabelText("描述"), "small task shape");
     await user.click(screen.getByRole("button", { name: "创建 Issue" }));
 
     expect(createIssueMock).toHaveBeenCalledWith({
@@ -860,11 +862,14 @@ describe("App project entry", () => {
     await user.click(
       await screen.findByRole("button", { name: "Existing issue" }),
     );
-    await user.clear(screen.getByLabelText("标题"));
-    await user.type(screen.getByLabelText("标题"), "Updated issue");
-    await user.clear(screen.getByLabelText("描述"));
-    await user.type(screen.getByLabelText("描述"), "Updated description");
-    expect(screen.getByLabelText("添加标签")).toBeInTheDocument();
+    await user.clear(await screen.findByLabelText("标题"));
+    await user.type(await screen.findByLabelText("标题"), "Updated issue");
+    await user.clear(await screen.findByLabelText("描述"));
+    await user.type(
+      await screen.findByLabelText("描述"),
+      "Updated description",
+    );
+    expect(await screen.findByLabelText("添加标签")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "保存" }));
 
     expect(updateIssueMock).toHaveBeenCalledWith({

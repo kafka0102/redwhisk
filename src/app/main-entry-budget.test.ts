@@ -33,4 +33,25 @@ describe("main entry startup budget", () => {
       /import \{ IssuesActivity \} from "\.\.\/features\/issues\/issues-activity"/,
     );
   });
+
+  it("keeps issue detail pages behind dynamic import() on the issues activity path", () => {
+    const activitySource = readFileSync(
+      resolve(process.cwd(), "src/features/issues/issues-activity.tsx"),
+      "utf8",
+    );
+    expect(activitySource).toMatch(/lazy\(/);
+    expect(activitySource).toMatch(
+      /import\("\.\/issue-detail\/issue-editable-page"\)/,
+    );
+    expect(activitySource).toMatch(
+      /import\("\.\/issue-detail\/issue-read-only-page"\)/,
+    );
+    // 看板首屏不得同步拉起 Quill / react-markdown 所在详情页。
+    expect(activitySource).not.toMatch(
+      /import \{ IssueEditablePage \} from "\.\/issue-detail\/issue-editable-page"/,
+    );
+    expect(activitySource).not.toMatch(
+      /import \{ IssueReadOnlyPage \} from "\.\/issue-detail\/issue-read-only-page"/,
+    );
+  });
 });

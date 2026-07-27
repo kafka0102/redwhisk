@@ -102,6 +102,10 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
+
 vi.mock("../../shared/toast", () => ({
   toast: {
     success: vi.fn(),
@@ -690,7 +694,7 @@ describe("IssuesActivity", () => {
     await user.click(
       (await screen.findAllByRole("button", { name: "New Issue" }))[0],
     );
-    await user.type(screen.getByLabelText("Title"), "Brand new issue");
+    await user.type(await screen.findByLabelText("Title"), "Brand new issue");
     await user.click(screen.getByRole("button", { name: "Create Issue" }));
 
     // 创建页打开期间看板会卸载，保存后回到看板需重新定位甬道。
@@ -964,7 +968,7 @@ describe("IssuesActivity", () => {
 
     await user.click(await screen.findByRole("button", { name: issue.title }));
 
-    const page = screen.getByRole("region", { name: "Issue Detail" });
+    const page = await screen.findByRole("region", { name: "Issue Detail" });
     expect(page).toHaveClass("issue-page--fullscreen");
     expect(
       screen.queryByRole("dialog", { name: "Issue Detail" }),

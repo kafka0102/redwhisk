@@ -58,5 +58,6 @@
 - `src/main.tsx` 不调用 / 不静态 import Monaco 配置；首次真正渲染 Editor/DiffEditor 前再 `import("./monaco-editor-setup")`。
 - `ActivityRouter` 对非 `issues` Activity 使用 `React.lazy` + `Suspense`；Issues 保持同步 import。
 - URL 带 `projectId` 时，`openProject` 与 `listProjects` 并行，避免列表 IPC 串行拖长打开空态。
-- 回归：`src/app/main-entry-budget.test.ts`；本地可用 `pnpm exec vite build` 核对 `dist/assets/index-*.js` 体积与是否含 `monaco`。
+- `IssuesActivity` 对详情编辑 / 只读页使用 `React.lazy` + `Suspense`；看板首屏保持同步，避免同步解析 Quill 与 `react-markdown`。
+- 回归：`src/app/main-entry-budget.test.ts`；本地可用 `pnpm exec vite build` 核对 `dist/assets/index-*.js` 体积与是否含 `monaco` / `quill`。
 
