@@ -193,9 +193,9 @@ _Avoid_: 本地 skill 索引条目、Agent profile、临时扫描结果
 _Avoid_: 用户手填路径、仅展示用假路径
 
 **支持的智能体**：
-已添加技能当前 `skill_paths` 所覆盖的 Agent 类型集合（Codex / Claude / OpenCode / Grok）；设置列表以图标 + 名称展示，悬停 Tooltip 展示该 Agent 下的路径。同一物理目录可归属多个 Agent（见 ADR 多 Agent 技能根映射）。
-_Avoid_: 当前技能路径列、单一 Agent 独占路径列
+已添加技能当前 `skill_paths` 所覆盖的 Agent 类型集合（Codex / Claude / OpenCode / Grok）；设置列表以图标 + 名称展示，悬停 Tooltip / 表单只读区对每个 Agent **只展示一条 preferred 路径**（优先级：专属根 → `.agents/skills` → 其他共享根 → 其余；同级字典序）。存储仍可含同 Agent 多路径；同一物理目录可归属多个 Agent（见 [ADR-0025 多 Agent 技能根归属](docs/adr/0025-multi-agent-skill-root-ownership.md)）。
+_Avoid_: 当前技能路径列、Tooltip 罗列该 Agent 全部路径、单一 Agent 独占路径列
 
 **技能刷新同步**：
-对本地 skill 目录重扫并更新内存索引后，按 `name + scope` 重算已添加技能的 `skill_paths` 写回数据库的过程。手动「刷新技能」覆盖全局 + 当前项目并提示结果；启动静默只处理全局；进入项目技能页静默处理当前项目。找不到同名 skill 时保留配置并将 `skill_paths` 置空，不软删。
-_Avoid_: 仅刷新内存索引不对账 DB、刷新即删除配置、把扫描 loading 当成列表行内骨架
+对本地 skill 目录重扫并更新内存索引后，按 `name + scope` 重算已添加技能的 `skill_paths` 写回数据库的过程。项目 scope 对账源为项目扫描 ∪ 全局扫描（同 `name + agentType` 项目优先）；全局 scope 仅用全局扫描。手动「刷新技能」覆盖全局 + 当前项目并提示结果；启动静默只处理全局；进入项目技能页静默处理当前项目。对账源中找不到同名 skill 时保留配置并将 `skill_paths` 置空，不软删。
+_Avoid_: 仅刷新内存索引不对账 DB、项目对账只看项目目录、刷新即删除配置、把扫描 loading 当成列表行内骨架
