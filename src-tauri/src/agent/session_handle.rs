@@ -60,7 +60,7 @@ pub trait AgentSessionHandle: Send + Sync {
     ///
     /// `attachments` 为协议中立的附件列表（落盘路径 + 展示名 + 种类）；
     /// 空切片表示纯文本消息。具体 agent 实现负责把附件编码进各自协议
-    /// 的输入块（codex → `TurnInput::Blocks`）。
+    /// 的输入块（Codex → `localImage`/文本路径；Claude → base64 image 块）。
     fn send_message(
         &self,
         text: String,

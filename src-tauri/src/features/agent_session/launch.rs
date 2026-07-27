@@ -8,13 +8,14 @@ use crate::agent::provider_factory::{
 use crate::agent::session_handle::AgentSessionError;
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::db::agent_session_repository::AgentSessionRepository;
+use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::git::worktree::{
     cleanup_worktree, create_worktree_for_issue, list_local_branches,
 };
 use crate::git::worktree_name::issue_worktree_base_name;
 use crate::types::agent_session::{
-    StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
+    AgentMessageAttachment, StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::errors::{
     CommandError, CommandErrorCode, ErrorDetail,
@@ -77,7 +78,11 @@ impl AgentSessionService<'_> {
         let _ = self
             .agent_session_repository
             .update_current_turn_source(session_id, "initial");
-        if let Err(error) = handle.send_message(prompt_snapshot.to_string(), Vec::new()) {
+        let attachments = load_issue_message_attachments(
+            self.issue_repository.connection(),
+            issue_id,
+        )?;
+        if let Err(error) = handle.send_message(prompt_snapshot.to_string(), attachments) {
             agent_registry.unmark_starting(session_id);
             handle.shutdown();
             self.cleanup_owned_worktree(project_id, launch);
@@ -355,4 +360,24 @@ pub(super) fn persist_started_session_thread_id(
         ThreadIdBackfill::DeferToStream => {}
     }
     Ok(())
+}
+
+
+/// 把 Issue 附件映射为协议中立的 agent 消息附件（仅保留磁盘上仍存在的文件）。
+fn load_issue_message_attachments(
+    connection: &rusqlite::Connection,
+    issue_id: i64,
+) -> Result<Vec<AgentMessageAttachment>, CommandError> {
+    let records = IssueAttachmentRepository::new(connection)
+        .list_by_issue_id(issue_id)
+        .map_err(agent_session_database_error)?;
+    Ok(records
+        .into_iter()
+        .filter(|record| Path::new(&record.absolute_path).is_file())
+        .map(|record| AgentMessageAttachment {
+            path: record.absolute_path,
+            display_name: record.display_name,
+            kind: record.kind.into(),
+        })
+        .collect())
 }

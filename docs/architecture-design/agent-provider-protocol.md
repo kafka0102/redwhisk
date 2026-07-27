@@ -88,6 +88,10 @@ Agent TUI 会话视图 (xterm)
 
 - Agent 附件先由 `save_agent_attachment` 落盘，后续消息仅传路径、展示名与种类。
 - Issue 附件与 Agent 附件有各自 DTO；不要直接把浏览器文件对象穿透 Rust 边界。
+- Issue 结构化启动时，后端会把 Issue 附件加载为 `AgentMessageAttachment` 随首条 prompt 下发：
+  - **Codex**：图片编码为 app-server `localImage` 输入块（真实视觉输入）；非图片仍为文本路径引用。
+  - **Claude**：图片读盘后以 base64 `image` content block 经 `--input-format stream-json` 写入 stdin；非图片为文本路径。
+  - **OpenCode**：当前仅支持文本路径说明（无原生多模态输入块）。
 - provider 新能力必须明确：持久化字段、事件映射、取消语义、权限语义、恢复语义及 unsupported 情形。
 - TUI 路径下 mode/dangerous 须落到交互式 CLI 参数，避免与 profile 权限策略脱节。
 

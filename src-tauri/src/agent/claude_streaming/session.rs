@@ -30,6 +30,7 @@ use super::transport::{ClaudeStreamingError, ClaudeTransport};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
+use super::user_input::{build_stream_json_user_event, has_image_attachment};
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
 };
@@ -190,10 +191,12 @@ impl ClaudeSessionHandle {
     }
 
     /// 发送用户消息：启动一个 claude `-p` 进程，等待结果流。
+    ///
+    /// 含图片附件时改走 `--input-format stream-json`，把图片 base64 写入 stdin。
     pub fn send_message(
         &self,
         text: String,
-        _attachments: Vec<AgentMessageAttachment>,
+        attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), ClaudeStreamingError> {
         let (session_id, model) = {
             let state = self
@@ -203,9 +206,29 @@ impl ClaudeSessionHandle {
             (state.session_id.clone(), state.current_model.clone())
         };
 
+        let use_stream_json_input = has_image_attachment(&attachments);
+        let stdin_event = if use_stream_json_input {
+            Some(
+                build_stream_json_user_event(&text, &attachments).map_err(|message| {
+                    ClaudeStreamingError::Protocol(message)
+                })?,
+            )
+        } else {
+            None
+        };
+
         // 构造 claude 命令参数。
-        let args = build_claude_args(&text, session_id.as_deref(), model.as_deref());
+        let args = build_claude_args(
+            &text,
+            session_id.as_deref(),
+            model.as_deref(),
+            use_stream_json_input,
+        );
         let transport = ClaudeTransport::spawn(&self.config.binary, &args, Some(&self.config.cwd))?;
+        if let Some(event) = stdin_event {
+            transport.write_line(&event)?;
+            transport.close_stdin();
+        }
 
         // 重置当前 turn 状态。
         {
@@ -473,12 +496,24 @@ impl From<ClaudeStreamingError> for AgentSessionError {
 }
 
 /// 构造 claude 命令参数：`-p <prompt> --output-format stream-json ... [--resume <id>] [--model <m>]`。
+///
+/// `stream_json_input=true` 时：prompt 改由 stdin 的 user 事件承载，命令侧只开
+/// print 模式并加 `--input-format stream-json`。
 fn build_claude_args(
     prompt: &str,
     resume_session_id: Option<&str>,
     model: Option<&str>,
+    stream_json_input: bool,
 ) -> Vec<String> {
-    let mut args = vec!["-p".to_string(), prompt.to_string()];
+    let mut args = if stream_json_input {
+        vec![
+            "-p".to_string(),
+            "--input-format".to_string(),
+            "stream-json".to_string(),
+        ]
+    } else {
+        vec!["-p".to_string(), prompt.to_string()]
+    };
     for arg in STREAM_JSON_ARGS {
         args.push(arg.to_string());
     }
@@ -1397,7 +1432,7 @@ mod tests {
 
     #[test]
     fn build_args_without_resume_or_model() {
-        let args = build_claude_args("hello", None, None);
+        let args = build_claude_args("hello", None, None, false);
         assert_eq!(args[0], "-p");
         assert_eq!(args[1], "hello");
         assert!(args.contains(&"--output-format".to_string()));
@@ -1409,8 +1444,17 @@ mod tests {
     }
 
     #[test]
+    fn build_args_stream_json_input_omits_prompt_arg() {
+        let args = build_claude_args("hello", None, Some("sonnet"), true);
+        assert_eq!(args[0], "-p");
+        assert!(args.windows(2).any(|w| w == ["--input-format", "stream-json"]));
+        assert!(!args.iter().any(|a| a == "hello"));
+        assert!(args.windows(2).any(|w| w == ["--model", "sonnet"]));
+    }
+
+    #[test]
     fn build_args_with_resume_and_model() {
-        let args = build_claude_args("hi", Some("sess-123"), Some("glm-5.2"));
+        let args = build_claude_args("hi", Some("sess-123"), Some("glm-5.2"), false);
         assert!(args.contains(&"--resume".into()));
         assert!(args.contains(&"sess-123".into()));
         assert!(args.contains(&"--model".into()));
@@ -2571,7 +2615,7 @@ mod tests {
             return;
         }
 
-        let args = build_claude_args("say only the word OK", None, None);
+        let args = build_claude_args("say only the word OK", None, None, false);
         let transport =
             ClaudeTransport::spawn("claude", &args, Some("/tmp")).expect("spawn claude");
 

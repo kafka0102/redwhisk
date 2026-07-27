@@ -179,8 +179,7 @@ impl ClaudeTransport {
             .unwrap_or_default()
     }
 
-    /// 写一行 JSON 到 stdin（未来长驻模式用；单轮模型下首条消息走 `-p` 参数）。
-    #[allow(dead_code)]
+    /// 写一行 JSON 到 stdin（图片多模态输入走 stream-json 时使用）。
     pub fn write_line(&self, value: &Value) -> Result<(), ClaudeStreamingError> {
         let mut line = serde_json::to_string(value)?;
         line.push('\n');
@@ -195,6 +194,13 @@ impl ClaudeTransport {
         stdin.write_all(line.as_bytes())?;
         stdin.flush()?;
         Ok(())
+    }
+
+    /// 关闭 stdin，通知 Claude 本轮 stream-json 输入结束。
+    pub fn close_stdin(&self) {
+        if let Ok(mut stdin_guard) = self.state.stdin.lock() {
+            stdin_guard.take();
+        }
     }
 
     /// 进程是否已关闭（读到 EOF 或被主动 shutdown）。

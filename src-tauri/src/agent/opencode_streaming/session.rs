@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
-use crate::agent::opencode_streaming::argv::{build_opencode_run_args, should_use_auto};
+use crate::agent::opencode_streaming::argv::{append_attachment_paths, build_opencode_run_args, should_use_auto};
 use crate::agent::opencode_streaming::event_mapper::{map_ndjson_value, MapContext};
 use crate::agent::opencode_streaming::transport::{
     OpenCodeStreamingError, OpenCodeTransport,
@@ -79,7 +79,7 @@ impl OpenCodeSessionHandle {
     pub fn send_message(
         &self,
         text: String,
-        _attachments: Vec<AgentMessageAttachment>,
+        attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), OpenCodeStreamingError> {
         if let Ok(mut guard) = self.transport.lock() {
             if let Some(prev) = guard.take() {
@@ -95,8 +95,9 @@ impl OpenCodeSessionHandle {
             (state.session_id.clone(), state.current_model.clone())
         };
 
+        // OpenCode 仅文本 prompt：附件附成路径说明。
         let args = build_opencode_run_args(
-            &text,
+            &append_attachment_paths(&text, &attachments),
             session_id.as_deref(),
             model.as_deref(),
             should_use_auto(self.config.mode_id.as_deref(), self.config.dangerous),

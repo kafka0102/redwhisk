@@ -20,6 +20,7 @@ pub mod event_mapper;
 pub mod message;
 pub mod session;
 pub mod transport;
+pub mod user_input;
 
 pub use session::{ClaudeSessionConfig, ClaudeSessionHandle};
 pub use transport::ClaudeStreamingError;

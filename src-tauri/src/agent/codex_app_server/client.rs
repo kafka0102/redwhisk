@@ -79,6 +79,17 @@ pub fn text_user_input(text: &str) -> Value {
     })
 }
 
+/// 本地图片输入块：codex app-server `UserInput::LocalImage`。
+///
+/// 字段与 CLI 0.145 二进制 schema 对齐：`type=localImage` + `path` + `detail`。
+pub fn local_image_user_input(path: &str) -> Value {
+    json!({
+        "type": "localImage",
+        "path": path,
+        "detail": "high",
+    })
+}
+
 /// codex sandbox 策略。覆盖 app-server 支持的三种 sandbox type。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxPolicy {

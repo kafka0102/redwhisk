@@ -20,8 +20,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use super::client::{
-    text_user_input, CodexAppServerClient, InitializeParams, PermissionDecision, SandboxPolicy,
-    TurnInput, TurnStartParams,
+    local_image_user_input, text_user_input, CodexAppServerClient, InitializeParams,
+    PermissionDecision, SandboxPolicy, TurnInput, TurnStartParams,
 };
 use super::notification::{parse_notification, CodexNotification};
 use super::thread_item::{extract_usage, map_thread_item};
@@ -266,8 +266,8 @@ impl CodexSessionHandle {
 
     /// 发送用户消息（发起一轮 turn）。
     ///
-    /// `attachments` 非空时切换为 `TurnInput::Blocks`，把附件编码为文本路径
-    /// 引用块追加在用户文本之后；为空时保持 `TurnInput::Text` 向后兼容。
+    /// `attachments` 非空时切换为 `TurnInput::Blocks`：图片走 `localImage`，
+    /// 其它种类走文本路径引用；为空时保持 `TurnInput::Text` 向后兼容。
     pub fn send_message(
         &self,
         text: String,
@@ -585,23 +585,27 @@ fn to_codex_decision(decision: AgentPermissionDecision) -> PermissionDecision {
 
 /// 把用户文本与附件编码为 `turn/start` 的 `input`。
 ///
-/// - 附件为空：`TurnInput::Text(text)`，保持向后兼容（codex 原生文本路径）。
-/// - 附件非空：`TurnInput::Blocks`，首个块为用户文本，其后每个附件追加一个
-///   text 块，内容为 `[附件] {display_name}: {path}`。
-///
-/// 首版统一用文本路径引用而非 image/file block：codex app-server 的 image
-/// 输入块 schema 在本仓库未类型化（仅 text 块被测试证实），文本路径引用
-/// 零协议风险、立即可用；image block 接入留作后续独立任务。
+/// - 附件为空：`TurnInput::Text(text)`，保持向后兼容。
+/// - 附件非空：`TurnInput::Blocks`，首个块为用户文本；图片附件编码为
+///   `localImage`（模型可直接视觉理解），非图片附件仍用文本路径引用。
 fn build_turn_input(text: String, attachments: &[AgentMessageAttachment]) -> TurnInput {
     if attachments.is_empty() {
         return TurnInput::Text(text);
     }
+    use crate::types::agent_session::AgentAttachmentKind;
     let mut blocks = vec![text_user_input(&text)];
     for attachment in attachments {
-        blocks.push(text_user_input(&format!(
-            "[附件] {}: {}",
-            attachment.display_name, attachment.path
-        )));
+        match attachment.kind {
+            AgentAttachmentKind::Image if !attachment.path.trim().is_empty() => {
+                blocks.push(local_image_user_input(attachment.path.trim()));
+            }
+            _ => {
+                blocks.push(text_user_input(&format!(
+                    "[附件] {}: {}",
+                    attachment.display_name, attachment.path
+                )));
+            }
+        }
     }
     TurnInput::Blocks(blocks)
 }
@@ -1516,7 +1520,7 @@ mod tests {
         );
         assert_eq!(
             blocks[1],
-            json!({ "type": "text", "text": "[附件] a.png: /data/a.png", "text_elements": [] })
+            json!({ "type": "localImage", "path": "/data/a.png", "detail": "high" })
         );
         assert_eq!(
             blocks[2],
