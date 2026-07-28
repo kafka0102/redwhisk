@@ -6,6 +6,10 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 
 import { attachTerminalDragDrop } from "./terminal-drag-drop";
+import {
+  applyTerminalBottomInset,
+  clearTerminalBottomInset,
+} from "./terminal-fit-inset";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { persistTerminalViewPosition } from "./terminal-history-writer";
@@ -91,7 +95,13 @@ export function TerminalSurface({
     }
 
     terminal.options.fontSize = contentFontSize;
+    const host = hostRef.current;
+    if (!host) {
+      return;
+    }
+    clearTerminalBottomInset(terminal);
     fitAddon.fit();
+    applyTerminalBottomInset(terminal, host);
   }, [contentFontSize]);
 
   useEffect(() => {
@@ -196,7 +206,9 @@ export function TerminalSurface({
       }
 
       try {
+        clearTerminalBottomInset(terminal);
         fitAddon.fit();
+        applyTerminalBottomInset(terminal, host);
       } catch (error) {
         const message = getCommandErrorMessage(error, t);
         window.setTimeout(() => {
