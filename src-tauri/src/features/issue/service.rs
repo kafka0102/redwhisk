@@ -2175,8 +2175,8 @@ mod tests {
     }
 
     #[test]
-    fn read_last_assistant_text_for_turn_returns_last_match() {
-        use crate::features::agent_session::read_last_assistant_text_for_turn;
+    fn read_assistant_texts_for_turn_returns_ordered_matches() {
+        use crate::features::agent_session::read_assistant_texts_for_turn;
         let temp = tempdir().expect("temp dir");
         let log = temp.path().join("session.log");
         let line = |turn_id: &str, text: &str| -> String {
@@ -2195,12 +2195,14 @@ mod tests {
         )
         .expect("write log");
         assert_eq!(
-            read_last_assistant_text_for_turn(log.to_string_lossy().as_ref(), "t1"),
-            Some("last in t1 <issue-comment>x</issue-comment>".to_string())
+            read_assistant_texts_for_turn(log.to_string_lossy().as_ref(), "t1"),
+            vec![
+                "first in t1".to_string(),
+                "last in t1 <issue-comment>x</issue-comment>".to_string(),
+            ]
         );
-        assert_eq!(
-            read_last_assistant_text_for_turn(log.to_string_lossy().as_ref(), "missing"),
-            None
+        assert!(
+            read_assistant_texts_for_turn(log.to_string_lossy().as_ref(), "missing").is_empty()
         );
     }
 

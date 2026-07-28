@@ -67,13 +67,6 @@ pub(crate) fn read_assistant_texts_for_turn(log_path: &str, turn_id: &str) -> Ve
         .collect()
 }
 
-/// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
-/// 供既有调用方；交付评论请优先用 `read_assistant_texts_for_turn`。
-pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
-    read_assistant_texts_for_turn(log_path, turn_id).into_iter().last()
-}
-
-
 pub(crate) fn read_timeline_from_log_path(
     log_path: &str,
 ) -> Result<StructuredTimelineHistory, CommandError> {
