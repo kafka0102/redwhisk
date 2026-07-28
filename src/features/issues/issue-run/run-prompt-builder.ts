@@ -26,6 +26,9 @@ interface BuildRunPromptPreviewInput {
 const APP_INSTRUCTIONS =
   "你正在 RedWhisk 中处理一个本地 issue。优先依据给定 issue 描述完成任务；如果上下文不足，先明确缺口再继续行动。";
 
+export const ISSUE_DELIVERY_SUMMARY_INSTRUCTION =
+  "本轮任务完成后，请在答复正文顶层用 <issue-comment>精简中文交付摘要</issue-comment> 输出本次阶段性交付内容（做了什么 / 结果 / 验证命令）；该标签会被系统优先提取为 Issue 评论。不要把标签放进代码块或对其转义。";
+
 export function buildRunPromptPreview(
   input: BuildRunPromptPreviewInput,
 ): RunPromptPreview {
@@ -84,7 +87,7 @@ export function buildRunPromptPreview(
   sources.push({
     id: "app-instructions",
     label: "App instructions",
-    content: APP_INSTRUCTIONS,
+    content: `${APP_INSTRUCTIONS}\n\n${ISSUE_DELIVERY_SUMMARY_INSTRUCTION}`,
   });
 
   const finalPromptSections: string[] = [];
@@ -113,6 +116,8 @@ export function buildRunPromptPreview(
       ].join("\n"),
     );
   }
+
+  finalPromptSections.push(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
 
   return {
     finalPrompt: finalPromptSections

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRunPromptPreview } from "./run-prompt-builder";
+import {
+  buildRunPromptPreview,
+  ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
+} from "./run-prompt-builder";
 
 describe("buildRunPromptPreview", () => {
   it("uses the raw issue description as the final prompt preview", () => {
@@ -16,11 +19,11 @@ describe("buildRunPromptPreview", () => {
       selectedWorkflowSkill: "bmad-dev-story",
     });
 
-    expect(preview.finalPrompt).toBe(
-      [
-        "using skill bmad-dev-story for task:",
-        "Make the preview reflect the selected profile.",
-      ].join("\n\n"),
+    expect(preview.finalPrompt).toContain(
+      "using skill bmad-dev-story for task:",
+    );
+    expect(preview.finalPrompt).toContain(
+      "Make the preview reflect the selected profile.",
     );
   });
 
@@ -169,11 +172,11 @@ describe("buildRunPromptPreview", () => {
       selectedWorkflowSkill: "bmad-dev-story",
     });
 
-    expect(preview.finalPrompt).toBe(
-      [
-        "使用skill bmad-dev-story 执行任务：",
-        "Make the preview reflect the selected profile.",
-      ].join("\n\n"),
+    expect(preview.finalPrompt).toContain(
+      "使用skill bmad-dev-story 执行任务：",
+    );
+    expect(preview.finalPrompt).toContain(
+      "Make the preview reflect the selected profile.",
     );
   });
 
@@ -190,14 +193,52 @@ describe("buildRunPromptPreview", () => {
       selectedWorkflowSkill: "skill-a",
     });
 
-    expect(preview.finalPrompt).toBe(
-      [
-        "using skill skill-a for task:",
-        "Make the preview reflect the selected profile.",
-      ].join("\n\n"),
+    expect(preview.finalPrompt).toContain("using skill skill-a for task:");
+    expect(preview.finalPrompt).toContain(
+      "Make the preview reflect the selected profile.",
     );
     expect(
       preview.sources.find((source) => source.id === "default-skill")?.content,
     ).toBe("skill-a");
+  });
+
+  it("appends isomorphic issue delivery summary instruction to finalPrompt and sources", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "Prompt preview",
+        description: "Ship the feature.",
+        attachments: [],
+      },
+      profile: {
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
+    expect(
+      preview.finalPrompt.endsWith(ISSUE_DELIVERY_SUMMARY_INSTRUCTION),
+    ).toBe(true);
+    expect(preview.finalPrompt).toContain("Ship the feature.");
+    expect(
+      preview.sources.find((source) => source.id === "app-instructions")
+        ?.content,
+    ).toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
+  });
+
+  it("still injects delivery summary instruction when issue description is empty", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "Empty body",
+        description: "   ",
+        attachments: [],
+      },
+      profile: {
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toContain("<issue-comment>");
+    expect(preview.finalPrompt).toContain("精简中文交付摘要");
+    expect(preview.finalPrompt).toContain("系统优先提取为 Issue 评论");
   });
 });

@@ -1,5 +1,7 @@
 # ADR 0003：Agent Turn 完成自动发表 Issue 评论
 
+> **状态补充**：本 ADR 中「仅 `completion` 触发」与「仅标签可评论、无兜底」的落地修正，已被 [ADR 0029](./0029-agent-turn-comment-multica-fallback.md) 取代；表结构、幂等与 actor 模型仍适用。
+
 ## 状态
 
 已采纳（2026-07-15 落地实现，commit 10a02a5 / f304c48 / 621c902 / 24081ab / b8708aa）。落地时修正了决定 1 与决定 6 两处判断，见文末「实现落地修正」。
