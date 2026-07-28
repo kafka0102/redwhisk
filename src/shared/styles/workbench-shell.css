@@ -9,9 +9,10 @@
 
 .project-home {
   display: grid;
-  align-content: start;
-  grid-template-rows: 40px auto;
+  grid-template-rows: 40px minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
   background: var(--color-app);
 }
 
@@ -82,9 +83,12 @@
 
 .project-list-shell {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
   width: min(860px, 100%);
   margin: 0 auto;
   padding: 24px 28px 34px;
+  overflow: hidden;
 }
 
 .project-home__toolbar {
@@ -139,6 +143,9 @@
 .project-list {
   margin: 0;
   padding: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-bottom: 1px solid var(--color-border);
   list-style: none;
 }
