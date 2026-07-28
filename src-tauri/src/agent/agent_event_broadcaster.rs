@@ -53,9 +53,9 @@ struct SessionPersistenceState {
 }
 
 
-/// TurnCompleted 信号订阅方（Issue 交付摘要等）。仅传 session_id + turn_id，
-/// 领域反应由 feature 自行完成，broadcaster 不感知 issue schema。
-type TurnCompletedHandler = std::sync::Arc<dyn Fn(i64, String) + Send + Sync>;
+/// TurnCompleted 信号订阅方（Issue 交付摘要等）。
+/// 参数：session_id + 快照 turn_source + turn_id；领域反应由 feature 自行完成。
+type TurnCompletedHandler = std::sync::Arc<dyn Fn(i64, String, String) + Send + Sync>;
 
 /// 跨 session 共享的事件广播器。
 ///
@@ -89,7 +89,7 @@ impl AgentEventBroadcaster {
     /// 重复调用忽略，保留首次注入。Issue feature 用此信号发表交付摘要评论。
     pub fn set_turn_completed_handler<F>(&self, handler: F)
     where
-        F: Fn(i64, String) + Send + Sync + 'static,
+        F: Fn(i64, String, String) + Send + Sync + 'static,
     {
         let _ = self.turn_completed_handler.set(std::sync::Arc::new(handler));
     }
@@ -297,13 +297,18 @@ impl AgentEventBroadcaster {
                         expected_turn_ended_at,
                     );
                 });
-                // TurnCompleted 信号：仅转发 session_id + turn_id，领域反应由注入的 handler 完成。
+                // TurnCompleted 信号：快照 turn_source + turn_id 后转发，领域反应由注入的 handler 完成。
                 if let AgentStreamEvent::TurnCompleted { turn_id: Some(t), .. } = &envelope.event {
                     if let Some(handler) = self.turn_completed_handler.get() {
                         let handler = std::sync::Arc::clone(handler);
                         let session_id = envelope.session_id;
                         let turn_id = t.clone();
-                        std::thread::spawn(move || handler(session_id, turn_id));
+                        let turn_source = repository
+                            .find_current_turn(session_id)
+                            .ok()
+                            .and_then(|(source, _)| source)
+                            .unwrap_or_default();
+                        std::thread::spawn(move || handler(session_id, turn_source, turn_id));
                     }
                 }
             }

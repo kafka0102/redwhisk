@@ -38,15 +38,16 @@ pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
 
 
 
-/// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
-/// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`
-/// 且 turn_id 等于入参的事件，取最后一条的 text。log 路径空或文件不可读返回 None。
-/// 供 completion turn 自动评论提取使用。
-pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
+/// 按 `turn_id` 从 session log 读取该 turn 全部助手答复正文（按日志顺序）。
+/// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`。
+/// log 路径空或文件不可读返回空 Vec。供交付评论：标签扫描与兜底正文。
+pub(crate) fn read_assistant_texts_for_turn(log_path: &str, turn_id: &str) -> Vec<String> {
     if log_path.trim().is_empty() {
-        return None;
+        return Vec::new();
     }
-    let file = File::open(log_path).ok()?;
+    let Ok(file) = File::open(log_path) else {
+        return Vec::new();
+    };
     BufReader::new(file)
         .lines()
         .filter_map(|line| line.ok())
@@ -63,7 +64,13 @@ pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -
             },
             _ => None,
         })
-        .last()
+        .collect()
+}
+
+/// 按 `turn_id` 从 session log 读取该 turn 最后一条助手答复正文。
+/// 供既有调用方；交付评论请优先用 `read_assistant_texts_for_turn`。
+pub(crate) fn read_last_assistant_text_for_turn(log_path: &str, turn_id: &str) -> Option<String> {
+    read_assistant_texts_for_turn(log_path, turn_id).into_iter().last()
 }
 
 

@@ -28,7 +28,9 @@ pub(crate) use log_path::{
     IssueSessionArchive, build_issue_session_archive, is_archived_issue_log_path,
     remove_session_log_file,
 };
-pub(crate) use timeline::read_last_assistant_text_for_turn;
+pub(crate) use timeline::{
+    read_assistant_texts_for_turn, read_last_assistant_text_for_turn,
+};
 #[cfg(test)]
 pub(crate) use log_path::build_issue_archive_log_path;
 

@@ -21,8 +21,8 @@ _Avoid_: 固定用户、设置记录
 _Avoid_: 当前 Agent 名称、运行记录
 
 **Issue 交付摘要**：
-Agent 最终答复中由 `<issue-comment>` 包围的精简交付内容；它是唯一可自动创建 Issue 评论的 Agent 输出，完整答复仍属于 Agent Session。
-_Avoid_: 原始最终答复、会话转录
+Eligible turn 结束后自动落到 Issue 时间轴的 Agent 交付说明；优先采用 Agent 标明的精简摘要标签，缺失时采用本轮最终答复的整理版。完整会话正文仍属于 Agent Session。
+_Avoid_: 仅靠标签才可评论、会话转录全文
 
 **完成流程**：
 Issue 从待验收标记为已完成的多步状态机流程；以实际执行路径、未提交改动与 Worktree 所有权为决策依据，经检测、dirty 三选（自动提交 / 不提交 / 取消）、自动提交后确认、Worktree 对账等阶段推进。phase 迁移由纯状态机模块决定，副作用以 effect 枚举由 service 解释执行；`detecting_workspace` 与 `reconciling_worktree` 是单次 command 内穿越的瞬态逻辑态（不持久化）。

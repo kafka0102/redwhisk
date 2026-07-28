@@ -60,14 +60,15 @@ pub fn run() {
             state
                 .agent_event_broadcaster
                 .set_app_handle(app.handle().clone());
-            // ADR-0003：TurnCompleted → Issue 交付摘要提取（broadcaster 只发信号）。
+            // ADR-0003 / Multica：TurnCompleted 快照 source+turn_id → Issue 交付评论。
             let completion_comment_app = app.handle().clone();
             state
                 .agent_event_broadcaster
-                .set_turn_completed_handler(move |session_id, turn_id| {
+                .set_turn_completed_handler(move |session_id, turn_source, turn_id| {
                     features::issue::handle_turn_completed(
                         &completion_comment_app,
                         session_id,
+                        turn_source,
                         turn_id,
                     );
                 });
