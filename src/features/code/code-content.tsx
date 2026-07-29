@@ -23,7 +23,7 @@ export interface CodeRevealRequest {
  * - 加载中：loadingFile 文案。
  * - 加载失败：file-error 红色 alert（受 `resolveFileLoadErrorMessage` 解析的 errorMessage 驱动）。
  * - 二进制或过大：占位提示，不进入 Monaco。
- * - 正常：Monaco 只读 Editor，字号跟随 `contentFontSize`，主题跟随全局 `theme`。
+ * - 正常：Monaco Editor（按 tab.isEditable 只读/可编辑），字号跟随 `contentFontSize`，主题跟随全局 `theme`。
  * - 可选 revealRequest：打开匹配行时滚动并定位光标。
  * - 按 projectId + filePath 缓存 Monaco view state，跨 Activity 切换后恢复阅读位置。
  */
@@ -109,14 +109,15 @@ export function CodeContent({
     applyReveal(revealRequest.lineNumber);
   }, [applyReveal, revealRequest, tab.content, tab.filePath, tab.isLoading]);
 
-  // 复检文件内容后 Monaco 可能重设 value 并回顶，需再次恢复阅读位置。
+  // 仅在磁盘加载身份变化时恢复阅读位置（静默复检/换文件/加载完成）。
+  // 不可依赖 tab.content 整体：本地编辑每次改 content 字符串会误触发 restore，导致光标跳行。
+  const contentLoadKey =
+    tab.content == null || tab.content.isBinary || tab.content.isTooLarge
+      ? null
+      : `${tab.filePath}:${tab.content.sizeBytes}:${tab.content.modifiedAt ?? "na"}`;
+
   useEffect(() => {
-    if (
-      tab.isLoading ||
-      !tab.content ||
-      tab.content.isBinary ||
-      tab.content.isTooLarge
-    ) {
+    if (tab.isLoading || contentLoadKey == null) {
       return;
     }
     if (revealRequest && revealRequest.filePath === tab.filePath) {
@@ -124,9 +125,9 @@ export function CodeContent({
     }
     restoreSavedViewState();
   }, [
+    contentLoadKey,
     restoreSavedViewState,
     revealRequest,
-    tab.content,
     tab.filePath,
     tab.isLoading,
   ]);
@@ -216,6 +217,10 @@ export function CodeContent({
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         fontSize: contentFontSize,
+        // 轻量编辑/只读查看均不做 IDE 诊断；关闭词丛高亮，避免 env 等重复 token 误闪选。
+        occurrencesHighlight: "off",
+        selectionHighlight: false,
+        renderValidationDecorations: "off",
       }}
       value={tab.content.content}
       onChange={(value) => {

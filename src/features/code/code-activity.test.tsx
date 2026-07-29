@@ -1200,11 +1200,16 @@ describe("CodeActivity", () => {
     });
     expect(editWhileLoading).toBeDisabled();
     expect(editWhileLoading).toHaveAttribute("aria-pressed", "false");
+    expect(editWhileLoading).toHaveAttribute("data-state", "readonly");
 
     resolveRead!(fileContent);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Edit file" })).toBeEnabled();
     });
+    expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
+      "data-state",
+      "readonly",
+    );
     expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
       "data-readonly",
       "true",
@@ -1230,6 +1235,7 @@ describe("CodeActivity", () => {
     });
     await user.click(editButton);
     expect(editButton).toHaveAttribute("aria-pressed", "true");
+    expect(editButton).toHaveAttribute("data-state", "editing");
     expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
       "data-readonly",
       "false",

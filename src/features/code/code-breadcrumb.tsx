@@ -4,6 +4,7 @@ import {
   Eye,
   EyeOff,
   Folder,
+  Lock,
   Pencil,
 } from "lucide-react";
 import { type CSSProperties, useCallback, useState } from "react";
@@ -88,11 +89,16 @@ export function CodeBreadcrumb({
           className="code-workspace__edit-toggle"
           aria-label={editToggle.label}
           aria-pressed={editToggle.pressed}
+          data-state={editToggle.pressed ? "editing" : "readonly"}
           disabled={editToggle.disabled}
           title={editToggle.title}
           onClick={editToggle.onToggle}
         >
-          <Pencil aria-hidden="true" size={14} strokeWidth={1.9} />
+          {editToggle.pressed ? (
+            <Pencil aria-hidden="true" size={14} strokeWidth={1.9} />
+          ) : (
+            <Lock aria-hidden="true" size={14} strokeWidth={1.9} />
+          )}
         </button>
       ) : null}
       {markdownPreviewToggle ? (

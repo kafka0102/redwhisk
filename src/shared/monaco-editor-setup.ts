@@ -49,14 +49,15 @@ export function configureMonacoEditor() {
   loader.config({ monaco });
   registerPrismaLanguage(monaco);
 
-  // 项目内 Monaco 仅作只读代码查看（code-workspace / session-file-viewer / diff），
-  // 关闭 TS/JS 语义诊断：默认 compilerOptions 未设 jsx，会把 tsx 里 JSX 对组件的引用
-  // 判为 unused 而标灰（"All imports in import declaration are unused."）。语法高亮不受影响。
+  // 项目内 Monaco 用于代码查看/轻量编辑/diff，不是完整 TS 语言服务。
+  // 无项目 tsconfig / 模块解析时语义与语法诊断易误报；按 ADR-0028 关闭诊断，仅保留语法高亮。
   monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: true,
+    noSyntaxValidation: true,
   });
   monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
     noSemanticValidation: true,
+    noSyntaxValidation: true,
   });
 
   hasConfiguredMonacoEditor = true;

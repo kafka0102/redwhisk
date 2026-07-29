@@ -302,7 +302,17 @@
 .code-workspace__edit-toggle[aria-pressed="true"],
 .code-workspace__markdown-toggle[aria-pressed="true"] {
   color: var(--color-text);
-  background: var(--color-surface-muted);
+  background: var(--color-accent-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+/* 只读态用锁图标 + muted；编辑态用铅笔 + 实心底，dark 下不仅靠颜色区分 */
+.code-workspace__edit-toggle[data-state="readonly"] {
+  color: var(--color-text-muted);
+}
+
+.code-workspace__edit-toggle[data-state="editing"] {
+  color: var(--color-text);
 }
 
 .code-workspace__tab-dirty {

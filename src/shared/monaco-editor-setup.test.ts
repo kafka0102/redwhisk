@@ -101,17 +101,19 @@ describe("configureMonacoEditor", () => {
     );
   });
 
-  it("disables semantic diagnostics for read-only viewers", async () => {
+  it("disables semantic and syntax diagnostics for non-IDE viewers", async () => {
     const { configureMonacoEditor } = await import("./monaco-editor-setup");
 
     configureMonacoEditor();
 
-    // 只读查看场景关闭 TS/JS 语义诊断，避免 tsx 因默认未设 jsx 导致的 unused import 误报。
+    // 无项目 TS 语言服务时诊断易误报；关闭语义与语法诊断，仅保留高亮。
     expect(typescriptDefaultsSetDiagnosticsMock).toHaveBeenCalledWith({
       noSemanticValidation: true,
+      noSyntaxValidation: true,
     });
     expect(javascriptDefaultsSetDiagnosticsMock).toHaveBeenCalledWith({
       noSemanticValidation: true,
+      noSyntaxValidation: true,
     });
   });
 
