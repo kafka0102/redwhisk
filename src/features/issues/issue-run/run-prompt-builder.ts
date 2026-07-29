@@ -38,12 +38,21 @@ export function buildRunPromptPreview(
   ).trim();
   // 附件实际存储在 ~/.redwhisk/issues/{id}/attachments/ 下（data_dir），不在项目
   // 工作区内；relativePath 形如 ".redwhisk/issues/{id}/..." 是相对于项目根的路径，
-  // agent 在项目 cwd 下根本读不到该文件。这里必须用 absolutePath，agent 才能真正
-  // 读取附件（图片、文档等）。
-  const attachmentPaths =
-    input.issue.attachments
-      ?.map((attachment) => attachment.absolutePath.trim())
-      .filter((path) => path.length > 0) ?? [];
+  // agent 在项目 cwd 下根本读不到该文件。这里必须用 absolutePath。
+  // 图片会在 launch 时作为 localImage 视觉附件注入，非图片才需要提示 agent 先读文件。
+  const attachmentsWithPath =
+    input.issue.attachments?.filter(
+      (attachment) => attachment.absolutePath.trim().length > 0,
+    ) ?? [];
+  const attachmentPaths = attachmentsWithPath.map((attachment) =>
+    attachment.absolutePath.trim(),
+  );
+  const fileAttachments = attachmentsWithPath.filter(
+    (attachment) => attachment.kind !== "image",
+  );
+  const imageAttachments = attachmentsWithPath.filter(
+    (attachment) => attachment.kind === "image",
+  );
   const selectedWorkflowSkill = input.selectedWorkflowSkill ?? null;
   const defaultSkills =
     selectedWorkflowSkill !== null && selectedWorkflowSkill.trim().length > 0
@@ -107,14 +116,12 @@ export function buildRunPromptPreview(
     finalPromptSections.push(issueDescription);
   }
 
-  if (attachmentPaths.length > 0) {
-    finalPromptSections.push(
-      [
-        "Attachments:",
-        ...attachmentPaths.map((path) => `- ${path}`),
-        "请先读取这些附件文件，再开始处理当前 issue。",
-      ].join("\n"),
-    );
+  const attachmentPromptSection = buildAttachmentPromptSection(
+    fileAttachments,
+    imageAttachments,
+  );
+  if (attachmentPromptSection !== null) {
+    finalPromptSections.push(attachmentPromptSection);
   }
 
   finalPromptSections.push(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
@@ -125,6 +132,42 @@ export function buildRunPromptPreview(
       .join("\n\n"),
     sources,
   };
+}
+
+function buildAttachmentPromptSection(
+  fileAttachments: NonNullable<IssueRecord["attachments"]>,
+  imageAttachments: NonNullable<IssueRecord["attachments"]>,
+): string | null {
+  const sections: string[] = [];
+
+  if (fileAttachments.length > 0) {
+    sections.push(
+      [
+        "Attachments:",
+        ...fileAttachments.map(
+          (attachment) => `- ${attachment.absolutePath.trim()}`,
+        ),
+        "请先读取这些附件文件，再开始处理当前 issue。",
+      ].join("\n"),
+    );
+  }
+
+  if (imageAttachments.length > 0) {
+    sections.push(
+      [
+        "Images:",
+        ...imageAttachments.map(
+          (attachment) => `- ${attachment.absolutePath.trim()}`,
+        ),
+        "以上图片已作为视觉附件提供，请直接查看截图内容；无需先当普通文件打开。",
+      ].join("\n"),
+    );
+  }
+
+  if (sections.length === 0) {
+    return null;
+  }
+  return sections.join("\n\n");
 }
 
 function stripAttachmentTokens(description: string): string {

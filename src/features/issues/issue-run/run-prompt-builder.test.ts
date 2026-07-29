@@ -106,10 +106,52 @@ describe("buildRunPromptPreview", () => {
     expect(preview.finalPrompt).toContain("Read the config.");
     expect(preview.finalPrompt).toContain("/tmp/12-tsconfig.json");
     expect(preview.finalPrompt).toContain("/tmp/13-screenshot.png");
+    // 非图片：强制先读文件；图片：视觉附件说明，不再强迫 shell 打开。
+    expect(preview.finalPrompt).toContain(
+      "请先读取这些附件文件，再开始处理当前 issue。",
+    );
+    expect(preview.finalPrompt).toContain(
+      "以上图片已作为视觉附件提供，请直接查看截图内容；无需先当普通文件打开。",
+    );
     expect(
       preview.sources.find((source) => source.id === "issue-attachments")
         ?.content,
     ).toContain("/tmp/12-tsconfig.json");
+  });
+
+  it("does not force shell-reading when attachments are images only", () => {
+    const preview = buildRunPromptPreview({
+      issue: {
+        title: "Screenshot bug",
+        description: "See the garbled terminal output.",
+        attachments: [
+          {
+            id: 13,
+            issueId: 1,
+            displayName: "screenshot.png",
+            storedName: "13-screenshot.png",
+            relativePath: ".redwhisk/issues/1/attachments/13-screenshot.png",
+            absolutePath: "/tmp/13-screenshot.png",
+            mimeType: "image/png",
+            fileSize: 256,
+            kind: "image",
+            isPreviewable: true,
+            createdAt: 2,
+          },
+        ],
+      },
+      profile: {
+        promptTemplate: "",
+      },
+    });
+
+    expect(preview.finalPrompt).toContain("/tmp/13-screenshot.png");
+    expect(preview.finalPrompt).toContain(
+      "以上图片已作为视觉附件提供，请直接查看截图内容；无需先当普通文件打开。",
+    );
+    expect(preview.finalPrompt).not.toContain(
+      "请先读取这些附件文件，再开始处理当前 issue。",
+    );
   });
 
   it("strips both bare token lines and image placeholder lines from the description", () => {
