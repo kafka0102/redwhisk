@@ -106,6 +106,55 @@ describe("ProjectTerminalStatusBar", () => {
     });
   });
 
+  it("moves focus to the terminal after inserting a shortcut command", async () => {
+    listCommandsMock.mockResolvedValue({
+      commands: [{ id: 1, projectId: 1, command: "git status", sortOrder: 0 }],
+    });
+    readCwdMock.mockResolvedValue({ sessionId: 10, cwd: null });
+    writeProjectTerminalMock.mockResolvedValue(undefined);
+
+    const terminalFocusTarget = document.createElement("textarea");
+    terminalFocusTarget.setAttribute("data-testid", "terminal-focus-target");
+    document.body.appendChild(terminalFocusTarget);
+    const focusTerminal = vi.fn(() => {
+      terminalFocusTarget.focus();
+    });
+
+    const user = userEvent.setup();
+    try {
+      render(
+        <ProjectTerminalStatusBar
+          projectId={1}
+          sessionId={10}
+          focusTerminal={focusTerminal}
+        />,
+      );
+
+      const trigger = await screen.findByRole("button", {
+        name: "Quick commands",
+      });
+      await user.click(trigger);
+
+      const commandItem = await screen.findByText("git status");
+      await user.click(commandItem);
+
+      await waitFor(() => {
+        expect(writeProjectTerminalMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 10,
+          data: "git status",
+        });
+      });
+
+      await waitFor(() => {
+        expect(focusTerminal).toHaveBeenCalledTimes(1);
+        expect(document.activeElement).toBe(terminalFocusTarget);
+      });
+    } finally {
+      terminalFocusTarget.remove();
+    }
+  });
+
   it("opens the manage dialog when clicking the manage entry", async () => {
     listCommandsMock.mockResolvedValue({ commands: [] });
     readCwdMock.mockResolvedValue({ sessionId: 10, cwd: null });

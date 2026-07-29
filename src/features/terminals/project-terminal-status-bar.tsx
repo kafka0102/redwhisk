@@ -25,11 +25,14 @@ const TERMINAL_CWD_POLL_MS = 2_000;
 interface ProjectTerminalStatusBarProps {
   projectId: number;
   sessionId: number;
+  /** 插入常用命令后，菜单关闭时把焦点还给终端（含滚到底部）。 */
+  focusTerminal?: () => void;
 }
 
 export function ProjectTerminalStatusBar({
   projectId,
   sessionId,
+  focusTerminal,
 }: ProjectTerminalStatusBarProps) {
   const { messages, t } = useI18n();
   const [commands, setCommands] = useState<
@@ -39,6 +42,8 @@ export function ProjectTerminalStatusBar({
   const [currentCwd, setCurrentCwd] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
+  // 选择常用命令后，菜单关闭时把焦点还给终端，而不是默认回到触发按钮。
+  const shouldFocusTerminalOnCloseRef = useRef(false);
 
   const refreshCommands = useCallback(async () => {
     setCommandError(null);
@@ -147,6 +152,18 @@ export function ProjectTerminalStatusBar({
           align="start"
           side="top"
           className="project-terminal-status-bar__menu"
+          finalFocus={() => {
+            if (!shouldFocusTerminalOnCloseRef.current) {
+              return true;
+            }
+            shouldFocusTerminalOnCloseRef.current = false;
+            if (!focusTerminal) {
+              return true;
+            }
+            focusTerminal();
+            // 已自行聚焦终端，阻止菜单默认把焦点还回触发按钮。
+            return false;
+          }}
         >
           <DropdownMenuItem onClick={handleManageClick}>
             <Settings aria-hidden="true" size={13} strokeWidth={1.8} />
@@ -158,6 +175,7 @@ export function ProjectTerminalStatusBar({
                 <DropdownMenuItem
                   key={command.id}
                   onClick={() => {
+                    shouldFocusTerminalOnCloseRef.current = true;
                     void handleRunCommand(command.command);
                   }}
                 >

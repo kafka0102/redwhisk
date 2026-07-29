@@ -1,5 +1,10 @@
+import { useRef } from "react";
+
 import { subscribeAgentSessionTerminalOutput } from "../agents/agent-terminal-events";
-import { TerminalSurface } from "./terminal-surface";
+import {
+  TerminalSurface,
+  type TerminalSurfaceHandle,
+} from "./terminal-surface";
 import { ProjectTerminalStatusBar } from "./project-terminal-status-bar";
 import {
   readProjectTerminal,
@@ -19,9 +24,12 @@ export function ProjectTerminal({
   projectId,
   sessionId,
 }: ProjectTerminalProps) {
+  const terminalSurfaceRef = useRef<TerminalSurfaceHandle | null>(null);
+
   return (
     <div className="project-terminal-shell">
       <TerminalSurface
+        ref={terminalSurfaceRef}
         ariaLabel="Project terminal"
         transport={{
           readSnapshot: (maxBytes) =>
@@ -51,7 +59,13 @@ export function ProjectTerminal({
         }}
         transportKey={`project:${projectId}:${sessionId}`}
       />
-      <ProjectTerminalStatusBar projectId={projectId} sessionId={sessionId} />
+      <ProjectTerminalStatusBar
+        projectId={projectId}
+        sessionId={sessionId}
+        focusTerminal={() => {
+          terminalSurfaceRef.current?.focus();
+        }}
+      />
     </div>
   );
 }

@@ -3,7 +3,18 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
+
+import {
+  createTerminalSurfaceHandle,
+  type TerminalSurfaceHandle,
+} from "./terminal-surface-handle";
 
 import { attachTerminalDragDrop } from "./terminal-drag-drop";
 import {
@@ -38,8 +49,11 @@ type TerminalStatusSource =
   | "resize"
   | "restore";
 
+export type { TerminalSurfaceHandle };
+
 interface TerminalSurfaceProps {
   ariaLabel: string;
+  ref?: Ref<TerminalSurfaceHandle | null>;
   shellClassName?: string;
   terminalClassName?: string;
   transport: TerminalTransport;
@@ -48,6 +62,7 @@ interface TerminalSurfaceProps {
 
 export function TerminalSurface({
   ariaLabel,
+  ref,
   shellClassName = "terminal-surface-shell",
   terminalClassName = "terminal-surface",
   transport,
@@ -71,6 +86,10 @@ export function TerminalSurface({
     }
   }
   const canBootXterm = supportsXtermRuntime();
+
+  useImperativeHandle(ref, () =>
+    createTerminalSurfaceHandle(() => terminalRef.current),
+  );
 
   useEffect(() => {
     transportRef.current = transport;
