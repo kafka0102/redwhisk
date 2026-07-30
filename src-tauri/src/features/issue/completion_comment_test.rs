@@ -216,8 +216,62 @@ fn try_publish_uses_snapshot_source_not_db_and_is_idempotent() {
 
     assert!(
         !try_publish_completion_comment(&service, 30, "follow_up", "t1").expect("follow_up"),
-        "快照 follow_up 不发表"
+        "同 turn 幂等：follow_up 快照也不重复发表"
     );
+}
+
+#[test]
+fn try_publish_follow_up_with_tag_publishes() {
+    let temp = tempdir().expect("temp dir");
+    let log = temp.path().join("session.log");
+    fs::write(
+        &log,
+        assistant_line(
+            "t-follow",
+            "本轮实现完成 <issue-comment>完成运维同步：limit + 无变化跳过</issue-comment>",
+        ),
+    )
+    .expect("write log");
+
+    let connection = Connection::open_in_memory().expect("open database");
+    seed_session(&connection, &log, "follow_up", "t-follow");
+    let service = IssueService::new(
+        IssueRepository::new(&connection),
+        ProjectRepository::new(&connection),
+    );
+
+    assert!(
+        try_publish_completion_comment(&service, 30, "follow_up", "t-follow").expect("publish"),
+        "follow_up 但含 <issue-comment> 应发表（标签=显式意图）"
+    );
+    assert_eq!(
+        comment_bodies(&service),
+        vec!["完成运维同步：limit + 无变化跳过".to_string()]
+    );
+}
+
+#[test]
+fn try_publish_follow_up_without_tag_skips() {
+    let temp = tempdir().expect("temp dir");
+    let log = temp.path().join("session.log");
+    fs::write(
+        &log,
+        assistant_line("t-q", "「最新 n 条」按什么取？\n1. miggoItemId\n2. 视图顺序"),
+    )
+    .expect("write log");
+
+    let connection = Connection::open_in_memory().expect("open database");
+    seed_session(&connection, &log, "follow_up", "t-q");
+    let service = IssueService::new(
+        IssueRepository::new(&connection),
+        ProjectRepository::new(&connection),
+    );
+
+    assert!(
+        !try_publish_completion_comment(&service, 30, "follow_up", "t-q").expect("skip"),
+        "follow_up 无标签不走 Multica 兜底，避免追问刷屏"
+    );
+    assert!(comment_bodies(&service).is_empty());
 }
 
 #[test]

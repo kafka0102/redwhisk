@@ -1,7 +1,8 @@
 //! Issue 交付摘要（eligible turn → 自动 Issue 评论）深 module。
 //!
-//! Eligible turn：`initial` | `completion` 的成功 `TurnCompleted`。
-//! 标签优先（扫描该 turn 全部助手消息，从后往前），缺失时 Multica 式兜底整理答复。
+//! 发表规则：
+//! 1. 任意成功 turn 若可提取 `<issue-comment>` 标签，一律发表（标签=显式交付意图，不限 turn_source）。
+//! 2. 无标签时：仅 `initial` | `completion` 走 Multica 式兜底整理；`follow_up` 不发表，避免追问污染时间轴。
 //! Broadcaster 在 TurnCompleted 时快照 `turn_source` + `turn_id` 注入本入口，避免事后读库竞态。
 
 use rusqlite::Connection;
@@ -76,13 +77,13 @@ pub fn handle_turn_completed(
     }
 }
 
-/// eligible turn 完成后尝试自动发表 Issue 评论（端到端编排）。
+/// turn 完成后尝试自动发表 Issue 评论（端到端编排）。
 ///
 /// 步骤：
-/// 1. 用快照 `turn_source` 判定 eligible（`initial` | `completion`）。
-/// 2. 找到 session 关联的未删除 Issue（无关联返回 `Ok(false)`）。
-/// 3. 取 Agent 配置名快照（查不到用空串兜底，仍归属 Agent）。
-/// 4. 读取该 turn 全部助手消息：从后往前提取 `<issue-comment>`；无标签则兜底整理。
+/// 1. 找到 session 关联的未删除 Issue（无关联返回 `Ok(false)`）。
+/// 2. 取 Agent 配置名快照（查不到用空串兜底，仍归属 Agent）。
+/// 3. 读取该 turn 全部助手消息：从后往前提取 `<issue-comment>`。
+/// 4. 有标签 → 发表（任意 turn_source）；无标签 → 仅 `initial` | `completion` 走 Multica 兜底。
 /// 5. 调用 `add_issue_comment` 写入（UNIQUE 保证幂等）；返回是否真正发表了评论。
 pub(crate) fn try_publish_completion_comment(
     service: &IssueService<'_>,
@@ -107,10 +108,6 @@ fn try_publish_completion_comment_with_connection(
     turn_source: &str,
     turn_id: &str,
 ) -> Result<bool, CommandError> {
-    if !is_eligible_turn_source(turn_source) {
-        return Ok(false);
-    }
-
     let session_repository = AgentSessionRepository::new(connection);
     let session = session_repository
         .find_by_id(session_id)
@@ -141,7 +138,16 @@ fn try_publish_completion_comment_with_connection(
         &session.log_path,
         turn_id,
     );
-    let body = resolve_completion_comment_body(&assistant_texts);
+
+    // 标签=显式交付意图：任意 turn_source 均可发表。
+    // 无标签时仅 initial/completion 走 Multica 兜底，follow_up 跳过以免追问刷屏。
+    let body = match extract_tagged_comment_body(&assistant_texts) {
+        Some(tagged) => tagged,
+        None if is_eligible_turn_source(turn_source) => {
+            resolve_completion_comment_body(&assistant_texts)
+        }
+        None => return Ok(false),
+    };
 
     let already_exists = IssueCommentRepository::new(connection)
         .exists_by_session_and_turn(session_id, turn_id)
@@ -163,16 +169,25 @@ fn try_publish_completion_comment_with_connection(
     Ok(true)
 }
 
+/// 从后往前扫描助手消息，取首个可提取的 `<issue-comment>` 正文。
+pub(crate) fn extract_tagged_comment_body(assistant_texts: &[String]) -> Option<String> {
+    for text in assistant_texts.iter().rev() {
+        if let Some(body) = extract_issue_comment_from_assistant_text(text) {
+            return Some(body);
+        }
+    }
+    None
+}
+
 pub(crate) fn is_eligible_turn_source(source: &str) -> bool {
     matches!(source, "initial" | "completion")
 }
 
 /// 标签优先（从后往前）+ Multica 兜底（去 fence / 800 字 / trivial → 固定句）。
+/// 仅用于 eligible 源的无标签路径；有标签时应走 `extract_tagged_comment_body`。
 pub(crate) fn resolve_completion_comment_body(assistant_texts: &[String]) -> String {
-    for text in assistant_texts.iter().rev() {
-        if let Some(body) = extract_issue_comment_from_assistant_text(text) {
-            return body;
-        }
+    if let Some(body) = extract_tagged_comment_body(assistant_texts) {
+        return body;
     }
 
     let last_non_empty = assistant_texts

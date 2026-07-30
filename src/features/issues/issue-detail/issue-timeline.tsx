@@ -104,30 +104,42 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
     issue_comment_added: messages.issues.timelineCommentAdded,
   };
 
+  const isComment =
+    entry.actionType === "issue_comment_added" && Boolean(entry.commentBody);
+
   return (
-    <li className="issue-timeline__entry">
+    <li
+      className={
+        isComment
+          ? "issue-timeline__entry issue-timeline__entry--comment"
+          : "issue-timeline__entry"
+      }
+    >
       <span aria-hidden="true" className="issue-timeline__node" />
-      <img
-        alt=""
-        className="issue-timeline__avatar"
-        src={resolveActorAvatar(entry.actor)}
-      />
-      <span className="issue-timeline__actor">{entry.actor.name}</span>
-      {entry.actionType === "issue_comment_added" && entry.commentBody ? (
+      <div className="issue-timeline__meta">
+        <img
+          alt=""
+          className="issue-timeline__avatar"
+          src={resolveActorAvatar(entry.actor)}
+        />
+        <span className="issue-timeline__actor">{entry.actor.name}</span>
+        {!isComment ? (
+          <span className="issue-timeline__action">
+            {actionText[entry.actionType]}
+          </span>
+        ) : null}
+        <time
+          className="issue-timeline__time"
+          dateTime={new Date(entry.createdAt).toISOString()}
+        >
+          {formatRelativeTime(entry.createdAt, messages)}
+        </time>
+      </div>
+      {isComment && entry.commentBody ? (
         <div className="issue-timeline__comment">
           <AgentMarkdown>{entry.commentBody}</AgentMarkdown>
         </div>
-      ) : (
-        <span className="issue-timeline__action">
-          {actionText[entry.actionType]}
-        </span>
-      )}
-      <time
-        className="issue-timeline__time"
-        dateTime={new Date(entry.createdAt).toISOString()}
-      >
-        {formatRelativeTime(entry.createdAt, messages)}
-      </time>
+      ) : null}
     </li>
   );
 }

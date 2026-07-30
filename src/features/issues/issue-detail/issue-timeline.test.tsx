@@ -124,4 +124,47 @@ describe("IssueTimeline", () => {
     expect(await screen.findByText("已完成提交并验证通过")).toBeVisible();
     expect(screen.getByTestId("agent-markdown")).toBeVisible();
   });
+
+  it("lays out multi-line comments below the meta row, not inline with the avatar", async () => {
+    const longBody = [
+      "按 `matt-dev-workflow` 进入阶段 0。",
+      "",
+      "- 全量导入：`TodoMiggoImportService.importAllFromView`",
+      "",
+      "---",
+      "",
+      "「最新 n 条」按什么取？",
+    ].join("\n");
+
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "issue_comment_added",
+          actor: {
+            name: "codex",
+            avatarPath: null,
+            actorKind: "agent",
+            agentType: "codex",
+          },
+          commentBody: longBody,
+          createdAt: Date.now() - 120_000,
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText(/进入阶段 0/)).toBeVisible();
+    const entry = document.querySelector(".issue-timeline__entry--comment");
+    expect(entry).not.toBeNull();
+    expect(entry?.querySelector(".issue-timeline__meta")).not.toBeNull();
+    expect(entry?.querySelector(".issue-timeline__comment")).not.toBeNull();
+    // 元信息行与评论正文是兄弟节点，避免横向 flex 挤压 Markdown
+    const meta = entry?.querySelector(".issue-timeline__meta");
+    const comment = entry?.querySelector(".issue-timeline__comment");
+    expect(meta?.nextElementSibling).toBe(comment);
+    expect(screen.getByText("codex")).toBeVisible();
+    // 评论条目不再把 action 文案塞进 meta
+    expect(screen.queryByText("commented")).toBeNull();
+  });
 });

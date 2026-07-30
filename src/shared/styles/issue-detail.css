@@ -403,9 +403,8 @@
 
 .issue-timeline__entry {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 6px;
   min-width: 0;
   padding-left: 18px;
 }
@@ -423,6 +422,7 @@
 .issue-timeline__node {
   position: absolute;
   left: 0;
+  top: 6px;
   width: 9px;
   height: 9px;
   border: 2px solid var(--color-border);
@@ -430,7 +430,15 @@
   background: var(--color-surface);
 }
 
+.issue-timeline__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .issue-timeline__avatar {
+  flex-shrink: 0;
   width: 22px;
   height: 22px;
   border-radius: 999px;
@@ -445,21 +453,67 @@
 }
 
 .issue-timeline__actor {
+  flex-shrink: 0;
   overflow: hidden;
+  max-width: 40%;
   color: var(--color-text);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.issue-timeline__action,
-.issue-timeline__time {
+.issue-timeline__action {
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .issue-timeline__time {
+  flex-shrink: 0;
   margin-left: auto;
+  color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+/* 评论正文独占下一行，避免与头像/时间挤在同一 flex 行导致 Markdown 排版错乱 */
+.issue-timeline__comment {
+  min-width: 0;
+  padding-left: 30px; /* avatar(22) + gap(8) */
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.issue-timeline__comment .agents-message__markdown {
+  min-width: 0;
+}
+
+.issue-timeline__comment .agents-message__markdown > :first-child {
+  margin-top: 0;
+}
+
+.issue-timeline__comment .agents-message__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.issue-timeline__comment .agents-message__code-inline {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.issue-timeline__comment .agents-message__markdown hr {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.issue-timeline__comment .agents-message__markdown pre,
+.issue-timeline__comment .agents-message__code-block {
+  max-width: 100%;
 }
 
 .issue-dialog__panel {
