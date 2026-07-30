@@ -55,9 +55,8 @@ pub const APP_THEME_PREFERENCE_CHANGED_EVENT: &str = "app-theme-preference-chang
 
 /// 同步应用主题偏好与已解析终端背景主题：
 /// - 更新 `PtySessionManager` 中的已解析主题（供后续 spawn 的 `COLORFGBG` / OSC 应答）
+/// - 对已运行 PTY 尽力推送 OSC 10/11/12 颜色报告（写失败不阻断本 command）
 /// - 广播偏好变更事件，供各窗 `I18nProvider` 同步 UI 与 Settings 选中态
-///
-/// 运行中 PTY 的主动 OSC 推送由后续 ticket 扩展；本 command 为统一写入入口。
 #[tauri::command]
 pub fn set_app_theme(
     app: tauri::AppHandle,
@@ -328,5 +327,42 @@ mod set_app_theme_tests {
 
         assert_eq!(event.theme_preference, ThemePreference::Dark);
         assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Dark);
+    }
+
+    #[test]
+    fn apply_set_app_theme_succeeds_with_no_live_sessions() {
+        let manager = PtySessionManager::new();
+        let input = SetAppThemeInput {
+            theme_preference: ThemePreference::Light,
+            theme: TerminalBackgroundTheme::Light,
+        };
+        let event = apply_set_app_theme(&manager, &input);
+        assert_eq!(event.theme_preference, ThemePreference::Light);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
+    }
+
+    #[test]
+    fn apply_set_app_theme_pushes_osc_to_live_sessions_best_effort() {
+        use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
+
+        let manager = PtySessionManager::new();
+        let buf = manager.insert_capturing_session_for_test(42);
+        manager.insert_failing_session_for_test(43);
+
+        let input = SetAppThemeInput {
+            theme_preference: ThemePreference::System,
+            theme: TerminalBackgroundTheme::Light,
+        };
+        let event = apply_set_app_theme(&manager, &input);
+
+        assert_eq!(event.theme_preference, ThemePreference::System);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
+        assert_eq!(
+            buf.lock().expect("buf").as_slice(),
+            format_theme_osc_color_reports(TerminalBackgroundTheme::Light).as_slice()
+        );
+
+        let _ = manager.kill(42);
+        let _ = manager.kill(43);
     }
 }

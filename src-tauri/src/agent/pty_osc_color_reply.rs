@@ -197,6 +197,33 @@ pub fn format_osc_color_reply(code: u8, (r, g, b): (u8, u8, u8)) -> Vec<u8> {
     format!("\x1b]{code};rgb:{rr}/{gg}/{bb}\x1b\\").into_bytes()
 }
 
+/// 主动推送给已运行 PTY 的 OSC 10/11/12 颜色报告（与查询应答字节一致）。
+///
+/// 供主题切换时尽力通知 Codex 等 TUI 重取默认前景/背景/光标色；不保证对端必消费。
+pub fn format_theme_osc_color_reports(theme: TerminalBackgroundTheme) -> Vec<u8> {
+    let colors = theme.osc_colors();
+    let mut reports = format_osc_color_reply(10, colors.foreground);
+    reports.extend(format_osc_color_reply(11, colors.background));
+    reports.extend(format_osc_color_reply(12, colors.cursor));
+    reports
+}
+
+/// 尽力将 payload 写入目标；写/flush 失败吞掉，供主题推送等 best-effort 路径使用。
+pub fn best_effort_write_all(writer: &mut dyn std::io::Write, payload: &[u8]) {
+    let _ = writer.write_all(payload);
+    let _ = writer.flush();
+}
+
+/// 对多个 writer 依次 best-effort 写入同一 payload；单路失败不影响后续。
+pub fn best_effort_write_all_to_each(
+    writers: &mut [&mut dyn std::io::Write],
+    payload: &[u8],
+) {
+    for writer in writers {
+        best_effort_write_all(*writer, payload);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,5 +288,83 @@ mod tests {
             "dark OSC background {:?} too close to pure black; Codex composer washout",
             bg
         );
+    }
+
+    #[test]
+    fn theme_reports_include_osc_10_11_12_matching_query_replies() {
+        let dark = format_theme_osc_color_reports(TerminalBackgroundTheme::Dark);
+        let colors = TerminalBackgroundTheme::Dark.osc_colors();
+        let mut expected = format_osc_color_reply(10, colors.foreground);
+        expected.extend(format_osc_color_reply(11, colors.background));
+        expected.extend(format_osc_color_reply(12, colors.cursor));
+        assert_eq!(dark, expected);
+
+        let light = format_theme_osc_color_reports(TerminalBackgroundTheme::Light);
+        let colors = TerminalBackgroundTheme::Light.osc_colors();
+        let mut expected = format_osc_color_reply(10, colors.foreground);
+        expected.extend(format_osc_color_reply(11, colors.background));
+        expected.extend(format_osc_color_reply(12, colors.cursor));
+        assert_eq!(light, expected);
+    }
+
+    #[test]
+    fn theme_reports_use_known_palette_literals() {
+        // 独立真值：与 terminal-theme / osc_colors 约定色值对齐，防回归洗白。
+        let dark = String::from_utf8(format_theme_osc_color_reports(
+            TerminalBackgroundTheme::Dark,
+        ))
+        .expect("utf8");
+        assert!(dark.contains("]10;rgb:f2f2/f3f3/f5f5"));
+        assert!(dark.contains("]11;rgb:1f1f/2020/2222"));
+        assert!(dark.contains("]12;rgb:f5f5/f5f5/f5f5"));
+
+        let light = String::from_utf8(format_theme_osc_color_reports(
+            TerminalBackgroundTheme::Light,
+        ))
+        .expect("utf8");
+        assert!(light.contains("]10;rgb:1616/1515/1515"));
+        assert!(light.contains("]11;rgb:ffff/ffff/ffff"));
+        assert!(light.contains("]12;rgb:1616/1515/1515"));
+    }
+
+    #[test]
+    fn best_effort_write_delivers_theme_reports_to_all_writers() {
+        let payload = format_theme_osc_color_reports(TerminalBackgroundTheme::Light);
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        {
+            let mut writers: [&mut dyn std::io::Write; 2] = [&mut a, &mut b];
+            best_effort_write_all_to_each(&mut writers, &payload);
+        }
+        assert_eq!(a, payload);
+        assert_eq!(b, payload);
+    }
+
+    #[test]
+    fn best_effort_write_swallows_errors_and_continues() {
+        struct FailingWriter;
+        impl std::io::Write for FailingWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "forced write failure",
+                ))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "forced flush failure",
+                ))
+            }
+        }
+
+        let payload = format_theme_osc_color_reports(TerminalBackgroundTheme::Dark);
+        let mut failing = FailingWriter;
+        let mut ok = Vec::new();
+        {
+            let mut writers: [&mut dyn std::io::Write; 2] = [&mut failing, &mut ok];
+            best_effort_write_all_to_each(&mut writers, &payload);
+        }
+        assert_eq!(ok, payload);
     }
 }

@@ -192,11 +192,28 @@ impl PtySessionManager {
         Self { store }
     }
 
-    /// 更新终端背景主题；后续 spawn 的 PTY 会据此注入 `COLORFGBG`。
-    /// 已运行的 session 不会回溯更新（子进程仅在启动时读取一次该变量）。
+    /// 更新终端背景主题：
+    /// - 后续 spawn 的 PTY 注入新的 `COLORFGBG`，OSC 查询应答也读此状态；
+    /// - 对已运行 session 尽力写入 OSC 10/11/12 颜色报告（写失败吞掉，不阻断调用方）。
     pub fn set_theme(&self, theme: TerminalBackgroundTheme) {
         if let Ok(mut app_theme) = self.store.app_theme.lock() {
             *app_theme = theme;
+        }
+        self.push_theme_osc_to_live_sessions(theme);
+    }
+
+    /// 尽力向全部存活 PTY 推送与查询应答一致的 OSC 10/11/12 报告。
+    fn push_theme_osc_to_live_sessions(&self, theme: TerminalBackgroundTheme) {
+        let payload = crate::agent::pty_osc_color_reply::format_theme_osc_color_reports(theme);
+        let handles: Vec<Arc<PtySessionHandle>> = match self.store.sessions.lock() {
+            Ok(sessions) => sessions.values().cloned().collect(),
+            Err(_) => return,
+        };
+        for handle in handles {
+            let Ok(mut writer) = handle.writer.lock() else {
+                continue;
+            };
+            crate::agent::pty_osc_color_reply::best_effort_write_all(&mut *writer, &payload);
         }
     }
 
@@ -207,6 +224,88 @@ impl PtySessionManager {
             .lock()
             .map(|theme| *theme)
             .unwrap_or(TerminalBackgroundTheme::Dark)
+    }
+
+    /// 注入带捕获 writer 的伪存活 session（真实 master/killer，写路径可观测）。
+    #[cfg(test)]
+    pub(crate) fn insert_capturing_session_for_test(
+        &self,
+        session_id: i64,
+    ) -> Arc<Mutex<Vec<u8>>> {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let writer: Box<dyn Write + Send> = Box::new(CapturingWriter {
+            buffer: Arc::clone(&buffer),
+            fail: false,
+        });
+        self.insert_session_with_writer_for_test(session_id, writer);
+        buffer
+    }
+
+    /// 注入写失败的伪 session。
+    #[cfg(test)]
+    pub(crate) fn insert_failing_session_for_test(&self, session_id: i64) {
+        let writer: Box<dyn Write + Send> = Box::new(CapturingWriter {
+            buffer: Arc::new(Mutex::new(Vec::new())),
+            fail: true,
+        });
+        self.insert_session_with_writer_for_test(session_id, writer);
+    }
+
+    #[cfg(test)]
+    fn insert_session_with_writer_for_test(
+        &self,
+        session_id: i64,
+        writer: Box<dyn Write + Send>,
+    ) {
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("openpty for theme test");
+        // 真实 writer 丢弃，改用可观测/可失败 writer，仅验证推送路径。
+        drop(pair.master.take_writer().expect("take writer"));
+
+        let mut command = CommandBuilder::new("sleep");
+        command.arg("30");
+        let child = pair
+            .slave
+            .spawn_command(command)
+            .expect("spawn sleep for theme test");
+        let killer = child.clone_killer();
+        // 保持 child 存活至 killer drop；detach 到后台 wait 避免僵尸。
+        thread::spawn(move || {
+            let mut child = child;
+            let _ = child.wait();
+        });
+
+        let handle = Arc::new(PtySessionHandle {
+            master: Mutex::new(pair.master),
+            writer: Mutex::new(writer),
+            killer: Mutex::new(killer),
+            restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
+            log: Mutex::new(PtyLogWriter {
+                path: std::path::PathBuf::from(format!(
+                    "/tmp/redwhisk-theme-test-{session_id}.log"
+                )),
+                file: None,
+                unflushed_bytes: 0,
+                bytes_since_trim_check: 0,
+            }),
+            routing: Arc::new(PtySessionRouting {
+                project_id: AtomicI64::new(0),
+                session_id: AtomicI64::new(session_id),
+                registered: AtomicBool::new(true),
+            }),
+        });
+        self.store
+            .sessions
+            .lock()
+            .expect("lock sessions")
+            .insert(session_id, handle);
     }
 
     /// 解析并缓存「login+interactive shell」的完整 `$PATH`，供 PTY 子进程注入。
@@ -1085,11 +1184,45 @@ fn shell_quote(value: &str) -> String {
 }
 
 #[cfg(test)]
+struct CapturingWriter {
+    buffer: Arc<Mutex<Vec<u8>>>,
+    fail: bool,
+}
+
+#[cfg(test)]
+impl Write for CapturingWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.fail {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "capturing writer forced failure",
+            ));
+        }
+        self.buffer
+            .lock()
+            .expect("capturing writer buffer")
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if self.fail {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "capturing writer forced flush failure",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{
         build_shell_keepalive_command_line, build_shell_command_line, trim_log_file,
-        TerminalBackgroundTheme,
+        PtySessionManager, TerminalBackgroundTheme,
     };
+    use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
     use std::io::Write;
 
     #[test]
@@ -1188,5 +1321,55 @@ mod tests {
         assert!(content.contains("dddd") || content.ends_with("dddd\n") || content.contains("ccc"));
     }
 
+    #[test]
+    fn set_theme_with_no_sessions_only_updates_stored_theme() {
+        let manager = PtySessionManager::new();
+        manager.set_theme(TerminalBackgroundTheme::Light);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
+        manager.set_theme(TerminalBackgroundTheme::Dark);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Dark);
+    }
 
+    #[test]
+    fn set_theme_pushes_osc_reports_to_all_live_sessions() {
+        let manager = PtySessionManager::new();
+        let buf_a = manager.insert_capturing_session_for_test(11);
+        let buf_b = manager.insert_capturing_session_for_test(22);
+
+        manager.set_theme(TerminalBackgroundTheme::Light);
+
+        let expected = format_theme_osc_color_reports(TerminalBackgroundTheme::Light);
+        assert_eq!(
+            buf_a.lock().expect("buf a").as_slice(),
+            expected.as_slice()
+        );
+        assert_eq!(
+            buf_b.lock().expect("buf b").as_slice(),
+            expected.as_slice()
+        );
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
+
+        // 清理：杀掉伪 session 的 sleep 子进程
+        let _ = manager.kill(11);
+        let _ = manager.kill(22);
+    }
+
+    #[test]
+    fn set_theme_swallows_writer_errors_and_continues() {
+        let manager = PtySessionManager::new();
+        manager.insert_failing_session_for_test(1);
+        let ok_buf = manager.insert_capturing_session_for_test(2);
+
+        manager.set_theme(TerminalBackgroundTheme::Dark);
+
+        let expected = format_theme_osc_color_reports(TerminalBackgroundTheme::Dark);
+        assert_eq!(
+            ok_buf.lock().expect("ok buf").as_slice(),
+            expected.as_slice()
+        );
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Dark);
+
+        let _ = manager.kill(1);
+        let _ = manager.kill(2);
+    }
 }
