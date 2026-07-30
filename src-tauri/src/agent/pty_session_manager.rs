@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use crate::agent::terminal_log_tail::{safe_terminal_log_tail_start, take_terminal_log_tail};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
 const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -92,15 +92,8 @@ pub enum PtyCommandMode {
     InteractiveRun,
 }
 
-/// 应用终端背景主题，用于在 spawn 时向 PTY 子进程声明背景深浅（注入 `COLORFGBG`），
-/// 使 Claude Code / Codex 等 CLI 能按终端实际背景选择匹配的配色，避免深色背景上深色
-/// 输出不可见（或反之）。值由前端解析 `light` / `dark`（含 system 跟随）后同步。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TerminalBackgroundTheme {
-    Light,
-    Dark,
-}
+/// 跨边界 DTO 见 `types::app_theme::TerminalBackgroundTheme`。
+pub use crate::types::app_theme::TerminalBackgroundTheme;
 
 impl TerminalBackgroundTheme {
     /// 返回 `COLORFGBG` 取值（`"fg;bg"`）。CLI 按 bg 索引判定深浅：
@@ -205,6 +198,15 @@ impl PtySessionManager {
         if let Ok(mut app_theme) = self.store.app_theme.lock() {
             *app_theme = theme;
         }
+    }
+
+    #[cfg(test)]
+    pub fn theme_for_test(&self) -> TerminalBackgroundTheme {
+        self.store
+            .app_theme
+            .lock()
+            .map(|theme| *theme)
+            .unwrap_or(TerminalBackgroundTheme::Dark)
     }
 
     /// 解析并缓存「login+interactive shell」的完整 `$PATH`，供 PTY 子进程注入。

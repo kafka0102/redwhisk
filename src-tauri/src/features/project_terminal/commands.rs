@@ -1,9 +1,8 @@
-use serde::Deserialize;
-use tauri::State;
+use tauri::{Emitter, State};
 
-use crate::agent::pty_session_manager::TerminalBackgroundTheme;
 use crate::app_state::AppState;
 use super::service::ProjectTerminalService;
+use crate::types::app_theme::{AppThemePreferenceChangedEvent, SetAppThemeInput};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
@@ -51,21 +50,41 @@ pub fn create_temporary_project_terminal(
     )
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetAppThemeInput {
-    pub theme: TerminalBackgroundTheme,
-}
+/// 全局主题偏好变更事件（跨窗 UI 同步）。
+pub const APP_THEME_PREFERENCE_CHANGED_EVENT: &str = "app-theme-preference-changed";
 
-/// 同步前端解析后的终端背景主题（`light` / `dark`，已含 system 跟随），
-/// 供后续 spawn 的 PTY 注入 `COLORFGBG`。已运行的 session 不受影响。
+/// 同步应用主题偏好与已解析终端背景主题：
+/// - 更新 `PtySessionManager` 中的已解析主题（供后续 spawn 的 `COLORFGBG` / OSC 应答）
+/// - 广播偏好变更事件，供各窗 `I18nProvider` 同步 UI 与 Settings 选中态
+///
+/// 运行中 PTY 的主动 OSC 推送由后续 ticket 扩展；本 command 为统一写入入口。
 #[tauri::command]
 pub fn set_app_theme(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: SetAppThemeInput,
 ) -> Result<(), CommandError> {
-    state.pty_sessions.set_theme(input.theme);
+    let event = apply_set_app_theme(&state.pty_sessions, &input);
+    emit_app_theme_preference_changed(&app, &event);
     Ok(())
+}
+
+/// 应用主题写入核心：更新 PTY 主题状态并构造跨窗事件载荷（可单测）。
+pub(crate) fn apply_set_app_theme(
+    pty_sessions: &crate::agent::pty_session_manager::PtySessionManager,
+    input: &SetAppThemeInput,
+) -> AppThemePreferenceChangedEvent {
+    pty_sessions.set_theme(input.theme);
+    AppThemePreferenceChangedEvent {
+        theme_preference: input.theme_preference,
+    }
+}
+
+fn emit_app_theme_preference_changed(
+    app: &tauri::AppHandle,
+    event: &AppThemePreferenceChangedEvent,
+) {
+    let _ = app.emit(APP_THEME_PREFERENCE_CHANGED_EVENT, event);
 }
 
 #[tauri::command]
@@ -269,4 +288,45 @@ fn prepare_project_terminal_data_dir(
     }
 
     Ok(data_dir)
+}
+
+
+#[cfg(test)]
+mod set_app_theme_tests {
+    use super::apply_set_app_theme;
+    use crate::agent::pty_session_manager::PtySessionManager;
+    use crate::types::app_theme::{
+        SetAppThemeInput, TerminalBackgroundTheme, ThemePreference,
+    };
+
+    #[test]
+    fn apply_set_app_theme_stores_resolved_theme_and_returns_preference_event() {
+        let manager = PtySessionManager::new();
+        let input = SetAppThemeInput {
+            theme_preference: ThemePreference::System,
+            theme: TerminalBackgroundTheme::Light,
+        };
+
+        let event = apply_set_app_theme(&manager, &input);
+
+        assert_eq!(event.theme_preference, ThemePreference::System);
+        assert_eq!(
+            manager.theme_for_test(),
+            TerminalBackgroundTheme::Light
+        );
+    }
+
+    #[test]
+    fn apply_set_app_theme_preserves_dark_preference_with_dark_resolved_theme() {
+        let manager = PtySessionManager::new();
+        let input = SetAppThemeInput {
+            theme_preference: ThemePreference::Dark,
+            theme: TerminalBackgroundTheme::Dark,
+        };
+
+        let event = apply_set_app_theme(&manager, &input);
+
+        assert_eq!(event.theme_preference, ThemePreference::Dark);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Dark);
+    }
 }

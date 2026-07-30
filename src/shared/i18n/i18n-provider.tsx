@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -27,7 +28,12 @@ import {
 } from "./i18n-constants";
 import { createMessagesProxy } from "./messages-bridge";
 import type { I18nMessages } from "./messages";
-import { setAppTheme } from "../commands/app-commands";
+import {
+  APP_THEME_PREFERENCE_CHANGED_EVENT,
+  isAppThemePreferenceChangedEvent,
+  setAppTheme,
+} from "../commands/app-commands";
+import { subscribeTauriEvent } from "../tauri-event/use-tauri-event";
 
 interface I18nContextValue {
   t: TFunction;
@@ -82,6 +88,13 @@ export function I18nProvider({
     getInitialNotificationReminder,
   );
   const theme = resolveDocumentTheme(themePreference, systemTheme);
+  // 远端跨窗事件应用本地状态时跳过一次后端写回，避免环路广播。
+  const skipBackendThemeSyncRef = useRef(false);
+  const themePreferenceRef = useRef(themePreference);
+
+  useEffect(() => {
+    themePreferenceRef.current = themePreference;
+  });
 
   useEffect(() => {
     if (themePreference !== "system" || !canMatchDarkScheme()) {
@@ -101,10 +114,42 @@ export function I18nProvider({
 
   useEffect(() => {
     window.document.documentElement.dataset.theme = theme;
-    void setAppTheme({ theme }).catch(() => {
+  }, [theme]);
+
+  useEffect(() => {
+    if (skipBackendThemeSyncRef.current) {
+      skipBackendThemeSyncRef.current = false;
+      return;
+    }
+    void setAppTheme({ theme, themePreference }).catch(() => {
       // 后端未就绪或同步失败时忽略；theme 下次变化会重试。
     });
-  }, [theme]);
+  }, [theme, themePreference]);
+
+  useEffect(() => {
+    return subscribeTauriEvent(
+      APP_THEME_PREFERENCE_CHANGED_EVENT,
+      (payload) => {
+        if (!isAppThemePreferenceChangedEvent(payload)) {
+          return;
+        }
+        const nextPreference = payload.themePreference;
+        if (nextPreference === themePreferenceRef.current) {
+          return;
+        }
+        skipBackendThemeSyncRef.current = true;
+        if (nextPreference === "system") {
+          setSystemTheme(getSystemTheme());
+        }
+        setThemePreferenceState(nextPreference);
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, nextPreference);
+        } catch {
+          // Ignore persistence failures; runtime state still updates.
+        }
+      },
+    );
+  }, []);
 
   useEffect(() => {
     window.document.documentElement.style.setProperty(

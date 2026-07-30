@@ -25,7 +25,7 @@
 | Skill 索引   | `list_agent_skills`、`refresh_agent_skills`（返回 `changedCount`）、`reconcile_saved_agent_skills`                                                                   | `features/settings/settings-commands.ts`                            | `features/settings/agent_skill_commands.rs` |
 | 会话监控窗口 | 打开/关闭 monitor、列出与定位会话                                                                                                                                  | `features/agents/session-notifications/session-monitor-commands.ts` | `features/agent_session/session_monitor_commands.rs` |
 | 应用更新     | `get_update_status`、`dismiss_update_prompt`                                                                                                                       | `shared/commands/app-update-commands.ts`                            | `features/app_update/commands.rs`        |
-| 应用主题     | `set_app_theme`（当前挂在 `project_terminal` 模块，语义属应用级，未来宜迁出）                                                                                      | `shared/commands/app-commands.ts`                                   | `features/project_terminal/commands.rs`  |
+| 应用主题     | `set_app_theme`（入参 `themePreference` + 已解析 `theme`；当前挂在 `project_terminal` 模块，语义属应用级，未来宜迁出）                                              | `shared/commands/app-commands.ts`                                   | `features/project_terminal/commands.rs`、`types/app_theme.rs`  |
 
 新增 command 必须同时更新 Rust DTO、adapter、`generate_handler!`、前端 wrapper、类型和成功/失败路径测试；并同步更新本注册表对应行 + 错误码到前端 locale 的映射（见错误码边界表）。不要只在本表新增名称。
 
@@ -49,6 +49,7 @@
 | `agent-session-list-changed`    | 会话列表变更（`projectId`、`sessionId`、`reason`）                              | `agent_event_broadcaster.rs`、`features/agent_session/commands.rs`（`emit_agent_session_list_changed`） | 会话增删/标题/attention 变更；前端 `agents/agent-session-events.ts`（常量）、`agents/use-agent-session-list.ts`（`agents-activity.tsx` 间接消费）、`changes/use-changes-auto-refresh.ts` 据此去抖刷新 |
 | `code-workspace-roots-updated`  | Code workspace 根目录变更                                                       | `features/agent_session/workspace_commands.rs`（`emit_code_workspace_roots_updated`） | worktree/code 根目录刷新；前端 `code/use-code-workspace-roots.ts` 重新拉取 |
 | `update-prompt-changed`         | `UpdateStatus`                                                                  | `features/app_update/commands.rs` | 应用更新提示状态变更；前端 `app-update/use-update-status.ts` 刷新徽章 |
+| `app-theme-preference-changed`  | `AppThemePreferenceChangedEvent`（`themePreference`）                           | `features/project_terminal/commands.rs`（`emit_app_theme_preference_changed`） | 全局主题偏好跨窗同步；前端 `shared/i18n/i18n-provider.tsx` 更新偏好/localStorage 并本地解析 light/dark |
 | `issue-timeline-changed`        | Issue 时间轴变更                                                                | `features/issue/completion_comment.rs`  | 评论自动发表后广播；前端 `issues/issue-detail/issue-timeline.tsx` 刷新当前 Issue 时间轴 |
 
 新增 event 必须有 kebab-case 名、定位实体 ID、Rust payload 类型、前端 listener 的释放逻辑和至少一条序列/重连行为测试。事件名以 `pub const`（或文件内 `const`）定义；生产者封装为 `emit_*` 函数；跨窗口广播用 `emit_to`；前端 listener 必须在卸载时释放并覆盖序列/重连测试。

@@ -3,6 +3,7 @@ pub mod agent_session;
 pub mod agent_session_terminal;
 pub mod agent_session_stream;
 pub mod agent_skill;
+pub mod app_theme;
 pub mod app_update;
 pub mod completion_attempt;
 pub mod errors;

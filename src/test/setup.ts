@@ -1,6 +1,12 @@
 import { cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// 非 Tauri 环境默认 stub listen，避免 I18nProvider 等全局订阅在 jsdom 中产生
+// unhandled rejection；需要断言订阅行为的用例可在文件内覆盖 mock。
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
 
 // jsdom 不实现 requestIdleCallback / cancelIdleCallback。源码（如
 // agents-activity.tsx 的 loadSessions）在 session 列表加载后用它延迟加载非关键

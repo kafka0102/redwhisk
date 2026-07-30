@@ -62,7 +62,9 @@ export function applyBootstrapDocumentTheme(
   return theme;
 }
 
-function isThemePreference(value: string | null): value is ThemePreference {
+export function isThemePreference(
+  value: string | null,
+): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
 }
 

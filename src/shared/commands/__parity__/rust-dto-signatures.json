@@ -212,6 +212,18 @@
         "outputTokens": "optional"
       }
     },
+    "AppThemePreferenceChangedEvent": {
+      "fields": {
+        "themePreference": "required"
+      }
+    },
+    "BranchSyncStatus": {
+      "fields": {
+        "ahead": "required",
+        "behind": "required",
+        "upstream": "required"
+      }
+    },
     "CancelAgentTurnInput": {
       "fields": {
         "projectId": "required",
@@ -892,6 +904,7 @@
     },
     "ProjectWorktreeChangesResponse": {
       "fields": {
+        "branchSync": "optional",
         "files": "required",
         "signature": "required"
       }
@@ -1209,6 +1222,12 @@
         "effort": "optional",
         "projectId": "required",
         "sessionId": "required"
+      }
+    },
+    "SetAppThemeInput": {
+      "fields": {
+        "theme": "required",
+        "themePreference": "required"
       }
     },
     "StartAgentSessionInput": {
@@ -1790,6 +1809,21 @@
         "session_prompt_injected",
         "session_attention_requested",
         "session_attention_cleared"
+      ]
+    },
+    "TerminalBackgroundTheme": {
+      "rename": "camelCase",
+      "variants": [
+        "light",
+        "dark"
+      ]
+    },
+    "ThemePreference": {
+      "rename": "camelCase",
+      "variants": [
+        "light",
+        "dark",
+        "system"
       ]
     },
     "ToolCallDetail": {

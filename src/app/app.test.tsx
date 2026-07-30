@@ -582,10 +582,18 @@ describe("App project entry", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(tauriEventMocks.listeners).toHaveLength(1);
+      expect(
+        tauriEventMocks.listeners.some(
+          (listener) => listener.eventName === "open-agent-session",
+        ),
+      ).toBe(true);
     });
 
-    tauriEventMocks.listeners[0].callback({
+    const openSessionListener = tauriEventMocks.listeners.find(
+      (listener) => listener.eventName === "open-agent-session",
+    );
+    expect(openSessionListener).toBeDefined();
+    openSessionListener?.callback({
       payload: { projectId: 1, sessionId: 77 },
     });
 
