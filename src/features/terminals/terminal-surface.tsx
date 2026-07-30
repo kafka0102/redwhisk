@@ -1,6 +1,5 @@
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import {
@@ -25,7 +24,12 @@ import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
 import { persistTerminalViewPosition } from "./terminal-history-writer";
 import { createTerminalShiftWheelScrollHandler } from "./terminal-shift-wheel-scroll";
-import { createTerminalSurfaceLiveHandlers } from "./terminal-surface-live-handlers";
+import {
+  createTerminalSurfaceLiveHandlers,
+  healTerminalViewport,
+} from "./terminal-surface-live-handlers";
+import { createTerminalWebglSession } from "./terminal-webgl-session";
+import { createTerminalXtermOptions } from "./terminal-xterm-options";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
 import {
   isCopyShortcut,
@@ -38,7 +42,6 @@ import { useI18n } from "../../shared/i18n/i18n";
 
 const TERMINAL_STATUS_MAX_BYTES = 1;
 const TERMINAL_STATUS_POLL_MS = 2_000;
-const TERMINAL_WORD_SEPARATOR = " ()[]{}',\"`";
 
 type TerminalStatusSource =
   | "boot"
@@ -131,7 +134,9 @@ export function TerminalSurface({
 
     let terminal: Terminal;
     let fitAddon: FitAddon;
-    let webglAddon: WebglAddon | null = null;
+    let isDisposed = false;
+    let webglSession: ReturnType<typeof createTerminalWebglSession> | null =
+      null;
     let imeInputGuard: ReturnType<typeof installTerminalImeInputGuard> | null =
       null;
     const imeFallbackSendRef: { current: ((data: string) => void) | null } = {
@@ -155,31 +160,12 @@ export function TerminalSurface({
     };
 
     try {
-      terminal = new Terminal({
-        allowTransparency: false,
-        convertEol: false,
-        cursorBlink: false,
-        cursorInactiveStyle: "outline",
-        cursorStyle: "block",
-        disableStdin: false,
-        fontFamily:
-          '"SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace',
-        fontSize: contentFontSizeRef.current,
-        fontWeight: "normal",
-        fontWeightBold: "bold",
-        letterSpacing: 0,
-        lineHeight: 1,
-        // 兜底 TUI 用 truecolor 画出的浅色前景（Codex / Claude Code 在 light 背景上
-        // 常见）：xterm 默认 1（不调整），低于该比值的 cell 前景会被动态提亮到可见。
-        minimumContrastRatio: 4.5,
-        rightClickSelectsWord: false,
-        scrollOnEraseInDisplay: true,
-        scrollOnUserInput: true,
-        scrollback: 10_000,
-        smoothScrollDuration: 0,
-        theme: getTerminalTheme(themeRef.current),
-        wordSeparator: TERMINAL_WORD_SEPARATOR,
-      });
+      terminal = new Terminal(
+        createTerminalXtermOptions({
+          contentFontSize: contentFontSizeRef.current,
+          theme: themeRef.current,
+        }),
+      );
       fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(new ClipboardAddon());
@@ -191,16 +177,9 @@ export function TerminalSurface({
             },
           })
         : null;
-      try {
-        webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          webglAddon?.dispose();
-          webglAddon = null;
-        });
-        terminal.loadAddon(webglAddon);
-      } catch {
-        webglAddon = null;
-      }
+      webglSession = createTerminalWebglSession(terminal, {
+        isCurrent: () => !isDisposed && terminalRef.current === terminal,
+      });
       fitAddon.fit();
     } catch (error) {
       const message = getCommandErrorMessage(error, t);
@@ -302,7 +281,6 @@ export function TerminalSurface({
 
     statusSourceRef.current = null;
 
-    let isDisposed = false;
     let statusTimer: number | null = null;
     let unlistenOutput: (() => void) | null = null;
     let desiredVisible = false;
@@ -396,6 +374,10 @@ export function TerminalSurface({
     window.addEventListener("resize", handleWindowResize);
 
     const handleVisibilityChange = () => {
+      // 系统休眠恢复时 desiredVisible 可能未变，但仍需清 WebGL 纹理（xterm 官方场景）。
+      if (document.visibilityState === "visible" && isLayoutVisible()) {
+        healTerminalViewport(terminal);
+      }
       void refreshLiveVisibility();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -471,7 +453,7 @@ export function TerminalSurface({
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();
       imeInputGuard?.dispose();
-      webglAddon?.dispose();
+      webglSession?.dispose();
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;

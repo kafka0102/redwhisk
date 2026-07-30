@@ -1,10 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createTerminalSurfaceLiveHandlers } from "./terminal-surface-live-handlers";
+import {
+  TERMINAL_WEBGL_ATLAS_HEAL_EVERY_BYTES,
+  createTerminalSurfaceLiveHandlers,
+  healTerminalViewport,
+} from "./terminal-surface-live-handlers";
 
 function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }
+
+describe("healTerminalViewport", () => {
+  it("clears webgl texture atlas then refreshes the viewport", () => {
+    const terminal = {
+      clearTextureAtlas: vi.fn(),
+      refresh: vi.fn(),
+      rows: 24,
+    };
+
+    healTerminalViewport(terminal as never);
+
+    expect(terminal.clearTextureAtlas).toHaveBeenCalledTimes(1);
+    expect(terminal.refresh).toHaveBeenCalledWith(0, 23);
+  });
+});
 
 describe("createTerminalSurfaceLiveHandlers", () => {
   it("does not show inplace scroll hint after CUP-heavy live writes", async () => {
@@ -15,6 +34,9 @@ describe("createTerminalSurfaceLiveHandlers", () => {
       write: vi.fn((_bytes: Uint8Array, cb?: () => void) => {
         writeCallback = cb;
       }),
+      clearTextureAtlas: vi.fn(),
+      refresh: vi.fn(),
+      rows: 24,
       buffer: { active: { baseY: 0, viewportY: 0 } },
       reset: vi.fn(),
       scrollToBottom: vi.fn(),
@@ -42,6 +64,9 @@ describe("createTerminalSurfaceLiveHandlers", () => {
   it("writes live bytes without depending on removed inplace hint deps", () => {
     const terminal = {
       write: vi.fn(),
+      clearTextureAtlas: vi.fn(),
+      refresh: vi.fn(),
+      rows: 24,
       buffer: { active: { baseY: 5, viewportY: 5 } },
       reset: vi.fn(),
       scrollToBottom: vi.fn(),
@@ -60,9 +85,36 @@ describe("createTerminalSurfaceLiveHandlers", () => {
     handlers.writeBytes(bytes);
     expect(terminal.write).toHaveBeenCalledWith(bytes);
   });
+
+  it("heals webgl atlas after enough live bytes accumulate", () => {
+    const terminal = {
+      write: vi.fn(),
+      clearTextureAtlas: vi.fn(),
+      refresh: vi.fn(),
+      rows: 32,
+      buffer: { active: { baseY: 0, viewportY: 0 } },
+      reset: vi.fn(),
+      scrollToBottom: vi.fn(),
+      scrollToLine: vi.fn(),
+    };
+    const handlers = createTerminalSurfaceLiveHandlers({
+      clearStatusMessage: vi.fn(),
+      setInputSuppressed: vi.fn(),
+      showStatusMessage: vi.fn(),
+      t: ((key: string) => key) as never,
+      terminal: terminal as never,
+      transportKey: "heal",
+    });
+
+    const chunk = new Uint8Array(TERMINAL_WEBGL_ATLAS_HEAL_EVERY_BYTES);
+    handlers.writeBytes(chunk);
+
+    expect(terminal.clearTextureAtlas).toHaveBeenCalledTimes(1);
+    expect(terminal.refresh).toHaveBeenCalledWith(0, 31);
+  });
 });
 
-it("refreshes terminal viewport after history write and live ready", async () => {
+it("heals terminal viewport after history write and live ready", async () => {
   const terminal = {
     write: vi.fn((_data: string, callback?: () => void) => {
       callback?.();
@@ -70,6 +122,7 @@ it("refreshes terminal viewport after history write and live ready", async () =>
     reset: vi.fn(),
     scrollToBottom: vi.fn(),
     scrollToLine: vi.fn(),
+    clearTextureAtlas: vi.fn(),
     refresh: vi.fn(),
     rows: 24,
     buffer: { active: { baseY: 0, viewportY: 0 } },
@@ -84,8 +137,10 @@ it("refreshes terminal viewport after history write and live ready", async () =>
   });
 
   await handlers.writeHistory("prompt$ ", { restoreSequence: 3 });
+  expect(terminal.clearTextureAtlas).toHaveBeenCalledTimes(1);
   expect(terminal.refresh).toHaveBeenCalledWith(0, 23);
 
   handlers.onLiveReady();
+  expect(terminal.clearTextureAtlas).toHaveBeenCalledTimes(2);
   expect(terminal.refresh).toHaveBeenCalledTimes(2);
 });

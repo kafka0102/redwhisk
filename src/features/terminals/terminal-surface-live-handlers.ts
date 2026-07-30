@@ -23,9 +23,16 @@ export interface TerminalSurfaceLiveHandlerDeps {
   transportKey: string | number;
 }
 
-function refreshTerminalViewport(terminal: Terminal): void {
-  // WebGL 在 bulk write / display:none→显示 后可能不主动重绘；
-  // 空闲 shell 无后续 live 帧时会出现“空白，按回车才看见”的假象。
+/** 长会话 TUI 高频重绘后，周期性重建 WebGL 字形图集，避免纹理损坏导致「看起来乱码、复制却正常」。 */
+export const TERMINAL_WEBGL_ATLAS_HEAL_EVERY_BYTES = 512 * 1024;
+
+/**
+ * 强制终端可见区域按当前 buffer 重绘。
+ * WebGL 在 bulk write / display:none→显示 / 系统休眠恢复 后可能保留损坏的字形纹理；
+ * clearTextureAtlas 是 xterm 官方针对纹理损坏的恢复手段，再配合 refresh 拉回画面。
+ */
+export function healTerminalViewport(terminal: Terminal): void {
+  terminal.clearTextureAtlas();
   const bottom = Math.max(0, terminal.rows - 1);
   terminal.refresh(0, bottom);
 }
@@ -33,10 +40,17 @@ function refreshTerminalViewport(terminal: Terminal): void {
 export function createTerminalSurfaceLiveHandlers(
   deps: TerminalSurfaceLiveHandlerDeps,
 ): TerminalLivePipelineCallbacks {
+  let liveBytesSinceHeal = 0;
+
   return {
     writeBytes: (bytes) => {
       try {
         deps.terminal.write(bytes);
+        liveBytesSinceHeal += bytes.byteLength;
+        if (liveBytesSinceHeal >= TERMINAL_WEBGL_ATLAS_HEAL_EVERY_BYTES) {
+          liveBytesSinceHeal = 0;
+          healTerminalViewport(deps.terminal);
+        }
       } catch (error) {
         deps.showStatusMessage("output", getCommandErrorMessage(error, deps.t));
       }
@@ -49,7 +63,8 @@ export function createTerminalSurfaceLiveHandlers(
         String(deps.transportKey),
         meta.restoreSequence,
       );
-      refreshTerminalViewport(deps.terminal);
+      liveBytesSinceHeal = 0;
+      healTerminalViewport(deps.terminal);
     },
     onRestoreError: (error) => {
       deps.showStatusMessage("restore", getCommandErrorMessage(error, deps.t));
@@ -61,7 +76,8 @@ export function createTerminalSurfaceLiveHandlers(
       // 不限定 source：切 session 后 ref 可能已被清空，但仍需去掉粘住的 restore 文案。
       deps.clearStatusMessage();
       // 跳过 rewrite 的 re-visible 路径也依赖这里把 WebGL 纹理刷回来。
-      refreshTerminalViewport(deps.terminal);
+      liveBytesSinceHeal = 0;
+      healTerminalViewport(deps.terminal);
     },
     onPendingDropped: () => {
       deps.showStatusMessage(
