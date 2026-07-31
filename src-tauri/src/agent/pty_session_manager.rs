@@ -67,6 +67,10 @@ struct PtySessionHandle {
     restore_buffer: Mutex<PtyRestoreBuffer>,
     log: Mutex<PtyLogWriter>,
     routing: Arc<PtySessionRouting>,
+    /// 主题切换时是否主动向 stdin 推 OSC 10/11/12。
+    /// Agent TUI（ExecReplace）需要；项目终端交互 shell（InteractiveRun）
+    /// 会把报告当输入回显成 `10;rgb:...` 乱码，必须关闭。
+    accepts_proactive_theme_osc: bool,
 }
 
 struct PtyLogWriter {
@@ -194,7 +198,8 @@ impl PtySessionManager {
 
     /// 更新终端背景主题：
     /// - 后续 spawn 的 PTY 注入新的 `COLORFGBG`，OSC 查询应答也读此状态；
-    /// - 对已运行 session 尽力写入 OSC 10/11/12 颜色报告（写失败吞掉，不阻断调用方）。
+    /// - 对已运行且接受主动推送的 session 尽力写入 OSC 10/11/12 颜色报告
+    ///   （写失败吞掉，不阻断调用方；项目终端交互 shell 不推送，避免命令行乱码）。
     pub fn set_theme(&self, theme: TerminalBackgroundTheme) {
         if let Ok(mut app_theme) = self.store.app_theme.lock() {
             *app_theme = theme;
@@ -202,11 +207,15 @@ impl PtySessionManager {
         self.push_theme_osc_to_live_sessions(theme);
     }
 
-    /// 尽力向全部存活 PTY 推送与查询应答一致的 OSC 10/11/12 报告。
+    /// 尽力向接受主动推送的存活 PTY 推送与查询应答一致的 OSC 10/11/12 报告。
     fn push_theme_osc_to_live_sessions(&self, theme: TerminalBackgroundTheme) {
         let payload = crate::agent::pty_osc_color_reply::format_theme_osc_color_reports(theme);
         let handles: Vec<Arc<PtySessionHandle>> = match self.store.sessions.lock() {
-            Ok(sessions) => sessions.values().cloned().collect(),
+            Ok(sessions) => sessions
+                .values()
+                .filter(|handle| handle.accepts_proactive_theme_osc)
+                .cloned()
+                .collect(),
             Err(_) => return,
         };
         for handle in handles {
@@ -227,17 +236,32 @@ impl PtySessionManager {
     }
 
     /// 注入带捕获 writer 的伪存活 session（真实 master/killer，写路径可观测）。
+    /// 默认接受主题 OSC 主动推送（对齐 Agent TUI）。
     #[cfg(test)]
     pub(crate) fn insert_capturing_session_for_test(
         &self,
         session_id: i64,
+    ) -> Arc<Mutex<Vec<u8>>> {
+        self.insert_capturing_session_with_theme_push_for_test(session_id, true)
+    }
+
+    /// 同 `insert_capturing_session_for_test`，可指定是否接受主题 OSC 推送。
+    #[cfg(test)]
+    pub(crate) fn insert_capturing_session_with_theme_push_for_test(
+        &self,
+        session_id: i64,
+        accepts_proactive_theme_osc: bool,
     ) -> Arc<Mutex<Vec<u8>>> {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let writer: Box<dyn Write + Send> = Box::new(CapturingWriter {
             buffer: Arc::clone(&buffer),
             fail: false,
         });
-        self.insert_session_with_writer_for_test(session_id, writer);
+        self.insert_session_with_writer_for_test(
+            session_id,
+            writer,
+            accepts_proactive_theme_osc,
+        );
         buffer
     }
 
@@ -248,7 +272,7 @@ impl PtySessionManager {
             buffer: Arc::new(Mutex::new(Vec::new())),
             fail: true,
         });
-        self.insert_session_with_writer_for_test(session_id, writer);
+        self.insert_session_with_writer_for_test(session_id, writer, true);
     }
 
     #[cfg(test)]
@@ -256,6 +280,7 @@ impl PtySessionManager {
         &self,
         session_id: i64,
         writer: Box<dyn Write + Send>,
+        accepts_proactive_theme_osc: bool,
     ) {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -300,6 +325,7 @@ impl PtySessionManager {
                 session_id: AtomicI64::new(session_id),
                 registered: AtomicBool::new(true),
             }),
+            accepts_proactive_theme_osc,
         });
         self.store
             .sessions
@@ -442,6 +468,9 @@ impl PtySessionManager {
             restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
             log: Mutex::new(log_writer),
             routing: Arc::clone(&routing),
+            // ExecReplace = Agent TUI：主题切换时主动推 OSC。
+            // InteractiveRun = 项目终端 shell：禁止推送，避免 zsh 命令行乱码。
+            accepts_proactive_theme_osc: matches!(request.mode, PtyCommandMode::ExecReplace),
         });
 
         {
@@ -1331,27 +1360,34 @@ mod tests {
     }
 
     #[test]
-    fn set_theme_pushes_osc_reports_to_all_live_sessions() {
+    fn set_theme_pushes_osc_reports_only_to_accepting_live_sessions() {
         let manager = PtySessionManager::new();
-        let buf_a = manager.insert_capturing_session_for_test(11);
-        let buf_b = manager.insert_capturing_session_for_test(22);
+        let agent_a = manager.insert_capturing_session_with_theme_push_for_test(11, true);
+        let agent_b = manager.insert_capturing_session_with_theme_push_for_test(22, true);
+        let project_shell =
+            manager.insert_capturing_session_with_theme_push_for_test(33, false);
 
         manager.set_theme(TerminalBackgroundTheme::Light);
 
         let expected = format_theme_osc_color_reports(TerminalBackgroundTheme::Light);
         assert_eq!(
-            buf_a.lock().expect("buf a").as_slice(),
+            agent_a.lock().expect("agent a").as_slice(),
             expected.as_slice()
         );
         assert_eq!(
-            buf_b.lock().expect("buf b").as_slice(),
+            agent_b.lock().expect("agent b").as_slice(),
             expected.as_slice()
+        );
+        assert!(
+            project_shell.lock().expect("project shell").is_empty(),
+            "interactive project terminals must not receive proactive OSC theme reports"
         );
         assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
 
         // 清理：杀掉伪 session 的 sleep 子进程
         let _ = manager.kill(11);
         let _ = manager.kill(22);
+        let _ = manager.kill(33);
     }
 
     #[test]

@@ -197,9 +197,10 @@ pub fn format_osc_color_reply(code: u8, (r, g, b): (u8, u8, u8)) -> Vec<u8> {
     format!("\x1b]{code};rgb:{rr}/{gg}/{bb}\x1b\\").into_bytes()
 }
 
-/// 主动推送给已运行 PTY 的 OSC 10/11/12 颜色报告（与查询应答字节一致）。
+/// 主动推送给已运行 Agent TUI PTY 的 OSC 10/11/12 颜色报告（与查询应答字节一致）。
 ///
 /// 供主题切换时尽力通知 Codex 等 TUI 重取默认前景/背景/光标色；不保证对端必消费。
+/// 不得写入项目终端交互 shell 的 stdin（会被 zsh 回显成 `10;rgb:...` 乱码）。
 pub fn format_theme_osc_color_reports(theme: TerminalBackgroundTheme) -> Vec<u8> {
     let colors = theme.osc_colors();
     let mut reports = format_osc_color_reply(10, colors.foreground);

@@ -13,7 +13,7 @@
 1. **单一写入路径**：扩展 `set_app_theme`，入参同时携带 `themePreference`（light/dark/system）与已解析 `theme`（light/dark）。一次调用完成：更新 PTY 主题状态、尽力向已运行 PTY 推送颜色变更通知、并 `app.emit` 主题偏好变更事件。
 2. **跨窗同步**：所有带 `I18nProvider` 的应用窗口（项目窗、会话监控窗等）订阅该事件；接收方以 `themePreference` 更新本地状态与 localStorage 展示一致性，本地再解析 `system`。发送方与接收方须避免环路（同值不重发）。
 3. **范围本期只做主题**：语言 / 字号 / 通知提醒不在本 ADR 范围，即使它们有相同的「只改当前窗」形态。
-4. **运行中 session**：xterm 主题随各窗 `theme` 更新；后端对已运行 PTY 尽力写回 OSC 10/11/12 颜色报告。不重建 terminal surface，不承诺所有 TUI 必重绘；新开 session 必须完全正确。
+4. **运行中 session**：xterm 主题随各窗 `theme` 更新；后端仅对已运行 **Agent TUI** PTY（`ExecReplace`）尽力写回 OSC 10/11/12 颜色报告。项目终端交互 shell（`InteractiveRun`）不主动推送，避免 zsh 把报告当输入回显成乱码。不重建 terminal surface，不承诺所有 TUI 必重绘；新开 session 必须完全正确。
 
 ## 后果
 
