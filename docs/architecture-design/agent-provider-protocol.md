@@ -126,7 +126,7 @@ Agent TUI 会话视图 (xterm)
 新增 **agentType** 或 **displayMode** 取值时，按序核对：
 
 1. **术语与 ADR**：`CONTEXT.md` 术语是否需要扩展？是否新建/更新 ADR（如传输分流）？
-2. **类型与持久化**：Rust / TS 的 `AgentType`、`displayMode`、DTO、migration 默认值与列表字段是否同步？
+2. **类型与持久化**：Rust / TS 的 `AgentType`、`displayMode`、DTO、migration 默认值与列表字段是否同步？**`AgentType` 的 SQLite 字面量只允许维护在 `AgentType::as_db_str` / `from_db_str`**（见 [agent-development-rules 新增 AgentType 门禁](./agent-development-rules.md#新增-agenttype-门禁)）；禁止在 `agent_session_repository` / `agent_profile_repository` 再写第二份解析表。必须有「含新 agent_type 的 session 能被 list」的回归测试，避免再次出现 `Query is not read-only` 拖垮 Agents 列表。
 3. **Descriptor**：`AgentProviderDescriptor` 是否实现 structured 与（若支持）`build_tui_command_snapshot`，以及 `ui_capabilities()`？是否在 `descriptor_for` 注册？`list_agent_models.capabilities` 是否同步？
 4. **Factory / 启动分流**：`provider_factory` 与 `start_*_agent_session` 是否经 `lifecycle::runtime_transport_from_raw` 按 session 快照在 structured / PTY 间分流？未支持组合是否明确失败？
 5. **命令与参数**：TUI 是否避免 app-server / stream-json？mode/dangerous 映射是否有单测？

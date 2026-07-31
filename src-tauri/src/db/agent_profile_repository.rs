@@ -71,7 +71,7 @@ impl<'connection> AgentProfileRepository<'connection> {
         display_mode: &str,
         enabled: bool,
     ) -> rusqlite::Result<AgentProfileRow> {
-        let agent_type_str = agent_type_to_str(&agent_type);
+        let agent_type_str = agent_type.as_db_str();
         let scope_str = scope_to_str(scope);
         let dangerous_int = bool_to_sqlite(dangerous);
         let enabled_int = bool_to_sqlite(enabled);
@@ -152,7 +152,7 @@ impl<'connection> AgentProfileRepository<'connection> {
     ///
     /// 见 ADR-0020：库中已有该类型记录（含软删）则不再自动播种，软删后重启不冒回。
     pub fn exists_profile_by_agent_type(&self, agent_type: AgentType) -> rusqlite::Result<bool> {
-        let agent_type_str = agent_type_to_str(&agent_type);
+        let agent_type_str = agent_type.as_db_str();
         let count: i64 = self.connection.query_row(
             "SELECT COUNT(*) FROM agent_profiles WHERE agent_type = ?1",
             params![agent_type_str],
@@ -183,7 +183,7 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
     Ok(AgentProfileRow {
         id: row.get(0)?,
         name: row.get(1)?,
-        agent_type: agent_type_from_str(&row.get::<_, String>(2)?)?,
+        agent_type: AgentType::from_db_str(&row.get::<_, String>(2)?).ok_or(rusqlite::Error::InvalidQuery)?,
         command: row.get(3)?,
         scope: scope_from_str(&row.get::<_, String>(4)?)?,
         project_id: row.get(5)?,
@@ -195,25 +195,6 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         display_mode: row.get(11)?,
         enabled: sqlite_to_bool(row.get(12)?),
     })
-}
-
-fn agent_type_to_str(agent_type: &AgentType) -> &'static str {
-    match agent_type {
-        AgentType::Codex => "codex",
-        AgentType::Claude => "claude",
-        AgentType::OpenCode => "opencode",
-        AgentType::Grok => "grok",
-    }
-}
-
-fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
-    match value {
-        "codex" => Ok(AgentType::Codex),
-        "claude" => Ok(AgentType::Claude),
-        "opencode" => Ok(AgentType::OpenCode),
-        "grok" => Ok(AgentType::Grok),
-        _ => Err(rusqlite::Error::InvalidQuery),
-    }
 }
 
 fn scope_to_str(scope: &AgentScope) -> &'static str {

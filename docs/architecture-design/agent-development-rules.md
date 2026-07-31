@@ -282,6 +282,25 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 
 ## Agent provider 接入边界
 
+### 新增 AgentType 门禁
+
+扩展 `AgentType`（Rust 枚举 / 前端 TS 联合类型 / SQLite CHECK）时，**禁止只改枚举本身**。漏同步 repository 解析会导致 Agents 页 `list_agent_sessions` 对已落库会话抛 `rusqlite::Error::InvalidQuery`（界面文案常为「Agent Session 启动失败。 Query is not read-only」），表现为「用新 agent 跑过一次后 session 列表全挂；删 session / 回 backlog 后恢复」。
+
+**唯一持久化字符串表**：`AgentType::as_db_str` / `AgentType::from_db_str`（`src-tauri/src/types/agent_profile.rs`）。
+
+| 必改面 | 说明 |
+| --- | --- |
+| `AgentType` 枚举 + `as_db_str` / `from_db_str` | match 必须穷尽；**不得**在 `db/*_repository.rs` 再写第二份 `"codex"/"claude"/…` 映射 |
+| SQLite migration CHECK | `agent_profiles.agent_type`（及任何引用该枚举的 CHECK）与 `as_db_str` 字面量一致 |
+| 前端 `AgentType` / DTO | `src/` 与 Rust serde 命名一致（`opencode` 等特例与 `#[serde(rename)]` 对齐） |
+| `AgentProviderDescriptor` + `descriptor_for` | 新 provider 能力与命令 snapshot；见 [Agent Provider 协议](./agent-provider-protocol.md) |
+| `provider_factory` / lifecycle 分流 | 未支持的 displayMode 组合必须明确失败，不可静默 |
+| 播种 / 预览 / skill 根 | settings 内置 seed 顺序、`builtin` 默认值、skill scanner 归属（若适用） |
+| 回归测试 | **至少**覆盖：`from_db_str`  round-trip；`list_by_project_id`（或等价 list）在含新 `agent_type` 的 session 行上成功（禁止再只测 profile 读写） |
+
+完成判定：存在新 `agent_type` 的 session 时，`list_agent_sessions` 不得因未知类型失败；未知 DB 字面量仅在该行映射失败，错误须可追溯到类型解析而非笼统「启动失败」（调用方可继续用 `InvalidQuery` 等，但根因必须是「漏同步 from_db_str」类变更）。
+
+
 Codex 与 Claude 的 **json** session 走结构化 provider，不走 PTY；**tui** session 走交互式 PTY（见 [ADR-0022](../adr/0022-display-mode-runtime-transport.md) 与 [Agent Provider 协议](./agent-provider-protocol.md)）。职责边界如下：
 
 - Rust 后端负责按 session 快照分流：json 时 spawn structured provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播；tui 时经 `AgentProviderDescriptor::build_tui_command_snapshot` 构造交互式命令并由 `PtySessionManager` 管理进程生命周期。

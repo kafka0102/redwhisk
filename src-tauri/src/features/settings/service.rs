@@ -862,12 +862,7 @@ const BUILTIN_AGENT_SEED_ORDER: [AgentType; 4] = [
 ];
 
 fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
-    match agent_type {
-        AgentType::Codex => "codex",
-        AgentType::Claude => "claude",
-        AgentType::OpenCode => "opencode",
-        AgentType::Grok => "grok",
-    }
+    agent_type.as_db_str()
 }
 
 /// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。

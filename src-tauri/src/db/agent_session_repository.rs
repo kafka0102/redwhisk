@@ -900,7 +900,7 @@ fn agent_session_list_row_from_row(
         agent_profile_id: row.get(7)?,
         agent_profile_name: row.get(8)?,
         title: row.get(9)?,
-        agent_type: agent_type_from_str(&row.get::<_, String>(10)?)?,
+        agent_type: AgentType::from_db_str(&row.get::<_, String>(10)?).ok_or(rusqlite::Error::InvalidQuery)?,
         display_mode: row.get(31)?,
         status: agent_session_status_from_str(&row.get::<_, String>(11)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(12)?)?,
@@ -923,16 +923,6 @@ fn agent_session_list_row_from_row(
         processing_ms: row.get(29)?,
         last_output_at: row.get::<_, Option<i64>>(30)?,
     })
-}
-
-fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
-    match value {
-        "codex" => Ok(AgentType::Codex),
-        "claude" => Ok(AgentType::Claude),
-        "opencode" => Ok(AgentType::OpenCode),
-        "grok" => Ok(AgentType::Grok),
-        _ => Err(rusqlite::Error::InvalidQuery),
-    }
 }
 
 fn agent_session_status_from_str(value: &str) -> rusqlite::Result<AgentSessionStatus> {
