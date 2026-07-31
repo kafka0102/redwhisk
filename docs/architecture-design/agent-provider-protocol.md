@@ -1,6 +1,6 @@
 # Agent Provider 协议
 
-RedWhisk 当前正式支持 `codex`、`claude` 与 OpenCode（TUI 进程级）Agent provider；Grok 仍为登记占位。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
+RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent provider；其中 codex/claude/opencode 走结构化（json）与交互式（tui）两路，Grok 为 **TUI-only**（交互式 PTY，displayMode 锁定 `tui`，不接结构化 json 路径）。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
 
 ## 统一边界
 
@@ -40,7 +40,7 @@ Agent TUI 会话视图 (xterm)
 1. 会话存续期只认 **Session 展示形式快照**，不回读 profile 当前 `displayMode`。
 2. TUI 命令**不得**注入 structured 专属参数（Codex 无 `app-server`；Claude 无 `stream-json` / `-p` / `--print` / `--output-format`）。
 3. mode / dangerous 映射由 descriptor 按 provider 交互式 CLI 语义处理；service / command 不按 `agentType` 散落 match。
-4. 本期 codex/claude/opencode 可以 json 与 tui 启动；grok 仍不可启动（descriptor 占位仅 trim）。OpenCode json 使用 `opencode run --format json`。
+4. codex/claude/opencode 可以 json 与 tui 启动；grok 仅可 tui 启动（displayMode 锁定 `tui`，结构化路径不接，`provider_factory` 对 Grok 保留防御性拒绝）。OpenCode json 使用 `opencode run --format json`。
 5. 运行中不得热切换 displayMode。
 
 ### TUI 命令映射要点（descriptor）
@@ -48,7 +48,7 @@ Agent TUI 会话视图 (xterm)
 - **Codex TUI**：`full-access` / `full-auto` /（未知 mode 且 `dangerous`）→ `--dangerously-bypass-approvals-and-sandbox`；`auto` → `--ask-for-approval on-request --sandbox workspace-write`；`read-only` / `read_only` → `--ask-for-approval on-request --sandbox read-only`；已知 mode 优先于 `dangerous`；不重复已有 flag；trim 路径。
 - **Claude TUI**：已有 `--permission-mode` 则保留；`full-access` 或 `dangerous` → `--permission-mode bypassPermissions`；`plan` / `acceptEdits` / `auto` 映射对应 permission-mode；trim 路径。
 - **OpenCode TUI**：trim；`full-access` 或 `dangerous` → 追加 `--auto`；不注入 `run` / `--format`。
-- **Stub（grok）**：仅 trim。
+- **Grok TUI**：trim；`full-access` 或 `dangerous` → 追加 `--always-approve`；不注入 `-p` / `--output-format` / `agent stdio` 等结构化参数。Grok 为 TUI-only，displayMode 锁定 `tui`。
 
 ## Session 生命周期 seam（displayMode）
 
