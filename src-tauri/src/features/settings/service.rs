@@ -108,7 +108,7 @@ where
     ///
     /// 复用 `provider_descriptor::descriptor_for(agent_type).build_command_snapshot_with_bypass`
     /// 计算命令行，再剥掉命令本身只返回参数部分。`dangerous=false` 时不补 bypass 参数；
-    /// OpenCode 在 dangerous 时返回 `--auto`；Grok 占位 descriptor 不加参数，返回空 Vec。
+    /// OpenCode 在 dangerous 时返回 `--auto`；Grok 在 dangerous 时返回 `--always-approve`。
     pub fn preview_agent_command_args(
         &self,
         input: PreviewAgentCommandArgsInput,

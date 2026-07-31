@@ -323,7 +323,7 @@ fn preview_agent_command_args_returns_auto_for_opencode_when_dangerous() {
 }
 
 #[test]
-fn preview_agent_command_args_returns_empty_for_grok() {
+fn preview_agent_command_args_returns_always_approve_for_grok_when_dangerous() {
     let connection = migrated_in_memory_connection();
     let service = test_settings_service(&connection, SeedTestDetector::new());
 
@@ -335,7 +335,7 @@ fn preview_agent_command_args_returns_empty_for_grok() {
             dangerous: true,
         })
         .expect("preview");
-    assert!(args.is_empty(), "grok 占位 descriptor 参数应为空");
+    assert_eq!(args, vec!["--always-approve".to_string()]);
 }
 
 #[test]

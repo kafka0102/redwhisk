@@ -10,6 +10,7 @@ use std::path::Path;
 use crate::agent::claude_config;
 use crate::agent::codex_app_server::session::default_codex_models_with_selected;
 use crate::agent::codex_config;
+use crate::agent::grok_config;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::AgentModel;
 
@@ -17,10 +18,10 @@ use crate::types::agent_session_stream::AgentModel;
 mod command;
 use command::{
     CLAUDE_FALLBACK_BINARY, CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY,
-    OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY, append_missing_args,
-    build_claude_tui_command_snapshot, build_codex_tui_command_snapshot,
-    build_opencode_structured_command_snapshot, build_opencode_tui_command_snapshot,
-    claude_models_from_home, ensure_claude_bypass_permission_args,
+    GROK_ALWAYS_APPROVE_ARG, GROK_FALLBACK_BINARY, OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY,
+    append_missing_args, build_claude_tui_command_snapshot, build_codex_tui_command_snapshot,
+    build_grok_tui_command_snapshot, build_opencode_structured_command_snapshot,
+    build_opencode_tui_command_snapshot, claude_models_from_home, ensure_claude_bypass_permission_args,
 };
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
@@ -80,15 +81,13 @@ pub trait AgentProviderDescriptor: Send + Sync {
 
 /// 按 agent 类型查表获取 descriptor。
 ///
-/// 2 种 provider 用 `match` 查表即可（编译期穷尽性是优点）；待第 3 种落地或需动态注册时
-/// 再换 `HashMap`（见 ADR-0015）。
+/// 4 种 provider 用 `match` 查表即可（编译期穷尽性是优点）；若未来需动态注册再换
+/// `HashMap`（见 ADR-0015）。
 pub fn descriptor_for(agent_type: &AgentType) -> &'static dyn AgentProviderDescriptor {
     static CODEX: CodexDescriptor = CodexDescriptor;
     static CLAUDE: ClaudeDescriptor = ClaudeDescriptor;
     static OPENCODE: OpenCodeDescriptor = OpenCodeDescriptor;
-    static GROK: StubDescriptor = StubDescriptor {
-        agent_type: AgentType::Grok,
-    };
+    static GROK: GrokDescriptor = GrokDescriptor;
     match agent_type {
         AgentType::Codex => &CODEX,
         AgentType::Claude => &CLAUDE,
@@ -285,19 +284,19 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
     }
 }
 
-// ===== Grok（占位 descriptor） =====
-//
-// Grok 仍仅登记展示；descriptor 最小占位，provider_factory 启动路由不接。
+// ===== Grok =====
 
-/// Grok 的占位 descriptor（尚未接入会话执行）。
-#[derive(Debug, Clone)]
-pub struct StubDescriptor {
-    agent_type: AgentType,
-}
+/// Grok provider 描述符。
+///
+/// TUI-only：经交互式 PTY 启动（ADR-0022）；displayMode 锁定 tui，不接结构化 json
+/// 路径（`provider_factory` 对 Grok 保留防御性拒绝）。模型只读展示，读 `~/.grok/config.toml`
+/// 的 `[models].default`。
+#[derive(Debug, Clone, Copy)]
+pub struct GrokDescriptor;
 
-impl AgentProviderDescriptor for StubDescriptor {
+impl AgentProviderDescriptor for GrokDescriptor {
     fn agent_type(&self) -> AgentType {
-        self.agent_type.clone()
+        AgentType::Grok
     }
 
     fn resolve_runtime_config(
@@ -313,32 +312,35 @@ impl AgentProviderDescriptor for StubDescriptor {
     }
 
     fn build_command_snapshot_with_bypass(&self, raw_command: &str) -> String {
-        raw_command.trim().to_string()
+        // dangerous 预览 / bypass 路径：与 TUI 启动一致地补 --always-approve（见 ADR-0020 #6）。
+        append_missing_args(raw_command.trim(), &[GROK_ALWAYS_APPROVE_ARG])
     }
 
     fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
+        // Grok 仅 TUI 启动；structured launch 路径不可达，保持 trim 不注入结构化参数。
         raw_command.trim().to_string()
     }
 
-    fn build_tui_command_snapshot(
-        &self,
-        raw_command: &str,
-        _mode: &str,
-        _dangerous: bool,
-    ) -> String {
-        raw_command.trim().to_string()
+    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
+        build_grok_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
     fn fallback_command_when_snapshot_empty(&self) -> String {
-        match self.agent_type {
-            AgentType::Grok => "grok".to_string(),
-            AgentType::OpenCode => OPENCODE_FALLBACK_BINARY.to_string(),
-            _ => String::new(),
-        }
+        GROK_FALLBACK_BINARY.to_string()
     }
 
-    fn list_models(&self, _home_dir: &Path) -> Vec<AgentModel> {
-        Vec::new()
+    fn list_models(&self, home_dir: &Path) -> Vec<AgentModel> {
+        // 只读展示 `[models].default`；读不到则空（前端不展示模型）。
+        grok_config::read_default_model_from_home(home_dir)
+            .map(|model| AgentModel {
+                model_id: model.clone(),
+                display_name: Some(model),
+                is_default: Some(true),
+                default_reasoning_effort: None,
+                supported_reasoning_efforts: Vec::new(),
+            })
+            .into_iter()
+            .collect()
     }
 
     fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
@@ -346,15 +348,9 @@ impl AgentProviderDescriptor for StubDescriptor {
     }
 
     fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
-        let model_type_label = match self.agent_type {
-            AgentType::Grok => "Grok",
-            AgentType::OpenCode => "OpenCode",
-            AgentType::Codex => "Codex",
-            AgentType::Claude => "Claude",
-        };
         crate::types::agent_session::AgentUiCapabilities {
-            model_type_label: model_type_label.to_string(),
-            can_show_model: false,
+            model_type_label: "Grok".to_string(),
+            can_show_model: true,
             supports_model_switching: false,
             supports_reasoning_effort: false,
             supports_modes: false,
@@ -365,3 +361,7 @@ impl AgentProviderDescriptor for StubDescriptor {
 #[cfg(test)]
 #[path = "provider_descriptor_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "provider_descriptor_grok_tests.rs"]
+mod grok_tests;

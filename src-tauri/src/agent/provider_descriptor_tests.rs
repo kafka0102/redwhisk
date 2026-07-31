@@ -410,19 +410,6 @@
     }
 
     #[test]
-    fn grok_stub_tui_command_trims_only() {
-        assert_eq!(
-            descriptor_for(&AgentType::Grok).build_tui_command_snapshot(
-                "  grok  ",
-                "full-access",
-                true
-            ),
-            "grok"
-        );
-    }
-
-
-    #[test]
     fn codex_ui_capabilities_match_product_table() {
         let caps = CodexDescriptor.ui_capabilities();
         assert_eq!(caps.model_type_label, "Codex");
@@ -450,16 +437,6 @@
         assert!(!opencode.supports_model_switching);
         assert!(!opencode.supports_reasoning_effort);
         assert!(!opencode.supports_modes);
-    }
-
-    #[test]
-    fn grok_stub_ui_capabilities_disable_all_model_controls() {
-        let grok = descriptor_for(&AgentType::Grok).ui_capabilities();
-        assert_eq!(grok.model_type_label, "Grok");
-        assert!(!grok.can_show_model);
-        assert!(!grok.supports_model_switching);
-        assert!(!grok.supports_reasoning_effort);
-        assert!(!grok.supports_modes);
     }
 
     #[test]

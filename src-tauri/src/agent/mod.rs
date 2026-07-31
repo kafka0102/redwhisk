@@ -4,6 +4,7 @@ pub mod claude_streaming;
 pub mod opencode_streaming;
 pub mod codex_app_server;
 pub mod codex_config;
+pub mod grok_config;
 pub mod command_detector;
 pub mod latest_output_writer;
 pub mod pty_osc_color_reply;

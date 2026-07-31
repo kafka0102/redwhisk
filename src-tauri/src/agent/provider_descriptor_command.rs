@@ -18,6 +18,8 @@ pub(super) const CODEX_FALLBACK_BINARY: &str = "codex";
 pub(super) const CLAUDE_FALLBACK_BINARY: &str = "claude";
 pub(super) const OPENCODE_AUTO_ARG: &str = "--auto";
 pub(super) const OPENCODE_FALLBACK_BINARY: &str = "opencode";
+pub(super) const GROK_ALWAYS_APPROVE_ARG: &str = "--always-approve";
+pub(super) const GROK_FALLBACK_BINARY: &str = "grok";
 
 /// Codex 交互式 TUI：按 mode/dangerous 映射审批与沙箱，不注入 app-server。
 pub(super) fn build_codex_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
@@ -79,6 +81,17 @@ pub(super) fn build_opencode_tui_command_snapshot(raw_command: &str, mode: &str,
     let trimmed = raw_command.trim();
     if mode == "full-access" || dangerous {
         append_missing_args(trimmed, &[OPENCODE_AUTO_ARG])
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Grok 交互式 TUI：trim；`dangerous` 或 mode=full-access 追加 `--always-approve`；
+/// 不注入 `-p` / `--output-format` / `agent stdio` 等结构化协议参数。
+pub(super) fn build_grok_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+    let trimmed = raw_command.trim();
+    if dangerous || mode == "full-access" {
+        append_missing_args(trimmed, &[GROK_ALWAYS_APPROVE_ARG])
     } else {
         trimmed.to_string()
     }
