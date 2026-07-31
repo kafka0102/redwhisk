@@ -929,6 +929,8 @@ fn agent_type_from_str(value: &str) -> rusqlite::Result<AgentType> {
     match value {
         "codex" => Ok(AgentType::Codex),
         "claude" => Ok(AgentType::Claude),
+        "opencode" => Ok(AgentType::OpenCode),
+        "grok" => Ok(AgentType::Grok),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -1710,5 +1712,45 @@ mod tests {
         assert!(!repository
             .ensure_turn_running(703, 6_000)
             .expect("ensure 703"));
+    }
+
+    #[test]
+    fn list_by_project_id_accepts_opencode_and_grok_agent_types() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (
+                   id, name, agent_type, command, scope, project_id, mode, dangerous,
+                   default_skill, prompt_template, del, display_mode, enabled
+                 ) VALUES
+                   (101, 'OpenCode', 'opencode', 'opencode', 'global', NULL, 'full-access', 1, '', '', 0, 'tui', 1),
+                   (102, 'Grok', 'grok', 'grok', 'global', NULL, 'full-access', 1, '', '', 0, 'tui', 1)",
+                [],
+            )
+            .expect("insert opencode/grok profiles");
+        for (id, number, profile_id) in [(801, 1, 101), (802, 2, 102)] {
+            connection
+                .execute(
+                    "INSERT INTO agent_sessions (
+                       id, project_id, number, agent_profile_id, status, attention,
+                       working_dir, command_snapshot, prompt_snapshot, log_path,
+                       last_active_at, started_at, del, display_mode
+                     ) VALUES (
+                       ?1, 1, ?2, ?3, 'running', 'none',
+                       '/tmp/repo', 'cmd', '', '/tmp/s.log',
+                       10, 10, 0, 'tui'
+                     )",
+                    params![id, number, profile_id],
+                )
+                .expect("insert session");
+        }
+
+        let rows = AgentSessionRepository::new(&connection)
+            .list_by_project_id(1)
+            .expect("list sessions with opencode/grok");
+        let types: Vec<_> = rows.iter().map(|row| row.agent_type.clone()).collect();
+        assert!(types.contains(&AgentType::OpenCode), "opencode missing: {types:?}");
+        assert!(types.contains(&AgentType::Grok), "grok missing: {types:?}");
     }
 }
