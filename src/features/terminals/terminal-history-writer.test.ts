@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  normalizeTerminalHistoryNewlines,
   writeTerminalHistory,
   writeTerminalHistoryPreservingView,
 } from "./terminal-history-writer";
@@ -9,6 +10,42 @@ import {
   clearTerminalViewStatesForTests,
   saveTerminalViewState,
 } from "./terminal-view-state";
+
+function bufferLines(term: Terminal): string[] {
+  const lines: string[] = [];
+  const buf = term.buffer.active;
+  for (let y = 0; y < buf.length; y++) {
+    const line = buf.getLine(y);
+    if (!line) {
+      continue;
+    }
+    lines.push(line.translateToString(true));
+  }
+  while (lines.length > 0 && lines[lines.length - 1]?.trim() === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+describe("normalizeTerminalHistoryNewlines", () => {
+  it("converts bare LF to CRLF", () => {
+    expect(normalizeTerminalHistoryNewlines("a\nb\n")).toBe("a\r\nb\r\n");
+  });
+
+  it("leaves existing CRLF intact", () => {
+    expect(normalizeTerminalHistoryNewlines("a\r\nb\r\n")).toBe("a\r\nb\r\n");
+  });
+
+  it("leaves lone CR intact for TUI overwrite semantics", () => {
+    expect(normalizeTerminalHistoryNewlines("progress\rnext")).toBe(
+      "progress\rnext",
+    );
+  });
+
+  it("handles mixed CRLF and bare LF", () => {
+    expect(normalizeTerminalHistoryNewlines("a\r\nb\nc")).toBe("a\r\nb\r\nc");
+  });
+});
 
 /**
  * 反馈环：复现「restore 回放含终端查询的历史 → onData 应答被写回 PTY」的症状。
@@ -152,6 +189,48 @@ describe("writeTerminalHistory", () => {
 
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
     expect(scrollToLine).not.toHaveBeenCalled();
+  });
+
+  it("replays bare-LF archive text as normal left-aligned rows", async () => {
+    // 回归：TUI Issue 归档日志经 strip 后为纯文本 + 裸 LF；
+    // xterm convertEol:false 下若不规范化，会呈阶梯错位（截屏「归档后展示排版乱」）。
+    const term = mountTerminal();
+    const archiveSnippet =
+      "⏺工作区干净，4个提交全部落地。\n\n" +
+      "<issue-comment>\n" +
+      "完成 grok 智能体 TUI 任务执行方式的实现。\n" +
+      "- 实现：后端读 config\n";
+
+    await writeTerminalHistory(term, archiveSnippet, () => undefined);
+
+    const lines = bufferLines(term).map((line) => line.trimEnd());
+    const nonEmpty = lines.filter((line) => line.trim().length > 0);
+
+    expect(nonEmpty[0]).toMatch(/^⏺工作区干净/);
+    expect(nonEmpty[1]).toBe("<issue-comment>");
+    expect(nonEmpty[2]).toMatch(/^完成 grok/);
+    expect(nonEmpty[3]).toMatch(/^- 实现：/);
+    // 阶梯错位时后续行会以大段前导空格起笔
+    for (const line of nonEmpty) {
+      expect(line.startsWith("  ")).toBe(false);
+    }
+  });
+
+  it("normalizes bare LF before writing to the terminal", async () => {
+    const write = vi.fn((_data: string, callback?: () => void) => {
+      callback?.();
+    });
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write,
+      scrollToBottom: vi.fn(),
+      scrollToLine: vi.fn(),
+      buffer: { active: { baseY: 0 } },
+    };
+
+    await writeTerminalHistory(fakeTerminal, "a\nb\n", () => undefined);
+
+    expect(write).toHaveBeenCalledWith("a\r\nb\r\n", expect.any(Function));
   });
 
   it("restores viewport when restoreViewportY is provided", async () => {

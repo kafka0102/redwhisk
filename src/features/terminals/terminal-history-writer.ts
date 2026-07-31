@@ -27,6 +27,17 @@ export interface TerminalHistoryTarget {
   buffer: { active: { baseY: number; viewportY: number } };
 }
 
+/**
+ * 把历史回放文本里的「裸 LF」规范为 CRLF。
+ *
+ * xterm 在 `convertEol: false`（live PTY 必须保持，避免 `\r\n` 被双重换行）时，
+ * 裸 `\n` 只做 index（下移、不回车），归档后的纯文本日志会呈阶梯错位。
+ * 已有 CRLF 与单独的 CR（TUI 行内覆盖）保持原样。
+ */
+export function normalizeTerminalHistoryNewlines(text: string): string {
+  return text.replace(/(?<!\r)\n/g, "\r\n");
+}
+
 export async function writeTerminalHistory(
   terminal: {
     reset: () => void;
@@ -42,8 +53,9 @@ export async function writeTerminalHistory(
   setInputSuppressed(true);
   try {
     terminal.reset();
+    const payload = normalizeTerminalHistoryNewlines(text);
     await new Promise<void>((resolve) => {
-      terminal.write(text, () => {
+      terminal.write(payload, () => {
         resolve();
       });
     });
