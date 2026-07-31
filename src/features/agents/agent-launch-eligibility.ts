@@ -1,31 +1,23 @@
 import type { AgentProfileRecord } from "../settings/settings-commands";
 
-// 会话入口（侧栏「+」菜单 / 临时会话 / Issue Run）选择列表的可见性与可选择性判定。
-// 抽纯函数便于单元测试，三个入口共用，避免 UI 层散落分支。规则：
+// 会话入口（Issue Run 等）选择列表的可见性与可选择性判定。
+// 抽纯函数便于单元测试，多入口共用，避免 UI 层散落分支。规则：
 // - enabled=false → 完全隐藏（前端过滤；后端不校验）。
-// - agentType=grok → 显示但置灰「暂不支持启动」不可选（尚未接入启动实现）。
-// - 其它（含 OpenCode TUI）且 enabled=true → 正常可选。
-export type AgentProfileLaunchNote = "unsupportedLaunch";
-
+// - enabled=true → 正常可选（含 Codex / Claude / OpenCode / Grok，Grok 为 TUI-only）。
 export interface AgentProfileLaunchEligibility {
   /** 是否在选择列表中可见（enabled=false 时前端隐藏）。 */
   visible: boolean;
-  /** 可见时是否可选（grok 本期不可选）。 */
+  /** 是否可选（与 visible 当前等价，仅 enabled=true 时可选）。 */
   selectable: boolean;
-  /** 可见但不可选时的标注 i18n key 后缀；无需标注为 null。 */
-  note: AgentProfileLaunchNote | null;
 }
 
 export function resolveAgentProfileLaunchEligibility(
   profile: AgentProfileRecord,
 ): AgentProfileLaunchEligibility {
   if (!profile.enabled) {
-    return { visible: false, selectable: false, note: null };
+    return { visible: false, selectable: false };
   }
-  if (profile.agentType === "grok") {
-    return { visible: true, selectable: false, note: "unsupportedLaunch" };
-  }
-  return { visible: true, selectable: true, note: null };
+  return { visible: true, selectable: true };
 }
 
 // 渲染选择列表前的过滤：剔除 enabled=false 的项。
@@ -39,7 +31,6 @@ export function filterLaunchVisibleAgentProfiles(
 }
 
 // 取默认选中 profile：首个「可选」项；无则 null。
-// 调用方据此设置初始 selectedProfileId，避免默认落到 grok 不可选项。
 export function pickDefaultLaunchSelectableProfile(
   profiles: readonly AgentProfileRecord[],
 ): AgentProfileRecord | null {

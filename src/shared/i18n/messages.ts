@@ -398,8 +398,6 @@ export interface I18nMessages {
     noProfilesForAgentType: string;
     noReviewSessions: string;
     noSessions: string;
-    /** ADR-0020：opencode/grok 在会话入口置灰时的标注。 */
-    unsupportedLaunch: string;
     openSessionActions: string;
     openSessionSidePanel: string;
     openStatusOptions: string;

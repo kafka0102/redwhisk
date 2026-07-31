@@ -32,39 +32,29 @@ describe("resolveAgentProfileLaunchEligibility", () => {
   it("enabled=false 时完全隐藏", () => {
     expect(
       resolveAgentProfileLaunchEligibility(makeProfile({ enabled: false })),
-    ).toEqual({ visible: false, selectable: false, note: null });
+    ).toEqual({ visible: false, selectable: false });
   });
 
-  it.each(["codex", "claude", "claude_code", "opencode"] as const)(
+  it.each(["codex", "claude", "claude_code", "opencode", "grok"] as const)(
     "agentType=%s 且 enabled=true → 正常可选",
     (agentType) => {
       expect(
         resolveAgentProfileLaunchEligibility(makeProfile({ agentType })),
-      ).toEqual({ visible: true, selectable: true, note: null });
+      ).toEqual({ visible: true, selectable: true });
     },
   );
 
-  it("agentType=grok 且 enabled=true → 显示但置灰不可选", () => {
-    expect(
-      resolveAgentProfileLaunchEligibility(makeProfile({ agentType: "grok" })),
-    ).toEqual({
-      visible: true,
-      selectable: false,
-      note: "unsupportedLaunch",
-    });
-  });
-
-  it("opencode 且 enabled=false → enabled 判定优先，完全隐藏（不显示置灰）", () => {
+  it("grok 且 enabled=false → enabled 判定优先，完全隐藏", () => {
     expect(
       resolveAgentProfileLaunchEligibility(
-        makeProfile({ agentType: "opencode", enabled: false }),
+        makeProfile({ agentType: "grok", enabled: false }),
       ),
-    ).toEqual({ visible: false, selectable: false, note: null });
+    ).toEqual({ visible: false, selectable: false });
   });
 });
 
 describe("filterLaunchVisibleAgentProfiles", () => {
-  it("剔除 enabled=false 的项（保留 grok 置灰项与可选 OpenCode）", () => {
+  it("剔除 enabled=false 的项（保留 grok 与可选 OpenCode）", () => {
     const profiles = [
       makeProfile({ id: 1, name: "Codex" }),
       makeProfile({ id: 2, name: "Old Codex", enabled: false }),
@@ -87,19 +77,19 @@ describe("filterLaunchVisibleAgentProfiles", () => {
 });
 
 describe("pickDefaultLaunchSelectableProfile", () => {
-  it("返回首个可选 profile，跳过 grok，允许 OpenCode", () => {
+  it("返回首个可选 profile（含 grok）", () => {
     const profiles = [
       makeProfile({ id: 1, agentType: "grok" }),
       makeProfile({ id: 2, agentType: "opencode" }),
       makeProfile({ id: 3, agentType: "codex" }),
       makeProfile({ id: 4, agentType: "claude" }),
     ];
-    expect(pickDefaultLaunchSelectableProfile(profiles)?.id).toBe(2);
+    expect(pickDefaultLaunchSelectableProfile(profiles)?.id).toBe(1);
   });
 
   it("全部不可选时返回 null", () => {
     const profiles = [
-      makeProfile({ id: 1, agentType: "grok" }),
+      makeProfile({ id: 1, agentType: "grok", enabled: false }),
       makeProfile({ id: 2, agentType: "codex", enabled: false }),
       makeProfile({ id: 3, agentType: "opencode", enabled: false }),
     ];

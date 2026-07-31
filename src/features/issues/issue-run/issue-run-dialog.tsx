@@ -141,9 +141,8 @@ export function IssueRunDialog({
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,
         ];
-        // enabled=false 隐藏；grok 显示但置灰不可选；OpenCode 在 enabled 时可选。
-        // 默认选中需从「可选」子集中挑，避免 initial profile 落到 grok 不可选项。
-        // resolveInitialProfile 的入参也用 selectable 子集。
+        // enabled=false 隐藏；默认选中需从「可选（enabled）」子集中挑，
+        // 避免 initial profile 落到 disabled 项。resolveInitialProfile 的入参也用 selectable 子集。
         const selectableProjectProfiles =
           projectProfilesResponse.profiles.filter(
             (profile) =>
@@ -416,18 +415,10 @@ export function IssueRunDialog({
                 {messages.issues.agentProfile}
               </Label>
               <Select
-                items={profiles.map((profile) => {
-                  const eligibility =
-                    resolveAgentProfileLaunchEligibility(profile);
-                  return {
-                    value: profile.id,
-                    label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}${
-                      eligibility.selectable
-                        ? ""
-                        : ` ${messages.agentsFeature.unsupportedLaunch}`
-                    }`,
-                  };
-                })}
+                items={profiles.map((profile) => ({
+                  value: profile.id,
+                  label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
+                }))}
                 value={selectedProfileId}
                 onValueChange={(value) => {
                   const nextProfileId = value as number;
@@ -462,25 +453,12 @@ export function IssueRunDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles.map((profile) => {
-                    const eligibility =
-                      resolveAgentProfileLaunchEligibility(profile);
-                    return (
-                      <SelectItem
-                        key={profile.id}
-                        disabled={!eligibility.selectable}
-                        value={profile.id}
-                      >
-                        {profile.name}
-                        {profile.scope === "project"
-                          ? " (Project)"
-                          : " (Global)"}
-                        {!eligibility.selectable
-                          ? ` ${messages.agentsFeature.unsupportedLaunch}`
-                          : ""}
-                      </SelectItem>
-                    );
-                  })}
+                  {profiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                      {profile.scope === "project" ? " (Project)" : " (Global)"}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
