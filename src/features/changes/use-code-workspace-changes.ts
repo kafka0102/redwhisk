@@ -47,7 +47,12 @@ type CommitHistoryRequestMode = "initial" | "refresh" | "load-more";
 /**
  * 代码工作区左侧栏「变更」视图的数据源。按当前选中根的 workspacePath 拉取未提交
  * 变更与已提交历史：进入变更视图（enabled）或切换工作区时各拉取一次，手动刷新可
- * 再触发；不做轮询。
+ * 再触发；不做轮询（轮询由 useChangesAutoRefresh 调用 refresh*）。
+ *
+ * soft revalidate（对齐文件树）：
+ * - 首次 / 切根 clearStale：清空旧数据并进入 loading。
+ * - 已有展示数据时后续 refresh：不进 loading；响应 signature 与上次相同则零
+ *   setState（不替换 files/branchSync/commits）；不同则静默更新。
  *
  * 已提交历史支持分页：首页 50；load-more 按 loadedCount offset 追加；刷新按
  * max(50, loadedCount) 整窗替换且不清空旧列表。刷新优先于 load-more，generation
@@ -88,8 +93,15 @@ export function useCodeWorkspaceChanges(
   ] = useState<string | null>(null);
   const changesRequestSequenceRef = useRef(0);
   const lastChangesSignatureRef = useRef<string | null>(null);
+  const hasChangesDisplayRef = useRef(false);
+  const isChangesLoadingRef = useRef(false);
+  const changesErrorMessageRef = useRef<string | null>(null);
+  const isChangesUnavailableRef = useRef(false);
   const commitHistoryRequestSequenceRef = useRef(0);
   const lastCommitHistorySignatureRef = useRef<string | null>(null);
+  const hasCommitHistoryDisplayRef = useRef(false);
+  const isCommitHistoryLoadingRef = useRef(false);
+  const commitHistoryErrorMessageRef = useRef<string | null>(null);
   const commitHistoryLoadedCountRef = useRef(0);
   const hasMoreCommitHistoryRef = useRef(false);
   const commitHistoryInFlightRef = useRef(false);
@@ -114,15 +126,26 @@ export function useCodeWorkspaceChanges(
 
       void Promise.resolve()
         .then(() => {
-          setIsChangesLoading(true);
-          setChangesErrorMessage(null);
           // 切换工作区时丢弃旧根数据与 signature，避免短暂展示他根变更 / 误命中去重。
           if (options.clearStale) {
+            isChangesLoadingRef.current = true;
+            setIsChangesLoading(true);
+            changesErrorMessageRef.current = null;
+            setChangesErrorMessage(null);
             setChanges([]);
             setBranchSync(null);
+            isChangesUnavailableRef.current = false;
             setIsChangesUnavailable(false);
             lastChangesSignatureRef.current = null;
+            hasChangesDisplayRef.current = false;
+          } else if (!hasChangesDisplayRef.current) {
+            // 尚无展示数据的首次拉取仍进 loading。
+            isChangesLoadingRef.current = true;
+            setIsChangesLoading(true);
+            changesErrorMessageRef.current = null;
+            setChangesErrorMessage(null);
           }
+          // soft revalidate：已有展示数据时不进 loading。
           return getProjectWorktreeChanges({ projectId, workspacePath });
         })
         .then((response) => {
@@ -134,24 +157,39 @@ export function useCodeWorkspaceChanges(
           }
           const unchanged =
             lastChangesSignatureRef.current === response.signature;
+          // signature 相同且已有展示、无 loading/错误需收口：零 setState。
+          if (
+            unchanged &&
+            hasChangesDisplayRef.current &&
+            !isChangesLoadingRef.current &&
+            changesErrorMessageRef.current == null &&
+            !isChangesUnavailableRef.current
+          ) {
+            return;
+          }
           lastChangesSignatureRef.current = response.signature;
+          hasChangesDisplayRef.current = true;
           if (!unchanged) {
             setChanges(response.files);
             setBranchSync(response.branchSync ?? null);
           }
+          isChangesLoadingRef.current = false;
           setIsChangesLoading(false);
+          changesErrorMessageRef.current = null;
           setChangesErrorMessage(null);
+          isChangesUnavailableRef.current = false;
           setIsChangesUnavailable(false);
         })
         .catch((error) => {
           if (changesRequestSequenceRef.current !== requestSequence) return;
           const commandError = toCommandError(error);
-          setIsChangesUnavailable(
-            isWorkspaceRootInaccessibleError(commandError),
-          );
-          setChangesErrorMessage(
-            getCommandErrorMessage(error, translateRef.current),
-          );
+          const unavailable = isWorkspaceRootInaccessibleError(commandError);
+          isChangesUnavailableRef.current = unavailable;
+          setIsChangesUnavailable(unavailable);
+          const message = getCommandErrorMessage(error, translateRef.current);
+          changesErrorMessageRef.current = message;
+          setChangesErrorMessage(message);
+          isChangesLoadingRef.current = false;
           setIsChangesLoading(false);
         });
     },
@@ -186,13 +224,23 @@ export function useCodeWorkspaceChanges(
             // 刷新优先：作废进行中的 load-more UI 态。
             setIsLoadingMoreCommitHistory(false);
             setLoadMoreCommitHistoryErrorMessage(null);
-            setIsCommitHistoryLoading(true);
-            setCommitHistoryErrorMessage(null);
             if (mode === "initial") {
+              isCommitHistoryLoadingRef.current = true;
+              setIsCommitHistoryLoading(true);
+              commitHistoryErrorMessageRef.current = null;
+              setCommitHistoryErrorMessage(null);
               setCommitHistory([]);
               setHasMoreCommitHistory(false);
               lastCommitHistorySignatureRef.current = null;
+              hasCommitHistoryDisplayRef.current = false;
+            } else if (!hasCommitHistoryDisplayRef.current) {
+              // 尚无展示数据时仍进 loading。
+              isCommitHistoryLoadingRef.current = true;
+              setIsCommitHistoryLoading(true);
+              commitHistoryErrorMessageRef.current = null;
+              setCommitHistoryErrorMessage(null);
             }
+            // soft revalidate：已有展示数据时 refresh 不进 loading。
           }
           return getProjectWorktreeCommitHistory({
             projectId,
@@ -217,19 +265,32 @@ export function useCodeWorkspaceChanges(
             setHasMoreCommitHistory(response.hasMore);
             // load-more 的 signature 仅代表一页；清空以便下次整窗刷新必应用。
             lastCommitHistorySignatureRef.current = null;
+            hasCommitHistoryDisplayRef.current = true;
             setIsLoadingMoreCommitHistory(false);
             setLoadMoreCommitHistoryErrorMessage(null);
           } else {
             const unchanged =
               lastCommitHistorySignatureRef.current === response.signature;
+            if (
+              unchanged &&
+              hasCommitHistoryDisplayRef.current &&
+              !isCommitHistoryLoadingRef.current &&
+              commitHistoryErrorMessageRef.current == null
+            ) {
+              commitHistoryInFlightRef.current = false;
+              return;
+            }
             lastCommitHistorySignatureRef.current = response.signature;
+            hasCommitHistoryDisplayRef.current = true;
             if (!unchanged) {
               setCommitHistory(response.commits);
               setIsWorktree(response.isWorktree);
               setBaseBranch(response.baseBranch ?? null);
               setHasMoreCommitHistory(response.hasMore);
             }
+            isCommitHistoryLoadingRef.current = false;
             setIsCommitHistoryLoading(false);
+            commitHistoryErrorMessageRef.current = null;
             setCommitHistoryErrorMessage(null);
           }
           commitHistoryInFlightRef.current = false;
@@ -244,9 +305,10 @@ export function useCodeWorkspaceChanges(
             );
             setIsLoadingMoreCommitHistory(false);
           } else {
-            setCommitHistoryErrorMessage(
-              getCommandErrorMessage(error, translateRef.current),
-            );
+            const message = getCommandErrorMessage(error, translateRef.current);
+            commitHistoryErrorMessageRef.current = message;
+            setCommitHistoryErrorMessage(message);
+            isCommitHistoryLoadingRef.current = false;
             setIsCommitHistoryLoading(false);
           }
           commitHistoryInFlightRef.current = false;
@@ -255,7 +317,8 @@ export function useCodeWorkspaceChanges(
     [projectId, workspacePath],
   );
 
-  // 进入变更视图（enabled）或切换工作区时各拉取一次（切换工作区先丢弃旧根数据）；不轮询。
+  // 进入变更视图（enabled）或切换工作区时各拉取一次（切换工作区先丢弃旧根数据）。
+  // 轮询由外部 refresh* 触发，本 hook 内部 soft revalidate。
   useEffect(() => {
     if (!enabled || !workspacePath) return;
     runChangesRequest({ clearStale: true });

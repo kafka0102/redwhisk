@@ -171,6 +171,7 @@ describe("useCodeWorkspaceChanges", () => {
     vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
       files: [changedFile],
       signature: "sig-1",
+      branchSync: { upstream: "origin/main", ahead: 0, behind: 1 },
     });
 
     const { result } = renderHook(
@@ -180,21 +181,142 @@ describe("useCodeWorkspaceChanges", () => {
 
     await waitFor(() => expect(result.current.changes).toEqual([changedFile]));
     const initialChanges = result.current.changes;
+    const initialBranchSync = result.current.branchSync;
+    expect(result.current.isChangesLoading).toBe(false);
 
     // 即便后端返回了不同内容，只要 signature 不变就视为未变化，保留既有引用。
-    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
-      files: [{ ...changedFile, additions: 99 }],
-      signature: "sig-1",
-    });
+    let resolveRefresh:
+      | ((value: {
+          files: (typeof changedFile)[];
+          signature: string;
+          branchSync: { upstream: string; ahead: number; behind: number };
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
 
     await act(async () => {
       result.current.refreshChanges();
+    });
+
+    // soft revalidate：已有展示数据时刷新全程不进 loading。
+    expect(result.current.isChangesLoading).toBe(false);
+
+    await act(async () => {
+      resolveRefresh?.({
+        files: [{ ...changedFile, additions: 99 }],
+        signature: "sig-1",
+        branchSync: { upstream: "origin/main", ahead: 9, behind: 9 },
+      });
+      await Promise.resolve();
     });
     await waitFor(() =>
       expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2),
     );
 
+    expect(result.current.isChangesLoading).toBe(false);
     expect(result.current.changes).toBe(initialChanges);
+    expect(result.current.branchSync).toBe(initialBranchSync);
+  });
+
+  it("soft-revalidates changes without loading and updates when signature changes", async () => {
+    const nextFile = { ...changedFile, path: "b.ts", additions: 3 };
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-1",
+      branchSync: { upstream: "origin/main", ahead: 0, behind: 0 },
+    });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.changes).toEqual([changedFile]));
+    const initialChanges = result.current.changes;
+
+    let resolveRefresh:
+      | ((value: {
+          files: (typeof changedFile)[];
+          signature: string;
+          branchSync: { upstream: string; ahead: number; behind: number };
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    await act(async () => {
+      result.current.refreshChanges();
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.changes).toBe(initialChanges);
+
+    await act(async () => {
+      resolveRefresh?.({
+        files: [nextFile],
+        signature: "sig-2",
+        branchSync: { upstream: "origin/main", ahead: 1, behind: 0 },
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.changes).toEqual([nextFile]);
+    });
+    expect(result.current.branchSync).toEqual({
+      upstream: "origin/main",
+      ahead: 1,
+      behind: 0,
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+  });
+
+  it("shows loading and clears stale changes when workspace path switches", async () => {
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-1",
+    });
+
+    const { result, rerender } = renderHook(
+      ({ path }) => useCodeWorkspaceChanges(1, path, true),
+      { initialProps: { path: "/tmp/redwhisk" }, wrapper },
+    );
+    await waitFor(() => expect(result.current.changes).toEqual([changedFile]));
+
+    let resolveNext:
+      | ((value: { files: (typeof changedFile)[]; signature: string }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveNext = resolve;
+        }),
+    );
+
+    rerender({ path: "/tmp/other" });
+
+    await waitFor(() => {
+      expect(result.current.changes).toEqual([]);
+      expect(result.current.isChangesLoading).toBe(true);
+    });
+
+    await act(async () => {
+      resolveNext?.({
+        files: [],
+        signature: "sig-other",
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(result.current.isChangesLoading).toBe(false);
+    });
   });
 
   it("fetches committed history alongside uncommitted changes", async () => {
@@ -373,9 +495,9 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
       result.current.refreshCommitHistory();
     });
 
-    // 刷新进行中不清空列表。
+    // 刷新进行中不清空列表；已有展示数据时 soft revalidate 不进 loading。
     expect(result.current.commitHistory).toBe(listBeforeRefresh);
-    expect(result.current.isCommitHistoryLoading).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
     expect(getProjectWorktreeCommitHistory).toHaveBeenLastCalledWith({
       projectId: 1,
       workspacePath: "/tmp/redwhisk",
@@ -554,6 +676,116 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
       expect(result.current.commitHistoryErrorMessage).not.toBeNull();
     });
     expect(result.current.commitHistory).toEqual(page1);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("soft-revalidates commit history: same signature keeps list and skips loading", async () => {
+    const commits = [makeCommit("soft-1")];
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits,
+      signature: "sig-soft",
+      isWorktree: false,
+      hasMore: false,
+    });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.commitHistory).toEqual(commits));
+    const listBefore = result.current.commitHistory;
+
+    let resolveRefresh:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeCommitHistory).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    await act(async () => {
+      result.current.refreshCommitHistory();
+    });
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toBe(listBefore);
+
+    await act(async () => {
+      resolveRefresh?.({
+        commits: [makeCommit("soft-1-replaced")],
+        signature: "sig-soft",
+        isWorktree: true,
+        hasMore: true,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(getProjectWorktreeCommitHistory).toHaveBeenCalledTimes(2),
+    );
+
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toBe(listBefore);
+    expect(result.current.isWorktree).toBe(false);
+    expect(result.current.hasMoreCommitHistory).toBe(false);
+  });
+
+  it("soft-revalidates commit history: different signature updates without loading", async () => {
+    const first = [makeCommit("soft-a")];
+    const second = [makeCommit("soft-b")];
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: first,
+      signature: "sig-a",
+      isWorktree: false,
+      hasMore: false,
+    });
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.commitHistory).toEqual(first));
+
+    let resolveRefresh:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeCommitHistory).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    await act(async () => {
+      result.current.refreshCommitHistory();
+    });
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+
+    await act(async () => {
+      resolveRefresh?.({
+        commits: second,
+        signature: "sig-b",
+        isWorktree: true,
+        hasMore: true,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.commitHistory).toEqual(second);
+    });
+    expect(result.current.isWorktree).toBe(true);
+    expect(result.current.hasMoreCommitHistory).toBe(true);
     expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 });
