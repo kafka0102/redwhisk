@@ -310,6 +310,29 @@ export function fetchProjectRemotes(
   return invokeCommand<void>("fetch_project_remotes", { input });
 }
 
+export type CheckoutBranchKind = "local" | "remote";
+
+export interface ProjectCheckoutBranchInput extends ProjectWorkspaceInput {
+  kind: CheckoutBranchKind;
+  /** 本地分支短名，或完整 remote-tracking 名（如 origin/feature/foo）。 */
+  name: string;
+}
+
+export interface ProjectCheckoutBranchResponse {
+  branch: string;
+}
+
+export function checkoutProjectBranch(
+  input: ProjectCheckoutBranchInput,
+): Promise<ProjectCheckoutBranchResponse> {
+  return invokeCommand<ProjectCheckoutBranchResponse>(
+    "checkout_project_branch",
+    {
+      input,
+    },
+  );
+}
+
 export function pullProjectWorktree(
   input: ProjectWorkspaceInput,
 ): Promise<void> {

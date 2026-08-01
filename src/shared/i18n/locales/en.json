@@ -981,6 +981,11 @@
     "hoursAgo": "{{hours}}h ago",
     "daysAgo": "{{days}}d ago",
     "monthsAgo": "{{months}}mo ago",
-    "metaLine": "{{author}} · {{shortHash}} · {{message}}"
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}",
+    "dirtyConfirmTitle": "Switch branch",
+    "dirtyConfirm": "You have uncommitted changes. Switch branch anyway?",
+    "dirtyConfirmAction": "Switch",
+    "checkingOut": "Checking out…",
+    "checkoutSuccess": "Checked out {{branch}}"
   }
 }

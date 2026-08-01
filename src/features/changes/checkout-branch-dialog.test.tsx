@@ -1,9 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import {
+  checkoutProjectBranch,
   fetchProjectRemotes,
   listProjectCheckoutBranches,
 } from "../../shared/workspace/workspace-commands";
@@ -13,10 +15,20 @@ import { formatBranchRelativeTime } from "./checkout-branch-relative-time";
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   listProjectCheckoutBranches: vi.fn(),
   fetchProjectRemotes: vi.fn(),
+  checkoutProjectBranch: vi.fn(),
+}));
+
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 const listMock = vi.mocked(listProjectCheckoutBranches);
 const fetchMock = vi.mocked(fetchProjectRemotes);
+const checkoutMock = vi.mocked(checkoutProjectBranch);
+const toastSuccessMock = vi.mocked(toast.success);
 
 const sampleResponse = {
   currentBranch: "main",
@@ -48,17 +60,27 @@ const sampleResponse = {
   ],
 };
 
-function renderDialog(open = true) {
-  return render(
+function renderDialog(
+  open = true,
+  overrides: {
+    onOpenChange?: (open: boolean) => void;
+    onSuccess?: () => void;
+  } = {},
+) {
+  const onOpenChange = overrides.onOpenChange ?? vi.fn();
+  const onSuccess = overrides.onSuccess ?? vi.fn();
+  const result = render(
     <I18nProvider initialLocale="zh">
       <CheckoutBranchDialog
         open={open}
-        onOpenChange={vi.fn()}
+        onOpenChange={onOpenChange}
         projectId={7}
         workspacePath="/tmp/repo"
+        onSuccess={onSuccess}
       />
     </I18nProvider>,
   );
+  return { ...result, onOpenChange, onSuccess };
 }
 
 describe("formatBranchRelativeTime", () => {
@@ -92,8 +114,11 @@ describe("CheckoutBranchDialog", () => {
   beforeEach(() => {
     listMock.mockReset();
     fetchMock.mockReset();
+    checkoutMock.mockReset();
+    toastSuccessMock.mockReset();
     listMock.mockResolvedValue(sampleResponse);
     fetchMock.mockResolvedValue(undefined);
+    checkoutMock.mockResolvedValue({ branch: "feature-new" });
   });
 
   it("loads branches without fetch on open and renders two sections", async () => {
@@ -168,5 +193,163 @@ describe("CheckoutBranchDialog", () => {
       expect(listMock).toHaveBeenCalled();
     });
     expect(await screen.findByText("origin/new-remote")).toBeInTheDocument();
+  });
+
+  it("checks out local branch, toasts, closes, and refreshes", async () => {
+    const user = userEvent.setup();
+    const { onOpenChange, onSuccess } = renderDialog(true);
+    await screen.findByText("feature-new");
+
+    await user.click(screen.getByText("feature-new"));
+
+    await waitFor(() => {
+      expect(checkoutMock).toHaveBeenCalledWith({
+        projectId: 7,
+        workspacePath: "/tmp/repo",
+        kind: "local",
+        name: "feature-new",
+      });
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("已签出到 feature-new");
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks out remote branch", async () => {
+    const user = userEvent.setup();
+    checkoutMock.mockResolvedValueOnce({ branch: "feature-remote" });
+    renderDialog(true);
+    await screen.findByText("origin/feature-remote");
+
+    await user.click(screen.getByText("origin/feature-remote"));
+
+    await waitFor(() => {
+      expect(checkoutMock).toHaveBeenCalledWith({
+        projectId: 7,
+        workspacePath: "/tmp/repo",
+        kind: "remote",
+        name: "origin/feature-remote",
+      });
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("已签出到 feature-remote");
+    });
+  });
+
+  it("current branch click is no-op close without checkout", async () => {
+    const user = userEvent.setup();
+    const { onOpenChange, onSuccess } = renderDialog(true);
+    await screen.findByText("main");
+
+    // 列表中有两个 main 相关文本；点本地 main 行按钮
+    const mainButtons = screen
+      .getAllByRole("button")
+      .filter((btn) => btn.textContent?.includes("main"));
+    const localMain = mainButtons.find((btn) =>
+      btn.textContent?.includes("base"),
+    );
+    expect(localMain).toBeTruthy();
+    await user.click(localMain!);
+
+    expect(checkoutMock).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("dirty workspace confirms before checkout; cancel skips", async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValue({
+      ...sampleResponse,
+      hasUncommittedChanges: true,
+    });
+    const { onSuccess } = renderDialog(true);
+    await screen.findByText("feature-new");
+
+    await user.click(screen.getByText("feature-new"));
+
+    const confirmDialog = await screen.findByRole("dialog", {
+      name: "切换分支",
+    });
+    expect(confirmDialog).toHaveTextContent(
+      "当前有未提交代码，确定要切换分支吗？",
+    );
+    expect(checkoutMock).not.toHaveBeenCalled();
+
+    await user.click(
+      within(confirmDialog).getByRole("button", { name: "取消" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: "切换分支" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(checkoutMock).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("dirty workspace confirm accept calls checkout", async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValue({
+      ...sampleResponse,
+      hasUncommittedChanges: true,
+    });
+    const { onSuccess } = renderDialog(true);
+    await screen.findByText("feature-new");
+
+    await user.click(screen.getByText("feature-new"));
+    const confirmDialog = await screen.findByRole("dialog", {
+      name: "切换分支",
+    });
+    await user.click(
+      within(confirmDialog).getByRole("button", { name: "切换" }),
+    );
+
+    await waitFor(() => {
+      expect(checkoutMock).toHaveBeenCalledWith({
+        projectId: 7,
+        workspacePath: "/tmp/repo",
+        kind: "local",
+        name: "feature-new",
+      });
+    });
+    await waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows error alert when checkout fails", async () => {
+    const user = userEvent.setup();
+    checkoutMock.mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "Git command failed: refused",
+      reason: "gitCommandFailed",
+      details: [
+        {
+          "@type": "Cause",
+          message: "error: your local changes would be overwritten",
+        },
+      ],
+    });
+    const { onOpenChange, onSuccess } = renderDialog(true);
+    await screen.findByText("feature-new");
+
+    await user.click(screen.getByText("feature-new"));
+
+    const dialogs = await screen.findAllByRole("dialog");
+    const alertDialog = dialogs.find((d) =>
+      d.textContent?.includes("Git 命令执行失败"),
+    );
+    expect(alertDialog).toBeTruthy();
+    expect(alertDialog).toHaveTextContent(
+      "error: your local changes would be overwritten",
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    // 失败时不关窗
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

@@ -296,6 +296,7 @@ mod tests {
         );
     }
 
+
     struct RemoteEnv {
         bare: std::path::PathBuf,
         local: std::path::PathBuf,
@@ -366,4 +367,5 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+
 }

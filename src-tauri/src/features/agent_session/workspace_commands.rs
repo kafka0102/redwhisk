@@ -6,13 +6,12 @@ use super::workspace::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
-    ProjectCheckoutBranchesResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
-    ProjectWorkspaceWriteFileInput,
-    ProjectWorktreeChangesResponse,
-    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
-    ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
-    WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
-    WorkspaceFileStat,
+    ProjectCheckoutBranchInput, ProjectCheckoutBranchResponse, ProjectCheckoutBranchesResponse,
+    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorkspaceWriteFileInput,
+    ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
+    ProjectWorktreeFileTreeResponse, ResolveWorkspaceGithubRemoteResponse,
+    WorkspaceContentSearchInput, WorkspaceContentSearchResponse, WorkspaceDiffContent,
+    WorkspaceFileContent, WorkspaceFileStat,
 };
 
 pub const CODE_WORKSPACE_ROOTS_UPDATED_EVENT: &str = "code-workspace-roots-updated";
@@ -136,6 +135,21 @@ pub async fn fetch_project_remotes(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
     run_workspace_blocking(data_dir, move |service| service.fetch_remotes(input)).await
+}
+
+#[tauri::command]
+pub async fn checkout_project_branch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectCheckoutBranchInput,
+) -> Result<ProjectCheckoutBranchResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    let project_id = input.project_id;
+    let event_data_dir = data_dir.clone();
+    let response =
+        run_workspace_blocking(data_dir, move |service| service.checkout_branch(input)).await?;
+    emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
+    Ok(response)
 }
 
 #[tauri::command]

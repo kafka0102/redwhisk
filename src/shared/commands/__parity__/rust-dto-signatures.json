@@ -230,6 +230,15 @@
         "sessionId": "required"
       }
     },
+    "CheckoutBranchItem": {
+      "fields": {
+        "authorName": "required",
+        "committedAt": "required",
+        "message": "required",
+        "name": "required",
+        "shortHash": "required"
+      }
+    },
     "CloseProjectTerminalInput": {
       "fields": {
         "projectId": "required",
@@ -788,6 +797,28 @@
       "fields": {
         "commitUrl": "optional",
         "status": "required"
+      }
+    },
+    "ProjectCheckoutBranchInput": {
+      "fields": {
+        "kind": "required",
+        "name": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "workspacePath": "optional"
+      }
+    },
+    "ProjectCheckoutBranchResponse": {
+      "fields": {
+        "branch": "required"
+      }
+    },
+    "ProjectCheckoutBranchesResponse": {
+      "fields": {
+        "currentBranch": "required",
+        "hasUncommittedChanges": "required",
+        "localBranches": "required",
+        "remoteBranches": "required"
       }
     },
     "ProjectGitBranchListInput": {
@@ -1591,6 +1622,13 @@
         "claude",
         "opencode",
         "grok"
+      ]
+    },
+    "CheckoutBranchKind": {
+      "rename": "camelCase",
+      "variants": [
+        "local",
+        "remote"
       ]
     },
     "CommandErrorCode": {

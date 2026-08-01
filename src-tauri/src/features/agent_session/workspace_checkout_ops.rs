@@ -1,9 +1,10 @@
-//! 变更 Activity 签出：分支列表与远程 fetch。
+//! 变更 Activity 签出：分支列表、远程 fetch 与主 checkout 切换。
 //! 与 pull/push 同级，仅允许项目主 checkout。
 
 use crate::types::errors::CommandError;
 use crate::types::session_workspace::{
-    CheckoutBranchItem, ProjectCheckoutBranchesResponse, ProjectWorkspaceInput,
+    CheckoutBranchItem, CheckoutBranchKind, ProjectCheckoutBranchInput,
+    ProjectCheckoutBranchResponse, ProjectCheckoutBranchesResponse, ProjectWorkspaceInput,
 };
 
 use super::workspace::{map_git_command_error, SessionWorkspaceService};
@@ -38,6 +39,27 @@ impl SessionWorkspaceService<'_> {
         let root = self.require_project_root_for_remote_ops(&input)?;
         crate::git::checkout_branches::fetch_all_prune(&root).map_err(map_git_command_error)
     }
+
+    /// 主 checkout 签出本地或远程分支（普通 checkout，不 force）。
+    pub fn checkout_branch(
+        &self,
+        input: ProjectCheckoutBranchInput,
+    ) -> Result<ProjectCheckoutBranchResponse, CommandError> {
+        let root = self.require_project_root_for_remote_ops(&ProjectWorkspaceInput {
+            project_id: input.project_id,
+            session_id: input.session_id,
+            workspace_path: input.workspace_path.clone(),
+            limit: None,
+            offset: None,
+        })?;
+        let kind = match input.kind {
+            CheckoutBranchKind::Local => crate::git::checkout_branch::CheckoutTargetKind::Local,
+            CheckoutBranchKind::Remote => crate::git::checkout_branch::CheckoutTargetKind::Remote,
+        };
+        let branch = crate::git::checkout_branch::checkout_branch(&root, kind, &input.name)
+            .map_err(map_git_command_error)?;
+        Ok(ProjectCheckoutBranchResponse { branch })
+    }
 }
 
 fn map_checkout_branch_item(
@@ -64,7 +86,7 @@ mod tests {
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
     use crate::types::errors::CommandErrorCode;
-    use crate::types::session_workspace::ProjectWorkspaceInput;
+    use crate::types::session_workspace::{CheckoutBranchKind, ProjectCheckoutBranchInput, ProjectWorkspaceInput};
     use super::super::workspace::SessionWorkspaceService;
 
     #[test]
@@ -190,6 +212,127 @@ mod tests {
                 .all(|b| b.committed_at >= 1_000_000_000_000 || b.committed_at == 0)
                 || response.local_branches.iter().any(|b| b.committed_at > 0)
         );
+    }
+
+    #[test]
+    fn checkout_branch_rejects_linked_worktree() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_root = temp_dir.path().join("repo");
+        let worktree_path = temp_dir.path().join("worktrees").join("issue-co");
+        fs::create_dir_all(&repo_root).expect("create repo dir");
+        init_git_repo(&repo_root);
+        fs::write(repo_root.join("README.md"), "base\n").expect("write");
+        git(&repo_root, &["add", "README.md"]);
+        git(&repo_root, &["commit", "-m", "base"]);
+        git(&repo_root, &["branch", "-M", "main"]);
+        git(
+            &repo_root,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-co",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
+
+        let worktree_canonical = worktree_path
+            .canonicalize()
+            .expect("canonicalize worktree")
+            .to_string_lossy()
+            .to_string();
+        let repo_canonical = repo_root
+            .canonicalize()
+            .expect("canonicalize repo")
+            .to_string_lossy()
+            .to_string();
+
+        let connection = rusqlite::Connection::open_in_memory().expect("open db");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("migrate");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'p1', ?1, 0, 0)",
+                params![&repo_canonical],
+            )
+            .expect("insert project");
+
+        let service = SessionWorkspaceService::new(
+            ProjectRepository::new(&connection),
+            AgentSessionRepository::new(&connection),
+        );
+        let error = service
+            .checkout_branch(ProjectCheckoutBranchInput {
+                project_id: 1,
+                session_id: None,
+                workspace_path: Some(worktree_canonical),
+                kind: CheckoutBranchKind::Local,
+                name: "main".to_string(),
+            })
+            .expect_err("checkout should reject worktree");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("remoteOpsRequireProjectRoot"));
+    }
+
+    #[test]
+    fn checkout_branch_switches_local_on_project_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_root = temp_dir.path().join("repo");
+        fs::create_dir_all(&repo_root).expect("create repo dir");
+        init_git_repo(&repo_root);
+        fs::write(repo_root.join("README.md"), "base\n").expect("write");
+        git(&repo_root, &["add", "README.md"]);
+        git(&repo_root, &["commit", "-m", "base"]);
+        git(&repo_root, &["branch", "-M", "main"]);
+        git(&repo_root, &["branch", "feature-a"]);
+
+        let repo_canonical = repo_root
+            .canonicalize()
+            .expect("canonicalize repo")
+            .to_string_lossy()
+            .to_string();
+
+        let connection = rusqlite::Connection::open_in_memory().expect("open db");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("migrate");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'p1', ?1, 0, 0)",
+                params![&repo_canonical],
+            )
+            .expect("insert project");
+
+        let service = SessionWorkspaceService::new(
+            ProjectRepository::new(&connection),
+            AgentSessionRepository::new(&connection),
+        );
+        let response = service
+            .checkout_branch(ProjectCheckoutBranchInput {
+                project_id: 1,
+                session_id: None,
+                workspace_path: Some(repo_canonical),
+                kind: CheckoutBranchKind::Local,
+                name: "feature-a".to_string(),
+            })
+            .expect("checkout local");
+        assert_eq!(response.branch, "feature-a");
+        let current = git_output(&repo_root, &["branch", "--show-current"]);
+        assert_eq!(current, "feature-a");
+    }
+
+    fn git_output(root: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("run git");
+        assert!(output.status.success(), "git failed");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
     fn init_git_repo(root: &Path) {

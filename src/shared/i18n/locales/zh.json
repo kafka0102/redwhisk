@@ -981,6 +981,11 @@
     "hoursAgo": "{{hours}} 小时前",
     "daysAgo": "{{days}} 天前",
     "monthsAgo": "{{months}} 个月前",
-    "metaLine": "{{author}} · {{shortHash}} · {{message}}"
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}",
+    "dirtyConfirmTitle": "切换分支",
+    "dirtyConfirm": "当前有未提交代码，确定要切换分支吗？",
+    "dirtyConfirmAction": "切换",
+    "checkingOut": "正在签出…",
+    "checkoutSuccess": "已签出到 {{branch}}"
   }
 }

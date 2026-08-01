@@ -327,3 +327,32 @@ pub struct ProjectCheckoutBranchesResponse {
     pub local_branches: Vec<CheckoutBranchItem>,
     pub remote_branches: Vec<CheckoutBranchItem>,
 }
+
+/// 签出目标分支类型。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CheckoutBranchKind {
+    Local,
+    Remote,
+}
+
+/// `checkout_project_branch` 入参。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCheckoutBranchInput {
+    pub project_id: i64,
+    pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    pub kind: CheckoutBranchKind,
+    /// 本地分支短名，或完整 remote-tracking 名（如 `origin/feature/foo`）。
+    pub name: String,
+}
+
+/// `checkout_project_branch` 响应：实际签出的本地分支名。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCheckoutBranchResponse {
+    pub branch: String,
+}
+

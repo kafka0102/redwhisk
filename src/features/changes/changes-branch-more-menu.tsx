@@ -227,6 +227,7 @@ export function ChangesBranchMoreMenu({
           onOpenChange={setCheckoutOpen}
           projectId={projectId}
           workspacePath={workspacePath}
+          onSuccess={onSuccess}
         />
       ) : null}
       {confirmationDialog}
