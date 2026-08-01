@@ -127,7 +127,7 @@ describe("TerminalShortcutCommandsDialog", () => {
   });
 
   it("disables the add button when the limit is reached", () => {
-    const commands = Array.from({ length: 10 }, (_, index) =>
+    const commands = Array.from({ length: 30 }, (_, index) =>
       makeCommand({
         id: index + 1,
         command: `cmd-${index}`,

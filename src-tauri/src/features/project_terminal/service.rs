@@ -64,7 +64,7 @@ fn next_project_terminal_name(existing_names: impl IntoIterator<Item = impl AsRe
 const TEMPORARY_PROJECT_TERMINAL_CONFIG_ID: i64 = -1;
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
-const PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT: i64 = 10;
+const PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT: i64 = 30;
 
 
 pub struct ProjectTerminalService<'connection> {
@@ -787,7 +787,10 @@ impl<'connection> ProjectTerminalService<'connection> {
                 if count >= PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT {
                     return Err(CommandError::new(
                         CommandErrorCode::ProjectTerminalValidationFailed,
-                        "常用命令最多 10 条。",
+                        format!(
+                            "常用命令最多 {} 条。",
+                            PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT
+                        ),
                     ).with_reason("shortcutLimitExceeded")
                     .with_detail(
                         ErrorDetail::new("ProjectTerminalShortcutCommand")
@@ -2870,5 +2873,85 @@ mod tests {
                 &manager,
             )
             .expect("close terminal");
+    }
+
+    #[test]
+    fn save_shortcut_command_allows_limit_and_rejects_beyond() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo_dir = temp_dir.path().join("shortcut-limit-repo");
+        std::fs::create_dir_all(repo_dir.join(".git")).expect("git dir");
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "shortcut-limit".to_string(),
+                repo_path: repo_dir.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+
+        use crate::types::project_terminal_shortcut_command::SaveProjectTerminalShortcutCommandInput;
+        use super::PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT;
+
+        for index in 0..PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT {
+            service
+                .save_shortcut_command(SaveProjectTerminalShortcutCommandInput {
+                    id: None,
+                    project_id: project.id,
+                    command: format!("cmd-{index}"),
+                    sort_order: index,
+                })
+                .unwrap_or_else(|error| {
+                    panic!("save within limit failed at {index}: {error:?}");
+                });
+        }
+
+        let listed = service
+            .list_shortcut_commands(
+                crate::types::project_terminal_shortcut_command::ListProjectTerminalShortcutCommandsInput {
+                    project_id: project.id,
+                },
+            )
+            .expect("list shortcuts");
+        assert_eq!(
+            listed.commands.len() as i64,
+            PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT
+        );
+
+        let error = service
+            .save_shortcut_command(SaveProjectTerminalShortcutCommandInput {
+                id: None,
+                project_id: project.id,
+                command: "cmd-overflow".to_string(),
+                sort_order: PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT,
+            })
+            .expect_err("31st shortcut must be rejected");
+
+        assert_eq!(error.reason.as_deref(), Some("shortcutLimitExceeded"));
+        assert!(
+            error.message.contains(&PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT.to_string()),
+            "error message should include limit: {}",
+            error.message
+        );
+
+        let serialized = serde_json::to_value(&error).expect("serialize error");
+        let details = serialized
+            .get("details")
+            .and_then(|value| value.as_array())
+            .expect("details array");
+        let limit = details.iter().find_map(|detail| detail.get("limit"));
+        assert_eq!(
+            limit.and_then(|value| value.as_i64()),
+            Some(PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT)
+        );
     }
 }

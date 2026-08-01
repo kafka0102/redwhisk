@@ -407,6 +407,15 @@
 
 .project-terminal-status-bar__menu {
   min-width: 300px;
+  max-height: min(500px, var(--available-height));
+  overflow-y: auto;
+}
+
+.project-terminal-status-bar__menu-manage {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--popover);
 }
 
 .project-terminal-status-bar__menu-command {

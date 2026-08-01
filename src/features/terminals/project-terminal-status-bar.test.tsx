@@ -213,4 +213,40 @@ describe("ProjectTerminalStatusBar", () => {
     expect(menuRoot).toBeTruthy();
     expect(window.getComputedStyle(menuRoot!).minWidth).toBe("300px");
   });
+
+  it("caps shortcut menu height and keeps manage item sticky", async () => {
+    listCommandsMock.mockResolvedValue({
+      commands: Array.from({ length: 12 }, (_, index) => ({
+        id: index + 1,
+        projectId: 1,
+        command: `cmd-${index + 1}`,
+        sortOrder: index,
+      })),
+    });
+    readCwdMock.mockResolvedValue({ sessionId: 10, cwd: null });
+
+    const user = userEvent.setup();
+    render(<ProjectTerminalStatusBar projectId={1} sessionId={10} />);
+
+    const trigger = await screen.findByRole("button", {
+      name: "Quick commands",
+    });
+    await user.click(trigger);
+
+    const manageItem = await screen.findByRole("menuitem", {
+      name: /Manage quick commands/i,
+    });
+    expect(manageItem).toHaveClass("project-terminal-status-bar__menu-manage");
+
+    const menuRoot = manageItem.closest(".project-terminal-status-bar__menu");
+    expect(menuRoot).toBeTruthy();
+
+    const menuStyle = window.getComputedStyle(menuRoot!);
+    expect(menuStyle.maxHeight).toMatch(/min\(500px/);
+    expect(menuStyle.overflowY).toBe("auto");
+
+    const manageStyle = window.getComputedStyle(manageItem);
+    expect(manageStyle.position).toBe("sticky");
+    expect(manageStyle.top).toBe("0px");
+  });
 });

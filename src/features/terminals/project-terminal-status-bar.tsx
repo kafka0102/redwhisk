@@ -165,7 +165,10 @@ export function ProjectTerminalStatusBar({
             return false;
           }}
         >
-          <DropdownMenuItem onClick={handleManageClick}>
+          <DropdownMenuItem
+            className="project-terminal-status-bar__menu-manage"
+            onClick={handleManageClick}
+          >
             <Settings aria-hidden="true" size={13} strokeWidth={1.8} />
             {messages.agentsFeature.shortcutCommandsManage}
           </DropdownMenuItem>

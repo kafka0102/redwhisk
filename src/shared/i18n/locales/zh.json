@@ -911,7 +911,7 @@
     "PROJECT_TERMINAL_VALIDATION_FAILED": {
       "sessionNotFound": "Agent Session 不存在。",
       "sessionNotInProject": "Agent Session 不属于当前 Project。",
-      "shortcutLimitExceeded": "常用命令最多 10 条。",
+      "shortcutLimitExceeded": "常用命令最多 30 条。",
       "shortcutNotFound": "常用命令不存在。",
       "shortcutNotFoundOrDeleted": "常用命令不存在或已删除。",
       "shortcutNotInProject": "常用命令不属于当前项目。",

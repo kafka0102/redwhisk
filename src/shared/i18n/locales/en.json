@@ -911,7 +911,7 @@
     "PROJECT_TERMINAL_VALIDATION_FAILED": {
       "sessionNotFound": "Agent Session not found.",
       "sessionNotInProject": "Agent Session does not belong to the current Project.",
-      "shortcutLimitExceeded": "Shortcuts are limited to 10 entries.",
+      "shortcutLimitExceeded": "Shortcuts are limited to 30 entries.",
       "shortcutNotFound": "Shortcut not found.",
       "shortcutNotFoundOrDeleted": "Shortcut not found or already deleted.",
       "shortcutNotInProject": "Shortcut does not belong to the current project.",

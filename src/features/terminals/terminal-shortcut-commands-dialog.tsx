@@ -13,7 +13,7 @@ import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ProjectTerminalShortcutCommandRecord } from "./project-terminal-commands";
 
-const SHORTCUT_COMMAND_MAX_COUNT = 10;
+const SHORTCUT_COMMAND_MAX_COUNT = 30;
 
 interface TerminalShortcutCommandsDialogProps {
   commands: ProjectTerminalShortcutCommandRecord[];
