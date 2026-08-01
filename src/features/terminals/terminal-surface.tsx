@@ -177,6 +177,9 @@ export function TerminalSurface({
             },
           })
         : null;
+      // 不在 boot 时立刻挂 WebGL：多终端 keep-alive 会共享 addon-webgl 的
+      // texture atlas，隐藏实例挂着 WebGL 时容易「一个花屏全家花屏」。
+      // 仅在 layout 可见时 setActive(true)。
       webglSession = createTerminalWebglSession(terminal, {
         isCurrent: () => !isDisposed && terminalRef.current === terminal,
       });
@@ -344,6 +347,10 @@ export function TerminalSurface({
       }
 
       const shouldBeVisible = isTerminalVisible();
+      // 无论 live 订阅是否变化，都按可见性对齐 WebGL：
+      // 隐藏实例必须卸下 addon，否则会继续占用跨 Terminal 共享的字形 atlas。
+      webglSession?.setActive(shouldBeVisible);
+
       if (shouldBeVisible === desiredVisible) {
         return;
       }
@@ -374,13 +381,25 @@ export function TerminalSurface({
     window.addEventListener("resize", handleWindowResize);
 
     const handleVisibilityChange = () => {
-      // 系统休眠恢复时 desiredVisible 可能未变，但仍需清 WebGL 纹理（xterm 官方场景）。
+      // 休眠恢复：GPU 纹理常已失效。clearTextureAtlas 不够时，整实例 recreate WebGL。
       if (document.visibilityState === "visible" && isLayoutVisible()) {
-        healTerminalViewport(terminal);
+        webglSession?.setActive(true);
+        webglSession?.recreate();
+      } else if (document.visibilityState === "hidden") {
+        webglSession?.setActive(false);
       }
       void refreshLiveVisibility();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 鼠标划过会触发局部重绘，用户常靠此「暂时看清」；主动 heal 把整屏纹理拉回。
+    const handlePointerEnter = () => {
+      if (!isLayoutVisible() || !isDocumentVisible()) {
+        return;
+      }
+      healTerminalViewport(terminal);
+    };
+    host.addEventListener("pointerenter", handlePointerEnter);
 
     const refreshStatus = async () => {
       try {
@@ -449,6 +468,7 @@ export function TerminalSurface({
         window.clearInterval(statusTimer);
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      host.removeEventListener("pointerenter", handlePointerEnter);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", handleWindowResize);
       disposeData.dispose();

@@ -94,21 +94,22 @@ TUI 日志几乎没有“按行文本”，`max_bytes` 经常落在：
 
 用户症状：
 
-- 长 Codex / SSH 远程 TUI 跑一段时间后，**偶发**绿色/彩色正文出现花字；
-- **鼠标框选复制后内容正常**（xterm buffer 内码点正确）；
+- 长 Codex / SSH 远程 TUI 或静态 `cat` 中文后，**偶发**正文花字、缺字；
+- **鼠标划过 / 框选后局部恢复，复制内容正常**（xterm buffer 内码点正确）；
+- **同一项目下其它终端 tab 跟着一起花屏**；切 tab 回来又可能再花；
 - headless / 纯 buffer 回放同一份 log **无** `U+FFFD`、中文可读。
 
-这与「半截 CSI 写进 buffer」不同：后者复制也会脏。根因落在 **WebGL renderer 的 texture atlas**：
+这与「半截 CSI 写进 buffer」不同：后者复制也会脏。根因有两层：
 
-- xterm 文档明确：`Terminal.clearTextureAtlas()` 用于纹理损坏（如休眠恢复后 Chromium/Nvidia 花屏）；
-- 旧逻辑只在 history / re-visible 时 `refresh`，**不**清 atlas；且 `document.visibilityState` 从 hidden→visible 时若订阅状态未变会直接 return，休眠场景不重绘；
-- `onContextLoss` 曾 dispose WebGL 后不重建，长时间会话更容易停在损坏纹理上。
+1. **WebGL texture atlas 损坏**（GPU / 休眠 / `display:none` 后纹理失效）；xterm 文档用 `Terminal.clearTextureAtlas()` 自愈。
+2. **`@xterm/addon-webgl` 的 `CharAtlasCache` 按字体/主题/DPR 跨 Terminal 共享同一 atlas**。项目终端与 Session 终端 Activity 均为 keep-alive + `hidden` 切换，若隐藏实例仍挂着 WebGL，任一实例清 atlas 或 GPU 写坏页，**同配置的所有终端一起花屏**——这就是「一个乱、全家乱」的机制。
 
-修复：
+修复（当前）：
 
-- `healTerminalViewport`：`clearTextureAtlas` + `refresh`；
-- history 写完 / live ready / 累计 live 输出约 512 KiB / 文档重新可见 时调用；
-- WebGL context loss 后有限次重建 addon。
+- **仅 layout + 文档可见时挂载 WebGL**（`terminal-webgl-session.setActive`）；隐藏 / 切走 / 休眠时 dispose addon，回退 canvas，**退出共享 atlas**。
+- 休眠恢复：`recreate()` 整实例重建 WebGL，而不仅 `clearTextureAtlas`。
+- `healTerminalViewport`：`clearTextureAtlas` + `refresh`；history 写完 / live ready / 累计 live 约 512 KiB / `pointerenter` 时调用。
+- context loss 后仅在仍 active 时有限次重建；耗尽则留在 canvas。
 
 ### 4.3 产品层：in-place 刷新本身不产生 scrollback
 
@@ -166,7 +167,7 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 1. **resize 稳定化**：spawn 前尽量用上次窗口尺寸；首帧 fit 完成前延迟注入 prompt（降低 DECSTBM 错位窗口）。  
 2. **catch-up 与 live 的“半帧”对齐**：若 tail 起点不是 synchronized update 边界，可向前扩到最近的 `CSI ?2026 h`（进一步减少首帧花屏）。  
 3. **可见性/订阅**：保持“隐藏不 fit、隐藏不写 xterm”；**sequence 未变时跳过 rewrite**（已实现，见 `TerminalLivePipeline.becomeVisible`），仅在隐藏期间有新输出时整段 catch-up。终端 Activity 与终端卡片均常驻挂载 + `hidden` 切换，避免切 Tab 卸载 xterm。  
-4. **WebGL 重绘与纹理自愈**：history / re-visible / 休眠恢复 / 长会话累计输出时 `clearTextureAtlas` + `refresh`；context loss 有限次重建（已实现）。
+4. **WebGL 仅可见挂载 + 纹理自愈**：hidden 终端卸 WebGL 避免共享 atlas 串扰；history / re-visible / pointerenter / 长会话累计输出 heal；休眠恢复 `recreate`；context loss 有限次重建（已实现）。
 
 ### P2（产品增强，非 bugfix）
 
@@ -203,7 +204,7 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 ## 9. 验收标准
 
 - 长 Codex TUI session：catch-up 后底部 composer **无半截 CSI 乱码**。
-- 长 session 偶发「画面花字但复制正常」：hide/show、休眠恢复或继续输出一段时间后应经 atlas heal 恢复；headless 回放同 log 不应出现 `U+FFFD`。  
+- 长 session 偶发「画面花字但复制正常」：hide/show 后仅可见终端挂 WebGL，不应再拖累其它 tab；休眠恢复 `recreate` 或 pointerenter heal 后画面恢复；headless 回放同 log 不应出现 `U+FFFD`。  
 - 同一 log 连续切 tab 隐藏/显示：不应因 0×0 fit 丢最后一行。  
 - `cargo test terminal_log_tail` / `pnpm test` 中 scrollback 相关用例通过。  
 - 对“过程滚不到”：若 `baseY=0` 且为 pure in-place CUP 覆盖，属协议边界（无提示、不伪造历史）；若 `baseY>0` 的已有 scrollback，用户应能上滚（含 TUI 开启 mouse reporting 时用 Shift+滚轮访问 buffer）。

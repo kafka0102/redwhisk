@@ -34,22 +34,58 @@ describe("createTerminalWebglSession", () => {
     vi.useRealTimers();
   });
 
-  it("loads webgl addon into the terminal", () => {
+  it("does not load webgl until setActive(true)", () => {
     const terminal = { loadAddon: vi.fn() };
     const session = createTerminalWebglSession(terminal as never, {
       isCurrent: () => true,
     });
 
+    expect(terminal.loadAddon).not.toHaveBeenCalled();
+    expect(session.getAddon()).toBeNull();
+    expect(session.isActive()).toBe(false);
+
+    session.setActive(true);
     expect(terminal.loadAddon).toHaveBeenCalledTimes(1);
     expect(session.getAddon()).not.toBeNull();
+    expect(session.isActive()).toBe(true);
+    expect(healTerminalViewport).toHaveBeenCalledWith(terminal);
     session.dispose();
   });
 
-  it("recreates webgl addon after context loss", () => {
+  it("loads immediately when initiallyActive", () => {
+    const terminal = { loadAddon: vi.fn() };
+    const session = createTerminalWebglSession(terminal as never, {
+      isCurrent: () => true,
+      initiallyActive: true,
+    });
+
+    expect(terminal.loadAddon).toHaveBeenCalledTimes(1);
+    expect(session.isActive()).toBe(true);
+    session.dispose();
+  });
+
+  it("detaches webgl on setActive(false) so hidden terminals leave the shared atlas", () => {
+    const terminal = { loadAddon: vi.fn() };
+    const session = createTerminalWebglSession(terminal as never, {
+      isCurrent: () => true,
+      initiallyActive: true,
+    });
+    const first = webglAddonInstances[0];
+    expect(first).toBeDefined();
+
+    session.setActive(false);
+    expect(first.dispose).toHaveBeenCalled();
+    expect(session.getAddon()).toBeNull();
+    expect(session.isActive()).toBe(false);
+    session.dispose();
+  });
+
+  it("recreates webgl addon after context loss while active", () => {
     vi.useFakeTimers();
     const terminal = { loadAddon: vi.fn() };
     const session = createTerminalWebglSession(terminal as never, {
       isCurrent: () => true,
+      initiallyActive: true,
     });
     const first = webglAddonInstances[0];
     expect(first).toBeDefined();
@@ -65,11 +101,41 @@ describe("createTerminalWebglSession", () => {
     session.dispose();
   });
 
+  it("does not recover context loss after setActive(false)", () => {
+    vi.useFakeTimers();
+    const terminal = { loadAddon: vi.fn() };
+    const session = createTerminalWebglSession(terminal as never, {
+      isCurrent: () => true,
+      initiallyActive: true,
+    });
+    const first = webglAddonInstances[0];
+    session.setActive(false);
+    first.triggerLoss();
+    vi.advanceTimersByTime(250);
+    expect(terminal.loadAddon).toHaveBeenCalledTimes(1);
+    session.dispose();
+  });
+
+  it("recreate rebuilds the addon while active", () => {
+    const terminal = { loadAddon: vi.fn() };
+    const session = createTerminalWebglSession(terminal as never, {
+      isCurrent: () => true,
+      initiallyActive: true,
+    });
+    const first = webglAddonInstances[0];
+    session.recreate();
+    expect(first.dispose).toHaveBeenCalled();
+    expect(terminal.loadAddon).toHaveBeenCalledTimes(2);
+    expect(session.getAddon()).not.toBe(null);
+    session.dispose();
+  });
+
   it("stops recovering after dispose", () => {
     vi.useFakeTimers();
     const terminal = { loadAddon: vi.fn() };
     const session = createTerminalWebglSession(terminal as never, {
       isCurrent: () => true,
+      initiallyActive: true,
     });
     const first = webglAddonInstances[0];
     session.dispose();
