@@ -304,3 +304,26 @@ pub struct ProbeGithubCommitResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_url: Option<String>,
 }
+
+
+/// 签出弹窗中的单条分支（本地或远程 tracking）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckoutBranchItem {
+    pub name: String,
+    pub author_name: String,
+    pub short_hash: String,
+    pub message: String,
+    /// 最后提交时间，epoch 毫秒。
+    pub committed_at: i64,
+}
+
+/// `list_project_checkout_branches` 响应。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCheckoutBranchesResponse {
+    pub current_branch: String,
+    pub has_uncommitted_changes: bool,
+    pub local_branches: Vec<CheckoutBranchItem>,
+    pub remote_branches: Vec<CheckoutBranchItem>,
+}

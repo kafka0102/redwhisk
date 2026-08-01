@@ -23,6 +23,7 @@ import {
   listAgentSessions,
   type AgentSessionListItem,
 } from "../agents/agent-session-commands";
+import { CheckoutBranchDialog } from "./checkout-branch-dialog";
 
 export interface ChangesBranchMoreMenuProps {
   projectId: number;
@@ -35,7 +36,7 @@ type BusyAction = "pull" | "push" | "delete" | null;
 
 /**
  * 变更 Activity 分支栏右侧「更多」菜单。
- * 主 checkout：拉取 / 推送；linked worktree：删除。
+ * 主 checkout：签出 / 拉取 / 推送；linked worktree：删除。
  */
 export function ChangesBranchMoreMenu({
   projectId,
@@ -46,6 +47,7 @@ export function ChangesBranchMoreMenu({
   const { alertDialog, showAlert } = useAlertDialog();
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const isBusy = busyAction !== null;
   const isProjectRoot = selectedRoot?.isProjectRoot === true;
@@ -176,6 +178,15 @@ export function ChangesBranchMoreMenu({
                 disabled={isBusy}
                 onClick={(event) => {
                   event.preventDefault();
+                  setCheckoutOpen(true);
+                }}
+              >
+                {t("changesBranchMenu.checkout")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isBusy}
+                onClick={(event) => {
+                  event.preventDefault();
                   handlePull();
                 }}
               >
@@ -210,6 +221,14 @@ export function ChangesBranchMoreMenu({
         message={loadingMessage}
         open={isBusy}
       />
+      {workspacePath ? (
+        <CheckoutBranchDialog
+          open={checkoutOpen}
+          onOpenChange={setCheckoutOpen}
+          projectId={projectId}
+          workspacePath={workspacePath}
+        />
+      ) : null}
       {confirmationDialog}
       {alertDialog}
     </>

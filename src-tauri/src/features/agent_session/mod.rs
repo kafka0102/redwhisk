@@ -19,6 +19,7 @@ mod worktree_setup;
 mod content_search;
 mod workspace;
 mod workspace_remote_ops;
+mod workspace_checkout_ops;
 mod workspace_github;
 mod lifecycle;
 

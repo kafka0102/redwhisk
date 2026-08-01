@@ -172,6 +172,8 @@ pub fn run() {
             features::agent_session::workspace_commands::get_project_worktree_commit_history,
             features::agent_session::workspace_commands::get_project_worktree_file_tree,
             features::agent_session::workspace_commands::search_project_worktree_content,
+            features::agent_session::workspace_commands::list_project_checkout_branches,
+            features::agent_session::workspace_commands::fetch_project_remotes,
             features::agent_session::workspace_commands::pull_project_worktree,
             features::agent_session::workspace_commands::push_project_worktree,
             features::agent_session::workspace_commands::delete_code_workspace_worktree,

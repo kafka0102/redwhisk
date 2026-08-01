@@ -6,7 +6,8 @@ use super::workspace::SessionWorkspaceService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
-    ProjectWorkspaceInput, ProjectWorkspacePathInput, ProjectWorkspaceWriteFileInput,
+    ProjectCheckoutBranchesResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
+    ProjectWorkspaceWriteFileInput,
     ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
     ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
@@ -114,6 +115,27 @@ pub async fn read_project_worktree_diff(
 ) -> Result<WorkspaceDiffContent, CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
     run_workspace_blocking(data_dir, move |service| service.read_diff(input)).await
+}
+
+
+#[tauri::command]
+pub async fn list_project_checkout_branches(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<ProjectCheckoutBranchesResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.list_checkout_branches(input)).await
+}
+
+#[tauri::command]
+pub async fn fetch_project_remotes(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.fetch_remotes(input)).await
 }
 
 #[tauri::command]

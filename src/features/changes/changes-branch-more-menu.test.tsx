@@ -12,6 +12,11 @@ import {
 import { listAgentSessions } from "../agents/agent-session-commands";
 import { ChangesBranchMoreMenu } from "./changes-branch-more-menu";
 
+vi.mock("./checkout-branch-dialog", () => ({
+  CheckoutBranchDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog">签出弹窗</div> : null,
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   pullProjectWorktree: vi.fn(),
   pushProjectWorktree: vi.fn(),
@@ -78,6 +83,34 @@ describe("ChangesBranchMoreMenu", () => {
     listSessionsMock.mockReset();
     listSessionsMock.mockResolvedValue({ sessions: [] });
     toastSuccessMock.mockReset();
+  });
+
+  it("shows checkout before pull and push for project root only", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = await screen.findByRole("menu");
+    const items = within(menu)
+      .getAllByRole("menuitem")
+      .map((el) => el.textContent);
+    expect(items).toEqual(["签出", "拉取", "推送"]);
+
+    await user.click(within(menu).getByText("签出"));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("签出弹窗");
+  });
+
+  it("does not show checkout on linked worktree", async () => {
+    const user = userEvent.setup();
+    renderMenu({ selectedRoot: worktreeRoot });
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = await screen.findByRole("menu");
+    const items = within(menu)
+      .getAllByRole("menuitem")
+      .map((el) => el.textContent);
+    expect(items).toEqual(["删除"]);
+    expect(screen.queryByText("签出")).not.toBeInTheDocument();
   });
 
   it("shows pull and push for project root without delete", async () => {

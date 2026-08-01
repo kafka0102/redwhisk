@@ -279,6 +279,37 @@ export function searchProjectWorktreeContent(
   );
 }
 
+export interface CheckoutBranchItem {
+  name: string;
+  authorName: string;
+  shortHash: string;
+  message: string;
+  /** 最后提交时间，epoch 毫秒。 */
+  committedAt: number;
+}
+
+export interface ProjectCheckoutBranchesResponse {
+  currentBranch: string;
+  hasUncommittedChanges: boolean;
+  localBranches: CheckoutBranchItem[];
+  remoteBranches: CheckoutBranchItem[];
+}
+
+export function listProjectCheckoutBranches(
+  input: ProjectWorkspaceInput,
+): Promise<ProjectCheckoutBranchesResponse> {
+  return invokeCommand<ProjectCheckoutBranchesResponse>(
+    "list_project_checkout_branches",
+    { input },
+  );
+}
+
+export function fetchProjectRemotes(
+  input: ProjectWorkspaceInput,
+): Promise<void> {
+  return invokeCommand<void>("fetch_project_remotes", { input });
+}
+
 export function pullProjectWorktree(
   input: ProjectWorkspaceInput,
 ): Promise<void> {

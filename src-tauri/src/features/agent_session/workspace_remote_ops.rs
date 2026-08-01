@@ -102,7 +102,8 @@ impl<'connection> SessionWorkspaceService<'connection> {
         Ok(())
     }
 
-    fn require_project_root_for_remote_ops(
+
+    pub(super) fn require_project_root_for_remote_ops(
         &self,
         input: &ProjectWorkspaceInput,
     ) -> Result<PathBuf, CommandError> {

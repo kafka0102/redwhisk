@@ -933,6 +933,7 @@
     }
   },
   "changesBranchMenu": {
+    "checkout": "Checkout",
     "moreActions": "More",
     "pull": "Pull",
     "push": "Push",
@@ -963,5 +964,23 @@
     "syncSuccess": "Synced successfully",
     "pullSuccess": "Pulled successfully",
     "pushSuccess": "Pushed successfully"
+  },
+  "changesCheckout": {
+    "selectBranchTitle": "Select a branch to check out",
+    "localSection": "Local branches",
+    "remoteSection": "Remote branches",
+    "refreshRemotes": "Refresh remote branches",
+    "refreshing": "Refreshing…",
+    "loadingBranches": "Loading branches…",
+    "loadFailed": "Failed to load branches",
+    "refreshFailed": "Failed to refresh remote branches",
+    "emptyLocal": "No local branches",
+    "emptyRemote": "No remote branches",
+    "justNow": "just now",
+    "minutesAgo": "{{minutes}}m ago",
+    "hoursAgo": "{{hours}}h ago",
+    "daysAgo": "{{days}}d ago",
+    "monthsAgo": "{{months}}mo ago",
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}"
   }
 }

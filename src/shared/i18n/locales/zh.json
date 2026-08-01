@@ -933,6 +933,7 @@
     }
   },
   "changesBranchMenu": {
+    "checkout": "签出",
     "moreActions": "更多",
     "pull": "拉取",
     "push": "推送",
@@ -963,5 +964,23 @@
     "syncSuccess": "同步成功",
     "pullSuccess": "拉取成功",
     "pushSuccess": "推送成功"
+  },
+  "changesCheckout": {
+    "selectBranchTitle": "选择要签出的分支",
+    "localSection": "本地分支",
+    "remoteSection": "远程分支",
+    "refreshRemotes": "刷新远程分支",
+    "refreshing": "正在刷新…",
+    "loadingBranches": "正在加载分支…",
+    "loadFailed": "加载分支列表失败",
+    "refreshFailed": "刷新远程分支失败",
+    "emptyLocal": "暂无本地分支",
+    "emptyRemote": "暂无远程分支",
+    "justNow": "刚刚",
+    "minutesAgo": "{{minutes}} 分钟前",
+    "hoursAgo": "{{hours}} 小时前",
+    "daysAgo": "{{days}} 天前",
+    "monthsAgo": "{{months}} 个月前",
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}"
   }
 }

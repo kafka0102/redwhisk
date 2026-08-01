@@ -1,4 +1,5 @@
 pub mod branch_sync;
+pub mod checkout_branches;
 pub mod command;
 pub mod remote;
 pub mod github_remote;

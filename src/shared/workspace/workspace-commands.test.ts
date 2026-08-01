@@ -7,6 +7,8 @@ import {
   readProjectWorktreeFile,
   writeProjectWorktreeFile,
   deleteCodeWorkspaceWorktree,
+  listProjectCheckoutBranches,
+  fetchProjectRemotes,
   pullProjectWorktree,
   pushProjectWorktree,
   searchProjectWorktreeContent,
@@ -74,6 +76,15 @@ describe("workspace commands", () => {
     );
 
     await expect(
+      listProjectCheckoutBranches({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+      }),
+    ).resolves.toEqual({ command: "list_project_checkout_branches" });
+    await expect(
+      fetchProjectRemotes({ projectId: 1, workspacePath: "/tmp/root" }),
+    ).resolves.toEqual({ command: "fetch_project_remotes" });
+    await expect(
       pullProjectWorktree({ projectId: 1, workspacePath: "/tmp/root" }),
     ).resolves.toEqual({ command: "pull_project_worktree" });
     await expect(
@@ -81,11 +92,21 @@ describe("workspace commands", () => {
     ).resolves.toEqual({ command: "push_project_worktree" });
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
       5,
-      "pull_project_worktree",
+      "list_project_checkout_branches",
       { input: { projectId: 1, workspacePath: "/tmp/root" } },
     );
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
       6,
+      "fetch_project_remotes",
+      { input: { projectId: 1, workspacePath: "/tmp/root" } },
+    );
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      7,
+      "pull_project_worktree",
+      { input: { projectId: 1, workspacePath: "/tmp/root" } },
+    );
+    expect(invokeCommandMock).toHaveBeenNthCalledWith(
+      8,
       "push_project_worktree",
       { input: { projectId: 1, workspacePath: "/tmp/root" } },
     );
@@ -97,7 +118,7 @@ describe("workspace commands", () => {
       }),
     ).resolves.toEqual({ command: "delete_code_workspace_worktree" });
     expect(invokeCommandMock).toHaveBeenNthCalledWith(
-      7,
+      9,
       "delete_code_workspace_worktree",
       {
         input: {
