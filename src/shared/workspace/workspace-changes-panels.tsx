@@ -1,9 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  LoaderCircle,
-  RefreshCw,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "../i18n/i18n";
@@ -217,12 +212,6 @@ export function WorkspaceChangesPanels({
                   type="button"
                   onClick={onSyncChanges}
                 >
-                  <RefreshCw
-                    aria-hidden="true"
-                    className="code-workspace__sync-changes-icon"
-                    size={14}
-                    strokeWidth={1.9}
-                  />
                   <span>{syncChangesLabel}</span>
                 </button>
               ) : (

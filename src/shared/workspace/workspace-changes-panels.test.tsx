@@ -257,4 +257,27 @@ describe("WorkspaceChangesPanels uncommitted empty sync button", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync Changes 2↓ 1↑" }));
     expect(onSyncChanges).toHaveBeenCalledTimes(1);
   });
+
+  it("renders sync button without refresh icon, label centered via button class", () => {
+    render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        isUncommittedExpanded={true}
+        isProjectRoot={true}
+        branchSync={{ upstream: "origin/main", ahead: 0, behind: 2 }}
+        onSyncChanges={() => {}}
+      />,
+      { wrapper },
+    );
+
+    const button = screen.getByRole("button", { name: "Sync Changes 2↓" });
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent("Sync Changes 2↓");
+    expect(
+      button.querySelector(".code-workspace__sync-changes-icon"),
+    ).not.toBeInTheDocument();
+    expect(button.querySelector("svg")).not.toBeInTheDocument();
+    expect(button).toHaveClass("code-workspace__sync-changes");
+    // 水平居中由 .code-workspace__sync-changes 的 justify-content: center 承担。
+  });
 });
