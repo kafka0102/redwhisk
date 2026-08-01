@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -402,5 +404,39 @@ describe("AgentProfileForm", () => {
         );
       });
     });
+  });
+
+  it("keeps the scope field inside the scrollable body above the footer", () => {
+    renderForm({
+      mode: "edit",
+      scope: "global",
+      projectId: null,
+      profile: buildProfile({ name: "OpenCode", agentType: "opencode" }),
+      onCancel: () => {},
+      onSaved: () => {},
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "编辑智能体" });
+    const body = dialog.querySelector(".agent-dialog__body");
+    const footer = dialog.querySelector(".issue-dialog__footer");
+    const scopeField = screen.getByRole("combobox", { name: "范围" });
+
+    expect(body).not.toBeNull();
+    expect(footer).not.toBeNull();
+    expect(body).toContainElement(scopeField);
+    expect(
+      body!.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("locks agent dialog body scroll contract so max-height cannot cover fields", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/shared/styles/settings.css"),
+      "utf8",
+    );
+    const rule = css.match(/\.agent-dialog__body\s*\{[^}]+\}/)?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/min-height:\s*0/);
+    expect(rule).toMatch(/overflow-y:\s*auto/);
   });
 });

@@ -300,7 +300,9 @@
   display: grid;
   align-content: start;
   gap: 12px;
+  min-height: 0;
   padding: 14px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 

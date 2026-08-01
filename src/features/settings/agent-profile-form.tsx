@@ -227,7 +227,7 @@ export function AgentProfileForm({
       }}
     >
       <form
-        className="issue-dialog"
+        className="issue-dialog issue-dialog--compact"
         aria-label={dialogTitle}
         aria-modal="true"
         role="dialog"
