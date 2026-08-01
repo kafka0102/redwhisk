@@ -355,7 +355,7 @@ fn start_tui_with_stdin_prompt_returns_after_register() {
                 project_id: 1,
                 issue_id: 11,
                 agent_profile_id: 101,
-                // 非 codex 可执行名 → stdin 注入；覆盖 claude TUI 首条 prompt 路径。
+                // 自定义 sleep script + codex type 走 trailing argv；覆盖 register 后仍可返回。
                 prompt_snapshot: "hello from issue via stdin".to_string(),
                 workflow_skill_name: None,
                 workspace_mode: Some(WorkspaceMode::CurrentBranch),

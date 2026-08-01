@@ -17,7 +17,7 @@ pub mod session_registry;
 
 pub use provider_descriptor::{
     AgentProviderDescriptor, ClaudeDescriptor, CodexDescriptor, OpenCodeDescriptor, RuntimeConfig,
-    descriptor_for,
+    TuiInitialPromptDelivery, TuiInitialPromptPlan, descriptor_for, plan_tui_initial_prompt,
 };
 pub use provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,

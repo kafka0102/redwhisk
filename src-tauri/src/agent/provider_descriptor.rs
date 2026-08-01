@@ -32,6 +32,53 @@ pub struct RuntimeConfig {
     pub effort: Option<String>,
 }
 
+/// TUI 首条 prompt 投递方式（ADR-0022：能作 CLI 参数则注入参数，否则 stdin）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TuiInitialPromptDelivery {
+    /// `cmd <prompt>` 位置参数（codex / claude / grok）。
+    TrailingArgument,
+    /// `cmd --prompt <prompt>`（opencode）。
+    PromptFlag,
+    /// PTY 就绪后写 stdin + CR（未知/自定义 binary 回退）。
+    StdinSubmit,
+}
+
+/// 把首条 prompt 落到具体 spawn 命令 / trailing argv / stdin 注入计划。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TuiInitialPromptPlan {
+    /// 实际 spawn 使用的命令（OpenCode 会内联 `--prompt`；其余保持 snapshot）。
+    pub spawn_command: String,
+    /// 作为位置参数附加的 prompt（仅 TrailingArgument）。
+    pub trailing_prompt: Option<String>,
+    /// register 后是否再写 stdin（仅 StdinSubmit）。
+    pub inject_stdin_after_register: bool,
+}
+
+/// 按 provider 解析 TUI 首条 prompt 投递计划；不改 DB 中的 command_snapshot。
+pub fn plan_tui_initial_prompt(
+    agent_type: &AgentType,
+    command_snapshot: &str,
+    prompt: &str,
+) -> TuiInitialPromptPlan {
+    match descriptor_for(agent_type).tui_initial_prompt_delivery() {
+        TuiInitialPromptDelivery::TrailingArgument => TuiInitialPromptPlan {
+            spawn_command: command_snapshot.to_string(),
+            trailing_prompt: Some(prompt.to_string()),
+            inject_stdin_after_register: false,
+        },
+        TuiInitialPromptDelivery::PromptFlag => TuiInitialPromptPlan {
+            spawn_command: command::append_prompt_flag_arg(command_snapshot, prompt),
+            trailing_prompt: None,
+            inject_stdin_after_register: false,
+        },
+        TuiInitialPromptDelivery::StdinSubmit => TuiInitialPromptPlan {
+            spawn_command: command_snapshot.to_string(),
+            trailing_prompt: None,
+            inject_stdin_after_register: true,
+        },
+    }
+}
+
 /// Provider 能力描述符：把 Codex / Claude 的启动期能力差异收回 provider 实现。
 ///
 /// service / command 不再 `match agent_type`，而是 `descriptor_for(agent_type).<method>()`。
@@ -65,6 +112,9 @@ pub trait AgentProviderDescriptor: Send + Sync {
     /// `mode` 为 profile 协作模式 id；`dangerous` 为 profile 危险开关。
     /// 实现须按 provider 的交互式 CLI 语义映射审批/沙箱参数，且不得注入结构化协议参数。
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String;
+
+    /// TUI 首条 prompt 如何投递（CLI 参数优先，stdin 仅作回退）。
+    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery;
 
     /// resume 路径下 `command_snapshot` 为空时的兜底命令（provider 默认 binary + bypass）。
     fn fallback_command_when_snapshot_empty(&self) -> String;
@@ -137,6 +187,10 @@ impl AgentProviderDescriptor for CodexDescriptor {
         build_codex_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
+        TuiInitialPromptDelivery::TrailingArgument
+    }
+
     fn fallback_command_when_snapshot_empty(&self) -> String {
         append_missing_args(
             CODEX_FALLBACK_BINARY,
@@ -199,6 +253,10 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         build_claude_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
+        TuiInitialPromptDelivery::TrailingArgument
+    }
+
     fn fallback_command_when_snapshot_empty(&self) -> String {
         ensure_claude_bypass_permission_args(CLAUDE_FALLBACK_BINARY)
     }
@@ -259,6 +317,10 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
 
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
         build_opencode_tui_command_snapshot(raw_command, mode, dangerous)
+    }
+
+    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
+        TuiInitialPromptDelivery::PromptFlag
     }
 
     fn fallback_command_when_snapshot_empty(&self) -> String {
@@ -325,6 +387,10 @@ impl AgentProviderDescriptor for GrokDescriptor {
         build_grok_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
+        TuiInitialPromptDelivery::TrailingArgument
+    }
+
     fn fallback_command_when_snapshot_empty(&self) -> String {
         GROK_FALLBACK_BINARY.to_string()
     }
@@ -365,3 +431,7 @@ mod tests;
 #[cfg(test)]
 #[path = "provider_descriptor_grok_tests.rs"]
 mod grok_tests;
+
+#[cfg(test)]
+#[path = "provider_descriptor_prompt_tests.rs"]
+mod prompt_tests;

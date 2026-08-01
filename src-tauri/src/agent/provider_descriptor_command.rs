@@ -130,6 +130,19 @@ pub(super) fn ensure_claude_bypass_permission_args(command: &str) -> String {
     }
 }
 
+
+
+/// 为 OpenCode 等 CLI 追加 `--prompt <quoted>`；写入 shell `-lc` 命令串，值用单引号转义。
+pub(super) fn append_prompt_flag_arg(command: &str, prompt: &str) -> String {
+    let trimmed = command.trim();
+    let quoted = format!("'{}'", prompt.replace('\'', "'\"'\"'"));
+    if trimmed.is_empty() {
+        format!("--prompt {quoted}")
+    } else {
+        format!("{trimmed} --prompt {quoted}")
+    }
+}
+
 pub(super) fn append_missing_args(command: &str, args: &[&str]) -> String {
     let trimmed = command.trim();
     let mut command_line = trimmed.to_string();

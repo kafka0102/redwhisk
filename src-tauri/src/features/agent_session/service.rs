@@ -52,10 +52,9 @@ use crate::types::session_event::SessionEventType;
 
 
 use super::command_snapshot::build_tui_command_snapshot_for_profile;
-use super::codex_session_id_capture::{
-    command_supports_prompt_argument, should_attempt_codex_session_capture,
-};
+use super::codex_session_id_capture::should_attempt_codex_session_capture;
 use crate::agent::descriptor_for;
+use crate::agent::provider_descriptor::plan_tui_initial_prompt;
 use super::launch::start_provider_session;
 use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
 use super::timeline::latest_output_from_session_log;
@@ -392,20 +391,23 @@ impl<'connection> AgentSessionService<'connection> {
             ));
         }
 
-        let command_accepts_prompt_argument =
-            command_supports_prompt_argument(&launch.command_snapshot);
-        let initial_prompt_argument =
-            command_accepts_prompt_argument.then(|| prompt_snapshot.clone());
+        // ADR-0022：能作 CLI 参数则注入参数；否则 register 后再写 stdin。
+        // codex/claude/grok → trailing argv；opencode → --prompt；其它 → stdin+CR。
+        let prompt_plan = plan_tui_initial_prompt(
+            &launch.profile.agent_type,
+            &launch.command_snapshot,
+            &prompt_snapshot,
+        );
 
         let pending_pty = if let Some(pty_sessions) = pty_sessions {
             Some(
                 pty_sessions
                     .spawn_pending(&PtySpawnRequest {
                         mode: PtyCommandMode::ExecReplace,
-                        command: launch.command_snapshot.clone(),
+                        command: prompt_plan.spawn_command.clone(),
                         working_dir: launch.working_dir.clone(),
                         log_path: launch.log_path.clone(),
-                        initial_prompt: initial_prompt_argument.clone(),
+                        initial_prompt: prompt_plan.trailing_prompt.clone(),
                         rows: 32,
                         cols: 120,
                         startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
@@ -422,7 +424,7 @@ impl<'connection> AgentSessionService<'connection> {
                 &launch.profile,
                 &launch.working_dir,
                 &launch.log_path,
-                initial_prompt_argument.as_deref(),
+                prompt_plan.trailing_prompt.as_deref(),
             ) {
                 Ok(child) => child,
                 Err(error) => {
@@ -439,10 +441,8 @@ impl<'connection> AgentSessionService<'connection> {
             None
         };
         // 注意：不得在 register（启动 master reader）之前向 pending PTY write_input。
-        // Claude/非 codex 的 Issue TUI 首条 prompt 靠 stdin 注入；若子进程（尤其是
-        // 交互式 TUI）已大量写 stdout 却无人 drain，再写 stdin 会因 PTY 双向缓冲
-        // 回压死锁，表现为 worktree 已建、claude 已起、但 start_agent_session 永不返回、
-        // DB 无 session、Issue 仍 backlog。
+        // 仅 StdinSubmit 回退路径会在 register 后写 stdin；若子进程已大量写 stdout
+        // 却无人 drain，再写 stdin 会因 PTY 双向缓冲回压死锁。
         let pending_pty = pending_pty;
 
         let transaction = self
@@ -569,8 +569,8 @@ impl<'connection> AgentSessionService<'connection> {
                             return Err(agent_session_start_error(error.message));
                         }
 
-                        // reader 已启动后再注入首条 prompt，避免 PTY 回压死锁。
-                        if !command_accepts_prompt_argument {
+                        // reader 已启动后再注入首条 prompt（仅 CLI 无法携带时），避免 PTY 回压死锁。
+                        if prompt_plan.inject_stdin_after_register {
                             if let Err(error) =
                                 pty_sessions.write_input(result.session_id, &normalized_prompt)
                             {

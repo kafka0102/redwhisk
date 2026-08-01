@@ -471,4 +471,3 @@
         assert!(command.contains("--format"));
         assert!(command.contains("json"));
     }
-

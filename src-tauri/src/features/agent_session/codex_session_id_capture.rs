@@ -30,11 +30,6 @@ pub(super) fn should_attempt_codex_session_capture(command: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// 命令是否接受 prompt 位置参数（当前等价于 codex 判定）。
-pub(super) fn command_supports_prompt_argument(command: &str) -> bool {
-    should_attempt_codex_session_capture(command)
-}
-
 /// 解析 `CODEX_HOME`，缺省回退到 `$HOME/.codex`。
 pub(super) fn resolve_codex_home() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
@@ -209,16 +204,6 @@ fn session_file_matches_working_dir(path: &Path, session_id: &str, working_dir: 
 mod tests {
     use super::*;
     use std::time::SystemTime;
-
-    #[test]
-    fn command_supports_prompt_argument_only_for_codex_binary() {
-        assert!(command_supports_prompt_argument("/usr/local/bin/codex"));
-        assert!(command_supports_prompt_argument("codex"));
-        assert!(command_supports_prompt_argument(
-            "codex --dangerously-bypass-approvals-and-sandbox"
-        ));
-        assert!(!command_supports_prompt_argument("/tmp/echo-stdin.sh"));
-    }
 
     #[test]
     fn detect_codex_session_id_from_home_matches_recent_session_file_by_working_dir() {

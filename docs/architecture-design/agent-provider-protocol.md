@@ -49,6 +49,7 @@ Agent TUI 会话视图 (xterm)
 - **Claude TUI**：已有 `--permission-mode` 则保留；`full-access` 或 `dangerous` → `--permission-mode bypassPermissions`；`plan` / `acceptEdits` / `auto` 映射对应 permission-mode；trim 路径。
 - **OpenCode TUI**：trim；`full-access` 或 `dangerous` → 追加 `--auto`；不注入 `run` / `--format`。
 - **Grok TUI**：trim；`full-access` 或 `dangerous` → 追加 `--always-approve`；不注入 `-p` / `--output-format` / `agent stdio` 等结构化参数。Grok 为 TUI-only，displayMode 锁定 `tui`。
+- **TUI 首条 prompt**：codex/claude/grok 以位置参数注入；opencode 用 `--prompt`；其它/未知回退为 PTY register 后 stdin + `\r`（ADR-0022）。
 
 ## Session 生命周期 seam（displayMode）
 
