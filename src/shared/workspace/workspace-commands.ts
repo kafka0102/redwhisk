@@ -333,6 +333,23 @@ export function checkoutProjectBranch(
   );
 }
 
+export interface ProjectCreateBranchInput extends ProjectWorkspaceInput {
+  /** 新分支名（无前端格式校验，空/非法由 Git 拒绝）。 */
+  name: string;
+}
+
+export interface ProjectCreateBranchResponse {
+  branch: string;
+}
+
+export function createProjectBranch(
+  input: ProjectCreateBranchInput,
+): Promise<ProjectCreateBranchResponse> {
+  return invokeCommand<ProjectCreateBranchResponse>("create_project_branch", {
+    input,
+  });
+}
+
 export function pullProjectWorktree(
   input: ProjectWorkspaceInput,
 ): Promise<void> {

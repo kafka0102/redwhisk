@@ -24,6 +24,7 @@ import {
   type AgentSessionListItem,
 } from "../agents/agent-session-commands";
 import { CheckoutBranchDialog } from "./checkout-branch-dialog";
+import { CreateBranchDialog } from "./create-branch-dialog";
 
 export interface ChangesBranchMoreMenuProps {
   projectId: number;
@@ -36,7 +37,7 @@ type BusyAction = "pull" | "push" | "delete" | null;
 
 /**
  * 变更 Activity 分支栏右侧「更多」菜单。
- * 主 checkout：签出 / 拉取 / 推送；linked worktree：删除。
+ * 主 checkout：签出 / 拉取 / 推送 / 创建分支；linked worktree：删除。
  */
 export function ChangesBranchMoreMenu({
   projectId,
@@ -48,6 +49,7 @@ export function ChangesBranchMoreMenu({
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [createBranchOpen, setCreateBranchOpen] = useState(false);
 
   const isBusy = busyAction !== null;
   const isProjectRoot = selectedRoot?.isProjectRoot === true;
@@ -201,6 +203,15 @@ export function ChangesBranchMoreMenu({
               >
                 {t("changesBranchMenu.push")}
               </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isBusy}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setCreateBranchOpen(true);
+                }}
+              >
+                {t("changesBranchMenu.createBranch")}
+              </DropdownMenuItem>
             </>
           ) : selectedRoot ? (
             <DropdownMenuItem
@@ -225,6 +236,15 @@ export function ChangesBranchMoreMenu({
         <CheckoutBranchDialog
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
+          projectId={projectId}
+          workspacePath={workspacePath}
+          onSuccess={onSuccess}
+        />
+      ) : null}
+      {workspacePath ? (
+        <CreateBranchDialog
+          open={createBranchOpen}
+          onOpenChange={setCreateBranchOpen}
           projectId={projectId}
           workspacePath={workspacePath}
           onSuccess={onSuccess}

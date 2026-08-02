@@ -945,7 +945,10 @@
     "pushSuccess": "推送成功",
     "deleteSuccess": "删除成功",
     "deleteConfirm": "确定要删除吗？",
-    "cannotDeleteWhileRunning": "该工作区仍有进行中的智能体任务，无法删除。"
+    "cannotDeleteWhileRunning": "该工作区仍有进行中的智能体任务，无法删除。",
+    "createBranch": "创建分支",
+    "creating": "正在创建分支…",
+    "createSuccess": "已创建并签出 {{branch}}"
   },
   "changesSync": {
     "syncChangesBehind": "同步更改 {{count}}↓",
@@ -987,5 +990,14 @@
     "dirtyConfirmAction": "切换",
     "checkingOut": "正在签出…",
     "checkoutSuccess": "已签出到 {{branch}}"
+  },
+  "changesCreateBranch": {
+    "title": "创建分支",
+    "branchNameLabel": "分支名",
+    "branchNamePlaceholder": "请输入分支名（基于当前分支名）",
+    "confirm": "确定",
+    "cancel": "取消",
+    "creating": "正在创建分支…",
+    "createSuccess": "已创建并签出 {{branch}}"
   }
 }

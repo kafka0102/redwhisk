@@ -17,6 +17,11 @@ vi.mock("./checkout-branch-dialog", () => ({
     open ? <div role="dialog">签出弹窗</div> : null,
 }));
 
+vi.mock("./create-branch-dialog", () => ({
+  CreateBranchDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog">创建分支弹窗</div> : null,
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   pullProjectWorktree: vi.fn(),
   pushProjectWorktree: vi.fn(),
@@ -85,7 +90,7 @@ describe("ChangesBranchMoreMenu", () => {
     toastSuccessMock.mockReset();
   });
 
-  it("shows checkout before pull and push for project root only", async () => {
+  it("shows checkout, pull, push, then create branch for project root only", async () => {
     const user = userEvent.setup();
     renderMenu();
 
@@ -94,10 +99,20 @@ describe("ChangesBranchMoreMenu", () => {
     const items = within(menu)
       .getAllByRole("menuitem")
       .map((el) => el.textContent);
-    expect(items).toEqual(["签出", "拉取", "推送"]);
+    expect(items).toEqual(["签出", "拉取", "推送", "创建分支"]);
 
     await user.click(within(menu).getByText("签出"));
     expect(await screen.findByRole("dialog")).toHaveTextContent("签出弹窗");
+  });
+
+  it("opens create branch dialog from project root more menu", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = await screen.findByRole("menu");
+    await user.click(within(menu).getByText("创建分支"));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("创建分支弹窗");
   });
 
   it("does not show checkout on linked worktree", async () => {
@@ -111,6 +126,7 @@ describe("ChangesBranchMoreMenu", () => {
       .map((el) => el.textContent);
     expect(items).toEqual(["删除"]);
     expect(screen.queryByText("签出")).not.toBeInTheDocument();
+    expect(screen.queryByText("创建分支")).not.toBeInTheDocument();
   });
 
   it("shows pull and push for project root without delete", async () => {
@@ -120,6 +136,7 @@ describe("ChangesBranchMoreMenu", () => {
     await user.click(screen.getByRole("button", { name: "更多" }));
     expect(await screen.findByText("拉取")).toBeInTheDocument();
     expect(screen.getByText("推送")).toBeInTheDocument();
+    expect(screen.getByText("创建分支")).toBeInTheDocument();
     expect(screen.queryByText("删除")).not.toBeInTheDocument();
   });
 
@@ -131,6 +148,7 @@ describe("ChangesBranchMoreMenu", () => {
     expect(await screen.findByText("删除")).toBeInTheDocument();
     expect(screen.queryByText("拉取")).not.toBeInTheDocument();
     expect(screen.queryByText("推送")).not.toBeInTheDocument();
+    expect(screen.queryByText("创建分支")).not.toBeInTheDocument();
   });
 
   it("pulls selected root path, shows loading then success toast and refreshes", async () => {

@@ -945,7 +945,10 @@
     "pushSuccess": "Pushed successfully",
     "deleteSuccess": "Deleted successfully",
     "deleteConfirm": "Are you sure you want to delete?",
-    "cannotDeleteWhileRunning": "This workspace still has a running agent turn and cannot be deleted."
+    "cannotDeleteWhileRunning": "This workspace still has a running agent turn and cannot be deleted.",
+    "createBranch": "Create Branch",
+    "creating": "Creating branch…",
+    "createSuccess": "Created and checked out {{branch}}"
   },
   "changesSync": {
     "syncChangesBehind": "Sync Changes {{count}}↓",
@@ -987,5 +990,14 @@
     "dirtyConfirmAction": "Switch",
     "checkingOut": "Checking out…",
     "checkoutSuccess": "Checked out {{branch}}"
+  },
+  "changesCreateBranch": {
+    "title": "Create Branch",
+    "branchNameLabel": "Branch name",
+    "branchNamePlaceholder": "Enter branch name (based on current branch)",
+    "confirm": "OK",
+    "cancel": "Cancel",
+    "creating": "Creating branch…",
+    "createSuccess": "Created and checked out {{branch}}"
   }
 }

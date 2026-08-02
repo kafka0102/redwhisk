@@ -10,6 +10,7 @@ import {
   listProjectCheckoutBranches,
   fetchProjectRemotes,
   checkoutProjectBranch,
+  createProjectBranch,
   pullProjectWorktree,
   pushProjectWorktree,
   searchProjectWorktreeContent,
@@ -148,6 +149,23 @@ describe("workspace commands", () => {
         },
       },
     );
+  });
+
+  it("invokes create_project_branch with branch name envelope", async () => {
+    await expect(
+      createProjectBranch({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        name: "feature-x",
+      }),
+    ).resolves.toEqual({ command: "create_project_branch" });
+    expect(invokeCommandMock).toHaveBeenCalledWith("create_project_branch", {
+      input: {
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        name: "feature-x",
+      },
+    });
   });
 
   it("invokes write_project_worktree_file with path and content envelope", async () => {

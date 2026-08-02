@@ -356,3 +356,22 @@ pub struct ProjectCheckoutBranchResponse {
     pub branch: String,
 }
 
+/// `create_project_branch` 入参：基于当前 HEAD 创建并签出本地分支。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCreateBranchInput {
+    pub project_id: i64,
+    pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    /// 新分支名（无前端格式校验，空/非法由 Git 拒绝）。
+    pub name: String,
+}
+
+/// `create_project_branch` 响应：新创建并签出的本地分支名。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCreateBranchResponse {
+    pub branch: String,
+}
+

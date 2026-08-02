@@ -175,6 +175,7 @@ pub fn run() {
             features::agent_session::workspace_commands::list_project_checkout_branches,
             features::agent_session::workspace_commands::fetch_project_remotes,
             features::agent_session::workspace_commands::checkout_project_branch,
+            features::agent_session::workspace_commands::create_project_branch,
             features::agent_session::workspace_commands::pull_project_worktree,
             features::agent_session::workspace_commands::push_project_worktree,
             features::agent_session::workspace_commands::delete_code_workspace_worktree,
