@@ -109,13 +109,21 @@ _Avoid_: 忽略版本、关闭应用即失效的一次性状态
 _Avoid_: 版本提醒冷却、卸载更新、降级
 
 **变更 Activity**（原「代码工作区变更视图」）：
-与「代码」Activity 同级的顶层工作台页面，位于左侧菜单 code 与终端之间。两栏布局：左栏为分支下拉（不设刷新按钮）与其右侧「更多」菜单 + 变更视图，右栏为 diff 主体（点单文件打开单文件 diff，或经提交上下文菜单「打开更改」进入提交全部更改视图）。「更多」仅属于变更 Activity：选中项目主 checkout 时提供签出、拉取与推送（签出居首）；选中 linked worktree 时提供删除（确认文案为「确定要删除吗？」）。签出打开居中 500px 分支选择弹窗，分本地分支与远程分支两段（隐藏已被其他 worktree 占用的本地分支；远程名显示完整 remote-tracking 名），点击分支切换当前主 checkout；有未提交改动时先确认再执行普通 checkout。弹窗打开只读本地 refs，标题栏右侧刷新执行 `git fetch --all --prune` 后重列。拉取执行当前分支 `git pull`；推送在已有 upstream 时 `git push`，无 upstream 时 `git push -u origin HEAD`；删除可针对任意 linked worktree（不限 RedWhisk 托管、不绑 Issue），强制移除目录并删除对应本地分支，但若该路径上存在 running turn 的 Agent session 则禁止删除。签出/拉取/推送成功后立即刷新未提交与已提交数据（签出并刷新分支根展示）。变更视图以当前选中根工作区为范围，分「未提交变更」「已提交变更」两个默认展开的折叠面板；未提交面板列出工作区改动文件（列表最大高度 300px，超出滚动），已提交面板以时间轴呈现该分支最近提交，已推送云端的记录圆点为紫色、本地为蓝色，第一条已推送记录右侧显示远端分支名 Tag；其渲染件与 Agent 会话页变更面板共用同一套共享实现。当未提交文件为空、当前为项目主 checkout（非 linked worktree）、且本地相对 upstream 有 ahead 或 behind 时，未提交空态以「同步更改」按钮替换「暂无未提交变更」文案。数据获取以选中根的 workspacePath 为键、按各自生命周期独立拉取；变更 Activity 采用条件轮询——页面可见且当前 worktree 上存在 running turn 的 Agent session 时每 4s 刷新一次，可见但无 running 时每 8s，页面隐藏时暂停，切换分支或由隐藏恢复可见时各补拉一次，遇 worktree 不可恢复错误停止轮询。「代码」Activity 不再保留「文件 / 变更」切换，仅提供文件树 + 编辑器，也不提供该「更多」菜单。
+与「代码」Activity 同级的顶层工作台页面，位于左侧菜单 code 与终端之间。两栏布局：左栏为分支下拉（不设刷新按钮）与其右侧「更多」菜单 + 变更视图，右栏为 diff 主体（点单文件打开单文件 diff，或经提交上下文菜单「打开更改」进入提交全部更改视图）。「更多」仅属于变更 Activity：选中项目主 checkout 时提供签出、拉取、推送与创建分支（签出居首，创建分支居末）；选中 linked worktree 时提供删除（确认文案为「确定要删除吗？」）。签出打开居中 500px 分支选择弹窗，分本地分支与远程分支两段（隐藏已被其他 worktree 占用的本地分支；远程名显示完整 remote-tracking 名），点击分支切换当前主 checkout；有未提交改动时先确认再执行普通 checkout。弹窗打开只读本地 refs，标题栏右侧刷新执行 `git fetch --all --prune` 后重列。拉取执行当前分支 `git pull`；推送采用安全推送策略（有 upstream 时先 fetch，可快进落后则 pull --ff-only 再 push，无法快进则中止提示且不留下 merge/rebase 态；无 upstream 时 push -u origin HEAD）；创建分支打开 400px 对话框输入分支名（默认空、无前端校验），确定后基于当前 HEAD 创建并签出，未提交改动随迁，Git 拒绝则报错不丢弃改动；删除可针对任意 linked worktree（不限 RedWhisk 托管、不绑 Issue），强制移除目录并删除对应本地分支，但若该路径上存在 running turn 的 Agent session 则禁止删除。签出/创建分支/拉取/推送成功后立即刷新未提交与已提交数据（签出与创建分支并刷新分支根展示）。变更视图以当前选中根工作区为范围，分「未提交变更」「已提交变更」两个默认展开的折叠面板；未提交面板列出工作区改动文件（列表最大高度 300px，超出滚动），已提交面板以时间轴呈现该分支最近提交，已推送云端的记录圆点为紫色、本地为蓝色，第一条已推送记录右侧显示远端分支名 Tag；其渲染件与 Agent 会话页变更面板共用同一套共享实现。当未提交文件为空、当前为项目主 checkout（非 linked worktree）、且本地相对 upstream 有 ahead 或 behind 时，未提交空态以「同步更改」按钮替换「暂无未提交变更」文案。数据获取以选中根的 workspacePath 为键、按各自生命周期独立拉取；变更 Activity 采用条件轮询——页面可见且当前 worktree 上存在 running turn 的 Agent session 时每 4s 刷新一次，可见但无 running 时每 8s，页面隐藏时暂停，切换分支或由隐藏恢复可见时各补拉一次，遇 worktree 不可恢复错误停止轮询。「代码」Activity 不再保留「文件 / 变更」切换，仅提供文件树 + 编辑器，也不提供该「更多」菜单。
 _Avoid_: 暂存 / 提交 / 编辑入口、跨根聚合、无差别持续轮询、在「代码」Activity 内保留变更入口或同样的拉取/推送/删除菜单、无 running turn 检查的 worktree 删除
 
+**安全推送**：
+变更 Activity 主 checkout 推送路径的远端同步策略：先 fetch；相对 upstream 可快进落后则静默 `pull --ff-only` 再 push；ahead-only 直接 push；分叉或无法快进则失败提示手动处理，不启动 merge/rebase，工作区保持干净。无 upstream 时仍 `push -u origin HEAD`。「更多 → 推送」与「同步更改」中的 push 共用此策略。
+_Avoid_: force push、自动 rebase、自动 merge commit、污染性冲突落地
+
 **同步更改**：
-变更 Activity 在「未提交变更」空态下，针对项目主 checkout 相对其 upstream 的 ahead/behind 所提供的一键同步入口；文案按三种计数形态展示（仅 behind / 仅 ahead / 双向）。点击后按需先确认：仅 behind 执行 pull，仅 ahead 执行 push，双向先 pull 后 push；失败即停。确认可「不再显示」并记入本机 localStorage 全局偏好。计数基于本地 tracking ref，不在刷新路径上隐式 `git fetch`。linked worktree 不提供此入口。
+变更 Activity 在「未提交变更」空态下，针对项目主 checkout 相对其 upstream 的 ahead/behind 所提供的一键同步入口；文案按三种计数形态展示（仅 behind / 仅 ahead / 双向）。点击后按需先确认：仅 behind 执行 pull，仅 ahead 执行 push（安全推送），双向先 pull 后 push（其中 push 仍走安全推送）；失败即停。确认可「不再显示」并记入本机 localStorage 全局偏好。计数基于本地 tracking ref，不在刷新路径上隐式 `git fetch`。linked worktree 不提供此入口。
 _Avoid_: 强制 fetch 后同步、worktree 同步按钮、与未提交文件列表并存的同步入口
 
+
+**创建分支**：
+变更 Activity 在项目主 checkout「更多」菜单末尾提供的、基于当前 HEAD 新建并签出本地分支的入口；对话框宽 400px，仅分支名输入（默认空、无前端校验）。未提交改动随签出带走；不自动设置 upstream、不自动推送。
+_Avoid_: 远程创建、worktree 内建分支、force 切换
 
 **分支签出**：
 变更 Activity 在项目主 checkout 的「更多」菜单中提供的分支切换入口。居中 500px 可滚动弹窗列出本地分支与远程分支（按最后提交时间倒序）；本地用分支图标、远程用云朵图标；每段首条右上标注「本地分支」/「远程分支」。点击本地分支直接 checkout；点击远程分支时若已有同名本地分支则签出本地，否则创建跟踪分支。当前分支可展示，再次点击为 no-op 并关闭。有未提交改动时确认「当前有未提交代码，确定要切换分支吗？」后仍走普通 checkout，Git 拒绝则报错不丢弃改动。不检查 running turn。
