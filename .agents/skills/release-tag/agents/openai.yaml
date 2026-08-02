@@ -1,0 +1,3 @@
+interface:
+  display_name: "Release Tag"
+  short_description: "升版本打 tag 并 push（跳过本地构建）"

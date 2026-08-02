@@ -16,7 +16,8 @@
     "ui:add": "shadcn add",
     "build:macos": "bash scripts/build-macos.sh",
     "bump-version": "node scripts/bump-version.mjs",
-    "release:version": "bash scripts/release-version.sh"
+    "release:version": "bash scripts/release-version.sh",
+    "release:tag": "bash scripts/release-tag.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

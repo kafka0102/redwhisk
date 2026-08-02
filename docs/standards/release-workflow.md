@@ -11,8 +11,9 @@
 - `scripts/build-macos.sh`：本地构建 Universal Mac 包（`.app` + DMG）。
 - `scripts/build-dmg.sh`：基于已生成的 `.app` 手工生成 Universal DMG（绕过 Tauri 原生 dmg bundler）。
 - `scripts/bump-version.mjs`：统一同步多文件版本号。
-- `scripts/release-version.sh`：按版本号执行验证、构建、提交、tag 与推送。
-- `package.json` 暴露 `build:macos`、`bump-version` 与 `release:version` 根脚本入口。
+- `scripts/release-tag.sh`：轻量发版——同步版本号、提交、tag 与推送（不跑本地验证与构建）。
+- `scripts/release-version.sh`：完整发版——验证、本地构建、提交、tag 与推送。
+- `package.json` 暴露 `build:macos`、`bump-version`、`release:tag` 与 `release:version` 根脚本入口。
 - `.github/workflows/release.yml`：tag 触发的自动发布工作流。
 - `src-tauri/tauri.conf.json` 的 `bundle.targets` 配置为 `["app"]`：Tauri 仅产出 `.app`；`build:macos` 随后调用 `build-dmg.sh` 生成 DMG。Release 附件目标为 **DMG + `.app.zip`**。
 - `src-tauri/Cargo.toml` 配置了 `[profile.release]` 体积优化。
@@ -129,7 +130,30 @@ bash scripts/build-dmg.sh /path/to/RedWhisk.app /path/to/RedWhisk_0.0.2_universa
 
 ### 发布流程
 
-发版操作按 [Git 工作流规范](./git-workflow.md) 属于"不自动授权"操作，必须由用户明确要求。完整流程可通过脚本执行：
+发版操作按 [Git 工作流规范](./git-workflow.md) 属于"不自动授权"操作，必须由用户明确要求。提供两条脚本路径：
+
+#### 轻量发版（推荐日常）
+
+跳过本地 format / lint / typecheck / test / build，只同步版本号并推送 tag，由 CI 构建与产出 draft Release：
+
+```bash
+pnpm release:tag 0.1.0
+```
+
+该脚本会按顺序执行：
+
+1. 检查工作区必须干净，避免混入无关改动
+2. 执行 `pnpm bump-version <version>` 同步版本号
+3. 校验 `package.json` / `tauri.conf.json` / `Cargo.toml` 版本一致
+4. 提交版本号改动
+5. 创建 `v<version>` tag
+6. 推送当前分支与 tag，触发 GitHub Actions 发布
+
+Agent 侧对应 skill：`.agents/skills/release-tag/`。
+
+#### 完整发版（本地验证 + Mac 包）
+
+需要本地跑验证并产出 Mac 包时：
 
 ```bash
 pnpm release:version 0.1.0
@@ -148,7 +172,7 @@ pnpm release:version 0.1.0
 9. 创建 `v<version>` tag
 10. 推送当前分支与 tag，触发 GitHub Actions 发布
 
-如需手动分步操作，可执行：
+#### 手动分步（轻量等价）
 
 ```bash
 # 1. 升级版本号（同步 package.json / tauri.conf.json / Cargo.toml / Cargo.lock）
@@ -160,6 +184,7 @@ git commit -m "chore: 升级版本号至 0.1.0"
 
 # 3. 创建并推送 tag（这一步触发 GitHub Actions）
 git tag v0.1.0
+git push origin HEAD
 git push origin v0.1.0
 ```
 
