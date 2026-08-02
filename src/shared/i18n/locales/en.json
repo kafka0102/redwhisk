@@ -756,6 +756,8 @@
       "default": "Agent session error."
     },
     "AGENT_SESSION_VALIDATION_FAILED": {
+      "cannotDeleteProjectRoot": "Cannot delete the project main checkout.",
+      "codeWorkspaceNotFound": "Code workspace not found.",
       "commitHashInvalid": "Commit hash format is invalid.",
       "commitNotFound": "Commit not found.",
       "completedIssueSessionCannotRun": "Sessions of completed Issues cannot continue running.",
@@ -771,6 +773,7 @@
       "gitStatusUnparseable": "Git status output could not be parsed.",
       "homeDirUnresolved": "Failed to resolve user home directory.",
       "injectedPromptRequired": "Injected prompt is required.",
+      "invalidSearchRegex": "Invalid search regular expression.",
       "issueNotInProject": "Issue does not belong to the current Project.",
       "linkedSessionCannotDelete": "Agent Sessions linked to an Issue cannot be deleted from the Sessions view.",
       "linkedSessionCannotRename": "Agent Sessions linked to an Issue cannot be renamed from the Sessions view.",
@@ -784,6 +787,8 @@
       "profileNotFound": "The Agent Profile linked to this Agent Session does not exist.",
       "profileNotInProject": "The project-level Agent Profile does not belong to the current Project.",
       "projectPathInvalid": "Project path is invalid.",
+      "pushRequiresManualSync": "Push requires manual sync: the branch has diverged from its upstream or cannot fast-forward.",
+      "remoteOpsRequireProjectRoot": "Pull and push are only allowed on the project main checkout.",
       "repoPathInaccessible": "Repository path is inaccessible.",
       "repoPathNotDir": "Repository path is not a directory.",
       "sessionNotInProject": "Agent Session does not belong to the current Project.",
@@ -795,13 +800,9 @@
       "workspaceFileReadFailed": "Failed to read workspace file.",
       "workspaceMissingForModelList": "Agent Session workspace does not exist; model list is unavailable.",
       "workspaceMissingForResume": "Agent Session workspace does not exist; cannot resume.",
-      "invalidSearchRegex": "Invalid search regular expression.",
-      "cannotDeleteProjectRoot": "Cannot delete the project main checkout.",
-      "remoteOpsRequireProjectRoot": "Pull and push are only allowed on the project main checkout.",
+      "worktreeDeleteFailed": "Failed to delete worktree.",
       "worktreeHasRunningTurn": "This workspace still has a running agent turn and cannot be deleted.",
-      "codeWorkspaceNotFound": "Code workspace not found.",
-      "worktreePathRequired": "Deleting a worktree requires a workspace path.",
-      "worktreeDeleteFailed": "Failed to delete worktree."
+      "worktreePathRequired": "Deleting a worktree requires a workspace path."
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "Attachment not found.",

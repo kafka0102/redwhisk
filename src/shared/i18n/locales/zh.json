@@ -756,6 +756,8 @@
       "default": "Agent 会话出错。"
     },
     "AGENT_SESSION_VALIDATION_FAILED": {
+      "cannotDeleteProjectRoot": "不能删除项目主工作区。",
+      "codeWorkspaceNotFound": "代码工作区不存在。",
       "commitHashInvalid": "提交哈希格式无效。",
       "commitNotFound": "提交不存在。",
       "completedIssueSessionCannotRun": "已完成 Issue 的 Session 不能继续运行。",
@@ -771,6 +773,7 @@
       "gitStatusUnparseable": "Git status 输出无法解析。",
       "homeDirUnresolved": "无法解析用户 Home 目录。",
       "injectedPromptRequired": "注入的 prompt 不能为空。",
+      "invalidSearchRegex": "搜索正则无效。",
       "issueNotInProject": "Issue 不属于当前 Project。",
       "linkedSessionCannotDelete": "关联 Issue 的 Agent Session 不能从 Sessions 视图删除。",
       "linkedSessionCannotRename": "关联 Issue 的 Agent Session 不能从 Sessions 视图修改标题。",
@@ -784,6 +787,8 @@
       "profileNotFound": "Agent Session 关联的 Agent Profile 不存在。",
       "profileNotInProject": "项目级 Agent Profile 不属于当前 Project。",
       "projectPathInvalid": "Project 路径无效。",
+      "pushRequiresManualSync": "推送前需要手动同步：本地分支与上游已分叉或无法快进。",
+      "remoteOpsRequireProjectRoot": "仅项目主工作区支持拉取与推送。",
       "repoPathInaccessible": "仓库路径不可访问。",
       "repoPathNotDir": "仓库路径不是目录。",
       "sessionNotInProject": "Agent Session 不属于当前 Project。",
@@ -795,13 +800,9 @@
       "workspaceFileReadFailed": "工作区文件读取失败。",
       "workspaceMissingForModelList": "Agent Session 工作区不存在，模型列表不可用。",
       "workspaceMissingForResume": "Agent Session 工作区不存在，无法恢复。",
-      "invalidSearchRegex": "搜索正则无效。",
-      "cannotDeleteProjectRoot": "不能删除项目主工作区。",
-      "remoteOpsRequireProjectRoot": "仅项目主工作区支持拉取与推送。",
+      "worktreeDeleteFailed": "删除 worktree 失败。",
       "worktreeHasRunningTurn": "该工作区仍有进行中的智能体任务，无法删除。",
-      "codeWorkspaceNotFound": "代码工作区不存在。",
-      "worktreePathRequired": "删除 worktree 需要提供工作区路径。",
-      "worktreeDeleteFailed": "删除 worktree 失败。"
+      "worktreePathRequired": "删除 worktree 需要提供工作区路径。"
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "附件不存在。",

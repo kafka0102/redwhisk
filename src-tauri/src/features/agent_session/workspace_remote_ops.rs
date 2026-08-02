@@ -20,10 +20,10 @@ impl<'connection> SessionWorkspaceService<'connection> {
         crate::git::remote::pull(&root).map_err(map_git_command_error)
     }
 
-    /// 仅允许项目主 checkout 推送。
+    /// 仅允许项目主 checkout 推送（安全策略见 `git::remote::push`）。
     pub fn push(&self, input: ProjectWorkspaceInput) -> Result<(), CommandError> {
         let root = self.require_project_root_for_remote_ops(&input)?;
-        crate::git::remote::push(&root).map_err(map_git_command_error)
+        crate::git::remote::push(&root).map_err(map_push_error)
     }
 
     /// 删除 linked worktree（禁止主 checkout；running turn 拒绝）。
@@ -152,6 +152,22 @@ impl<'connection> SessionWorkspaceService<'connection> {
 
         canonical_workspace_root(&target.path)
     }
+}
+
+fn map_push_error(error: crate::git::command::GitCommandError) -> CommandError {
+    use crate::git::command::GitCommandError;
+    use crate::git::remote::PUSH_REQUIRES_MANUAL_SYNC;
+
+    if let GitCommandError::Failed { message, .. } = &error {
+        if message == PUSH_REQUIRES_MANUAL_SYNC {
+            return CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Push requires manual sync because the branch has diverged from its upstream.",
+            )
+            .with_reason(PUSH_REQUIRES_MANUAL_SYNC);
+        }
+    }
+    map_git_command_error(error)
 }
 
 #[cfg(test)]
@@ -372,6 +388,30 @@ mod tests {
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
         assert_eq!(error.reason.as_deref(), Some("worktreeHasRunningTurn"));
         assert!(Path::new(&worktree_canonical).exists());
+    }
+
+    #[test]
+    fn map_push_error_maps_manual_sync_reason() {
+        use crate::git::command::GitCommandError;
+        use crate::git::remote::PUSH_REQUIRES_MANUAL_SYNC;
+
+        let mapped = map_push_error(GitCommandError::Failed {
+            command: "git push".to_string(),
+            message: PUSH_REQUIRES_MANUAL_SYNC.to_string(),
+        });
+        assert_eq!(mapped.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(mapped.reason.as_deref(), Some(PUSH_REQUIRES_MANUAL_SYNC));
+    }
+
+    #[test]
+    fn map_push_error_falls_back_to_git_command_failed() {
+        use crate::git::command::GitCommandError;
+
+        let mapped = map_push_error(GitCommandError::Failed {
+            command: "git push".to_string(),
+            message: "network down".to_string(),
+        });
+        assert_eq!(mapped.reason.as_deref(), Some("gitCommandFailed"));
     }
 
     #[test]
