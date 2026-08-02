@@ -16,6 +16,8 @@
 
 **反例**：`src-tauri/src/features/agent_session/workspace_commands.rs` 历史上的 6 个同步 `pub fn`（开库 + 迁移 + git 全跑在运行时线程）。已改异步 + `spawn_blocking`。
 
+**反例**：`get_update_status` 曾为同步 command，且在缓存过期时直接 `ureq` 访问 GitHub（超时 15s）；Workbench（`AppShell`）每次挂载都会静默调用。网络慢/失败时把项目打开与 Issue 首屏拖到十多秒。已改为 `async` + `spawn_blocking`，失败时写入 `last_checked_at` 负缓存，TTL 内不再打远端。
+
 ## 2. 批量取数，禁止 N+1 子进程 / 命令调用
 
 **判据**：对一组条目（提交、文件、行）逐条发起 `git` 子进程、SQL 查询或 Tauri command，就是 N+1。

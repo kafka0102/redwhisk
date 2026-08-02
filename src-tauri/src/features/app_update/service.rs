@@ -72,6 +72,17 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
                 state = updated;
             }
             Err(error_code) => {
+                // 失败也刷新 last_checked_at（保留旧版本缓存），避免 Workbench 每次挂载
+                // 在 TTL 内反复请求 GitHub。远端超时可达 HTTP_TIMEOUT（15s），且历史
+                // 实现是同步 command，会放大项目打开/切换时的首屏卡顿。
+                let checked_at = format_rfc3339(self.now);
+                let _ = self.repository.save_cache(
+                    &checked_at,
+                    state.cached_latest_version.as_deref(),
+                    state.cached_release_url.as_deref(),
+                );
+                state.last_checked_at = Some(checked_at);
+
                 if force_refresh {
                     return Ok(self.build_status_from_state(&state, Some(error_code)));
                 }
@@ -283,6 +294,7 @@ fn update_database_error(error: impl ToString) -> CommandError {
 mod tests {
     use super::*;
     use crate::features::app_update::github::{LatestRelease, LatestReleaseFetchError};
+    use crate::db::app_update_repository::AppUpdateRepository;
     use crate::db::migrations::MigrationRunner;
     use chrono::TimeZone;
     use rusqlite::Connection;
@@ -450,6 +462,36 @@ mod tests {
         assert!(!status.should_show_prompt);
         assert!(status.error_code.is_none());
     }
+
+
+    #[test]
+    fn silent_network_error_negative_caches_within_ttl() {
+        let connection = open_db();
+        let calls = Rc::new(Cell::new(0));
+        let source = MockSource {
+            calls: calls.clone(),
+            result: Err(LatestReleaseFetchError::Network),
+        };
+        let svc = service(&connection, source, "0.0.3");
+        let first = svc.get_status(false).expect("first");
+        assert!(!first.should_show_prompt);
+        assert!(first.error_code.is_none());
+        // 失败后必须写入检查时间，避免切换项目时在 TTL 内反复打远端。
+        let state = AppUpdateRepository::new(&connection)
+            .get_state()
+            .expect("state");
+        assert!(
+            state.last_checked_at.is_some(),
+            "silent network failure must negative-cache last_checked_at"
+        );
+        svc.get_status(false).expect("second");
+        assert_eq!(
+            calls.get(),
+            1,
+            "second silent check within TTL must not hit network again"
+        );
+    }
+
 
     #[test]
     fn force_network_error_surfaces_stable_error_code() {

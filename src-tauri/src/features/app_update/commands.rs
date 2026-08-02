@@ -9,17 +9,21 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 pub const UPDATE_PROMPT_CHANGED_EVENT: &str = "update-prompt-changed";
 
 #[tauri::command]
-pub fn get_update_status(
+pub async fn get_update_status(
     app: AppHandle,
     state: State<'_, AppState>,
     input: GetUpdateStatusInput,
 ) -> Result<UpdateStatus, CommandError> {
     let data_dir = prepare_update_data_dir(&app, &state)?;
     let current_version = app.package_info().version.to_string();
-    let status =
-        get_update_status_in_data_dir(data_dir, current_version, input.force_refresh)?;
+    let force_refresh = input.force_refresh;
+    let status = tauri::async_runtime::spawn_blocking(move || {
+        get_update_status_in_data_dir(data_dir, current_version, force_refresh)
+    })
+    .await
+    .map_err(update_join_error)??;
 
-    if input.force_refresh {
+    if force_refresh {
         let _ = app.emit(UPDATE_PROMPT_CHANGED_EVENT, &status);
     }
 
@@ -27,14 +31,18 @@ pub fn get_update_status(
 }
 
 #[tauri::command]
-pub fn dismiss_update_prompt(
+pub async fn dismiss_update_prompt(
     app: AppHandle,
     state: State<'_, AppState>,
     input: DismissUpdatePromptInput,
 ) -> Result<UpdateStatus, CommandError> {
     let data_dir = prepare_update_data_dir(&app, &state)?;
     let current_version = app.package_info().version.to_string();
-    let status = dismiss_update_prompt_in_data_dir(data_dir, current_version, input)?;
+    let status = tauri::async_runtime::spawn_blocking(move || {
+        dismiss_update_prompt_in_data_dir(data_dir, current_version, input)
+    })
+    .await
+    .map_err(update_join_error)??;
     let _ = app.emit(UPDATE_PROMPT_CHANGED_EVENT, &status);
     Ok(status)
 }
@@ -64,4 +72,12 @@ fn prepare_update_data_dir(
     }
 
     Ok(data_dir)
+}
+
+fn update_join_error(error: impl std::fmt::Display) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::AppUpdatePersistenceFailed,
+        "检查更新失败。",
+    )
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
