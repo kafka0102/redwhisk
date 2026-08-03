@@ -18,7 +18,7 @@ use serde::Serialize;
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
 const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
-const LOG_FLUSH_EVERY_BYTES: usize = 64 * 1024;
+const LOG_FLUSH_EVERY_BYTES: usize = 4 * 1024;
 const LOG_TRIM_CHECK_EVERY_BYTES: usize = 8 * 1024 * 1024;
 const EMIT_COALESCE_MAX_BYTES: usize = 64 * 1024;
 // 交互回显优先：合并窗口过大会让 TUI 输入（如 grok）感觉“粘滞”。
@@ -407,6 +407,49 @@ impl PtySessionManager {
         log.flush().map_err(|error| error.to_string())
     }
 
+    /// TUI 完成归档前：flush 磁盘 log；若文件仍为空则把 restore buffer 回填进 log，
+    /// 尽量避免「live 可见但归档读到空文件」。
+    pub fn prepare_tui_log_for_archive(&self, session_id: i64) -> Result<(), String> {
+        let session = self.lookup(session_id)?;
+        let log_path = {
+            let mut log = session
+                .log
+                .lock()
+                .map_err(|_| "failed to lock PTY log writer".to_string())?;
+            log.flush().map_err(|error| error.to_string())?;
+            log.path.clone()
+        };
+
+        let on_disk_len = std::fs::metadata(&log_path)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
+        if on_disk_len > 0 {
+            return Ok(());
+        }
+
+        let restore_bytes = {
+            let restore_buffer = session
+                .restore_buffer
+                .lock()
+                .map_err(|_| "failed to lock PTY restore buffer".to_string())?;
+            let mut bytes = Vec::with_capacity(restore_buffer.total_bytes);
+            for chunk in &restore_buffer.chunks {
+                bytes.extend_from_slice(chunk);
+            }
+            bytes
+        };
+        if restore_bytes.is_empty() {
+            return Ok(());
+        }
+
+        let mut log = session
+            .log
+            .lock()
+            .map_err(|_| "failed to lock PTY log writer".to_string())?;
+        log.write_all(&restore_bytes)?;
+        log.flush().map_err(|error| error.to_string())
+    }
+
     pub fn spawn_pending(&self, request: &PtySpawnRequest) -> Result<PendingPtySession, String> {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -786,9 +829,10 @@ fn run_reader_loop(
     }
 
     let (_project_id, session_id, registered) = handle.routing.snapshot();
+    // 仅 flush：退出路径不要 force trim（trim 会关句柄再 reopen，
+    // 若归档已删除 runtime 文件会重新创建空文件）。
     if let Ok(mut log) = handle.log.lock() {
         let _ = log.flush();
-        let _ = log.trim_if_needed(true);
     }
     if registered && has_output_subscribers(&store, session_id) {
         flush_pending_session(&store, session_id);

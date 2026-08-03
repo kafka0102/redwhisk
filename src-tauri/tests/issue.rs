@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+use redwhisk_lib::agent::pty_session_manager::PtySessionManager;
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
 use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
@@ -1328,10 +1329,14 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
     );
 
     let completed = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete manually");
 
     assert_eq!(completed.id, issue.id);
@@ -1415,10 +1420,14 @@ fn complete_issue_manual_allows_running_issue_without_review_gate() {
     );
 
     let completed = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete running issue manually");
 
     assert_eq!(completed.id, issue.id);
@@ -1467,10 +1476,14 @@ fn complete_issue_manual_finishes_when_project_git_status_is_unavailable() {
     fs::remove_dir_all(&repo_dir).expect("delete project worktree");
 
     let completed = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete when git status is unavailable");
 
     assert_eq!(completed.id, issue.id);
@@ -1566,10 +1579,14 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
     );
 
     let completed = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete manually");
 
     assert_eq!(completed.status, IssueStatus::Completed);
@@ -1602,10 +1619,14 @@ fn complete_issue_manual_rejects_issue_without_session_without_partial_write() {
         .expect("created issue");
 
     let error = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect_err("issue without session should be rejected");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
@@ -1664,10 +1685,14 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
     );
 
     service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete manually");
 
     let summary = service
@@ -1746,10 +1771,14 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
     );
 
     let completed = service
-        .complete_issue_clean(CompleteIssueCleanInput {
+        .complete_issue_clean(
+            CompleteIssueCleanInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete clean");
 
     assert_eq!(completed.id, issue.id);
@@ -1846,10 +1875,14 @@ fn complete_issue_clean_allows_closed_linked_session() {
     );
 
     let completed = service
-        .complete_issue_clean(CompleteIssueCleanInput {
+        .complete_issue_clean(
+            CompleteIssueCleanInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("complete clean");
 
     assert_eq!(completed.status, IssueStatus::Completed);
@@ -1915,10 +1948,14 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
     );
 
     let error = service
-        .complete_issue_clean(CompleteIssueCleanInput {
+        .complete_issue_clean(
+            CompleteIssueCleanInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect_err("dirty worktree should be rejected");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
@@ -2015,10 +2052,14 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
     );
 
     let error = service
-        .complete_issue_clean(CompleteIssueCleanInput {
+        .complete_issue_clean(
+            CompleteIssueCleanInput {
             project_id,
             issue_id: issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect_err("git operation should block complete");
 
     assert_eq!(error.code, CommandErrorCode::IssueValidationFailed);
@@ -3403,10 +3444,14 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     );
 
     let manual = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: manual_issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("manual legacy entry delegates");
     assert_eq!(manual.status, IssueStatus::Completed);
     assert_eq!(
@@ -3431,10 +3476,14 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     );
 
     let clean = service
-        .complete_issue_clean(CompleteIssueCleanInput {
+        .complete_issue_clean(
+            CompleteIssueCleanInput {
             project_id,
             issue_id: clean_issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect("clean legacy entry delegates");
     assert_eq!(clean.status, IssueStatus::Completed);
     assert_eq!(
@@ -3478,10 +3527,14 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     git(&workspace_path, &["commit", "-am", "legacy external"]);
 
     let external_error = service
-        .complete_issue_manual(CompleteIssueManualInput {
+        .complete_issue_manual(
+            CompleteIssueManualInput {
             project_id,
             issue_id: external_issue.id,
-        })
+        },
+            &PtySessionManager::new(),
+            &AgentSessionRegistry::new(),
+        )
         .expect_err("legacy entry should not auto-confirm external worktree");
     assert_eq!(external_error.code, CommandErrorCode::IssueValidationFailed);
     let external_flow = IssueCompletionFlowRepository::new(&database.connection)

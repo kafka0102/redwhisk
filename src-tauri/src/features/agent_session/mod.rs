@@ -12,6 +12,7 @@ mod command_snapshot;
 mod launch;
 mod log_path;
 mod terminal_archive_clean;
+mod terminal_archive_render;
 mod service;
 mod timeline;
 mod validation;

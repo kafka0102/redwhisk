@@ -1752,6 +1752,7 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
             issue_id,
         },
         &manager,
+        &AgentSessionRegistry::new(),
     )
     .expect("complete issue manually");
 

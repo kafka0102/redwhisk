@@ -373,3 +373,13 @@ Slithering…
     assert!(!got2.contains("Slithering"), "{got2:?}");
     let _ = got;
 }
+
+
+#[test]
+fn indented_grok_style_user_prompt_is_kept() {
+    let input = "\
+   ❯ 请修复远程变更检测\n\n◆ Recap\n\n• 最终结论：已加 60s fetch\n";
+    let got = extract_tui_archive_conclusion_text(input);
+    assert!(got.contains("请修复远程变更检测"), "got={got:?}");
+    assert!(got.contains("最终结论"), "got={got:?}");
+}

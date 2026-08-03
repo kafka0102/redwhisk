@@ -1782,8 +1782,14 @@ impl AgentSessionService<'_> {
         data_dir: impl AsRef<Path>,
         input: CompleteIssueManualInput,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
-        let completed_issue = IssueService::complete_issue_manual_in_data_dir(&data_dir, input)?;
+        let completed_issue = IssueService::complete_issue_manual_in_data_dir(
+            &data_dir,
+            input,
+            pty_sessions,
+            agent_registry,
+        )?;
 
         if let Some(session_id) = completed_issue.linked_session_id {
             if pty_sessions.contains(session_id) {
@@ -1809,8 +1815,14 @@ impl AgentSessionService<'_> {
         data_dir: impl AsRef<Path>,
         input: CompleteIssueCleanInput,
         pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
-        let completed_issue = IssueService::complete_issue_clean_in_data_dir(&data_dir, input)?;
+        let completed_issue = IssueService::complete_issue_clean_in_data_dir(
+            &data_dir,
+            input,
+            pty_sessions,
+            agent_registry,
+        )?;
 
         if let Some(session_id) = completed_issue.linked_session_id {
             if pty_sessions.contains(session_id) {
@@ -2074,13 +2086,32 @@ pub(super) fn strip_terminal_control_sequences(snapshot: &str) -> String {
 
     while let Some(character) = chars.next() {
         if character == '\u{1b}' {
-            if matches!(chars.peek(), Some('[')) {
-                let _ = chars.next();
-                for next in chars.by_ref() {
-                    if ('@'..='~').contains(&next) {
-                        break;
+            match chars.peek().copied() {
+                Some('[') => {
+                    let _ = chars.next();
+                    for next in chars.by_ref() {
+                        if ('@'..='~').contains(&next) {
+                            break;
+                        }
                     }
                 }
+                Some(']') => {
+                    // OSC: ESC ] ... BEL / ST，避免标题泄漏成 `]0;title`
+                    let _ = chars.next();
+                    while let Some(next) = chars.next() {
+                        if next == '\u{7}' {
+                            break;
+                        }
+                        if next == '\u{1b}' && matches!(chars.peek(), Some('\\')) {
+                            let _ = chars.next();
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    let _ = chars.next();
+                }
+                None => {}
             }
             continue;
         }

@@ -12,6 +12,7 @@ use super::service::{agent_session_start_error, strip_terminal_control_sequences
 use super::terminal_archive_clean::{
     extract_tui_archive_conclusion_text, latest_output_from_archive_text,
 };
+use super::terminal_archive_render::render_terminal_snapshot_text;
 use super::timeline::{
     latest_output_from_timeline_item, read_timeline_from_log_path, should_archive_timeline_item,
 };
@@ -160,8 +161,7 @@ fn build_tui_issue_session_archive(
     let archive_path =
         build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
     let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
-    let stripped = strip_terminal_control_sequences(&snapshot).replace('\r', "\n");
-    let cleaned = extract_tui_archive_conclusion_text(&stripped);
+    let cleaned = extract_tui_archive_text_from_snapshot(&snapshot);
     let file_content = if cleaned.is_empty() {
         String::new()
     } else {
@@ -174,6 +174,50 @@ fn build_tui_issue_session_archive(
         runtime_path: runtime_log_path.to_string(),
         latest_output: latest_output_from_archive_text(&cleaned),
     })
+}
+
+/// TUI 归档正文提取：
+/// 1) 先对剥壳文本做结论向提取（Codex/Claude 行式输出）
+/// 2) 若为空或明显是全屏粘连噪声，再做 VT 屏缓冲回放后重提
+fn extract_tui_archive_text_from_snapshot(snapshot: &str) -> String {
+    if snapshot.is_empty() {
+        return String::new();
+    }
+    let stripped = strip_terminal_control_sequences(snapshot).replace('\r', "\n");
+    let primary = extract_tui_archive_conclusion_text(&stripped);
+    if archive_text_looks_usable(&primary) {
+        return primary;
+    }
+    let rendered = render_terminal_snapshot_text(snapshot);
+    let secondary = extract_tui_archive_conclusion_text(&rendered);
+    if archive_text_looks_usable(&secondary) {
+        return secondary;
+    }
+    // 仍无结构化结论时，优先回放文本的轻清理结果，避免空归档 / 整包粘连噪声。
+    if !rendered.trim().is_empty() {
+        return extract_tui_archive_conclusion_text(&rendered);
+    }
+    primary
+}
+
+fn archive_text_looks_usable(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    // 单行超长且无换行：全屏 TUI 剥壳粘连，不可用
+    if !trimmed.contains('\n') && trimmed.chars().count() > 400 {
+        return false;
+    }
+    // 大量 box-drawing / spinner 粘连也视为不可用
+    let noise = trimmed
+        .chars()
+        .filter(|c| matches!(*c, '┃' | '◆' | '│' | '─' | '\u{2800}'..='\u{28ff}'))
+        .count();
+    if noise > 40 && noise * 3 > trimmed.chars().count() {
+        return false;
+    }
+    true
 }
 
 fn build_json_issue_session_archive(
@@ -418,5 +462,29 @@ mod tests {
         assert!(archived_lines.contains("user_message"));
         assert!(archived_lines.contains("assistant_message"));
         assert!(archived_lines.contains("error"));
+    }
+    #[test]
+    fn build_tui_archive_uses_render_for_fullscreen_paint() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let runtime = temp_dir.path().join("runtime.log");
+        // 全屏 CUP 重绘：简单剥壳无换行；回放后应得到分行正文
+        let raw = "\u{1b}[1;1H\u{1b}[2J\u{1b}[1;1H❯ fix remote detect\u{1b}[2;1Hdone: added 60s fetch";
+        std::fs::write(&runtime, raw).expect("write runtime");
+        let archive = build_issue_session_archive(
+            temp_dir.path(),
+            1,
+            212,
+            259,
+            374,
+            runtime.to_string_lossy().as_ref(),
+            "tui",
+        )
+        .expect("archive");
+        let content = std::fs::read_to_string(&archive.archive_path).expect("read archive");
+        assert!(
+            content.contains("fix remote detect") || content.contains("done: added 60s fetch"),
+            "archive should extract core text, got={content:?}"
+        );
+        assert!(!content.trim().is_empty(), "archive must not be empty");
     }
 }

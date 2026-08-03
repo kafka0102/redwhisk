@@ -1,10 +1,9 @@
 //! TUI 归档结论向提取：多标记族行分类（Codex / Claude 等）。
 
 pub(super) fn is_real_user_prompt_line(line: &str) -> bool {
-    // 真用户 turn 顶格以 › / ❯ 起笔；缩进 ›/> 或 shell 回显 `> cmd` 不计入
-    if line.starts_with(' ') || line.starts_with('\t') {
-        return false;
-    }
+    // 真用户 turn 以 › / ❯ 起笔。允许前导空白（Grok 等全屏 TUI 内容区常缩进）；
+    // ASCII `>` shell 回显仍不计入（strip_user_prompt_prefix 不认 `>`）。
+    let line = line.trim_start();
     let Some(rest) = strip_user_prompt_prefix(line) else {
         return false;
     };

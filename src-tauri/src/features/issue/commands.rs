@@ -224,8 +224,12 @@ pub async fn complete_issue_manual(
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let issue =
-            AgentSessionService::complete_issue_manual_in_data_dir(data_dir, input, &pty_sessions)?;
+        let issue = AgentSessionService::complete_issue_manual_in_data_dir(
+            data_dir,
+            input,
+            &pty_sessions,
+            &agent_sessions,
+        )?;
         shutdown_closed_issue_session(&pty_sessions, &agent_sessions, &issue);
         Ok(issue)
     })
@@ -246,8 +250,12 @@ pub async fn complete_issue_clean(
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let issue =
-            AgentSessionService::complete_issue_clean_in_data_dir(data_dir, input, &pty_sessions)?;
+        let issue = AgentSessionService::complete_issue_clean_in_data_dir(
+            data_dir,
+            input,
+            &pty_sessions,
+            &agent_sessions,
+        )?;
         shutdown_closed_issue_session(&pty_sessions, &agent_sessions, &issue);
         Ok(issue)
     })

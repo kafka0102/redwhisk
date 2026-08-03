@@ -701,6 +701,8 @@ impl<'connection> IssueService<'connection> {
     pub fn complete_issue_manual(
         &self,
         input: CompleteIssueManualInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
         let result = self.complete_issue_flow_with_option(
             CompleteIssueFlowInput {
@@ -714,8 +716,8 @@ impl<'connection> IssueService<'connection> {
                 worktree_cleanup_decision: None,
             },
             self.data_dir.clone(),
-            &PtySessionManager::new(),
-            &AgentSessionRegistry::new(),
+            pty_sessions,
+            agent_registry,
             Some(CompletionAttemptOption::CompleteManual),
         )?;
         if result.action == CompleteIssueFlowAction::Completed {
@@ -852,6 +854,8 @@ impl<'connection> IssueService<'connection> {
     pub fn complete_issue_clean(
         &self,
         input: CompleteIssueCleanInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
         let result = self.complete_issue_flow_with_option(
             CompleteIssueFlowInput {
@@ -865,8 +869,8 @@ impl<'connection> IssueService<'connection> {
                 worktree_cleanup_decision: None,
             },
             self.data_dir.clone(),
-            &PtySessionManager::new(),
-            &AgentSessionRegistry::new(),
+            pty_sessions,
+            agent_registry,
             Some(CompletionAttemptOption::CompleteClean),
         )?;
         if result.action == CompleteIssueFlowAction::Completed {
@@ -1003,9 +1007,10 @@ impl<'connection> IssueService<'connection> {
             .with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        // TUI 归档读磁盘 runtime log：完成前 flush，降低 BufWriter 未落盘导致空/截断归档概率。
+        // TUI 归档读磁盘 runtime log：完成前 flush；若磁盘 log 空则回填 restore buffer，
+        // 避免 live 可见但归档为空（BufWriter 未刷 / 路径被截断等）。
         if session.display_mode == "tui" {
-            let _ = pty_sessions.flush_log(session.id);
+            let _ = pty_sessions.prepare_tui_log_for_archive(session.id);
         }
         crate::features::issue::completion::use_case::CompletionFlow::new(self).drive(
             input,
@@ -1133,24 +1138,28 @@ impl<'connection> IssueService<'connection> {
     pub fn complete_issue_manual_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: CompleteIssueManualInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository)
-            .complete_issue_manual(input)
+            .complete_issue_manual(input, pty_sessions, agent_registry)
             .log_if_error("complete_issue_manual")
     }
 
     pub fn complete_issue_clean_in_data_dir(
         data_dir: impl AsRef<Path>,
         input: CompleteIssueCleanInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
     ) -> Result<IssueRecord, CommandError> {
         let database = open_issue_database(data_dir)?;
         let issue_repository = IssueRepository::new(&database.connection);
         let project_repository = ProjectRepository::new(&database.connection);
         IssueService::new(issue_repository, project_repository)
-            .complete_issue_clean(input)
+            .complete_issue_clean(input, pty_sessions, agent_registry)
             .log_if_error("complete_issue_clean")
     }
 
