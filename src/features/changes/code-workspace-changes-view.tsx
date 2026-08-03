@@ -81,6 +81,9 @@ export function CodeWorkspaceChangesView({
     refreshChanges,
     refreshCommitHistory,
     isUnavailable: isChangesUnavailable,
+    projectId,
+    workspacePath: selectedRootWorkspacePath,
+    isProjectRoot,
   });
 
   useEffect(() => {

@@ -10,11 +10,14 @@ import {
 } from "../agents/agent-session-events";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import { useConditionalPolling } from "../../shared/workspace/use-conditional-polling";
+import { fetchProjectRemotes } from "../../shared/workspace/workspace-commands";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const RUNNING_SESSION_FALLBACK_POLL_MS = 5_000;
 const CHANGES_REFRESH_INTERVAL_RUNNING_MS = 4_000;
 const CHANGES_REFRESH_INTERVAL_IDLE_MS = 8_000;
+/** 主 checkout 可见时后台更新 remote-tracking 的间隔；不嵌套在 4s/8s 本地轮询里。 */
+const CHANGES_REMOTE_FETCH_INTERVAL_MS = 60_000;
 
 /**
  * 判定选中 worktree 上是否存在 running turn 的 Agent session。
@@ -107,6 +110,15 @@ export interface UseChangesAutoRefreshOptions {
   refreshCommitHistory: () => void;
   /** worktree 不可恢复（isWorkspaceRootInaccessibleError）时停轮询。 */
   isUnavailable: boolean;
+  /** 项目 ID；主 checkout 后台 fetch 需要。 */
+  projectId: number;
+  /** 当前选中根路径；为空时不后台 fetch。 */
+  workspacePath: string | null;
+  /**
+   * 是否项目主 checkout。仅主 checkout 做低频 `git fetch`（后端 remote ops
+   * 同样只允许主根）；linked worktree 只做本地 4s/8s 轮询。
+   */
+  isProjectRoot: boolean;
 }
 
 /**
@@ -114,7 +126,12 @@ export interface UseChangesAutoRefreshOptions {
  * 每次 tick 同时刷新未提交变更与已提交历史。由隐藏恢复可见时立即补拉一次；
  * worktree 不可恢复（isUnavailable）→ 停轮询，待切分支重置 / 再次可见时重试。
  *
- * 不在挂载或工作区切换时主动补拉——useCodeWorkspaceChanges 已在进入
+ * 另：项目主 checkout 且页面可见时，每 60s 后台 `fetch_project_remotes`
+ *（`git fetch --all --prune`），成功后再 soft revalidate 本地变更数据，使远端
+ * push 能驱动 ahead/behind 与「同步更改」。fetch 失败静默忽略，不打断本地轮询。
+ * 不嵌套进 4s/8s 路径；不在挂载时立即 fetch（首拍在 60s 后），避免拖慢进入。
+ *
+ * 不在挂载或工作区切换时主动补拉本地数据——useCodeWorkspaceChanges 已在进入
  * 视图 / 切分支时各拉取一次（signature 去重），轮询 hook 只在「由隐藏恢复可见」
  * 与「定时 tick」时触发，避免制造冗余请求。
  */
@@ -124,11 +141,15 @@ export function useChangesAutoRefresh({
   refreshChanges,
   refreshCommitHistory,
   isUnavailable,
+  projectId,
+  workspacePath,
+  isProjectRoot,
 }: UseChangesAutoRefreshOptions): void {
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" || document.visibilityState === "visible",
   );
   const wasVisibleRef = useRef(isVisible);
+  const remoteFetchInFlightRef = useRef(false);
 
   const refresh = useCallback(() => {
     refreshChanges();
@@ -152,7 +173,7 @@ export function useChangesAutoRefresh({
     };
   }, [enabled]);
 
-  // 由隐藏恢复可见 → 立即补拉一次（挂载时 wasVisibleRef 已为初始可见，跳过）。
+  // 由隐藏恢复可见 → 立即补拉一次本地数据（挂载时 wasVisibleRef 已为初始可见，跳过）。
   useEffect(() => {
     if (!enabled) {
       wasVisibleRef.current = isVisible;
@@ -175,4 +196,56 @@ export function useChangesAutoRefresh({
     isActive: enabled && isVisible && !isUnavailable,
     refreshOnActivate: false,
   });
+
+  // 主 checkout 低频后台 fetch：更新 origin/* 后走既有 soft revalidate。
+  // 与 4s/8s 本地轮询解耦；失败静默；同一时刻最多一个 in-flight。
+  useEffect(() => {
+    const canFetchRemote =
+      enabled &&
+      isVisible &&
+      !isUnavailable &&
+      isProjectRoot &&
+      workspacePath != null &&
+      workspacePath.length > 0;
+    if (!canFetchRemote) {
+      return;
+    }
+
+    let isDisposed = false;
+
+    const runRemoteFetch = () => {
+      if (isDisposed || remoteFetchInFlightRef.current) {
+        return;
+      }
+      remoteFetchInFlightRef.current = true;
+      void fetchProjectRemotes({ projectId, workspacePath })
+        .then(() => {
+          if (isDisposed) return;
+          refresh();
+        })
+        .catch(() => {
+          // 网络 / 凭证失败：保留旧 UI，下次间隔再试；本地轮询不受影响。
+        })
+        .finally(() => {
+          remoteFetchInFlightRef.current = false;
+        });
+    };
+
+    const timerId = window.setInterval(
+      runRemoteFetch,
+      CHANGES_REMOTE_FETCH_INTERVAL_MS,
+    );
+    return () => {
+      isDisposed = true;
+      window.clearInterval(timerId);
+    };
+  }, [
+    enabled,
+    isVisible,
+    isUnavailable,
+    isProjectRoot,
+    projectId,
+    workspacePath,
+    refresh,
+  ]);
 }

@@ -32,9 +32,42 @@ vi.mock("../agents/agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
 }));
 
+vi.mock("../../shared/workspace/workspace-commands", () => ({
+  fetchProjectRemotes: vi.fn(),
+}));
+
 import { listAgentSessions } from "../agents/agent-session-commands";
+import { fetchProjectRemotes } from "../../shared/workspace/workspace-commands";
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const fetchProjectRemotesMock = vi.mocked(fetchProjectRemotes);
+
+const REMOTE_FETCH_MS = 60_000;
+
+function baseAutoRefreshOptions(
+  overrides: Partial<{
+    enabled: boolean;
+    running: boolean;
+    refreshChanges: () => void;
+    refreshCommitHistory: () => void;
+    isUnavailable: boolean;
+    projectId: number;
+    workspacePath: string | null;
+    isProjectRoot: boolean;
+  }> = {},
+) {
+  return {
+    enabled: true,
+    running: false,
+    refreshChanges: vi.fn() as unknown as () => void,
+    refreshCommitHistory: vi.fn() as unknown as () => void,
+    isUnavailable: false,
+    projectId: 1,
+    workspacePath: "/tmp/repo",
+    isProjectRoot: true,
+    ...overrides,
+  };
+}
 
 function setVisibility(visible: boolean) {
   Object.defineProperty(document, "visibilityState", {
@@ -248,6 +281,8 @@ describe("useChangesAutoRefresh", () => {
     vi.useFakeTimers();
     refreshChanges = vi.fn() as unknown as () => void;
     refreshCommitHistory = vi.fn() as unknown as () => void;
+    fetchProjectRemotesMock.mockReset();
+    fetchProjectRemotesMock.mockResolvedValue(undefined);
     setVisibility(true);
   });
 
@@ -257,13 +292,13 @@ describe("useChangesAutoRefresh", () => {
 
   it("polls every 4000ms when visible and a running turn is active", async () => {
     renderHook(() =>
-      useChangesAutoRefresh({
-        enabled: true,
-        running: true,
-        refreshChanges,
-        refreshCommitHistory,
-        isUnavailable: false,
-      }),
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          running: true,
+          refreshChanges,
+          refreshCommitHistory,
+        }),
+      ),
     );
     // 挂载不补拉。
     expect(refreshChanges).not.toHaveBeenCalled();
@@ -278,13 +313,12 @@ describe("useChangesAutoRefresh", () => {
 
   it("polls every 8000ms when visible and idle", async () => {
     renderHook(() =>
-      useChangesAutoRefresh({
-        enabled: true,
-        running: false,
-        refreshChanges,
-        refreshCommitHistory,
-        isUnavailable: false,
-      }),
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+        }),
+      ),
     );
     await vi.advanceTimersByTimeAsync(4_000);
     expect(refreshChanges).not.toHaveBeenCalled();
@@ -295,13 +329,13 @@ describe("useChangesAutoRefresh", () => {
 
   it("pauses polling while the document is hidden", async () => {
     renderHook(() =>
-      useChangesAutoRefresh({
-        enabled: true,
-        running: true,
-        refreshChanges,
-        refreshCommitHistory,
-        isUnavailable: false,
-      }),
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          running: true,
+          refreshChanges,
+          refreshCommitHistory,
+        }),
+      ),
     );
     changeVisibility(false);
     await vi.advanceTimersByTimeAsync(10_000);
@@ -310,13 +344,13 @@ describe("useChangesAutoRefresh", () => {
 
   it("refreshes immediately when becoming visible again", async () => {
     renderHook(() =>
-      useChangesAutoRefresh({
-        enabled: true,
-        running: true,
-        refreshChanges,
-        refreshCommitHistory,
-        isUnavailable: false,
-      }),
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          running: true,
+          refreshChanges,
+          refreshCommitHistory,
+        }),
+      ),
     );
     changeVisibility(false);
     await vi.advanceTimersByTimeAsync(0);
@@ -332,13 +366,14 @@ describe("useChangesAutoRefresh", () => {
   it("stops polling when the workspace becomes unavailable", async () => {
     const { rerender } = renderHook(
       ({ isUnavailable }: { isUnavailable: boolean }) =>
-        useChangesAutoRefresh({
-          enabled: true,
-          running: true,
-          refreshChanges,
-          refreshCommitHistory,
-          isUnavailable,
-        }),
+        useChangesAutoRefresh(
+          baseAutoRefreshOptions({
+            running: true,
+            refreshChanges,
+            refreshCommitHistory,
+            isUnavailable,
+          }),
+        ),
       { initialProps: { isUnavailable: false } },
     );
     await vi.advanceTimersByTimeAsync(4_000);
@@ -352,13 +387,14 @@ describe("useChangesAutoRefresh", () => {
 
   it("does not poll when disabled (files view)", async () => {
     renderHook(() =>
-      useChangesAutoRefresh({
-        enabled: false,
-        running: true,
-        refreshChanges,
-        refreshCommitHistory,
-        isUnavailable: false,
-      }),
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          enabled: false,
+          running: true,
+          refreshChanges,
+          refreshCommitHistory,
+        }),
+      ),
     );
     await vi.advanceTimersByTimeAsync(10_000);
     expect(refreshChanges).not.toHaveBeenCalled();
@@ -368,13 +404,12 @@ describe("useChangesAutoRefresh", () => {
     const refreshChangesA = vi.fn() as unknown as () => void;
     const { rerender } = renderHook(
       ({ refreshChanges }: { refreshChanges: () => void }) =>
-        useChangesAutoRefresh({
-          enabled: true,
-          running: false,
-          refreshChanges,
-          refreshCommitHistory,
-          isUnavailable: false,
-        }),
+        useChangesAutoRefresh(
+          baseAutoRefreshOptions({
+            refreshChanges,
+            refreshCommitHistory,
+          }),
+        ),
       { initialProps: { refreshChanges: refreshChangesA } },
     );
     expect(refreshChangesA).not.toHaveBeenCalled();
@@ -385,5 +420,103 @@ describe("useChangesAutoRefresh", () => {
     rerender({ refreshChanges: refreshChangesB });
     expect(refreshChangesA).not.toHaveBeenCalled();
     expect(refreshChangesB).not.toHaveBeenCalled();
+  });
+
+  it("fetches remotes every 60s on project root and refreshes after success", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+          workspacePath: "/tmp/repo",
+        }),
+      ),
+    );
+
+    // 挂载不立即 fetch。
+    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS - 1);
+    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
+    expect(fetchProjectRemotesMock).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/repo",
+    });
+    // fetch 成功后 soft revalidate 本地变更 + 提交历史。
+    expect(refreshChanges).toHaveBeenCalled();
+    expect(refreshCommitHistory).toHaveBeenCalled();
+  });
+
+  it("does not background-fetch remotes on linked worktree", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: false,
+          workspacePath: "/tmp/worktree",
+        }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS + 5_000);
+    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
+  });
+
+  it("does not background-fetch remotes while hidden", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+        }),
+      ),
+    );
+    changeVisibility(false);
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS + 5_000);
+    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
+  });
+
+  it("does not background-fetch remotes when workspace is unavailable", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+          isUnavailable: true,
+        }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS + 5_000);
+    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
+  });
+
+  it("skips local refresh when remote fetch fails", async () => {
+    fetchProjectRemotesMock.mockRejectedValueOnce(new Error("network"));
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+        }),
+      ),
+    );
+    // 推进到首个 60s fetch 前，清掉本地 8s 轮询可能产生的调用计数基线。
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS - 1);
+    const localCallsBeforeFetch = (refreshChanges as ReturnType<typeof vi.fn>)
+      .mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
+    // 失败不因 fetch 额外触发 refresh（本地 8s 轮询另计，此窗口内不应再增）。
+    expect((refreshChanges as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      localCallsBeforeFetch,
+    );
   });
 });

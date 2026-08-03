@@ -48,6 +48,7 @@
 - 命令体内有 `Command::new("git")` / `Connection::open` / `fs::read_dir` 吗？→ `spawn_blocking`。
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
 - 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？
+- 会不会在已有的高频本地轮询（如变更页 4s/8s）里再嵌网络型 `git fetch`？→ 禁止；远端跟踪更新应低频独立（见 ADR-0032 的 60s 后台 fetch），失败不得阻塞本地 refresh。
 
 ## 5. 新窗口 / 默认 Issues 首屏禁止同步拉起重依赖
 
