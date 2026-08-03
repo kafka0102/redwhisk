@@ -87,8 +87,8 @@ export interface InjectAgentSessionPromptInput {
 
 export interface InjectAgentSessionPromptResult {
   sessionId: number;
-  // Rust codex_session_id: Option<String> 无 skip_serializing_if，键始终存在。
-  codexSessionId: string | null;
+  // Rust provider_session_id: Option<String> 无 skip_serializing_if，键始终存在。
+  providerSessionId: string | null;
 }
 
 export interface DeleteAgentSessionInput {
@@ -170,12 +170,12 @@ export function updateAgentSessionTitle(
 export type AgentPermissionDecisionLiteral = "accept" | "decline" | "cancel";
 export type { AgentAttachmentKindLiteral } from "./agent-stream-types";
 
-export interface ResumeStructuredAgentSessionInput {
+export interface ResumeAgentSessionInput {
   projectId: number;
   sessionId: number;
 }
 
-export interface ResumeStructuredAgentSessionResult {
+export interface ResumeAgentSessionResult {
   sessionId: number;
   threadId: string;
 }
@@ -251,13 +251,12 @@ export interface ReadAgentTimelineInput {
   sessionId: number;
 }
 
-export function resumeStructuredAgentSession(
-  input: ResumeStructuredAgentSessionInput,
-): Promise<ResumeStructuredAgentSessionResult> {
-  return invokeCommand<ResumeStructuredAgentSessionResult>(
-    "resume_structured_agent_session",
-    { input },
-  );
+export function resumeAgentSession(
+  input: ResumeAgentSessionInput,
+): Promise<ResumeAgentSessionResult> {
+  return invokeCommand<ResumeAgentSessionResult>("resume_agent_session", {
+    input,
+  });
 }
 
 export function sendAgentMessage(input: SendAgentMessageInput): Promise<void> {

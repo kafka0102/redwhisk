@@ -42,7 +42,7 @@ import {
 import {
   injectAgentSessionPrompt,
   listAgentSessions,
-  resumeStructuredAgentSession,
+  resumeAgentSession,
 } from "../agents/agent-session-commands";
 import {
   listAgentProfiles,
@@ -79,7 +79,7 @@ vi.mock("./issue-commands", () => ({
 vi.mock("../agents/agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
-  resumeStructuredAgentSession: vi.fn(),
+  resumeAgentSession: vi.fn(),
 }));
 
 vi.mock("../settings/settings-commands", async (importOriginal) => {
@@ -225,9 +225,7 @@ const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const getIssueWorktreeStatusMock = vi.mocked(getIssueWorktreeStatus);
 const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
-const resumeStructuredAgentSessionMock = vi.mocked(
-  resumeStructuredAgentSession,
-);
+const resumeAgentSessionMock = vi.mocked(resumeAgentSession);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
@@ -497,7 +495,7 @@ describe("IssuesActivity", () => {
     getIssueWorktreeStatusMock.mockReset();
     getProjectGitBranchesMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
-    resumeStructuredAgentSessionMock.mockReset();
+    resumeAgentSessionMock.mockReset();
     listAgentSessionsMock.mockReset();
     listIssuesMock.mockReset();
     markIssueReviewMock.mockReset();
@@ -565,13 +563,13 @@ describe("IssuesActivity", () => {
           : [],
     }));
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
-    resumeStructuredAgentSessionMock.mockResolvedValue({
+    resumeAgentSessionMock.mockResolvedValue({
       sessionId: 1,
       threadId: "thread-1",
     });
     injectAgentSessionPromptMock.mockResolvedValue({
       sessionId: 1,
-      codexSessionId: "thread-1",
+      providerSessionId: "thread-1",
     });
     getProjectGitBranchesMock.mockResolvedValue({
       currentBranch: "main",
@@ -4064,7 +4062,7 @@ describe("IssuesActivity", () => {
     });
     injectAgentSessionPromptMock.mockResolvedValueOnce({
       sessionId: 506,
-      codexSessionId: "thread-506",
+      providerSessionId: "thread-506",
     });
 
     renderIssuesActivity({ onOpenAgentsActivity });
@@ -4090,7 +4088,7 @@ describe("IssuesActivity", () => {
       }),
     );
     // live session 直接 inject 成功时无需 resume。
-    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
+    expect(resumeAgentSessionMock).not.toHaveBeenCalled();
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(506);
     expect(
       screen.queryByRole("dialog", { name: "Complete issue" }),
@@ -4120,15 +4118,15 @@ describe("IssuesActivity", () => {
       drifted: false,
       sessionId: 536,
     });
-    // live TUI/PTY：inject 可直接写入；resume 会因缺少 codex_session_id 失败。
-    resumeStructuredAgentSessionMock.mockRejectedValueOnce({
+    // live TUI/PTY：inject 可直接写入；resume 会因缺少 provider_session_id 失败。
+    resumeAgentSessionMock.mockRejectedValueOnce({
       code: "AGENT_SESSION_VALIDATION_FAILED",
       message: "当前 Session 缺少可续接的会话标识。",
       reason: "missingResumeSessionId",
     });
     injectAgentSessionPromptMock.mockResolvedValueOnce({
       sessionId: 536,
-      codexSessionId: null,
+      providerSessionId: null,
     });
 
     renderIssuesActivity({ onOpenAgentsActivity });
@@ -4188,7 +4186,7 @@ describe("IssuesActivity", () => {
       message: "当前 Session 未运行，请先恢复会话后再注入。",
       reason: "notRunningForInject",
     });
-    resumeStructuredAgentSessionMock.mockRejectedValueOnce({
+    resumeAgentSessionMock.mockRejectedValueOnce({
       code: "RESUME_FAILURE_TEST",
       message: "resume workspace missing",
       reason: "workspaceMissingForResume",

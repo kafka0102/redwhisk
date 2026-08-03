@@ -479,7 +479,7 @@ describe("command client", () => {
   it("invokes Rust Core through the inject agent session prompt command", async () => {
     invokeMock.mockResolvedValue({
       sessionId: 301,
-      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+      providerSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
 
     await expect(
@@ -491,7 +491,7 @@ describe("command client", () => {
       }),
     ).resolves.toEqual({
       sessionId: 301,
-      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+      providerSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
     expect(invokeMock).toHaveBeenCalledWith("inject_agent_session_prompt", {
       input: {
@@ -861,7 +861,7 @@ describe("command client", () => {
     invokeMock.mockResolvedValue({
       issueId: 3,
       sessionId: 7,
-      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+      providerSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
 
     await expect(
@@ -872,7 +872,7 @@ describe("command client", () => {
     ).resolves.toEqual({
       issueId: 3,
       sessionId: 7,
-      codexSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
+      providerSessionId: "019d8b4d-2998-7913-889d-fb3c32971610",
     });
     expect(invokeMock).toHaveBeenCalledWith("send_agent_commit_prompt", {
       input: {

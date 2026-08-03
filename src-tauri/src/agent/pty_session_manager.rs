@@ -485,7 +485,13 @@ impl PtySessionManager {
             .spawn_command(command)
             .map_err(|error| error.to_string())?;
 
-        File::create(&request.log_path).map_err(|error| error.to_string())?;
+        // 存在则保留历史（TUI resume 追加同一 log_path）；不存在则创建。
+        // 勿用 File::create：会 truncate，破坏 resume 与 saved log 连贯展示。
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&request.log_path)
+            .map_err(|error| error.to_string())?;
         let log_writer = PtyLogWriter::open(Path::new(&request.log_path))?;
 
         let master = pair.master;

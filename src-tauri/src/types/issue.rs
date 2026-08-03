@@ -222,7 +222,7 @@ pub struct AgentCommitCompletionPreview {
 pub struct SendAgentCommitPromptResult {
     pub issue_id: i64,
     pub session_id: i64,
-    pub codex_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -2409,7 +2409,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, issue_id, title, agent_profile_id, provider_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
@@ -2497,7 +2497,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, issue_id, title, agent_profile_id, provider_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
@@ -2599,7 +2599,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, issue_id, title, agent_profile_id, provider_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
@@ -3612,7 +3612,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, number, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, number, issue_id, title, agent_profile_id, provider_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
@@ -3664,7 +3664,7 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO agent_sessions (
-                   id, project_id, number, issue_id, title, agent_profile_id, codex_session_id,
+                   id, project_id, number, issue_id, title, agent_profile_id, provider_session_id,
                    status, attention, working_dir, command_snapshot, prompt_snapshot,
                    workspace_mode, target_branch, workspace_branch, workspace_path,
                    origin_branch, worktree_owner, log_path,
@@ -3839,7 +3839,7 @@ mod tests {
             title: None,
             agent_profile_id: 1,
             workflow_skill_name: None,
-            codex_session_id: None,
+            provider_session_id: None,
             status: AgentSessionStatus::Running,
             attention: AgentSessionAttention::None,
             working_dir,

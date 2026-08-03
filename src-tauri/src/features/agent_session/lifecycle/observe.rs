@@ -87,7 +87,7 @@ mod tests {
             title: Some("test".to_string()),
             agent_profile_id: 0,
             workflow_skill_name: None,
-            codex_session_id: None,
+            provider_session_id: None,
             status: AgentSessionStatus::Stopped,
             attention: AgentSessionAttention::None,
             working_dir: "/tmp/redwhisk".to_string(),

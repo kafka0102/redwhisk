@@ -417,6 +417,7 @@
         assert!(caps.supports_model_switching);
         assert!(caps.supports_reasoning_effort);
         assert!(caps.supports_modes);
+        assert!(caps.supports_tui_resume);
     }
 
     #[test]
@@ -427,6 +428,7 @@
         assert!(caps.supports_model_switching);
         assert!(!caps.supports_reasoning_effort);
         assert!(!caps.supports_modes);
+        assert!(caps.supports_tui_resume);
     }
 
     #[test]
@@ -437,6 +439,7 @@
         assert!(!opencode.supports_model_switching);
         assert!(!opencode.supports_reasoning_effort);
         assert!(!opencode.supports_modes);
+        assert!(opencode.supports_tui_resume);
     }
 
     #[test]

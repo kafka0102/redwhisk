@@ -22,7 +22,7 @@ struct AgentSessionStore {
     sessions: Mutex<HashMap<i64, Arc<dyn AgentSessionHandle>>>,
     /// 已写入 DB（`running`）但尚未 register 真实 handle 的 session id。
     ///
-    /// 用于在 `start_agent_session` / `resume_structured_agent_session` 等
+    /// 用于在 `start_agent_session` / `resume_agent_session` 等
     /// 闭包内，DB 事务 commit 之后、handle 启动与 `register` 之前的窗口期，
     /// 让 `contains` 返回 `true`，避免并发 reconcile（如轮询
     /// `list_agent_sessions` 触发的 `reconcile_unrecoverable_running_sessions`）
@@ -103,7 +103,7 @@ impl AgentSessionRegistry {
 
     /// 标记 session 为"启动中"：DB 已写入 `running`，但 handle 尚未 register。
     ///
-    /// 在 `start_agent_session` / `resume_structured_agent_session` 等
+    /// 在 `start_agent_session` / `resume_agent_session` 等
     /// 闭包内，DB 事务 commit 之后、耗时 handle 启动之前调用。`register`
     /// 真实 handle 时自动清除该标记；启动失败时调用方应调 `unmark_starting`。
     pub fn mark_starting(&self, session_id: i64) {

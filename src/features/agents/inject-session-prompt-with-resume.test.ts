@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
-  resumeStructuredAgentSession: vi.fn(),
+  resumeAgentSession: vi.fn(),
 }));
 
 import {
   injectAgentSessionPrompt,
-  resumeStructuredAgentSession,
+  resumeAgentSession,
 } from "./agent-session-commands";
 import { injectSessionPromptWithResume } from "./inject-session-prompt-with-resume";
 
 const injectMock = vi.mocked(injectAgentSessionPrompt);
-const resumeMock = vi.mocked(resumeStructuredAgentSession);
+const resumeMock = vi.mocked(resumeAgentSession);
 
 const input = {
   projectId: 1,
@@ -30,17 +30,17 @@ describe("injectSessionPromptWithResume", () => {
   it("injects directly when the session is already live (TUI PTY / structured handle)", async () => {
     injectMock.mockResolvedValueOnce({
       sessionId: 42,
-      codexSessionId: null,
+      providerSessionId: null,
     });
 
     await expect(injectSessionPromptWithResume(input)).resolves.toEqual({
       sessionId: 42,
-      codexSessionId: null,
+      providerSessionId: null,
     });
 
     expect(injectMock).toHaveBeenCalledTimes(1);
     expect(injectMock).toHaveBeenCalledWith(input);
-    // live Codex TUI 等已在运行的会话不应先 resume，否则会因缺少 codex_session_id 误报。
+    // live Codex TUI 等已在运行的会话不应先 resume，否则会因缺少 provider_session_id 误报。
     expect(resumeMock).not.toHaveBeenCalled();
   });
 
@@ -53,7 +53,7 @@ describe("injectSessionPromptWithResume", () => {
       })
       .mockResolvedValueOnce({
         sessionId: 42,
-        codexSessionId: "thread-42",
+        providerSessionId: "thread-42",
       });
     resumeMock.mockResolvedValueOnce({
       sessionId: 42,
@@ -62,7 +62,7 @@ describe("injectSessionPromptWithResume", () => {
 
     await expect(injectSessionPromptWithResume(input)).resolves.toEqual({
       sessionId: 42,
-      codexSessionId: "thread-42",
+      providerSessionId: "thread-42",
     });
 
     expect(injectMock).toHaveBeenNthCalledWith(1, input);

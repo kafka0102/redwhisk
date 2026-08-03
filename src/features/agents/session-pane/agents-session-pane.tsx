@@ -454,6 +454,9 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
             <AgentTuiSessionView
               projectId={projectId}
               sessionId={workspace.sessionId}
+              sessionStatus={workspace.sessionStatus}
+              issueStatus={workspace.issueStatus}
+              isActive={isCurrent}
             />
           ) : (
             <AgentSessionView

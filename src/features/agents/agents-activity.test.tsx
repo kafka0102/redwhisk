@@ -19,7 +19,7 @@ import {
   injectAgentSessionPrompt,
   deleteAgentSession,
   listAgentSessions,
-  resumeStructuredAgentSession,
+  resumeAgentSession,
   setAgentSessionAttention,
   updateAgentSessionTitle,
   type AgentSessionListItem,
@@ -163,7 +163,7 @@ vi.mock("./agent-session-commands", () => ({
   deleteAgentSession: vi.fn(),
   injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
-  resumeStructuredAgentSession: vi.fn(),
+  resumeAgentSession: vi.fn(),
   setAgentSessionAttention: vi.fn(),
   updateAgentSessionTitle: vi.fn(),
   sendAgentMessage: vi.fn(),
@@ -210,9 +210,7 @@ vi.mock("../../shared/toast", () => ({
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const deleteAgentSessionMock = vi.mocked(deleteAgentSession);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
-const resumeStructuredAgentSessionMock = vi.mocked(
-  resumeStructuredAgentSession,
-);
+const resumeAgentSessionMock = vi.mocked(resumeAgentSession);
 const setAgentSessionAttentionMock = vi.mocked(setAgentSessionAttention);
 const updateAgentSessionTitleMock = vi.mocked(updateAgentSessionTitle);
 const completeIssueFlowMock = vi.mocked(completeIssueFlow);
@@ -521,7 +519,7 @@ describe("AgentsActivity", () => {
     listAgentSessionsMock.mockReset();
     deleteAgentSessionMock.mockReset();
     injectAgentSessionPromptMock.mockReset();
-    resumeStructuredAgentSessionMock.mockReset();
+    resumeAgentSessionMock.mockReset();
     setAgentSessionAttentionMock.mockReset();
     updateAgentSessionTitleMock.mockReset();
     listIssuesMock.mockReset();
@@ -550,13 +548,13 @@ describe("AgentsActivity", () => {
     deleteAgentSessionMock.mockResolvedValue({
       sessionId: 701,
     });
-    resumeStructuredAgentSessionMock.mockResolvedValue({
+    resumeAgentSessionMock.mockResolvedValue({
       sessionId: 502,
       threadId: "thread-502",
     });
     injectAgentSessionPromptMock.mockResolvedValue({
       sessionId: 502,
-      codexSessionId: "thread-502",
+      providerSessionId: "thread-502",
     });
     updateAgentSessionTitleMock.mockResolvedValue({
       sessionId: 701,
@@ -5408,7 +5406,7 @@ describe("AgentsActivity", () => {
         }),
       ).not.toBeInTheDocument(),
     );
-    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
+    expect(resumeAgentSessionMock).not.toHaveBeenCalled();
     expect(injectAgentSessionPromptMock).not.toHaveBeenCalled();
     expect(markIssueReviewMock).not.toHaveBeenCalled();
     expect(
@@ -5525,7 +5523,7 @@ describe("AgentsActivity", () => {
     await act(async () => {
       handoff.resolve({
         sessionId: 302,
-        codexSessionId: "thread-302",
+        providerSessionId: "thread-302",
       });
       await handoff.promise;
     });
@@ -5541,7 +5539,7 @@ describe("AgentsActivity", () => {
       }),
     );
     // live session 直接 inject 成功时无需 resume。
-    expect(resumeStructuredAgentSessionMock).not.toHaveBeenCalled();
+    expect(resumeAgentSessionMock).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("dialog", {
         name: "Let the agent auto-merge the current branch into the base branch?",

@@ -110,7 +110,7 @@ pub struct InjectAgentSessionPromptInput {
 #[serde(rename_all = "camelCase")]
 pub struct InjectAgentSessionPromptResult {
     pub session_id: i64,
-    pub codex_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -165,7 +165,7 @@ pub struct AgentSessionRecord {
     pub title: Option<String>,
     pub agent_profile_id: i64,
     pub workflow_skill_name: Option<String>,
-    pub codex_session_id: Option<String>,
+    pub provider_session_id: Option<String>,
     pub status: AgentSessionStatus,
     pub attention: AgentSessionAttention,
     pub working_dir: String,
@@ -263,14 +263,14 @@ impl AgentPermissionDecision {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResumeStructuredAgentSessionInput {
+pub struct ResumeAgentSessionInput {
     pub project_id: i64,
     pub session_id: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResumeStructuredAgentSessionResult {
+pub struct ResumeAgentSessionResult {
     pub session_id: i64,
     pub thread_id: String,
 }
@@ -360,6 +360,8 @@ pub struct AgentUiCapabilities {
     pub supports_model_switching: bool,
     pub supports_reasoning_effort: bool,
     pub supports_modes: bool,
+    /// 是否支持 TUI 路径的 Agent Session 续接（ADR-0033）。
+    pub supports_tui_resume: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

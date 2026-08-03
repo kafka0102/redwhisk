@@ -347,13 +347,13 @@ pub(super) fn persist_started_session_thread_id(
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
             })?;
             repository
-                .update_codex_session_id(session_id, thread_id)
+                .update_provider_session_id(session_id, thread_id)
                 .map_err(agent_session_database_error)?;
         }
         ThreadIdBackfill::WhenPresent => {
             if let Some(thread_id) = started.thread_id.as_deref() {
                 repository
-                    .update_codex_session_id(session_id, thread_id)
+                    .update_provider_session_id(session_id, thread_id)
                     .map_err(agent_session_database_error)?;
             }
         }

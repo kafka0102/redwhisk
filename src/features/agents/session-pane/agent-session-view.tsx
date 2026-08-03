@@ -22,7 +22,7 @@ import { useAgentMessageStream } from "../message-stream/use-agent-message-strea
 import { PermissionCard } from "../message-stream/permission-card";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
-  resumeStructuredAgentSession,
+  resumeAgentSession,
   type AgentSessionStatus,
   type AgentType,
   type IssueStatus,
@@ -95,7 +95,7 @@ export const AgentSessionView = memo(function AgentSessionView({
     if (!shouldResumeBeforeSend) {
       return;
     }
-    await resumeStructuredAgentSession({ projectId, sessionId });
+    await resumeAgentSession({ projectId, sessionId });
   }, [projectId, sessionId, shouldResumeBeforeSend]);
 
   return (

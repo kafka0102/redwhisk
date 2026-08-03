@@ -279,7 +279,7 @@ export interface AgentCommitCompletionPreview {
 export interface SendAgentCommitPromptResult {
   issueId: number;
   sessionId: number;
-  codexSessionId: string | null;
+  providerSessionId: string | null;
 }
 
 export type DetectAgentCommitCompletionOutcome =

@@ -167,7 +167,7 @@ export function useIssueCompletionResolution({
     // worktree session 关闭后 handle / PTY 会移除，直接注入会报 notRunning。
     // injectSessionPromptWithResume：live session（含 Codex TUI PTY）直接注入；
     // 仅 notRunning 时再 resume 重建。resume 失败时在对话框展示具体错误，避免
-    // 冒泡成 unhandled rejection，也避免 live TUI 因缺少 codex_session_id 误报。
+    // 冒泡成 unhandled rejection，也避免 live TUI 因缺少 provider_session_id 误报。
     try {
       await injectSessionPromptWithResume({
         projectId: requestProjectId,

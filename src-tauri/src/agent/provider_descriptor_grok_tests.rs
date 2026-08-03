@@ -40,6 +40,7 @@ fn grok_ui_capabilities_show_model_without_switching() {
     assert!(!grok.supports_model_switching);
     assert!(!grok.supports_reasoning_effort);
     assert!(!grok.supports_modes);
+    assert!(grok.supports_tui_resume);
 }
 
 #[test]
