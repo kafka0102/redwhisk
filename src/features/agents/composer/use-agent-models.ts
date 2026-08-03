@@ -30,6 +30,7 @@ export const SAFE_DEFAULT_CAPABILITIES: AgentUiCapabilities = {
   supportsModelSwitching: false,
   supportsReasoningEffort: false,
   supportsModes: false,
+  supportsTuiResume: false,
 };
 
 interface UseAgentModelsArgs {

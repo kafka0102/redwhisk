@@ -97,6 +97,69 @@ pub(super) fn build_grok_tui_command_snapshot(raw_command: &str, mode: &str, dan
     }
 }
 
+/// 从 command_snapshot 拆出 program 与其余参数（空白分词；空 snapshot 用 fallback）。
+fn split_program_and_args(command_snapshot: &str, fallback_binary: &str) -> (String, Vec<String>) {
+    let trimmed = command_snapshot.trim();
+    if trimmed.is_empty() {
+        return (fallback_binary.to_string(), Vec::new());
+    }
+    let mut parts = trimmed.split_whitespace().map(str::to_string);
+    let program = parts.next().unwrap_or_else(|| fallback_binary.to_string());
+    (program, parts.collect())
+}
+
+/// Codex 交互式 TUI resume：`codex resume <id> [原 snapshot 其余参数]`；不注入 prompt。
+pub(super) fn build_codex_tui_resume_command(command_snapshot: &str, provider_session_id: &str) -> String {
+    let (program, rest) = split_program_and_args(command_snapshot, CODEX_FALLBACK_BINARY);
+    let mut out = vec![program, "resume".to_string(), provider_session_id.to_string()];
+    out.extend(rest);
+    out.join(" ")
+}
+
+/// Claude 交互式 TUI resume：`claude --resume <id> [原 snapshot 其余参数]`；不注入 prompt。
+pub(super) fn build_claude_tui_resume_command(
+    command_snapshot: &str,
+    provider_session_id: &str,
+) -> String {
+    let (program, rest) = split_program_and_args(command_snapshot, CLAUDE_FALLBACK_BINARY);
+    let mut out = vec![
+        program,
+        "--resume".to_string(),
+        provider_session_id.to_string(),
+    ];
+    out.extend(rest);
+    out.join(" ")
+}
+
+/// OpenCode 交互式 TUI resume：在 snapshot 末尾追加 `-s <id>`；不注入 prompt / run / --format。
+pub(super) fn build_opencode_tui_resume_command(
+    command_snapshot: &str,
+    provider_session_id: &str,
+) -> String {
+    let trimmed = command_snapshot.trim();
+    let base = if trimmed.is_empty() {
+        OPENCODE_FALLBACK_BINARY
+    } else {
+        trimmed
+    };
+    format!("{base} -s {provider_session_id}")
+}
+
+/// Grok 交互式 TUI resume：`grok --resume <id> [原 snapshot 其余参数]`；不注入 prompt。
+pub(super) fn build_grok_tui_resume_command(
+    command_snapshot: &str,
+    provider_session_id: &str,
+) -> String {
+    let (program, rest) = split_program_and_args(command_snapshot, GROK_FALLBACK_BINARY);
+    let mut out = vec![
+        program,
+        "--resume".to_string(),
+        provider_session_id.to_string(),
+    ];
+    out.extend(rest);
+    out.join(" ")
+}
+
 /// OpenCode structured/json launch snapshot：确保含 `run --format json`；不注入 message / -s / -m。
 ///
 /// 运行时完整 argv 由 `opencode_streaming::session` 拼装。

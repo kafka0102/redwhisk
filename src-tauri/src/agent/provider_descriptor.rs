@@ -19,9 +19,11 @@ mod command;
 use command::{
     CLAUDE_FALLBACK_BINARY, CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY,
     GROK_ALWAYS_APPROVE_ARG, GROK_FALLBACK_BINARY, OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY,
-    append_missing_args, build_claude_tui_command_snapshot, build_codex_tui_command_snapshot,
-    build_grok_tui_command_snapshot, build_opencode_structured_command_snapshot,
-    build_opencode_tui_command_snapshot, claude_models_from_home, ensure_claude_bypass_permission_args,
+    append_missing_args, build_claude_tui_command_snapshot, build_claude_tui_resume_command,
+    build_codex_tui_command_snapshot, build_codex_tui_resume_command, build_grok_tui_command_snapshot,
+    build_grok_tui_resume_command, build_opencode_structured_command_snapshot,
+    build_opencode_tui_command_snapshot, build_opencode_tui_resume_command, claude_models_from_home,
+    ensure_claude_bypass_permission_args,
 };
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
@@ -113,6 +115,12 @@ pub trait AgentProviderDescriptor: Send + Sync {
     /// 实现须按 provider 的交互式 CLI 语义映射审批/沙箱参数，且不得注入结构化协议参数。
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String;
 
+    /// 构造交互式 TUI resume 启动命令（基于已持久化的 `command_snapshot` + Provider 会话标识）。
+    ///
+    /// **不**改写 DB 中的 `command_snapshot`；**不**注入额外 prompt。
+    /// resume 命令只用于本次 spawn。
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String;
+
     /// TUI 首条 prompt 如何投递（CLI 参数优先，stdin 仅作回退）。
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery;
 
@@ -187,6 +195,10 @@ impl AgentProviderDescriptor for CodexDescriptor {
         build_codex_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+        build_codex_tui_resume_command(command_snapshot, provider_session_id)
+    }
+
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
         TuiInitialPromptDelivery::TrailingArgument
     }
@@ -213,6 +225,7 @@ impl AgentProviderDescriptor for CodexDescriptor {
             supports_model_switching: true,
             supports_reasoning_effort: true,
             supports_modes: true,
+            supports_tui_resume: true,
         }
     }
 }
@@ -253,6 +266,10 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         build_claude_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+        build_claude_tui_resume_command(command_snapshot, provider_session_id)
+    }
+
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
         TuiInitialPromptDelivery::TrailingArgument
     }
@@ -278,6 +295,7 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
             supports_model_switching: true,
             supports_reasoning_effort: false,
             supports_modes: false,
+            supports_tui_resume: true,
         }
     }
 }
@@ -319,6 +337,10 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
         build_opencode_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+        build_opencode_tui_resume_command(command_snapshot, provider_session_id)
+    }
+
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
         TuiInitialPromptDelivery::PromptFlag
     }
@@ -342,6 +364,7 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
             supports_model_switching: false,
             supports_reasoning_effort: false,
             supports_modes: false,
+            supports_tui_resume: true,
         }
     }
 }
@@ -387,6 +410,10 @@ impl AgentProviderDescriptor for GrokDescriptor {
         build_grok_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+        build_grok_tui_resume_command(command_snapshot, provider_session_id)
+    }
+
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
         TuiInitialPromptDelivery::TrailingArgument
     }
@@ -420,6 +447,7 @@ impl AgentProviderDescriptor for GrokDescriptor {
             supports_model_switching: false,
             supports_reasoning_effort: false,
             supports_modes: false,
+            supports_tui_resume: true,
         }
     }
 }
@@ -431,6 +459,10 @@ mod tests;
 #[cfg(test)]
 #[path = "provider_descriptor_grok_tests.rs"]
 mod grok_tests;
+
+#[cfg(test)]
+#[path = "provider_descriptor_resume_tests.rs"]
+mod resume_tests;
 
 #[cfg(test)]
 #[path = "provider_descriptor_prompt_tests.rs"]

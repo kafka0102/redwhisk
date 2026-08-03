@@ -79,6 +79,7 @@ beforeEach(() => {
       supportsModelSwitching: true,
       supportsReasoningEffort: true,
       supportsModes: true,
+      supportsTuiResume: false,
     },
     models: [
       {
@@ -428,6 +429,7 @@ describe("AgentComposer", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: true,
         supportsModes: true,
+        supportsTuiResume: false,
       },
       models: [
         {
@@ -462,6 +464,7 @@ describe("AgentComposer", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: false,
         supportsModes: false,
+        supportsTuiResume: false,
       },
       models: [
         {

@@ -181,6 +181,8 @@ export interface AgentUiCapabilities {
   supportsModelSwitching: boolean;
   supportsReasoningEffort: boolean;
   supportsModes: boolean;
+  /** 是否支持 TUI 路径的 Agent Session 续接（ADR-0032）。 */
+  supportsTuiResume: boolean;
 }
 
 export interface ListAgentModelsResult {

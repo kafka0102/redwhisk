@@ -2614,6 +2614,7 @@ fn resume_agent_session_rejects_completed_issue() {
     );
     let registry = AgentSessionRegistry::new();
     let broadcaster = redwhisk_lib::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+    let pty = redwhisk_lib::agent::pty_session_manager::PtySessionManager::new();
 
     let error = service
         .resume_agent_session(
@@ -2624,6 +2625,7 @@ fn resume_agent_session_rejects_completed_issue() {
             },
             &registry,
             &broadcaster,
+            &pty,
         )
         .expect_err("completed issue session should not resume");
 

@@ -1398,6 +1398,7 @@ impl AgentSessionService<'_> {
         input: ResumeAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        pty_sessions: &PtySessionManager,
     ) -> Result<ResumeAgentSessionResult, CommandError> {
         let database = DatabaseConfig::new(&data_dir)
             .open()
@@ -1417,15 +1418,17 @@ impl AgentSessionService<'_> {
             input,
             agent_registry,
             broadcaster,
+            pty_sessions,
         )
     }
 
     pub fn resume_agent_session(
         &self,
-        _data_dir: &Path,
+        data_dir: &Path,
         input: ResumeAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        pty_sessions: &PtySessionManager,
     ) -> Result<ResumeAgentSessionResult, CommandError> {
         let session = self.find_project_session(input.project_id, input.session_id)?;
 
@@ -1475,9 +1478,19 @@ impl AgentSessionService<'_> {
             }
         }
 
-        // 已在 registry 的 live handle 优先 short-circuit：不依赖 DB 中的
-        // provider_session_id。否则已运行会话若尚未回填 thread id（或 TUI 路径无该字段）
-        // 会误报 missingResumeSessionId。
+        // closed 会话不自动/不手动复活（ADR-0032）。
+        if session.status == AgentSessionStatus::Closed {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "已正常关闭的 Session 不能续接。",
+            )
+            .with_reason("closedSessionCannotResume")
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+            ));
+        }
+
+        // 幂等：structured live handle / TUI 活跃 PTY / mark_starting 均 short-circuit。
         if let Some(handle) = agent_registry.get(session.id) {
             let active_thread_id = handle
                 .thread_id()
@@ -1494,7 +1507,46 @@ impl AgentSessionService<'_> {
                 thread_id: active_thread_id,
             });
         }
+        if pty_sessions.contains(session.id) || agent_registry.contains(session.id) {
+            let active_thread_id = session
+                .provider_session_id
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_default();
+            self.mark_structured_session_resumed(&session, &active_thread_id)?;
+            return Ok(ResumeAgentSessionResult {
+                session_id: session.id,
+                thread_id: active_thread_id,
+            });
+        }
 
+        match super::lifecycle::runtime_transport_from_raw(&session.display_mode)? {
+            super::lifecycle::RuntimeTransport::InteractiveTui => self.resume_tui_agent_session(
+                data_dir,
+                &session,
+                input.project_id,
+                agent_registry,
+                pty_sessions,
+            ),
+            super::lifecycle::RuntimeTransport::StructuredJson => self
+                .resume_structured_agent_session(
+                    data_dir,
+                    &session,
+                    input.project_id,
+                    agent_registry,
+                    broadcaster,
+                ),
+        }
+    }
+
+    fn resume_structured_agent_session(
+        &self,
+        data_dir: &Path,
+        session: &crate::types::agent_session::AgentSessionRecord,
+        project_id: i64,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+    ) -> Result<ResumeAgentSessionResult, CommandError> {
         let thread_id = session
             .provider_session_id
             .clone()
@@ -1503,11 +1555,11 @@ impl AgentSessionService<'_> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "当前 Session 缺少可续接的会话标识。",
-                ).with_reason("missingResumeSessionId")
+                )
+                .with_reason("missingResumeSessionId")
                 .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
             })?;
 
-        // 通过 profile 判定 agent 类型，构造走 provider factory。
         let profile = self
             .agent_profile_repository
             .find_profile_by_id(session.agent_profile_id)
@@ -1516,7 +1568,8 @@ impl AgentSessionService<'_> {
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "Agent Profile 不存在。",
-                ).with_reason("profileNotFound")
+                )
+                .with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("agentProfileId", session.agent_profile_id),
@@ -1528,14 +1581,14 @@ impl AgentSessionService<'_> {
         } else {
             session.command_snapshot.clone()
         };
-        let cwd = self.resolve_session_cwd_for_resume(&session)?;
+        let cwd = self.resolve_session_cwd_for_resume(session)?;
         agent_registry.mark_starting(session.id);
-        let runtime = descriptor.resolve_runtime_config(_data_dir, None, None);
+        let runtime = descriptor.resolve_runtime_config(data_dir, None, None);
         let started = match start_provider_session(
             &DefaultAgentSessionProviderFactory,
             AgentSessionStartRequest {
                 agent_type: profile.agent_type.clone(),
-                project_id: input.project_id,
+                project_id,
                 session_id: session.id,
                 binary,
                 cwd,
@@ -1545,7 +1598,7 @@ impl AgentSessionService<'_> {
                 effort: runtime.effort,
                 resume_thread_id: Some(thread_id.clone()),
                 broadcaster: broadcaster.clone(),
-                config_home: user_home_from_data_dir(_data_dir),
+                config_home: user_home_from_data_dir(data_dir),
             },
         ) {
             Ok(started) => started,
@@ -1569,7 +1622,7 @@ impl AgentSessionService<'_> {
                 ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
             ));
         }
-        if let Err(error) = self.mark_structured_session_resumed(&session, &resumed_thread_id) {
+        if let Err(error) = self.mark_structured_session_resumed(session, &resumed_thread_id) {
             agent_registry.unmark_starting(session.id);
             started.handle.shutdown();
             return Err(error);
@@ -1580,6 +1633,141 @@ impl AgentSessionService<'_> {
         Ok(ResumeAgentSessionResult {
             session_id: session.id,
             thread_id: resumed_thread_id,
+        })
+    }
+
+    fn resume_tui_agent_session(
+        &self,
+        data_dir: &Path,
+        session: &crate::types::agent_session::AgentSessionRecord,
+        project_id: i64,
+        agent_registry: &AgentSessionRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<ResumeAgentSessionResult, CommandError> {
+        let thread_id = session
+            .provider_session_id
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "当前 Session 缺少可续接的会话标识。",
+                )
+                .with_reason("missingResumeSessionId")
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+            })?;
+
+        let profile = self
+            .agent_profile_repository
+            .find_profile_by_id(session.agent_profile_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "Agent Profile 不存在。",
+                )
+                .with_reason("profileNotFound")
+                .with_detail(
+                    ErrorDetail::new("AgentProfile")
+                        .with_value("agentProfileId", session.agent_profile_id),
+                )
+            })?;
+        let descriptor = descriptor_for(&profile.agent_type);
+        if !descriptor.ui_capabilities().supports_tui_resume {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "当前 Agent 不支持 TUI 会话续接。",
+            )
+            .with_reason("tuiResumeNotSupported")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
+        }
+
+        let cwd = self.resolve_session_cwd_for_resume(session)?;
+        // resume 命令现算，不改写 DB 中的 command_snapshot；不注入 prompt。
+        let resume_command =
+            descriptor.build_tui_resume_command(&session.command_snapshot, &thread_id);
+
+        agent_registry.mark_starting(session.id);
+        let pending_pty = match pty_sessions.spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::ExecReplace,
+            command: resume_command,
+            working_dir: cwd.clone(),
+            log_path: session.log_path.clone(),
+            initial_prompt: None,
+            rows: 32,
+            cols: 120,
+            startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+            startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+        }) {
+            Ok(pending) => pending,
+            Err(error) => {
+                agent_registry.unmark_starting(session.id);
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentSessionStartFailed,
+                    "TUI Session 续接启动失败。",
+                )
+                .with_reason("tuiResumeSpawnFailed")
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error)));
+            }
+        };
+
+        if let Err(error) = self.mark_structured_session_resumed(session, &thread_id) {
+            agent_registry.unmark_starting(session.id);
+            pending_pty.terminate();
+            return Err(error);
+        }
+
+        let data_dir_for_exit = data_dir.to_path_buf();
+        let session_id = session.id;
+        if let Err(error) = pty_sessions.register_for_project(
+            project_id,
+            session_id,
+            pending_pty,
+            move |exit_status| {
+                let _ = AgentSessionService::record_session_termination_in_data_dir(
+                    &data_dir_for_exit,
+                    session_id,
+                    exit_status,
+                );
+            },
+        ) {
+            agent_registry.unmark_starting(session_id);
+            error.pending.terminate();
+            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                data_dir,
+                session_id,
+                PtyExitStatus { exit_code: None },
+            );
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionStartFailed,
+                "TUI Session 续接注册失败。",
+            )
+            .with_reason("tuiResumeSpawnFailed")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.message)));
+        }
+
+        agent_registry.unmark_starting(session_id);
+
+        // 尽力回写 Provider 会话标识；失败不阻断 resume 成功。
+        if should_attempt_codex_session_capture(&session.command_snapshot) {
+            let data_dir_buf = data_dir.to_path_buf();
+            let working_dir = cwd;
+            let started_at = session.started_at;
+            thread::spawn(move || {
+                refresh_provider_session_id_in_data_dir(
+                    &data_dir_buf,
+                    session_id,
+                    &working_dir,
+                    started_at,
+                );
+            });
+        }
+
+        Ok(ResumeAgentSessionResult {
+            session_id,
+            thread_id,
         })
     }
 
@@ -5170,6 +5358,7 @@ mod tests {
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         let error = service
             .resume_agent_session(
                 std::env::temp_dir().as_path(),
@@ -5179,6 +5368,7 @@ mod tests {
                 },
                 &registry,
                 &broadcaster,
+                &pty,
             )
             .expect_err("missing issue must reject resume");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -5207,6 +5397,7 @@ mod tests {
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         let error = service
             .resume_agent_session(
                 std::env::temp_dir().as_path(),
@@ -5216,6 +5407,7 @@ mod tests {
                 },
                 &registry,
                 &broadcaster,
+                &pty,
             )
             .expect_err("backlog issue must reject resume");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -5244,6 +5436,7 @@ mod tests {
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         let error = service
             .resume_agent_session(
                 std::env::temp_dir().as_path(),
@@ -5253,6 +5446,7 @@ mod tests {
                 },
                 &registry,
                 &broadcaster,
+                &pty,
             )
             .expect_err("completed issue must reject resume");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -5337,6 +5531,7 @@ mod tests {
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         registry.register(
             602,
             Arc::new(ControllableHandle {
@@ -5354,6 +5549,7 @@ mod tests {
                 },
                 &registry,
                 &broadcaster,
+                &pty,
             )
             .expect("live handle should short-circuit without provider_session_id");
         assert_eq!(result.session_id, 602);
@@ -5383,6 +5579,7 @@ mod tests {
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         registry.register(
             601,
             Arc::new(ControllableHandle {
@@ -5400,6 +5597,7 @@ mod tests {
                 },
                 &registry,
                 &broadcaster,
+                &pty,
             )
             .expect("resume short circuit");
         assert_eq!(result.session_id, 601);

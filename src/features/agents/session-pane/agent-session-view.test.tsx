@@ -86,6 +86,7 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
       supportsModelSwitching: true,
       supportsReasoningEffort: true,
       supportsModes: true,
+      supportsTuiResume: false,
     },
     models: [],
   });
@@ -163,6 +164,7 @@ describe("AgentSessionView", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: true,
         supportsModes: true,
+        supportsTuiResume: false,
       },
       models: [
         {
@@ -205,6 +207,7 @@ describe("AgentSessionView", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: true,
         supportsModes: true,
+        supportsTuiResume: false,
       },
       models: [
         {
@@ -460,6 +463,7 @@ describe("AgentSessionView", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: true,
         supportsModes: true,
+        supportsTuiResume: false,
       },
       models: [
         {
@@ -518,6 +522,7 @@ describe("AgentSessionView", () => {
         supportsModelSwitching: true,
         supportsReasoningEffort: true,
         supportsModes: true,
+        supportsTuiResume: false,
       },
       models: [
         {

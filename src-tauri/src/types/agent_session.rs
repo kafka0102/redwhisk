@@ -360,6 +360,8 @@ pub struct AgentUiCapabilities {
     pub supports_model_switching: bool,
     pub supports_reasoning_effort: bool,
     pub supports_modes: bool,
+    /// 是否支持 TUI 路径的 Agent Session 续接（ADR-0032）。
+    pub supports_tui_resume: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
