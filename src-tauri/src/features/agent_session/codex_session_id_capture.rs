@@ -4,7 +4,7 @@
 //!
 //! 与 agent_session 编排解耦的纯谓词模块：零 DB 依赖，输入只有 codex_home
 //! 与会话元信息，输出 `Option<String>`。service 仅持有一次 `resolve` 调用，
-//! 持久化（开库、migration、回写 codex_session_id）留在 service 侧。
+//! 持久化（开库、migration、回写 provider_session_id）留在 service 侧。
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};

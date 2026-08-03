@@ -136,7 +136,6 @@
         "agentProfileId": "required",
         "attention": "required",
         "closedAt": "required",
-        "codexSessionId": "required",
         "commandSnapshot": "required",
         "displayMode": "required",
         "id": "required",
@@ -148,6 +147,7 @@
         "originBranch": "required",
         "projectId": "required",
         "promptSnapshot": "required",
+        "providerSessionId": "required",
         "startedAt": "required",
         "status": "required",
         "targetBranch": "required",
@@ -512,7 +512,7 @@
     },
     "InjectAgentSessionPromptResult": {
       "fields": {
-        "codexSessionId": "required",
+        "providerSessionId": "required",
         "sessionId": "required"
       }
     },
@@ -821,6 +821,19 @@
         "remoteBranches": "required"
       }
     },
+    "ProjectCreateBranchInput": {
+      "fields": {
+        "name": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "workspacePath": "optional"
+      }
+    },
+    "ProjectCreateBranchResponse": {
+      "fields": {
+        "branch": "required"
+      }
+    },
     "ProjectGitBranchListInput": {
       "fields": {
         "projectId": "required"
@@ -1087,13 +1100,13 @@
         "sessionId": "required"
       }
     },
-    "ResumeStructuredAgentSessionInput": {
+    "ResumeAgentSessionInput": {
       "fields": {
         "projectId": "required",
         "sessionId": "required"
       }
     },
-    "ResumeStructuredAgentSessionResult": {
+    "ResumeAgentSessionResult": {
       "fields": {
         "sessionId": "required",
         "threadId": "required"
@@ -1199,8 +1212,8 @@
     },
     "SendAgentCommitPromptResult": {
       "fields": {
-        "codexSessionId": "required",
         "issueId": "required",
+        "providerSessionId": "required",
         "sessionId": "required"
       }
     },

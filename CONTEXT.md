@@ -181,6 +181,14 @@ _Avoid_: 运行中 live log、完整审计仓、完整过程 transcript、SQLite
 Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区：交互式 xterm 终端 surface，输入直达 PTY，不使用结构化消息流与底部 composer。
 _Avoid_: Project Terminal 配置实体、旁路只读 TUI 面板、双轨同显
 
+**Provider 会话标识**（providerSessionId）：
+各 Agent provider 用于跨进程续接同一对话上下文的外部会话 id（Codex thread、Claude session、OpenCode session 等），持久化在 Agent Session 上；json 与 tui 路径共用。字段名中立，不绑定某一厂商。
+_Avoid_: 仅 Codex 语义的 id、前端伪造 id、与 RedWhisk session 主键混用
+
+**Agent Session 续接**（resume）：
+在既有 Agent Session 记录上重新拉起运行时，以继续同一外部对话上下文：json 走结构化 provider resume；tui 走交互式 PTY + 各 CLI 的续接命令。仅当关联 Issue 为 running 或 review 时可续接；无 Issue、backlog、completed 或 Session 已正常 closed 的不自动续接。应用重启后无活跃 PTY 时，Agents 工作台打开 tui 会话可自动尝试续接。
+_Avoid_: 冷启动全新对话冒充续接、Issue 只读归档面板续接、无 providerSessionId 时静默新开会话
+
 **Agent 启用状态**（enabled）：
 某 Agent profile 是否处于可用状态的布尔标记，默认启用；禁用的 profile 在 Agent 表中以浅灰行底区分并排序置末，且在「启动 Agent 会话」的选择列表中隐藏。本期启用状态仅前端过滤、后端不做启动校验。
 _Avoid_: 软删标记 del、dangerous 模式标记

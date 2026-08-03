@@ -22,7 +22,7 @@ use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
-    ResumeStructuredAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
+    ResumeAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
     WorkspaceMode, WorktreeOwner,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
@@ -108,7 +108,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "issue_id",
             "title",
             "agent_profile_id",
-            "codex_session_id",
+            "provider_session_id",
             "status",
             "attention",
             "working_dir",
@@ -139,6 +139,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "last_output_at",
             "current_turn_source",
             "current_turn_id",
+            "display_mode",
         ]
     );
 
@@ -2299,7 +2300,7 @@ fn list_agent_sessions_prunes_broken_structured_standalone_sessions() {
     database
         .connection
         .execute(
-            "UPDATE agent_sessions SET codex_session_id = 'thread-valid' WHERE id = ?1",
+            "UPDATE agent_sessions SET provider_session_id = 'thread-valid' WHERE id = ?1",
             rusqlite::params![valid_session_id],
         )
         .expect("set valid session thread id");
@@ -2583,7 +2584,7 @@ fn set_session_attention_rejects_non_running_session() {
 }
 
 #[test]
-fn resume_structured_agent_session_rejects_completed_issue() {
+fn resume_agent_session_rejects_completed_issue() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let project_id = insert_project(&database.connection, "resume-completed-project");
@@ -2600,7 +2601,7 @@ fn resume_structured_agent_session_rejects_completed_issue() {
     database
         .connection
         .execute(
-            "UPDATE agent_sessions SET codex_session_id = 'thread-completed' WHERE id = ?1",
+            "UPDATE agent_sessions SET provider_session_id = 'thread-completed' WHERE id = ?1",
             rusqlite::params![session_id],
         )
         .expect("set codex session id");
@@ -2615,9 +2616,9 @@ fn resume_structured_agent_session_rejects_completed_issue() {
     let broadcaster = redwhisk_lib::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
 
     let error = service
-        .resume_structured_agent_session(
+        .resume_agent_session(
             temp_dir.path(),
-            ResumeStructuredAgentSessionInput {
+            ResumeAgentSessionInput {
                 project_id,
                 session_id,
             },
@@ -2628,6 +2629,7 @@ fn resume_structured_agent_session_rejects_completed_issue() {
 
     assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
     assert_eq!(error.message, "已完成 Issue 的 Session 不能继续运行。");
+    assert_eq!(error.reason.as_deref(), Some("completedIssueSessionCannotRun"));
 }
 
 #[test]
@@ -3020,6 +3022,13 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
         1_780_628_600_000,
         None,
     );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET display_mode = 'tui' WHERE id = ?1",
+            rusqlite::params![session_id],
+        )
+        .expect("set tui display mode");
 
     let command = echo_stdin_command(temp_dir.path());
     let log_path = temp_dir.path().join("inject-prompt.log");
@@ -3062,7 +3071,7 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
         .expect("inject prompt");
 
     assert_eq!(result.session_id, session_id);
-    assert_eq!(result.codex_session_id, None);
+    assert_eq!(result.provider_session_id, None);
 
     let mut snapshot = String::new();
     for _ in 0..20 {
@@ -3115,6 +3124,13 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
         None,
         log_path.to_string_lossy().as_ref(),
     );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET display_mode = 'tui' WHERE id = ?1",
+            rusqlite::params![session_id],
+        )
+        .expect("set tui display mode");
 
     let command = echo_stdin_command(temp_dir.path());
     let manager = PtySessionManager::new();
@@ -3160,7 +3176,7 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
         .expect("inject review prompt");
 
     assert_eq!(result.session_id, session_id);
-    assert_eq!(result.codex_session_id, None);
+    assert_eq!(result.provider_session_id, None);
 
     let issue = IssueRepository::new(&database.connection)
         .find_by_id(issue_id)
@@ -3626,7 +3642,13 @@ fn git(repo: &std::path::Path, args: &[&str]) {
 
 fn echo_stdin_command(base_dir: &std::path::Path) -> std::path::PathBuf {
     let path = base_dir.join("echo-stdin.sh");
-    std::fs::write(&path, "#!/bin/sh\ncat\n").expect("write echo stdin script");
+    // Codex TUI 首条 prompt 以 trailing argv 注入；stdin 路径用于 inject / 自定义 binary。
+    // 同时回显参数与 stdin，便于两类路径的集成断言。
+    std::fs::write(
+        &path,
+        "#!/bin/sh\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\ncat\n",
+    )
+    .expect("write echo stdin script");
     set_executable(&path);
     path
 }

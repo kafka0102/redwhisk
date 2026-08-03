@@ -35,7 +35,7 @@ use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineResult,
-    ResumeStructuredAgentSessionInput, ResumeStructuredAgentSessionResult,
+    ResumeAgentSessionInput, ResumeAgentSessionResult,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
     StartAgentSessionResult,
     UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
@@ -529,7 +529,7 @@ impl<'connection> AgentSessionService<'connection> {
                     let working_dir = launch.working_dir.clone();
                     let session_id = result.session_id;
                     thread::spawn(move || {
-                        refresh_codex_session_id_in_data_dir(
+                        refresh_provider_session_id_in_data_dir(
                             &data_dir,
                             session_id,
                             &working_dir,
@@ -1084,7 +1084,7 @@ impl<'connection> AgentSessionService<'connection> {
         )?;
         self.clear_attention_after_successful_input(input.session_id)?;
 
-        let codex_session_id = session.codex_session_id.clone();
+        let provider_session_id = session.provider_session_id.clone();
         let recorded_at = current_epoch_millis()?;
         let payload = json!({
             "sessionId": session.id,
@@ -1092,7 +1092,7 @@ impl<'connection> AgentSessionService<'connection> {
             "kind": prompt_kind_literal(&input.kind),
             "prompt": prompt,
             "submitted": true,
-            "codexSessionId": codex_session_id,
+            "providerSessionId": provider_session_id,
         })
         .to_string();
 
@@ -1113,7 +1113,7 @@ impl<'connection> AgentSessionService<'connection> {
 
         Ok(InjectAgentSessionPromptResult {
             session_id: session.id,
-            codex_session_id,
+            provider_session_id,
         })
     }
 
@@ -1393,12 +1393,12 @@ impl AgentSessionService<'_> {
             .map(|session| session.log_path))
     }
 
-    pub fn resume_structured_agent_session_in_data_dir(
+    pub fn resume_agent_session_in_data_dir(
         data_dir: impl AsRef<Path>,
-        input: ResumeStructuredAgentSessionInput,
+        input: ResumeAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
-    ) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+    ) -> Result<ResumeAgentSessionResult, CommandError> {
         let database = DatabaseConfig::new(&data_dir)
             .open()
             .map_err(CommandError::from)?;
@@ -1412,7 +1412,7 @@ impl AgentSessionService<'_> {
             AgentProfileRepository::new(&database.connection),
             AgentSessionRepository::new(&database.connection),
         );
-        service.resume_structured_agent_session(
+        service.resume_agent_session(
             data_dir.as_ref(),
             input,
             agent_registry,
@@ -1420,29 +1420,54 @@ impl AgentSessionService<'_> {
         )
     }
 
-    pub fn resume_structured_agent_session(
+    pub fn resume_agent_session(
         &self,
         _data_dir: &Path,
-        input: ResumeStructuredAgentSessionInput,
+        input: ResumeAgentSessionInput,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
-    ) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+    ) -> Result<ResumeAgentSessionResult, CommandError> {
         let session = self.find_project_session(input.project_id, input.session_id)?;
 
-        if let Some(issue_id) = session.issue_id {
-            let issue = self
-                .issue_repository
-                .find_by_id(issue_id)
-                .map_err(agent_session_database_error)?
-                .ok_or_else(|| {
-                    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
-                        .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
-                })?;
-            if issue.status == IssueStatus::Completed {
+        // 统一门禁：仅关联 Issue 为 running / review 时可 resume；无 Issue、backlog、completed 拒绝。
+        let Some(issue_id) = session.issue_id else {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "未关联 Issue 的 Session 不能续接。",
+            )
+            .with_reason("missingLinkedIssue")
+            .with_detail(
+                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+            ));
+        };
+        let issue = self
+            .issue_repository
+            .find_by_id(issue_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_reason("issueNotFound")
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+            })?;
+        match issue.status {
+            IssueStatus::Running | IssueStatus::Review => {}
+            IssueStatus::Backlog => {
+                return Err(CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "Backlog Issue 的 Session 不能续接。",
+                )
+                .with_reason("backlogIssueSessionCannotRun")
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+                .with_detail(
+                    ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
+                ));
+            }
+            IssueStatus::Completed => {
                 return Err(CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "已完成 Issue 的 Session 不能继续运行。",
-                ).with_reason("completedIssueSessionCannotRun")
+                )
+                .with_reason("completedIssueSessionCannotRun")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
@@ -1451,27 +1476,27 @@ impl AgentSessionService<'_> {
         }
 
         // 已在 registry 的 live handle 优先 short-circuit：不依赖 DB 中的
-        // codex_session_id。否则已运行会话若尚未回填 thread id（或 TUI 路径无该字段）
+        // provider_session_id。否则已运行会话若尚未回填 thread id（或 TUI 路径无该字段）
         // 会误报 missingResumeSessionId。
         if let Some(handle) = agent_registry.get(session.id) {
             let active_thread_id = handle
                 .thread_id()
                 .or_else(|| {
                     session
-                        .codex_session_id
+                        .provider_session_id
                         .clone()
                         .filter(|value| !value.trim().is_empty())
                 })
                 .unwrap_or_default();
             self.mark_structured_session_resumed(&session, &active_thread_id)?;
-            return Ok(ResumeStructuredAgentSessionResult {
+            return Ok(ResumeAgentSessionResult {
                 session_id: session.id,
                 thread_id: active_thread_id,
             });
         }
 
         let thread_id = session
-            .codex_session_id
+            .provider_session_id
             .clone()
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| {
@@ -1552,7 +1577,7 @@ impl AgentSessionService<'_> {
         broadcaster.register_session(session.id);
         agent_registry.register(session.id, started.handle);
 
-        Ok(ResumeStructuredAgentSessionResult {
+        Ok(ResumeAgentSessionResult {
             session_id: session.id,
             thread_id: resumed_thread_id,
         })
@@ -1653,7 +1678,7 @@ impl AgentSessionService<'_> {
             "status": "running",
             "resumed": true,
             "structuredStream": true,
-            "codexSessionId": thread_id,
+            "providerSessionId": thread_id,
             "logPath": session.log_path,
         })
         .to_string();
@@ -1873,10 +1898,10 @@ impl AgentSessionService<'_> {
         );
 
         let verified_session = service.find_project_session(input.project_id, input.session_id)?;
-        let refreshed_codex_session_id = if verified_session.codex_session_id.is_some() {
-            verified_session.codex_session_id
+        let refreshed_provider_session_id = if verified_session.provider_session_id.is_some() {
+            verified_session.provider_session_id
         } else {
-            refresh_codex_session_id_in_data_dir(
+            refresh_provider_session_id_in_data_dir(
                 data_dir.as_ref(),
                 verified_session.id,
                 &verified_session.working_dir,
@@ -1885,8 +1910,8 @@ impl AgentSessionService<'_> {
         };
 
         let mut result = service.inject_session_prompt(input, pty_sessions, agent_registry)?;
-        if refreshed_codex_session_id.is_some() {
-            result.codex_session_id = refreshed_codex_session_id;
+        if refreshed_provider_session_id.is_some() {
+            result.provider_session_id = refreshed_provider_session_id;
         }
         Ok(result)
     }
@@ -2361,7 +2386,7 @@ fn normalize_submitted_prompt(prompt: &str) -> String {
     format!("{prompt}\r")
 }
 
-fn refresh_codex_session_id_in_data_dir(
+fn refresh_provider_session_id_in_data_dir(
     data_dir: &Path,
     session_id: i64,
     working_dir: &str,
@@ -2374,9 +2399,9 @@ fn refresh_codex_session_id_in_data_dir(
     MigrationRunner::default().run(&database.connection).ok()?;
     let repository = AgentSessionRepository::new(&database.connection);
     let session = repository
-        .update_codex_session_id(session_id, &detected)
+        .update_provider_session_id(session_id, &detected)
         .ok()??;
-    session.codex_session_id
+    session.provider_session_id
 }
 
 fn preferred_session_cwd(session: &crate::types::agent_session::AgentSessionRecord) -> String {
@@ -4212,7 +4237,7 @@ mod tests {
             title: Some("test".to_string()),
             agent_profile_id: 0,
             workflow_skill_name: None,
-            codex_session_id: None,
+            provider_session_id: None,
             status: AgentSessionStatus::Stopped,
             attention: AgentSessionAttention::None,
             working_dir: "/tmp/redwhisk".to_string(),
@@ -4244,7 +4269,7 @@ mod tests {
             title: None,
             agent_profile_id: 101,
             workflow_skill_name: None,
-            codex_session_id: Some("thread-16".to_string()),
+            provider_session_id: Some("thread-16".to_string()),
             status: AgentSessionStatus::Stopped,
             attention: AgentSessionAttention::None,
             working_dir: worktree_path.to_string(),
@@ -5112,7 +5137,7 @@ mod tests {
             .find_by_id(503)
             .expect("query")
             .expect("session");
-        assert_eq!(session.codex_session_id.as_deref(), Some("thread-ok"));
+        assert_eq!(session.provider_session_id.as_deref(), Some("thread-ok"));
         assert_eq!(session.status, AgentSessionStatus::Running);
         let issue = IssueRepository::new(&connection)
             .find_by_id(53)
@@ -5122,20 +5147,193 @@ mod tests {
     }
 
 
+
     #[test]
-    fn resume_structured_session_short_circuits_live_handle_without_codex_session_id() {
+    fn resume_agent_session_rejects_missing_linked_issue() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            701,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Stopped,
+            100,
+            Some(200),
+        );
+        connection
+            .execute(
+                "UPDATE agent_sessions SET provider_session_id = 'thread-no-issue' WHERE id = 701",
+                [],
+            )
+            .expect("set provider session id");
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let error = service
+            .resume_agent_session(
+                std::env::temp_dir().as_path(),
+                crate::types::agent_session::ResumeAgentSessionInput {
+                    project_id: 1,
+                    session_id: 701,
+                },
+                &registry,
+                &broadcaster,
+            )
+            .expect_err("missing issue must reject resume");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("missingLinkedIssue"));
+    }
+
+    #[test]
+    fn resume_agent_session_rejects_backlog_issue() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            702,
+            Some(72),
+            Some("backlog issue"),
+            Some("backlog"),
+            AgentSessionStatus::Stopped,
+            100,
+            Some(200),
+        );
+        connection
+            .execute(
+                "UPDATE agent_sessions SET provider_session_id = 'thread-backlog' WHERE id = 702",
+                [],
+            )
+            .expect("set provider session id");
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let error = service
+            .resume_agent_session(
+                std::env::temp_dir().as_path(),
+                crate::types::agent_session::ResumeAgentSessionInput {
+                    project_id: 1,
+                    session_id: 702,
+                },
+                &registry,
+                &broadcaster,
+            )
+            .expect_err("backlog issue must reject resume");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("backlogIssueSessionCannotRun"));
+    }
+
+    #[test]
+    fn resume_agent_session_rejects_completed_issue() {
+        let connection = setup_session_list_database();
+        insert_session_list_row(
+            &connection,
+            703,
+            Some(73),
+            Some("completed issue"),
+            Some("completed"),
+            AgentSessionStatus::Stopped,
+            100,
+            Some(200),
+        );
+        connection
+            .execute(
+                "UPDATE agent_sessions SET provider_session_id = 'thread-completed' WHERE id = 703",
+                [],
+            )
+            .expect("set provider session id");
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let error = service
+            .resume_agent_session(
+                std::env::temp_dir().as_path(),
+                crate::types::agent_session::ResumeAgentSessionInput {
+                    project_id: 1,
+                    session_id: 703,
+                },
+                &registry,
+                &broadcaster,
+            )
+            .expect_err("completed issue must reject resume");
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("completedIssueSessionCannotRun"));
+    }
+
+    #[test]
+    fn provider_session_id_migration_preserves_existing_values() {
+        use crate::db::migrations::MigrationRunner;
+        let connection = Connection::open_in_memory().expect("open database");
+        MigrationRunner::runner_skipping(&["0050_agent_sessions_provider_session_id"])
+            .run(&connection)
+            .expect("run migrations up to 0049");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, repo_path, created_at, last_opened_at)
+                 VALUES (1, 'RedWhisk', '/tmp/repo', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (101, 'Codex', 'codex', 'codex', 'project', 1, 'full-auto', 1, '', '', 0)",
+                [],
+            )
+            .expect("insert profile");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, number, agent_profile_id, codex_session_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, del
+                 ) VALUES (
+                   801, 1, 1, 101, 'thread-migrated', 'stopped', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   1, 1, 0
+                 )",
+                [],
+            )
+            .expect("insert session with legacy column");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("apply provider_session_id migration");
+        let value: String = connection
+            .query_row(
+                "SELECT provider_session_id FROM agent_sessions WHERE id = 801",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read migrated value");
+        assert_eq!(value, "thread-migrated");
+        let has_old: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('agent_sessions') WHERE name = 'codex_session_id'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("check old column");
+        assert_eq!(has_old, 0);
+        let session = AgentSessionRepository::new(&connection)
+            .find_by_id(801)
+            .expect("query")
+            .expect("session");
+        assert_eq!(session.provider_session_id.as_deref(), Some("thread-migrated"));
+    }
+
+    #[test]
+    fn resume_agent_session_short_circuits_live_handle_without_provider_session_id() {
         let connection = setup_session_list_database();
         insert_session_list_row(
             &connection,
             602,
-            None,
-            None,
-            None,
+            Some(62),
+            Some("live resume issue"),
+            Some("running"),
             AgentSessionStatus::Running,
             100,
             None,
         );
-        // 故意不写 codex_session_id：live handle 仍应 short-circuit 成功。
+        // 故意不写 provider_session_id：live handle 仍应 short-circuit 成功。
         let service = test_agent_session_service(&connection);
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
@@ -5148,29 +5346,29 @@ mod tests {
             }),
         );
         let result = service
-            .resume_structured_agent_session(
+            .resume_agent_session(
                 std::env::temp_dir().as_path(),
-                crate::types::agent_session::ResumeStructuredAgentSessionInput {
+                crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 602,
                 },
                 &registry,
                 &broadcaster,
             )
-            .expect("live handle should short-circuit without codex_session_id");
+            .expect("live handle should short-circuit without provider_session_id");
         assert_eq!(result.session_id, 602);
         assert_eq!(result.thread_id, "thread-live");
     }
 
     #[test]
-    fn resume_structured_session_short_circuits_when_already_registered() {
+    fn resume_agent_session_short_circuits_when_already_registered() {
         let connection = setup_session_list_database();
         insert_session_list_row(
             &connection,
             601,
-            None,
-            None,
-            None,
+            Some(61),
+            Some("registered resume issue"),
+            Some("review"),
             AgentSessionStatus::Stopped,
             100,
             Some(200),
@@ -5178,7 +5376,7 @@ mod tests {
         // 写入可续接 thread id
         connection
             .execute(
-                "UPDATE agent_sessions SET codex_session_id = 'thread-resume', status = 'stopped' WHERE id = 601",
+                "UPDATE agent_sessions SET provider_session_id = 'thread-resume', status = 'stopped' WHERE id = 601",
                 [],
             )
             .expect("set thread id");
@@ -5194,9 +5392,9 @@ mod tests {
             }),
         );
         let result = service
-            .resume_structured_agent_session(
+            .resume_agent_session(
                 std::env::temp_dir().as_path(),
-                crate::types::agent_session::ResumeStructuredAgentSessionInput {
+                crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 601,
                 },

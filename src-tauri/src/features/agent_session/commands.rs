@@ -20,8 +20,8 @@ use crate::types::agent_session::{
     InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
     ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
     ProjectGitBranchListResult, ReadAgentTimelineInput, ReadAgentTimelineResult,
-    RespondAgentPermissionInput, ResumeStructuredAgentSessionInput,
-    ResumeStructuredAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
+    RespondAgentPermissionInput, ResumeAgentSessionInput,
+    ResumeAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
     SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
     SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
     StartAgentSessionResult,
@@ -362,18 +362,18 @@ fn emit_agent_session_list_changed(
 }
 
 #[tauri::command]
-pub async fn resume_structured_agent_session(
+pub async fn resume_agent_session(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-    input: ResumeStructuredAgentSessionInput,
-) -> Result<ResumeStructuredAgentSessionResult, CommandError> {
+    input: ResumeAgentSessionInput,
+) -> Result<ResumeAgentSessionResult, CommandError> {
     let data_dir = prepare_agent_session_data_dir(&app, &state)?;
     let agent_sessions = state.agent_sessions.clone();
     let agent_event_broadcaster = state.agent_event_broadcaster.clone();
     let project_id = input.project_id;
     let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = AgentSessionService::resume_structured_agent_session_in_data_dir(
+        let result = AgentSessionService::resume_agent_session_in_data_dir(
             data_dir,
             input,
             &agent_sessions,
@@ -401,7 +401,7 @@ pub async fn resume_structured_agent_session(
         .with_reason("restoreFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
-    .log_if_error("resume_structured_agent_session")
+    .log_if_error("resume_agent_session")
 }
 
 #[tauri::command]

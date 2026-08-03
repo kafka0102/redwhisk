@@ -30,7 +30,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../agent-session-commands", () => ({
   readAgentTimeline: vi.fn(),
-  resumeStructuredAgentSession: vi.fn(),
+  resumeAgentSession: vi.fn(),
   sendAgentMessage: vi.fn(),
   cancelAgentTurn: vi.fn(),
   respondAgentPermission: vi.fn(),
@@ -48,16 +48,14 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 const {
   readAgentTimeline,
-  resumeStructuredAgentSession,
+  resumeAgentSession,
   sendAgentMessage,
   setAgentModel,
   setAgentThinking,
   listAgentModels,
 } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
-const resumeStructuredAgentSessionMock = vi.mocked(
-  resumeStructuredAgentSession,
-);
+const resumeAgentSessionMock = vi.mocked(resumeAgentSession);
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
 const setAgentModelMock = vi.mocked(setAgentModel);
 const setAgentThinkingMock = vi.mocked(setAgentThinking);
@@ -69,8 +67,8 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   readAgentTimelineMock.mockResolvedValue({
     items: items as never,
   });
-  resumeStructuredAgentSessionMock.mockReset();
-  resumeStructuredAgentSessionMock.mockResolvedValue({
+  resumeAgentSessionMock.mockReset();
+  resumeAgentSessionMock.mockResolvedValue({
     sessionId: 10,
     threadId: "thread-10",
   });
@@ -417,7 +415,7 @@ describe("AgentSessionView", () => {
 
   it("未完成的关闭 session 发送时先自动恢复再发送消息", async () => {
     setupTimeline([]);
-    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+    resumeAgentSessionMock.mockResolvedValueOnce({
       sessionId: 10,
       threadId: "thread-10",
     });
@@ -440,7 +438,7 @@ describe("AgentSessionView", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => {
-      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+      expect(resumeAgentSessionMock).toHaveBeenCalledWith({
         projectId: 1,
         sessionId: 10,
       });
@@ -477,7 +475,7 @@ describe("AgentSessionView", () => {
         },
       ],
     });
-    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+    resumeAgentSessionMock.mockResolvedValueOnce({
       sessionId: 10,
       threadId: "thread-10",
     });
@@ -499,7 +497,7 @@ describe("AgentSessionView", () => {
     await user.click(await screen.findByRole("option", { name: "GPT-4o" }));
 
     await waitFor(() => {
-      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+      expect(resumeAgentSessionMock).toHaveBeenCalledWith({
         projectId: 1,
         sessionId: 10,
       });
@@ -530,7 +528,7 @@ describe("AgentSessionView", () => {
         },
       ],
     });
-    resumeStructuredAgentSessionMock.mockResolvedValueOnce({
+    resumeAgentSessionMock.mockResolvedValueOnce({
       sessionId: 10,
       threadId: "thread-10",
     });
@@ -552,7 +550,7 @@ describe("AgentSessionView", () => {
     await user.click(await screen.findByRole("option", { name: "High" }));
 
     await waitFor(() => {
-      expect(resumeStructuredAgentSessionMock).toHaveBeenCalledWith({
+      expect(resumeAgentSessionMock).toHaveBeenCalledWith({
         projectId: 1,
         sessionId: 10,
       });

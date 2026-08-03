@@ -161,6 +161,10 @@ const AGENT_SESSIONS_DISPLAY_MODE_MIGRATION_SQL: &str =
 const PROJECTS_REMOVED_AT_MIGRATION_VERSION: &str = "0049_projects_removed_at";
 const PROJECTS_REMOVED_AT_MIGRATION_SQL: &str =
     include_str!("../../migrations/0049_projects_removed_at.sql");
+const AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_VERSION: &str =
+    "0050_agent_sessions_provider_session_id";
+const AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0050_agent_sessions_provider_session_id.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -434,6 +438,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: PROJECTS_REMOVED_AT_MIGRATION_VERSION,
             sql: PROJECTS_REMOVED_AT_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_SQL,
         },
     ]
 }

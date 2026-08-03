@@ -332,7 +332,7 @@ export function useAgentSessionCompletionResolution({
 
     try {
       // live session（含 Codex TUI PTY）直接注入；仅 notRunning 时 resume 再注入。
-      // 避免 live TUI 因缺少 codex_session_id 被 resume 误拦。
+      // 避免 live TUI 因缺少 provider_session_id 被 resume 误拦。
       await injectSessionPromptWithResume({
         projectId,
         sessionId: mergePromptSessionId,
