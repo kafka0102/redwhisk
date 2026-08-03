@@ -455,6 +455,8 @@ export interface I18nMessages {
     reasoningDuration: (seconds: number) => string;
     structuredSessionView: string;
     tuiSessionView: string;
+    tuiSessionResuming: string;
+    tuiSessionResumeRetry: string;
     readOnlyCompletedIssue: string;
     permissionCard: string;
     sessionListControls: string;
