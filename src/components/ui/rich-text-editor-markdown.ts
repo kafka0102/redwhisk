@@ -17,10 +17,14 @@ export function markdownToDelta(
     attachments.map((attachment) => [attachment.markdownToken, attachment]),
   );
   const lines = normalizeLineEndings(markdown).split("\n");
+  // 预判哪些行应按有序列表解析：孤立的「N. 段落」（尤其 N≠1）保留字面序号，
+  // 避免 Quill 有序列表从 1 重排（粘贴「4. 标题」却显示成「1. 标题」）。
+  const orderedListLineIndexes = resolveOrderedListLineIndexes(lines);
   const imageLinePattern = /^!\[([^\]]*)\]\(([^)]+)\)$/;
   let isReadingCodeBlock = false;
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith("```")) {
       isReadingCodeBlock = !isReadingCodeBlock;
@@ -54,7 +58,10 @@ export function markdownToDelta(
       continue;
     }
 
-    const parsedLine = parseMarkdownLine(line);
+    const parsedLine = parseMarkdownLine(
+      line,
+      orderedListLineIndexes.has(lineIndex),
+    );
     ops.push(...parseInlineMarkdown(parsedLine.text));
     ops.push({ insert: "\n", attributes: parsedLine.attributes });
   }
@@ -256,7 +263,51 @@ export function getAttachmentInsert(
   return null;
 }
 
-function parseMarkdownLine(line: string): {
+const ORDERED_LIST_LINE_PATTERN = /^\s*\d+\.\s+/;
+const ORDERED_LIST_START_ONE_PATTERN = /^\s*1\.\s+/;
+
+// 判定哪些「数字. 」行应解析为有序列表：
+// - 相邻多行均匹配数字序号 → 视为列表块（与常见 Markdown 列表一致）；
+// - 孤立单行仅当以「1. 」开头时才视为列表（与编辑器输入快捷方式一致）；
+// - 孤立的「4. 段落标题」等保留字面文本，避免 Quill 从 1 重排序号。
+// 代码围栏内的行不参与判定，避免 fenced code 被误伤。
+function resolveOrderedListLineIndexes(lines: string[]): Set<number> {
+  const candidateIndexes: number[] = [];
+  let isReadingCodeBlock = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed.startsWith("```")) {
+      isReadingCodeBlock = !isReadingCodeBlock;
+      continue;
+    }
+    if (isReadingCodeBlock) {
+      continue;
+    }
+    if (ORDERED_LIST_LINE_PATTERN.test(lines[index])) {
+      candidateIndexes.push(index);
+    }
+  }
+
+  const orderedIndexes = new Set<number>();
+  for (const index of candidateIndexes) {
+    const hasNeighborCandidate =
+      candidateIndexes.includes(index - 1) ||
+      candidateIndexes.includes(index + 1);
+    if (
+      hasNeighborCandidate ||
+      ORDERED_LIST_START_ONE_PATTERN.test(lines[index])
+    ) {
+      orderedIndexes.add(index);
+    }
+  }
+  return orderedIndexes;
+}
+
+function parseMarkdownLine(
+  line: string,
+  treatAsOrderedList: boolean,
+): {
   text: string;
   attributes?: Record<string, unknown>;
 } {
@@ -278,9 +329,9 @@ function parseMarkdownLine(line: string): {
       attributes: { list: "bullet" },
     };
   }
-  if (/^\s*\d+\.\s+/.test(line)) {
+  if (treatAsOrderedList && ORDERED_LIST_LINE_PATTERN.test(line)) {
     return {
-      text: line.replace(/^\s*\d+\.\s+/, ""),
+      text: line.replace(ORDERED_LIST_LINE_PATTERN, ""),
       attributes: { list: "ordered" },
     };
   }

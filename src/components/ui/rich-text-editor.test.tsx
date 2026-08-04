@@ -510,6 +510,39 @@ describe("RichTextEditor", () => {
     expect(quillInstances[0].setSelection).toHaveBeenCalledWith(10, 0, "user");
   });
 
+  // 回归：用户从外部复制带非 1 序号的单行段落（如 "4. 标题"），粘贴到正文时应
+  // 保留原文序号。若被 Markdown 有序列表解析，Quill 会从 1 起重新编号，表现为
+  // 标题栏粘贴正确、编辑器却显示 "1. …"。
+  it("preserves a non-1 numbered single-line paste instead of renumbering to 1", async () => {
+    render(
+      <RichTextEditor
+        ariaLabel="Description"
+        labels={labels}
+        placeholder="Describe"
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(quillInstances[0]?.root).toBeTruthy());
+    const editorRoot = quillInstances[0].root;
+    const pasted = "4. 加深「列表搜索 / 写权限」共享 module";
+    const event = createPasteEvent(pasted);
+    editorRoot.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    const updateContentsCalls = quillInstances[0].updateContents.mock.calls;
+    const pasteOps = updateContentsCalls[updateContentsCalls.length - 1]?.[0];
+    const serialized = JSON.stringify(pasteOps);
+    // 症状：序号被剥掉后仅剩正文，有序列表从 1 渲染，用户看到 "1. …"。
+    expect(serialized).toContain("4.");
+    expect(serialized).toContain("加深「列表搜索 / 写权限」共享 module");
+    expect(pasteOps).not.toContainEqual({
+      insert: "\n",
+      attributes: { list: "ordered" },
+    });
+  });
+
   it("strips the trailing plain newline so plain paste does not add a blank line", async () => {
     render(
       <RichTextEditor
