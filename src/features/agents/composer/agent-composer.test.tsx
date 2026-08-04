@@ -267,6 +267,49 @@ describe("AgentComposer", () => {
       key: "Enter",
       isComposing: true,
     });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+  });
+
+  // 部分 WebKit / 中文输入法在确认候选时不置 isComposing，只报 keyCode 229 或 key=Process。
+  // 这是 JSON 模式 composer 误把「上屏」当「提交」的常见路径。
+  it("IME keyCode=229 时 Enter 不触发提交（即使 isComposing=false）", async () => {
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "nihao");
+    fireEvent.keyDown(textarea, {
+      key: "Enter",
+      keyCode: 229,
+      which: 229,
+      isComposing: false,
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue("nihao");
+  });
+
+  it("IME key=Process 时不触发提交", async () => {
+    const user = userEvent.setup();
+    await renderComposer();
+    const textarea = screen.getByRole("textbox", { name: "Message input" });
+    await user.type(textarea, "nihao");
+    fireEvent.keyDown(textarea, {
+      key: "Process",
+      keyCode: 229,
+      which: 229,
+      isComposing: false,
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
   });
 

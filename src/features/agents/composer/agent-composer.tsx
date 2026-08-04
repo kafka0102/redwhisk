@@ -21,6 +21,23 @@ import type { AgentComposerProps } from "./composer-types";
 /** textarea 最大高度（px），超过后内部滚动而非无限撑高。 */
 const TEXTAREA_MAX_HEIGHT_PX = 160;
 
+/**
+ * 判断 keydown 是否属于 IME 处理中的按键。
+ * 与终端 IME guard 一致：isComposing / keyCode 229 / Process / Unidentified。
+ */
+function isImeKeyboardEvent(event: {
+  isComposing?: boolean;
+  keyCode?: number;
+  key?: string;
+}): boolean {
+  return (
+    event.isComposing === true ||
+    event.keyCode === 229 ||
+    event.key === "Process" ||
+    event.key === "Unidentified"
+  );
+}
+
 export function AgentComposer({
   projectId,
   sessionId,
@@ -115,8 +132,10 @@ export function AgentComposer({
         value={text}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          // IME 合成中（如中文输入法选词）的 Enter 交由输入法处理，不触发提交。
-          if (event.nativeEvent.isComposing) {
+          // IME 合成 / 选词确认：交由输入法处理，不触发提交。
+          // 仅查 isComposing 不够——部分 WebKit（含 Tauri WKWebView）在确认候选时
+          // isComposing=false，但 keyCode 仍为 229（或 key 为 Process / Unidentified）。
+          if (isImeKeyboardEvent(event.nativeEvent)) {
             return;
           }
           // Enter 提交；Shift+Enter 保持换行。
