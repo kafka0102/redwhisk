@@ -1213,12 +1213,80 @@ pub(crate) fn build_shell_command_line(command: &str, prompt: Option<&str>) -> S
 /// 到不了 `exec $SHELL -li`，PTY 退出、session 失活。因此运行 command 前给包装 shell
 /// 装一个 no-op INT trap 让它存活（被捕获的信号在派生外部命令子进程时会被复位为默认
 /// 动作，故 command 仍会正常收到 SIGINT 被中断），exec 前再复位。
+///
+/// 启动命令在非交互包装 shell 中执行，不会进入交互 shell 的 history。exec 交互
+/// shell 前按 shell 类型注入 history 种子（zsh: ZDOTDIR + `print -s`；bash:
+/// `--rcfile` + `history -s`），使用户按上箭头时能召回窗口刚运行的启动命令。
 fn build_shell_keepalive_command_line(command: &str, shell: &str) -> String {
     let trimmed = command.trim();
     if trimmed.is_empty() || trimmed == shell {
         format!("exec {shell} -li")
     } else {
-        format!("trap ':' INT; {trimmed}; trap - INT; exec {shell} -li")
+        let seed_exec = build_interactive_history_seed_exec(shell, trimmed);
+        format!("trap ':' INT; {trimmed}; trap - INT; {seed_exec}")
+    }
+}
+
+/// 构造「将 launch command 写入交互 shell 内存 history 后 exec」的片段。
+///
+/// 通过环境变量 `REDWHISK_LAUNCH_HISTORY_SEED` 传递命令原文，避免把任意用户输入
+/// 再次拼进生成的 rc 文件时出现嵌套引号问题。
+fn build_interactive_history_seed_exec(shell: &str, command: &str) -> String {
+    let quoted = shell_quote(command);
+    let basename = Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(shell);
+
+    if basename == "zsh" || basename.starts_with("zsh-") {
+        // ZDOTDIR 代理：在临时 .zshrc 里 `print -s` 写入内存 history，再 source 用户配置。
+        // 不直接改写用户 HISTFILE，避免污染其它终端会话。
+        //
+        // 写入 .zshrc 的 `print -s` / `unset` 行必须用单引号传给 printf，避免外层
+        // `-lc` shell 过早展开 `$REDWHISK_LAUNCH_HISTORY_SEED`。
+        let mut script = String::new();
+        script.push_str("export REDWHISK_LAUNCH_HISTORY_SEED=");
+        script.push_str(&quoted);
+        script.push_str("; _rw_dir=$(mktemp -d \"${TMPDIR:-/tmp}/rw-term-hist.XXXXXX\") || exec ");
+        script.push_str(shell);
+        script.push_str(" -li; _rw_real=\"${ZDOTDIR:-$HOME}\"; ");
+        script.push_str(
+            "printf '%s\\n' \"[[ -r \\\"$_rw_real/.zshenv\\\" ]] && source \\\"$_rw_real/.zshenv\\\"\" \"export ZDOTDIR=\\\"$_rw_dir\\\"\" > \"$_rw_dir/.zshenv\"; ",
+        );
+        script.push_str(
+            "printf '%s\\n' \"[[ -r \\\"$_rw_real/.zprofile\\\" ]] && source \\\"$_rw_real/.zprofile\\\"\" > \"$_rw_dir/.zprofile\"; ",
+        );
+        script.push_str(
+            "printf '%s\\n' 'print -s -- \"$REDWHISK_LAUNCH_HISTORY_SEED\"' 'unset REDWHISK_LAUNCH_HISTORY_SEED' \"[[ -r \\\"$_rw_real/.zshrc\\\" ]] && source \\\"$_rw_real/.zshrc\\\"\" > \"$_rw_dir/.zshrc\"; ",
+        );
+        script.push_str(
+            "printf '%s\\n' \"[[ -r \\\"$_rw_real/.zlogin\\\" ]] && source \\\"$_rw_real/.zlogin\\\"\" \"export ZDOTDIR=\\\"$_rw_real\\\"\" \"command rm -rf \\\"$_rw_dir\\\"\" > \"$_rw_dir/.zlogin\"; ",
+        );
+        script.push_str("ZDOTDIR=\"$_rw_dir\" exec ");
+        script.push_str(shell);
+        script.push_str(" -li");
+        script
+    } else if basename == "bash" || basename.starts_with("bash-") {
+        // bash login 交互不会读 --rcfile；用非 login `-i` + --rcfile，先 history -s 再 source bashrc。
+        // PATH 已由 PTY 层注入完整交互 PATH，通常不依赖 login profile。
+        let mut script = String::new();
+        script.push_str("export REDWHISK_LAUNCH_HISTORY_SEED=");
+        script.push_str(&quoted);
+        script.push_str("; _rw_rc=$(mktemp \"${TMPDIR:-/tmp}/rw-term-hist.XXXXXX\") || exec ");
+        script.push_str(shell);
+        script.push_str(" -li; ");
+        script.push_str(
+            "printf '%s\\n' 'history -s -- \"$REDWHISK_LAUNCH_HISTORY_SEED\"' 'unset REDWHISK_LAUNCH_HISTORY_SEED' '[[ -f \"$HOME/.bashrc\" ]] && . \"$HOME/.bashrc\"' \"command rm -f \\\"$_rw_rc\\\"\" > \"$_rw_rc\"; ",
+        );
+        script.push_str("exec ");
+        script.push_str(shell);
+        script.push_str(" --rcfile \"$_rw_rc\" -i");
+        script
+    } else {
+        let mut script = String::from("exec ");
+        script.push_str(shell);
+        script.push_str(" -li");
+        script
     }
 }
 
@@ -1360,13 +1428,40 @@ mod tests {
 
     #[test]
     fn build_shell_keepalive_command_line_runs_command_then_interactive_shell() {
-        assert_eq!(
-            build_shell_keepalive_command_line("grok", "/bin/zsh"),
-            "trap ':' INT; grok; trap - INT; exec /bin/zsh -li"
+        let zsh_line = build_shell_keepalive_command_line("grok", "/bin/zsh");
+        assert!(
+            zsh_line.starts_with("trap ':' INT; grok; trap - INT; "),
+            "should run command under INT trap first: {zsh_line}"
         );
-        assert_eq!(
-            build_shell_keepalive_command_line("grok --model x", "/bin/zsh"),
-            "trap ':' INT; grok --model x; trap - INT; exec /bin/zsh -li"
+        assert!(
+            zsh_line.contains("export REDWHISK_LAUNCH_HISTORY_SEED='grok'"),
+            "should export launch command for history seed: {zsh_line}"
+        );
+        assert!(
+            zsh_line.contains(r#"print -s -- "$REDWHISK_LAUNCH_HISTORY_SEED""#),
+            "zsh should seed history via print -s: {zsh_line}"
+        );
+        assert!(
+            zsh_line.contains(r#"ZDOTDIR="$_rw_dir" exec /bin/zsh -li"#),
+            "zsh should exec interactive login shell via seeded ZDOTDIR: {zsh_line}"
+        );
+
+        let zsh_args = build_shell_keepalive_command_line("grok --model x", "/bin/zsh");
+        assert!(zsh_args.starts_with("trap ':' INT; grok --model x; trap - INT; "));
+        assert!(zsh_args.contains("export REDWHISK_LAUNCH_HISTORY_SEED='grok --model x'"));
+
+        let bash_line = build_shell_keepalive_command_line("pnpm dev:admin-api", "/bin/bash");
+        assert!(bash_line.starts_with("trap ':' INT; pnpm dev:admin-api; trap - INT; "));
+        assert!(bash_line.contains(
+            "export REDWHISK_LAUNCH_HISTORY_SEED='pnpm dev:admin-api'"
+        ));
+        assert!(
+            bash_line.contains(r#"history -s -- "$REDWHISK_LAUNCH_HISTORY_SEED""#),
+            "bash should seed history via history -s: {bash_line}"
+        );
+        assert!(
+            bash_line.contains(r#"exec /bin/bash --rcfile "$_rw_rc" -i"#),
+            "bash should exec interactive shell with seed rcfile: {bash_line}"
         );
     }
 
@@ -1384,6 +1479,149 @@ mod tests {
             build_shell_keepalive_command_line("/bin/zsh", "/bin/zsh"),
             "exec /bin/zsh -li"
         );
+    }
+
+    #[test]
+    fn build_shell_keepalive_command_line_quotes_history_seed_with_special_chars() {
+        let line = build_shell_keepalive_command_line("echo 'x'", "/bin/zsh");
+        let expected_seed = format!(
+            "export REDWHISK_LAUNCH_HISTORY_SEED={}",
+            super::shell_quote("echo 'x'")
+        );
+        assert!(
+            line.contains(&expected_seed),
+            "history seed must shell-quote single quotes: {line}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interactive_run_keepalive_seeds_launch_command_into_zsh_history() {
+        use super::{PtyCommandMode, PtySpawnRequest};
+
+        let temp = tempfile::tempdir().expect("temp dir");
+        let user_zdot = temp.path().join("user-zdot");
+        std::fs::create_dir_all(&user_zdot).expect("user zdot");
+        // 隔离用户配置，避免 powerlevel10k 等拖慢/干扰 history 探测。
+        std::fs::write(user_zdot.join(".zshrc"), "PS1='%# '\n").expect("write zshrc");
+        let log_path = temp.path().join("term.log");
+        let launch = "printf '%s' 'LAUNCHED'";
+
+        let original_shell = std::env::var_os("SHELL");
+        let original_zdot = std::env::var_os("ZDOTDIR");
+        let original_home = std::env::var_os("HOME");
+        std::env::set_var("SHELL", "/bin/zsh");
+        std::env::set_var("ZDOTDIR", &user_zdot);
+        std::env::set_var("HOME", temp.path());
+
+        let manager = PtySessionManager::new();
+        let pending = match manager.spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::InteractiveRun,
+            command: launch.to_string(),
+            working_dir: temp.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 20,
+        }) {
+            Ok(pending) => pending,
+            Err(error) => {
+                restore_env(original_shell, original_zdot, original_home);
+                panic!("spawn pending failed: {error}");
+            }
+        };
+        if let Err(error) = manager.register(9_001, pending, |_| {}) {
+            restore_env(original_shell, original_zdot, original_home);
+            panic!("register failed: {error:?}");
+        }
+
+        // 等待启动命令执行并落入交互 shell。
+        let mut launched = false;
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = match manager.restore_snapshot(9_001) {
+                Ok(snapshot) => snapshot,
+                Err(_) => continue,
+            };
+            let text = snapshot
+                .chunks
+                .iter()
+                .flat_map(|chunk| chunk.iter().copied())
+                .collect::<Vec<u8>>();
+            if String::from_utf8_lossy(&text).contains("LAUNCHED") {
+                launched = true;
+                break;
+            }
+        }
+        if !launched {
+            let _ = manager.kill(9_001);
+            restore_env(original_shell, original_zdot, original_home);
+            panic!("launch command should run");
+        }
+
+        // 再等一小段时间确保交互 shell 完成 history 初始化。
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        manager
+            .write_input(9_001, "print -r -- LAST=${history[$#history]}\r")
+            .expect("write history probe");
+
+        let mut saw_history = false;
+        let mut last_snapshot = String::new();
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = match manager.restore_snapshot(9_001) {
+                Ok(snapshot) => snapshot,
+                Err(_) => continue,
+            };
+            let text = snapshot
+                .chunks
+                .iter()
+                .flat_map(|chunk| chunk.iter().copied())
+                .collect::<Vec<u8>>();
+            last_snapshot = String::from_utf8_lossy(&text).into_owned();
+            if last_snapshot.contains(&format!("LAST={launch}")) {
+                saw_history = true;
+                break;
+            }
+        }
+
+        let _ = manager.kill(9_001);
+        restore_env(original_shell, original_zdot, original_home);
+
+        assert!(
+            saw_history,
+            "interactive shell history should recall launch command `{launch}`; snapshot tail:\n{}",
+            tail_chars(&last_snapshot, 1200)
+        );
+    }
+
+    fn restore_env(
+        original_shell: Option<std::ffi::OsString>,
+        original_zdot: Option<std::ffi::OsString>,
+        original_home: Option<std::ffi::OsString>,
+    ) {
+        match original_shell {
+            Some(value) => std::env::set_var("SHELL", value),
+            None => std::env::remove_var("SHELL"),
+        }
+        match original_zdot {
+            Some(value) => std::env::set_var("ZDOTDIR", value),
+            None => std::env::remove_var("ZDOTDIR"),
+        }
+        match original_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    fn tail_chars(value: &str, max_chars: usize) -> String {
+        let count = value.chars().count();
+        if count <= max_chars {
+            return value.to_string();
+        }
+        value.chars().skip(count - max_chars).collect()
     }
 
     #[test]
