@@ -47,6 +47,8 @@ export interface SessionWorkspaceEntry {
   issueStatus: NonNullable<AgentSessionListItem["issueStatus"]> | null;
   isTurnRunning: boolean;
   displayMode: AgentSessionListItem["displayMode"];
+  /** 会话日志路径；TUI 归档回看用于切换 Markdown 面板。 */
+  logPath: string;
   activeWorkspaceTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
@@ -457,6 +459,7 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
               sessionStatus={workspace.sessionStatus}
               issueStatus={workspace.issueStatus}
               isActive={isCurrent}
+              logPath={workspace.logPath}
             />
           ) : (
             <AgentSessionView

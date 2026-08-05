@@ -82,6 +82,7 @@ function buildWorkspace(
     issueStatus: null,
     isTurnRunning: false,
     displayMode: "json",
+    logPath: "/tmp/log",
     activeWorkspaceTab: "session",
     changeTab: null,
     fileTab: null,

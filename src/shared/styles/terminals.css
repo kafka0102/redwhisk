@@ -393,6 +393,30 @@
   min-width: 0;
 }
 
+/* TUI Issue 完成归档：Markdown 富文本回看（对齐 JSON AgentMarkdown） */
+.agent-tui-archive-markdown {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.agent-tui-archive-markdown__status {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-tui-archive-markdown__body {
+  min-width: 0;
+  max-width: 48rem;
+}
+
 .project-terminal-status-bar {
   display: flex;
   align-items: center;

@@ -174,7 +174,7 @@ fn decorative_lines_inside_conclusion_do_not_truncate() {
     let expected = "\
 › 问性能
 
-• 结论
+• ## 结论
 
   首屏同步加载过重。
 
@@ -201,7 +201,7 @@ fn ascii_gt_shell_echo_is_not_user_turn() {
     let expected = "\
 › 真用户
 
-• 结论
+• ## 结论
 
   完成。";
     assert_eq!(got, expected);
@@ -384,10 +384,9 @@ fn indented_grok_style_user_prompt_is_kept() {
     assert!(got.contains("最终结论"), "got={got:?}");
 }
 
-/// 回归：TUI 归档正文含 Markdown 标题/加粗/标签时，回看须呈普通文本而非原样标签。
-/// 样本对齐实档 archive-project-2-issue-33-session-44.log 的形态。
+/// 回归：TUI 归档保留 Markdown 源文，仅去掉交付标签（方案 2，前端 AgentMarkdown 渲染）。
 #[test]
-fn extract_tui_archive_converts_markdown_labels_in_conclusion() {
+fn extract_tui_archive_preserves_markdown_source_for_frontend_render() {
     let input = "\
 › 使用 skill 重构
 
@@ -403,29 +402,10 @@ fn extract_tui_archive_converts_markdown_labels_in_conclusion() {
   </issue-comment>
 ";
     let got = extract_tui_archive_conclusion_text(input);
-    assert!(got.contains("结果"), "got={got:?}");
-    assert!(!got.contains("## 结果"), "got={got:?}");
-    assert!(got.contains("完成"), "got={got:?}");
-    assert!(!got.contains("**完成**"), "got={got:?}");
-    assert!(!got.contains("<issue-comment>"), "got={got:?}");
+    assert!(got.contains("## 结果"), "got={got:?}");
+    assert!(got.contains("**完成**"), "got={got:?}");
+    assert!(got.contains("[文档](https://example.com)"), "got={got:?}");
     assert!(got.contains("交付摘要"), "got={got:?}");
-    assert!(!got.contains("[文档](https://example.com)"), "got={got:?}");
+    assert!(!got.contains("<issue-comment>"), "got={got:?}");
+    assert!(!got.contains("</issue-comment>"), "got={got:?}");
 }
-
-#[test]
-fn decorative_markdown_heading_in_conclusion_becomes_plain() {
-    let input = "\
-› 问性能
-
-• Ran measure
-  └ ok
-
-• ## 结论
-
-  首屏同步加载过重。
-";
-    let got = extract_tui_archive_conclusion_text(input);
-    assert!(got.contains("结论"), "got={got:?}");
-    assert!(!got.contains("## 结论"), "got={got:?}");
-}
-

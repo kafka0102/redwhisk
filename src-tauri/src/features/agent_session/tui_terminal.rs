@@ -12,7 +12,6 @@ use crate::types::agent_session_terminal::{
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 use super::service::{inactive_terminal_error, AgentSessionService};
-use super::terminal_archive_clean::markdown_labels_to_plain_text;
 
 impl AgentSessionService<'_> {
     /// 热路径：仅内存 PTY，不打开 SQLite。
@@ -106,6 +105,7 @@ impl AgentSessionService<'_> {
     }
 
     /// 读日志快照：需要 DB 取 log_path。
+    /// 归档 Markdown 源文原样返回，由前端 AgentMarkdown 渲染标题/加粗等。
     pub fn read_agent_session_terminal(
         &self,
         input: ReadAgentSessionTerminalInput,
@@ -129,65 +129,10 @@ impl AgentSessionService<'_> {
             .with_detail(ErrorDetail::new("Cause").with_value("message", error))
         })?;
 
-        // 归档纯文本回看：存量日志可能仍含 Markdown 标签；仅 inactive 且路径含
-        // session-logs/archive 时做标签→普通文本，不碰 live PTY 原始字节。
-        let snapshot = if !is_active && log_path_looks_like_issue_archive(&session.log_path) {
-            markdown_labels_to_plain_text(&snapshot)
-        } else {
-            snapshot
-        };
-
         Ok(ReadAgentSessionTerminalResult {
             session_id: input.session_id,
             snapshot,
             is_active,
         })
-    }
-}
-
-/// 路径是否含连续段 `session-logs` + `archive`（不依赖 data_dir，读侧热路径）。
-fn log_path_looks_like_issue_archive(log_path: &str) -> bool {
-    let mut saw_session_logs = false;
-    for component in Path::new(log_path).components() {
-        let name = component.as_os_str();
-        if name == "session-logs" {
-            saw_session_logs = true;
-            continue;
-        }
-        if saw_session_logs && name == "archive" {
-            return true;
-        }
-        saw_session_logs = false;
-    }
-    false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::log_path_looks_like_issue_archive;
-    use super::markdown_labels_to_plain_text;
-
-    #[test]
-    fn archive_path_detection_matches_issue_archive_layout() {
-        assert!(log_path_looks_like_issue_archive(
-            "/Users/x/.redwhisk/session-logs/archive/project-2/archive-project-2-issue-33-session-44.log"
-        ));
-        assert!(!log_path_looks_like_issue_archive(
-            "/Users/x/.redwhisk/session-logs/project-2/runtime.log"
-        ));
-        assert!(!log_path_looks_like_issue_archive(
-            "/tmp/other-archive/session-logs/runtime.log"
-        ));
-    }
-
-    #[test]
-    fn archived_snapshot_markdown_becomes_plain_for_display() {
-        let raw = "• <issue-comment>\n\n  **完成**\n\n## 结果\n\n正文\n\n</issue-comment>\n";
-        let plain = markdown_labels_to_plain_text(raw);
-        assert!(!plain.contains("## "));
-        assert!(!plain.contains("**"));
-        assert!(!plain.contains("<issue-comment>"));
-        assert!(plain.contains("完成"));
-        assert!(plain.contains("结果"));
     }
 }

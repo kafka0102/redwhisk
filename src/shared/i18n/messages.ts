@@ -457,6 +457,11 @@ export interface I18nMessages {
     tuiSessionView: string;
     tuiSessionResuming: string;
     tuiSessionResumeRetry: string;
+    /** TUI 完成归档 Markdown 回看区域 aria-label。 */
+    tuiArchiveView: string;
+    tuiArchiveLoading: string;
+    tuiArchiveEmpty: string;
+    tuiArchiveLoadFailed: string;
     readOnlyCompletedIssue: string;
     permissionCard: string;
     sessionListControls: string;

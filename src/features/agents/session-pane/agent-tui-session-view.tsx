@@ -14,6 +14,8 @@ import {
 } from "../agent-session-commands";
 import { subscribeAgentSessionTerminalOutput } from "../agent-terminal-events";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { AgentTuiArchiveMarkdownView } from "./agent-tui-archive-markdown-view";
+import { isTuiArchiveLogPath } from "./agent-tui-archive-path";
 import { useAgentTuiSessionResume } from "./use-agent-tui-session-resume";
 
 interface AgentTuiSessionViewProps {
@@ -23,6 +25,8 @@ interface AgentTuiSessionViewProps {
   issueStatus?: IssueStatus | null;
   /** 本 session 是否为当前选中（实例池 hidden 时为 false，不自动 resume）。 */
   isActive?: boolean;
+  /** 会话日志路径；Issue 完成归档路径走 Markdown 回看，不挂 xterm。 */
+  logPath?: string | null;
 }
 
 /**
@@ -33,6 +37,8 @@ interface AgentTuiSessionViewProps {
  *
  * inactive 且 supportsTuiResume 时自动 resume 一次：进行中显示 saved log +
  * 「正在续接」；成功后 remount surface 接 live；失败按 reason 白名单可重试。
+ *
+ * logPath 指向 session-logs/archive 时改为 AgentMarkdown 富文本回看（对齐 JSON）。
  */
 export function AgentTuiSessionView({
   projectId,
@@ -40,8 +46,10 @@ export function AgentTuiSessionView({
   sessionStatus,
   issueStatus = null,
   isActive = true,
+  logPath = null,
 }: AgentTuiSessionViewProps) {
   const { messages } = useI18n();
+  const isArchiveReplay = isTuiArchiveLogPath(logPath);
   const { phase, errorMessage, canRetry, surfaceEpoch, retry } =
     useAgentTuiSessionResume({
       projectId,
@@ -49,6 +57,8 @@ export function AgentTuiSessionView({
       sessionStatus,
       issueStatus,
       isActive,
+      // 完成归档只读回看，禁止自动 resume。
+      autoResumeEnabled: !isArchiveReplay,
     });
 
   const transport = useMemo(
@@ -86,6 +96,17 @@ export function AgentTuiSessionView({
     }),
     [projectId, sessionId],
   );
+
+  if (isArchiveReplay) {
+    return (
+      <div className="agent-tui-session-shell">
+        <AgentTuiArchiveMarkdownView
+          projectId={projectId}
+          sessionId={sessionId}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="agent-tui-session-shell">

@@ -150,6 +150,41 @@ describe("AgentTuiSessionView", () => {
     expect(terminalSurfaceMock.lastTransportKey).toBe("agent-tui:7:42:0");
   });
 
+  it("logPath 为 Issue 归档时渲染 Markdown 回看，不挂 TerminalSurface / 不 resume", async () => {
+    mockInactivePty();
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: "• ## 结果\n\n**完成** 拆分。\n",
+      isActive: false,
+    });
+
+    render(
+      <AgentTuiSessionView
+        projectId={2}
+        sessionId={44}
+        sessionStatus="closed"
+        issueStatus="completed"
+        isActive
+        logPath="/Users/x/.redwhisk/session-logs/archive/project-2/archive-project-2-issue-33-session-44.log"
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("agent-tui-terminal-surface"),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByLabelText(/归档回看|archive view/i),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(commandMocks.readAgentSessionTerminal).toHaveBeenCalledWith({
+        projectId: 2,
+        sessionId: 44,
+        maxBytes: 512_000,
+      });
+    });
+    expect(commandMocks.resumeAgentSession).not.toHaveBeenCalled();
+    expect(commandMocks.listAgentModels).not.toHaveBeenCalled();
+  });
+
   it("transport 契约转发到 agent session 终端 I/O 命令", async () => {
     render(<AgentTuiSessionView projectId={3} sessionId={9} />);
     const transport = terminalSurfaceMock.lastTransport;

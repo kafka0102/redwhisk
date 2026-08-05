@@ -1,7 +1,7 @@
 //! TUI Issue Session 归档：结论向提取纯函数（ADR-0023 / ADR-0025）。
 //! 多标记族（Codex / Claude 等）启发式；无顶格用户 turn 时提取全会话最后结论，
 //! 仍空则增强轻清理，避免完成归档写空。
-//! 写出前将常见 Markdown 标签转为普通文本，避免 xterm 回看露出 `##` / `**` / 标签。
+//! 正文保留 Markdown 源文，由前端归档回看用 AgentMarkdown 渲染（与 JSON 模式对齐）。
 
 const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 
@@ -9,17 +9,12 @@ const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 mod terminal_archive_clean_classify;
 use terminal_archive_clean_classify::*;
 
-#[path = "terminal_archive_markdown.rs"]
-mod terminal_archive_markdown;
-pub(crate) use terminal_archive_markdown::markdown_labels_to_plain_text;
-
-
 /// 对已剥离控制序列的终端文本做结论向提取：
 /// - 保留真实用户输入块与每个用户 turn 之后的最后一段连续非过程正文
 /// - 丢弃 chrome / 工具过程 / 首用户前残留 / 中间思考与旁白
 /// - 按固定块间距排版（无 User/Assistant 标签）
 /// - 若找不到顶格真实用户 turn：全会话最后结论；仍空则轻清理回退
-/// - 最终将 Markdown 标签转为普通可读文本（写侧，ADR-0023 纯文本回看）
+/// - 保留 Markdown 源文（标题/加粗等），仅去掉交付用 `issue-comment` 标签
 pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
     let lines: Vec<&str> = normalized.lines().map(|line| line.trim_end()).collect();
@@ -34,10 +29,10 @@ pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
         .collect();
     if user_starts.is_empty() {
         if let Some(conclusion) = extract_last_conclusion(&lines) {
-            return markdown_labels_to_plain_text(&conclusion);
+            return finalize_archive_text(&conclusion);
         }
         // 无助手正文可抽时回退轻清理，避免完成归档写空。
-        return markdown_labels_to_plain_text(&light_clean_terminal_archive_text(&normalized));
+        return finalize_archive_text(&light_clean_terminal_archive_text(&normalized));
     }
 
     let mut output_blocks: Vec<String> = Vec::new();
@@ -59,12 +54,41 @@ pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
 
     if output_blocks.is_empty() {
         if let Some(conclusion) = extract_last_conclusion(&lines) {
-            return markdown_labels_to_plain_text(&conclusion);
+            return finalize_archive_text(&conclusion);
         }
-        return markdown_labels_to_plain_text(&light_clean_terminal_archive_text(&normalized));
+        return finalize_archive_text(&light_clean_terminal_archive_text(&normalized));
     }
 
-    markdown_labels_to_plain_text(&join_blocks_with_spacing(&output_blocks))
+    finalize_archive_text(&join_blocks_with_spacing(&output_blocks))
+}
+
+/// 写档收尾：去掉交付标签，保留 Markdown；折叠多余空行。
+fn finalize_archive_text(text: &str) -> String {
+    let without_tags = text
+        .replace("<issue-comment>", "")
+        .replace("</issue-comment>", "");
+    let mut cleaned: Vec<String> = Vec::new();
+    let mut blank_run = 0usize;
+    for line in without_tags.lines() {
+        let trimmed_end = line.trim_end();
+        if trimmed_end.trim().is_empty() {
+            blank_run += 1;
+            if blank_run > 1 {
+                continue;
+            }
+            cleaned.push(String::new());
+            continue;
+        }
+        blank_run = 0;
+        cleaned.push(trimmed_end.to_string());
+    }
+    while cleaned.first().is_some_and(|line| line.is_empty()) {
+        cleaned.remove(0);
+    }
+    while cleaned.last().is_some_and(|line| line.is_empty()) {
+        cleaned.pop();
+    }
+    cleaned.join("\n")
 }
 
 /// 从提取后的纯文本取最后一条非空行（截断到与 timeline 摘要一致的长度上限）。
@@ -241,7 +265,6 @@ fn light_clean_terminal_archive_text(text: &str) -> String {
 
     cleaned_lines.join("\n")
 }
-
 
 #[cfg(test)]
 #[path = "terminal_archive_clean_test.rs"]
