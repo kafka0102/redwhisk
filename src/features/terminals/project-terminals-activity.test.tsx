@@ -8,6 +8,7 @@ import { getDefaultProjectTerminalsActivityState } from "./project-terminals-act
 import {
   createProjectTerminal,
   deleteProjectTerminalConfig,
+  ensureProjectTerminals,
   listProjectTerminals,
   updateProjectTerminalConfig,
 } from "./project-terminal-commands";
@@ -30,6 +31,7 @@ vi.mock("./project-terminal", () => ({
 vi.mock("./project-terminal-commands", () => ({
   createProjectTerminal: vi.fn(),
   deleteProjectTerminalConfig: vi.fn(),
+  ensureProjectTerminals: vi.fn(),
   listProjectTerminals: vi.fn(),
   updateProjectTerminalConfig: vi.fn(),
 }));
@@ -37,14 +39,17 @@ vi.mock("./project-terminal-commands", () => ({
 vi.mock("../../shared/toast", () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 const createProjectTerminalMock = vi.mocked(createProjectTerminal);
 const deleteProjectTerminalConfigMock = vi.mocked(deleteProjectTerminalConfig);
+const ensureProjectTerminalsMock = vi.mocked(ensureProjectTerminals);
 const listProjectTerminalsMock = vi.mocked(listProjectTerminals);
 const updateProjectTerminalConfigMock = vi.mocked(updateProjectTerminalConfig);
 const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 
 function renderProjectTerminalsActivity() {
   function Harness() {
@@ -68,9 +73,11 @@ describe("ProjectTerminalsActivity", () => {
   beforeEach(() => {
     createProjectTerminalMock.mockReset();
     deleteProjectTerminalConfigMock.mockReset();
+    ensureProjectTerminalsMock.mockReset();
     listProjectTerminalsMock.mockReset();
     updateProjectTerminalConfigMock.mockReset();
     toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     deleteProjectTerminalConfigMock.mockResolvedValue({
       configId: 102,
       sessionId: -2,
@@ -231,6 +238,91 @@ describe("ProjectTerminalsActivity", () => {
     expect(
       kept.closest(".project-terminals-workspace__surface"),
     ).toHaveAttribute("hidden");
+    expect(ensureProjectTerminalsMock).not.toHaveBeenCalled();
+  });
+
+  it("ensures inactive shell-like terminals on hydrate and mounts the session", async () => {
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 105,
+          sessionId: 0,
+          name: "terminal-5",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "/bin/zsh",
+        },
+      ],
+    });
+    ensureProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 105,
+          sessionId: -5,
+          name: "terminal-5",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "/bin/zsh",
+        },
+      ],
+      shellFailures: [],
+    });
+
+    renderProjectTerminalsActivity();
+
+    await waitFor(() => {
+      expect(ensureProjectTerminalsMock).toHaveBeenCalledWith({ projectId: 1 });
+    });
+    expect(
+      await screen.findByTestId("project-terminal:1:-5"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("This terminal is not running right now."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows status and toast when shell ensure reports failures", async () => {
+    listProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 106,
+          sessionId: 0,
+          name: "terminal-6",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "",
+        },
+      ],
+    });
+    ensureProjectTerminalsMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 106,
+          sessionId: 0,
+          name: "terminal-6",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "",
+        },
+      ],
+      shellFailures: [
+        {
+          configId: 106,
+          name: "terminal-6",
+          message: "spawn failed",
+          reason: "startFailed",
+        },
+      ],
+    });
+
+    renderProjectTerminalsActivity();
+
+    await waitFor(() => {
+      expect(ensureProjectTerminalsMock).toHaveBeenCalled();
+    });
+    expect(
+      await screen.findByText("This terminal is not running right now."),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("terminal-6: spawn failed");
+    });
+    expect(screen.getByText("terminal-6: spawn failed")).toBeInTheDocument();
   });
 
   it("opens the edit dialog and saves terminal config updates", async () => {

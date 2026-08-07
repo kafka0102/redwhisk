@@ -24,12 +24,16 @@ import { ProjectTerminal } from "./project-terminal";
 import {
   createProjectTerminal,
   deleteProjectTerminalConfig,
+  ensureProjectTerminals,
   listProjectTerminals,
+  type EnsureProjectTerminalsResult,
+  type ProjectTerminalSummary,
 } from "./project-terminal-commands";
 import type {
   ProjectTerminalCardState,
   ProjectTerminalsActivityState,
 } from "./project-terminals-activity-state";
+import { hasInactiveShellLikeTerminal } from "./project-terminal-shell-kind";
 
 interface ProjectTerminalsActivityProps {
   onStateChange: Dispatch<SetStateAction<ProjectTerminalsActivityState>>;
@@ -40,6 +44,26 @@ interface ProjectTerminalsActivityProps {
 }
 
 const PROJECT_TERMINALS_SIDEBAR_MAX_WIDTH = 420;
+const SHELL_ENSURE_MAX_ATTEMPTS = 3;
+const SHELL_ENSURE_RETRY_DELAY_MS = 150;
+
+function mapTerminalSummariesToCards(
+  terminals: ProjectTerminalSummary[],
+): ProjectTerminalCardState[] {
+  return terminals.map((terminal) => ({
+    configId: terminal.configId,
+    sessionId: terminal.sessionId,
+    name: terminal.name,
+    workingDir: terminal.workingDir,
+    launchCommand: terminal.launchCommand,
+  }));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
 
 function formatTerminalPathForDisplay(path: string): string {
   return formatHomePathForDisplay(path);
@@ -100,14 +124,10 @@ export function ProjectTerminalsActivity({
     [onStateChange],
   );
 
-  const hydrateTerminals = useCallback(async () => {
-    setHydratingTerminals(true);
-    setTerminalStatusMessage(null);
-
-    try {
-      const result = await listProjectTerminals({ projectId });
+  const applyTerminalList = useCallback(
+    (terminals: ProjectTerminalSummary[]) => {
       onStateChange((currentState) => {
-        const selectedStillExists = result.terminals.some(
+        const selectedStillExists = terminals.some(
           (terminal) => terminal.configId === currentState.selectedConfigId,
         );
         return {
@@ -115,16 +135,54 @@ export function ProjectTerminalsActivity({
           hasHydrated: true,
           selectedConfigId: selectedStillExists
             ? currentState.selectedConfigId
-            : (result.terminals[0]?.configId ?? null),
-          terminalCards: result.terminals.map((terminal) => ({
-            configId: terminal.configId,
-            sessionId: terminal.sessionId,
-            name: terminal.name,
-            workingDir: terminal.workingDir,
-            launchCommand: terminal.launchCommand,
-          })),
+            : (terminals[0]?.configId ?? null),
+          terminalCards: mapTerminalSummariesToCards(terminals),
         };
       });
+    },
+    [onStateChange],
+  );
+
+  const reportShellEnsureFailures = useCallback(
+    (result: EnsureProjectTerminalsResult) => {
+      if (result.shellFailures.length === 0) {
+        return;
+      }
+      const summary = result.shellFailures
+        .map((failure) => `${failure.name}: ${failure.message}`)
+        .join("; ");
+      setTerminalStatusMessage(summary);
+      toast.error(summary);
+    },
+    [],
+  );
+
+  const hydrateTerminals = useCallback(async () => {
+    setHydratingTerminals(true);
+    setTerminalStatusMessage(null);
+
+    try {
+      let terminals = (await listProjectTerminals({ projectId })).terminals;
+
+      if (hasInactiveShellLikeTerminal(terminals)) {
+        for (
+          let attempt = 0;
+          attempt < SHELL_ENSURE_MAX_ATTEMPTS;
+          attempt += 1
+        ) {
+          const ensured = await ensureProjectTerminals({ projectId });
+          terminals = ensured.terminals;
+          reportShellEnsureFailures(ensured);
+          if (!hasInactiveShellLikeTerminal(terminals)) {
+            break;
+          }
+          if (attempt + 1 < SHELL_ENSURE_MAX_ATTEMPTS) {
+            await sleep(SHELL_ENSURE_RETRY_DELAY_MS);
+          }
+        }
+      }
+
+      applyTerminalList(terminals);
     } catch (error: unknown) {
       setTerminalStatusMessage(getCommandErrorMessage(error, t));
       onStateChange((currentState) => ({
@@ -134,7 +192,13 @@ export function ProjectTerminalsActivity({
     } finally {
       setHydratingTerminals(false);
     }
-  }, [onStateChange, projectId, t]);
+  }, [
+    applyTerminalList,
+    onStateChange,
+    projectId,
+    reportShellEnsureFailures,
+    t,
+  ]);
 
   const clearDragState = useCallback(() => {
     if (!dragStateRef.current) {
