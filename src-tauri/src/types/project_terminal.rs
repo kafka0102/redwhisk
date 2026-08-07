@@ -147,3 +147,27 @@ pub struct DeleteProjectTerminalConfigResult {
     pub config_id: i64,
     pub session_id: Option<i64>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnsureProjectTerminalsInput {
+    pub project_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnsureProjectTerminalFailure {
+    pub config_id: i64,
+    pub name: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnsureProjectTerminalsResult {
+    pub terminals: Vec<ProjectTerminalSummary>,
+    pub shell_failures: Vec<EnsureProjectTerminalFailure>,
+}
+

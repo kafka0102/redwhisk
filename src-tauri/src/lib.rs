@@ -110,6 +110,7 @@ pub fn run() {
             features::project_terminal::commands::create_project_terminal,
             features::project_terminal::commands::create_temporary_project_terminal,
             features::project_terminal::commands::list_project_terminals,
+            features::project_terminal::commands::ensure_project_terminals,
             features::project_terminal::commands::read_project_terminal,
             features::project_terminal::commands::write_project_terminal,
             features::project_terminal::commands::restore_project_terminal,

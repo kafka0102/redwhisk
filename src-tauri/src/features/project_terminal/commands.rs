@@ -7,7 +7,8 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
     CreateTemporaryProjectTerminalInput, CreateTemporaryProjectTerminalResult,
-    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
+    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult,
+    EnsureProjectTerminalsInput, EnsureProjectTerminalsResult, ListProjectTerminalsInput,
     ListProjectTerminalsResult, ReadProjectTerminalInput, ReadProjectTerminalResult,
     ResizeProjectTerminalInput, RestoreProjectTerminalInput, RestoreProjectTerminalResult,
     SubscribeProjectTerminalOutputInput, UpdateProjectTerminalConfigInput,
@@ -107,6 +108,21 @@ pub fn list_project_terminals(
 ) -> Result<ListProjectTerminalsResult, CommandError> {
     let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
     ProjectTerminalService::list_project_terminals_in_data_dir(
+        data_dir,
+        input,
+        &state.project_terminals,
+        &state.pty_sessions,
+    )
+}
+
+#[tauri::command]
+pub fn ensure_project_terminals(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: EnsureProjectTerminalsInput,
+) -> Result<EnsureProjectTerminalsResult, CommandError> {
+    let data_dir = prepare_project_terminal_data_dir(&app, &state)?;
+    ProjectTerminalService::ensure_project_terminals_in_data_dir(
         data_dir,
         input,
         &state.project_terminals,

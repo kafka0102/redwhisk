@@ -34,6 +34,22 @@ export interface ListProjectTerminalsResult {
   terminals: ProjectTerminalSummary[];
 }
 
+export interface EnsureProjectTerminalsInput {
+  projectId: number;
+}
+
+export interface EnsureProjectTerminalFailure {
+  configId: number;
+  name: string;
+  message: string;
+  reason?: string;
+}
+
+export interface EnsureProjectTerminalsResult {
+  terminals: ProjectTerminalSummary[];
+  shellFailures: EnsureProjectTerminalFailure[];
+}
+
 export interface ReadProjectTerminalInput {
   projectId: number;
   sessionId: number;
@@ -130,6 +146,17 @@ export function listProjectTerminals(
   return invokeCommand<ListProjectTerminalsResult>("list_project_terminals", {
     input,
   });
+}
+
+export function ensureProjectTerminals(
+  input: EnsureProjectTerminalsInput,
+): Promise<EnsureProjectTerminalsResult> {
+  return invokeCommand<EnsureProjectTerminalsResult>(
+    "ensure_project_terminals",
+    {
+      input,
+    },
+  );
 }
 
 export function restoreProjectTerminal(

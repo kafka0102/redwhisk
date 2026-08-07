@@ -37,6 +37,7 @@ import {
   closeProjectTerminal,
   createProjectTerminal,
   deleteProjectTerminalConfig,
+  ensureProjectTerminals,
   listProjectTerminals,
   readProjectTerminal,
   resizeProjectTerminal,
@@ -349,6 +350,51 @@ describe("command client", () => {
       ],
     });
     expect(invokeMock).toHaveBeenCalledWith("list_project_terminals", {
+      input: { projectId: 1 },
+    });
+  });
+
+  it("invokes Rust Core through the ensure project terminals command", async () => {
+    invokeMock.mockResolvedValue({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "terminal-1",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "/bin/zsh",
+        },
+      ],
+      shellFailures: [
+        {
+          configId: 102,
+          name: "broken-shell",
+          message: "spawn failed",
+          reason: "startFailed",
+        },
+      ],
+    });
+
+    await expect(ensureProjectTerminals({ projectId: 1 })).resolves.toEqual({
+      terminals: [
+        {
+          configId: 101,
+          sessionId: -1,
+          name: "terminal-1",
+          workingDir: "/tmp/redwhisk",
+          launchCommand: "/bin/zsh",
+        },
+      ],
+      shellFailures: [
+        {
+          configId: 102,
+          name: "broken-shell",
+          message: "spawn failed",
+          reason: "startFailed",
+        },
+      ],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("ensure_project_terminals", {
       input: { projectId: 1 },
     });
   });

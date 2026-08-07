@@ -16,8 +16,9 @@ use crate::types::project::ProjectSummary;
 use crate::types::project_terminal::{
     CloseProjectTerminalInput, CreateProjectTerminalInput, CreateProjectTerminalResult,
     CreateTemporaryProjectTerminalInput, CreateTemporaryProjectTerminalResult,
-    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult, ListProjectTerminalsInput,
-    ListProjectTerminalsResult, ReadProjectTerminalInput,
+    DeleteProjectTerminalConfigInput, DeleteProjectTerminalConfigResult,
+    EnsureProjectTerminalFailure, EnsureProjectTerminalsInput, EnsureProjectTerminalsResult,
+    ListProjectTerminalsInput, ListProjectTerminalsResult, ReadProjectTerminalInput,
     ReadProjectTerminalResult, ResizeProjectTerminalInput, RestoreProjectTerminalInput,
     RestoreProjectTerminalResult, SubscribeProjectTerminalOutputInput,
     UpdateProjectTerminalConfigInput, UpdateProjectTerminalConfigResult, WriteProjectTerminalInput,
@@ -35,6 +36,7 @@ use super::registry::{
     final_path_segment, preferred_project_terminal_session, project_terminal_summary,
     ProjectTerminalRegistry, ProjectTerminalSession,
 };
+use super::shell_kind::is_shell_like_launch_command;
 use super::shortcut::{shortcut_command_record_from_row, validate_shortcut_command};
 
 const PROJECT_TERMINAL_NAME_PREFIX: &str = "terminal-";
@@ -339,6 +341,7 @@ impl<'connection> ProjectTerminalService<'connection> {
         })
     }
 
+    /// 打开项目后的批量恢复：与 ensure 共用启动逻辑；失败由 ensure 出口对调用方暴露。
     pub fn restore_project_terminals(
         &self,
         data_dir: impl AsRef<Path>,
@@ -346,23 +349,44 @@ impl<'connection> ProjectTerminalService<'connection> {
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
-        self.project_by_id(project_id)?;
-        let configs = registry.with_project_lock(project_id, || {
+        self.ensure_project_terminals(
+            data_dir,
+            EnsureProjectTerminalsInput { project_id },
+            registry,
+            pty_sessions,
+        )
+        .map(|_| ())
+    }
+
+    /// 确保项目终端尽量运行，并返回最新 list 与 Shell 类启动失败。
+    /// 命令型失败不进入 shell_failures；已有 active PTY 则幂等跳过。
+    pub fn ensure_project_terminals(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: EnsureProjectTerminalsInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<EnsureProjectTerminalsResult, CommandError> {
+        self.project_by_id(input.project_id)?;
+        let configs = registry.with_project_lock(input.project_id, || {
             self.project_repository
-                .list_project_terminal_configs(project_id)
+                .list_project_terminal_configs(input.project_id)
                 .map_err(project_terminal_database_error)
         })?;
 
+        let mut shell_failures = Vec::new();
+
         for config in configs {
-            run_restore_before_start_lock_hook(project_id, config.id);
-            let _ = registry.with_config_lock(project_id, config.id, || {
+            run_restore_before_start_lock_hook(input.project_id, config.id);
+            let start_result = registry.with_config_lock(input.project_id, config.id, || {
                 let Some(current_config) =
-                    self.project_terminal_config_by_id(project_id, config.id)?
+                    self.project_terminal_config_by_id(input.project_id, config.id)?
                 else {
                     return Ok(());
                 };
 
-                let sessions = registry.sessions_by_config_id(project_id, current_config.id)?;
+                let sessions =
+                    registry.sessions_by_config_id(input.project_id, current_config.id)?;
                 if let Some((session_id, session)) =
                     preferred_project_terminal_session(sessions.clone(), pty_sessions)
                 {
@@ -371,8 +395,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                     }
                 }
 
-                let _ = registry.remove_sessions_by_config_id(project_id, current_config.id);
-                run_restore_before_spawn_hook(project_id, current_config.id);
+                let _ = registry.remove_sessions_by_config_id(input.project_id, current_config.id);
+                run_restore_before_spawn_hook(input.project_id, current_config.id);
                 self.start_terminal_for_config(
                     data_dir.as_ref(),
                     &current_config,
@@ -381,9 +405,31 @@ impl<'connection> ProjectTerminalService<'connection> {
                 )
                 .map(|_| ())
             });
+
+            if let Err(error) = start_result {
+                if is_shell_like_launch_command(&config.launch_command) {
+                    shell_failures.push(EnsureProjectTerminalFailure {
+                        config_id: config.id,
+                        name: config.name.clone(),
+                        message: error.message,
+                        reason: error.reason,
+                    });
+                }
+            }
         }
 
-        Ok(())
+        let listed = self.list_project_terminals(
+            ListProjectTerminalsInput {
+                project_id: input.project_id,
+            },
+            registry,
+            pty_sessions,
+        )?;
+
+        Ok(EnsureProjectTerminalsResult {
+            terminals: listed.terminals,
+            shell_failures,
+        })
     }
 
     /// 热路径：读 log / 状态轮询只依赖 registry，不打开 SQLite。
@@ -718,6 +764,22 @@ impl<'connection> ProjectTerminalService<'connection> {
         ProjectTerminalService::new(repository).restore_project_terminals(
             data_dir,
             project_id,
+            registry,
+            pty_sessions,
+        )
+    }
+
+    pub fn ensure_project_terminals_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: EnsureProjectTerminalsInput,
+        registry: &ProjectTerminalRegistry,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<EnsureProjectTerminalsResult, CommandError> {
+        let database = open_project_database(data_dir.as_ref())?;
+        let repository = ProjectRepository::new(&database.connection);
+        ProjectTerminalService::new(repository).ensure_project_terminals(
+            data_dir,
+            input,
             registry,
             pty_sessions,
         )
@@ -1146,9 +1208,9 @@ mod tests {
     use crate::types::project::{CreateProjectInput, ProjectWorktreeLocation};
     use crate::types::project_terminal::{
         CloseProjectTerminalInput, CreateProjectTerminalInput, CreateTemporaryProjectTerminalInput,
-        DeleteProjectTerminalConfigInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
-        ResizeProjectTerminalInput, RestoreProjectTerminalInput, UpdateProjectTerminalConfigInput,
-        WriteProjectTerminalInput,
+        DeleteProjectTerminalConfigInput, EnsureProjectTerminalsInput, ListProjectTerminalsInput,
+        ReadProjectTerminalInput, ResizeProjectTerminalInput, RestoreProjectTerminalInput,
+        UpdateProjectTerminalConfigInput, WriteProjectTerminalInput,
     };
 
     use super::{restore_test_hooks, ProjectTerminalService};
@@ -2953,5 +3015,338 @@ mod tests {
             limit.and_then(|value| value.as_i64()),
             Some(PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT)
         );
+    }
+
+    fn wait_until_session_absent(manager: &PtySessionManager, session_id: i64) {
+        for _ in 0..40 {
+            if !manager.contains(session_id) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert!(!manager.contains(session_id), "session {session_id} still present");
+    }
+
+    #[test]
+    fn ensure_starts_empty_launch_command_as_shell_with_active_session() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let repository = ProjectRepository::new(&database.connection);
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let config = repository
+            .insert_project_terminal_config(
+                project.id,
+                "shell-empty",
+                &current_repo.to_string_lossy(),
+                "",
+            )
+            .expect("insert empty launch config");
+
+        let ensured = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("ensure shell terminals");
+
+        assert!(ensured.shell_failures.is_empty(), "{:?}", ensured.shell_failures);
+        assert_eq!(ensured.terminals.len(), 1);
+        assert_eq!(ensured.terminals[0].config_id, config.id);
+        assert_ne!(
+            ensured.terminals[0].session_id, 0,
+            "empty launchCommand Shell 类 ensure 后必须有活跃 sessionId"
+        );
+        assert!(manager.contains(ensured.terminals[0].session_id));
+    }
+
+    #[test]
+    fn ensure_starts_default_shell_launch_command_with_active_session() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+        manager
+            .kill(created.session_id)
+            .expect("kill initial session");
+        wait_until_session_absent(&manager, created.session_id);
+
+        let ensured = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("ensure after kill");
+
+        assert!(ensured.shell_failures.is_empty(), "{:?}", ensured.shell_failures);
+        assert_eq!(ensured.terminals.len(), 1);
+        assert_ne!(ensured.terminals[0].session_id, 0);
+        assert_ne!(ensured.terminals[0].session_id, created.session_id);
+        assert!(manager.contains(ensured.terminals[0].session_id));
+    }
+
+    #[test]
+    fn ensure_is_idempotent_and_keeps_single_active_session() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let created = service
+            .create_terminal(
+                temp_dir.path(),
+                CreateProjectTerminalInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("create terminal");
+
+        let first = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("first ensure");
+        let second = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("second ensure");
+
+        assert_eq!(first.terminals[0].session_id, created.session_id);
+        assert_eq!(second.terminals[0].session_id, created.session_id);
+
+        let matching_sessions = registry
+            .sessions
+            .lock()
+            .expect("registry sessions")
+            .values()
+            .filter(|session| {
+                session.project_id == project.id && session.config_id == created.config_id
+            })
+            .count();
+        assert_eq!(matching_sessions, 1, "ensure 不得对同一 config 产生双活 session");
+    }
+
+    #[test]
+    fn ensure_reports_shell_start_failure_without_pretending_success() {
+        let _env_lock = lock_terminal_test_env();
+        let _shell_guard = ShellEnvGuard::set_invalid_shell();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let repository = ProjectRepository::new(&database.connection);
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        let config = repository
+            .insert_project_terminal_config(
+                project.id,
+                "broken-shell",
+                &current_repo.to_string_lossy(),
+                "",
+            )
+            .expect("insert shell config");
+
+        let ensured = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("ensure should return Ok with shell_failures");
+
+        assert_eq!(ensured.terminals.len(), 1);
+        assert_eq!(ensured.terminals[0].session_id, 0);
+        assert_eq!(ensured.shell_failures.len(), 1);
+        assert_eq!(ensured.shell_failures[0].config_id, config.id);
+        assert_eq!(ensured.shell_failures[0].name, "broken-shell");
+        assert!(!ensured.shell_failures[0].message.is_empty());
+    }
+
+    #[test]
+    fn ensure_command_type_is_not_reported_as_shell_failure() {
+        let _env_lock = lock_terminal_test_env();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let current_repo = std::env::current_dir()
+            .expect("cwd")
+            .parent()
+            .expect("repo root")
+            .to_path_buf();
+        let project = ProjectService::create_project_in_data_dir(
+            temp_dir.path(),
+            CreateProjectInput {
+                name: "redwhisk".to_string(),
+                repo_path: current_repo.to_string_lossy().to_string(),
+                worktree_location: ProjectWorktreeLocation::RepoSibling,
+                worktree_setup_command: "".to_string(),
+            },
+        )
+        .expect("create project");
+
+        let database = DatabaseConfig::new(temp_dir.path())
+            .open()
+            .expect("open database");
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .expect("run migrations");
+        let repository = ProjectRepository::new(&database.connection);
+        let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
+        let registry = ProjectTerminalRegistry::new();
+        let manager = PtySessionManager::new();
+
+        // InteractiveRun 会把业务命令包进默认 shell keepalive，因此即便命令不存在
+        // 通常仍会起交互 shell；本断言只要求命令型不得进入 shell_failures。
+        repository
+            .insert_project_terminal_config(
+                project.id,
+                "command-type",
+                &current_repo.to_string_lossy(),
+                "/path/that/does/not/exist/redwhisk-cmd",
+            )
+            .expect("insert command config");
+
+        let ensured = service
+            .ensure_project_terminals(
+                temp_dir.path(),
+                EnsureProjectTerminalsInput {
+                    project_id: project.id,
+                },
+                &registry,
+                &manager,
+            )
+            .expect("ensure command type");
+
+        assert!(
+            ensured.shell_failures.is_empty(),
+            "命令型不得进入 shell_failures: {:?}",
+            ensured.shell_failures
+        );
+        assert_eq!(ensured.terminals.len(), 1);
+        assert_eq!(ensured.terminals[0].name, "command-type");
     }
 }
