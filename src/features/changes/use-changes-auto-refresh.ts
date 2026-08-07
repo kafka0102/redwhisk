@@ -126,10 +126,12 @@ export interface UseChangesAutoRefreshOptions {
  * 每次 tick 同时刷新未提交变更与已提交历史。由隐藏恢复可见时立即补拉一次；
  * worktree 不可恢复（isUnavailable）→ 停轮询，待切分支重置 / 再次可见时重试。
  *
- * 另：项目主 checkout 且页面可见时，每 60s 后台 `fetch_project_remotes`
- *（`git fetch --all --prune`），成功后再 soft revalidate 本地变更数据，使远端
- * push 能驱动 ahead/behind 与「同步更改」。fetch 失败静默忽略，不打断本地轮询。
- * 不嵌套进 4s/8s 路径；不在挂载时立即 fetch（首拍在 60s 后），避免拖慢进入。
+ * 另：项目主 checkout 且页面可见时，激活即后台 `fetch_project_remotes`
+ *（`git fetch --all --prune`，fire-and-forget 不阻塞首屏），之后每 60s 再拉；
+ * 成功后再 soft revalidate 本地变更数据，使远端 push 能驱动 ahead/behind 与
+ *「同步更改」。fetch 失败静默忽略，不打断本地轮询。不嵌套进 4s/8s 路径。
+ * 变更 Activity 切走会卸载本 hook：若仅「首拍等满 60s」则短时进入永远发现不了
+ * 远端 behind（用户体感「一直暂无未提交变更」）。
  *
  * 不在挂载或工作区切换时主动补拉本地数据——useCodeWorkspaceChanges 已在进入
  * 视图 / 切分支时各拉取一次（signature 去重），轮询 hook 只在「由隐藏恢复可见」
@@ -197,8 +199,10 @@ export function useChangesAutoRefresh({
     refreshOnActivate: false,
   });
 
-  // 主 checkout 低频后台 fetch：更新 origin/* 后走既有 soft revalidate。
+  // 主 checkout 后台 fetch：更新 origin/* 后走既有 soft revalidate。
   // 与 4s/8s 本地轮询解耦；失败静默；同一时刻最多一个 in-flight。
+  // 激活（挂载 / 由 hidden 恢复 / 切回主根）时立即首拍一次：变更 Activity 切走会
+  // 卸载本 hook，仅 setInterval(60s) 会导致「短时多次进入永远不 fetch」。
   useEffect(() => {
     const canFetchRemote =
       enabled &&
@@ -231,6 +235,7 @@ export function useChangesAutoRefresh({
         });
     };
 
+    runRemoteFetch();
     const timerId = window.setInterval(
       runRemoteFetch,
       CHANGES_REMOTE_FETCH_INTERVAL_MS,

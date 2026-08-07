@@ -12,16 +12,18 @@
 
 ## 决定
 
-1. **仅项目主 checkout**、变更 Activity 启用且 **document 可见**、worktree 可恢复时，每 **60s** 调用既有 `fetch_project_remotes`（`git fetch --all --prune`）。
-2. **成功后**再调用既有 `refreshChanges` + `refreshCommitHistory`（soft revalidate）；**失败静默**，不 toast、不打断 4s/8s 本地轮询。
-3. **挂载 / 切根不立即 fetch**，首拍在 60s 间隔后，避免拖慢进入变更页。
+1. **仅项目主 checkout**、变更 Activity 启用且 **document 可见**、worktree 可恢复时，调用既有 `fetch_project_remotes`（`git fetch --all --prune`）。
+2. **激活时立即首拍一次**（挂载 / 由 hidden 恢复可见 / 重新满足 canFetch 条件），之后每 **60s** 再拉。首拍与间隔均为 fire-and-forget，**不 await、不阻塞首屏渲染**。
+3. **成功后**再调用既有 `refreshChanges` + `refreshCommitHistory`（soft revalidate）；**失败静默**，不 toast、不打断 4s/8s 本地轮询。
 4. **linked worktree 不做后台 fetch**（与后端 `require_project_root_for_remote_ops` 一致）。
 5. **不把 fetch 嵌进 4s/8s 本地刷新路径**，避免网络放大与 IPC 压力。
 
+> 修订说明：初版「挂载不立即 fetch、首拍仅在 60s 后」在变更 Activity 切走即卸载的前提下，会导致用户多次短时进入变更页却永不 fetch，远端 behind 无法驱动「同步更改」，空态长期停在「暂无未提交变更」。改为激活即首拍。
+
 ## 后果
 
-- 主 checkout 停留变更页约一分钟内可看到远端 behind / 同步更改状态更新（仍依赖本地 tracking；已提交时间轴仍以本地 HEAD 历史为准，仅 behind 标签与 `is_pushed` 会随 tracking 变化）。
-- 增加低频网络与凭证使用；隐藏页面 / 切走 Activity 时停 fetch。
+- 进入变更页后很快可看到远端 behind / 同步更改状态更新（仍依赖本地 tracking；已提交时间轴仍以本地 HEAD 历史为准，仅 behind 标签与 `is_pushed` 会随 tracking 变化）；停留期间每 60s 再更新。
+- 增加低频网络与凭证使用；隐藏页面 / 切走 Activity 时停 fetch。短时进入也会产生一次 fetch（可接受）。
 - 4s/8s 路径仍为纯本地，性能特征与 ADR-0008 / performance 规范对本地轮询的约束不变。
 
 ## 考虑过的替代方案
@@ -30,6 +32,7 @@
 | --- | --- |
 | 每次 4s/8s 本地 refresh 都 fetch | 网络与阻塞成本过高 |
 | 仅文案提示用户手动刷新远程 | 不能解决「等一分钟也不变」的体感 |
+| 挂载不 fetch、仅 60s interval | 变更 Activity 卸载后短时进入永远不 fetch（已踩坑） |
 | worktree 也后台 fetch | 后端 remote ops 仅主 checkout；跨 worktree 共享 object db 时主根 fetch 已够更新 tracking |
 
 ## 代码事实来源

@@ -64,7 +64,9 @@ function baseAutoRefreshOptions(
     isUnavailable: false,
     projectId: 1,
     workspacePath: "/tmp/repo",
-    isProjectRoot: true,
+    // 默认 false：本地 4s/8s 轮询用例不受激活首拍 remote fetch 干扰；
+    // 需要后台 fetch 的用例显式传 isProjectRoot: true。
+    isProjectRoot: false,
     ...overrides,
   };
 }
@@ -422,7 +424,7 @@ describe("useChangesAutoRefresh", () => {
     expect(refreshChangesB).not.toHaveBeenCalled();
   });
 
-  it("fetches remotes every 60s on project root and refreshes after success", async () => {
+  it("fetches remotes on activate and every 60s, refreshing after success", async () => {
     renderHook(() =>
       useChangesAutoRefresh(
         baseAutoRefreshOptions({
@@ -434,12 +436,7 @@ describe("useChangesAutoRefresh", () => {
       ),
     );
 
-    // 挂载不立即 fetch。
-    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS - 1);
-    expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
+    // 激活即首拍（变更 Activity 切走会卸载；不能只等满 60s）。
     await settle();
     expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
     expect(fetchProjectRemotesMock).toHaveBeenCalledWith({
@@ -449,6 +446,53 @@ describe("useChangesAutoRefresh", () => {
     // fetch 成功后 soft revalidate 本地变更 + 提交历史。
     expect(refreshChanges).toHaveBeenCalled();
     expect(refreshCommitHistory).toHaveBeenCalled();
+
+    const refreshCallsAfterActivate = (
+      refreshChanges as ReturnType<typeof vi.fn>
+    ).mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS - 1);
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(2);
+    expect(
+      (refreshChanges as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBeGreaterThan(refreshCallsAfterActivate);
+  });
+
+  it("fetches remotes on each short activate (intermittent Changes visits)", async () => {
+    // 回归：用户多次短时打开变更页（<60s）却从不连续停满 60s 时，旧实现永不 fetch，
+    // 远端 behind 无法驱动「同步更改」，空态一直显示「暂无未提交变更」。
+    const { unmount } = renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+          workspacePath: "/tmp/repo",
+        }),
+      ),
+    );
+    await settle();
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          isProjectRoot: true,
+          workspacePath: "/tmp/repo",
+        }),
+      ),
+    );
+    await settle();
+    expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not background-fetch remotes on linked worktree", async () => {
@@ -467,6 +511,7 @@ describe("useChangesAutoRefresh", () => {
   });
 
   it("does not background-fetch remotes while hidden", async () => {
+    setVisibility(false);
     renderHook(() =>
       useChangesAutoRefresh(
         baseAutoRefreshOptions({
@@ -476,7 +521,7 @@ describe("useChangesAutoRefresh", () => {
         }),
       ),
     );
-    changeVisibility(false);
+    await settle();
     await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS + 5_000);
     expect(fetchProjectRemotesMock).not.toHaveBeenCalled();
   });
@@ -507,11 +552,8 @@ describe("useChangesAutoRefresh", () => {
         }),
       ),
     );
-    // 推进到首个 60s fetch 前，清掉本地 8s 轮询可能产生的调用计数基线。
-    await vi.advanceTimersByTimeAsync(REMOTE_FETCH_MS - 1);
     const localCallsBeforeFetch = (refreshChanges as ReturnType<typeof vi.fn>)
       .mock.calls.length;
-    await vi.advanceTimersByTimeAsync(1);
     await settle();
     expect(fetchProjectRemotesMock).toHaveBeenCalledTimes(1);
     // 失败不因 fetch 额外触发 refresh（本地 8s 轮询另计，此窗口内不应再增）。
