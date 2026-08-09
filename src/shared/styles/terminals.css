@@ -414,7 +414,7 @@
 
 .agent-tui-archive-markdown__body {
   min-width: 0;
-  max-width: 48rem;
+  max-width: 100%;
 }
 
 .project-terminal-status-bar {

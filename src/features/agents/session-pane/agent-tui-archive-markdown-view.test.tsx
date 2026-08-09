@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -52,5 +54,18 @@ describe("AgentTuiArchiveMarkdownView", () => {
     expect(
       await screen.findByText(/归档内容为空|Archive is empty/i),
     ).toBeInTheDocument();
+  });
+
+  it("归档 Markdown 正文使用全宽，不限制为 48rem", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/shared/styles/terminals.css"),
+      "utf8",
+    );
+    const rule = css.match(
+      /\.agent-tui-archive-markdown__body\s*\{[^}]+\}/,
+    )?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).not.toMatch(/max-width:\s*48rem/);
+    expect(rule).toMatch(/max-width:\s*100%/);
   });
 });
