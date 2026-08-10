@@ -212,6 +212,33 @@ fn collect_project_skill_roots(
     seen_roots: &mut HashSet<PathBuf>,
     roots: &mut Vec<(PathBuf, &'static [AgentType])>,
 ) {
+    // 先按入口路径后缀判定是否为已知 skill root：命中即按该 root 约定登记 agentType
+    // 并停止下钻。判定在「是否下钻」之前完成，使 root 本身是软链（如
+    // `.claude/skills -> ../.agents/skills`）时也能被跟随——agentType 由入口 root 约定
+    // 决定（非 canonical 目标），同一物理技能可归属多个 Agent（ADR-0025）。
+    if let Some(agent_types) = project_skill_root_agent_types(current) {
+        // current 可能是软链；is_dir 跟随软链，broken symlink 等非目录直接放弃。
+        if !current.is_dir() {
+            return;
+        }
+        let resolved = match current.canonicalize() {
+            Ok(resolved) => resolved,
+            Err(_) => return,
+        };
+        // 软链 root 的目标必须落在项目内，避免越过项目边界扫描外部目录。
+        if !resolved.starts_with(project_root) {
+            return;
+        }
+        // 按入口路径去重：`.claude/skills` 软链与 `.agents/skills` 真实 root 入口不同，
+        // 可共存为两条 root；存入 canonical 以维持 find_project_skill_roots 既有返回。
+        if seen_roots.insert(current.to_path_buf()) {
+            roots.push((resolved, agent_types));
+        }
+        return;
+    }
+
+    // 非 root：仅下钻真实目录。软链非 root 目录在下方 is_symlink 判定处返回不跟随，
+    // 保留「不跟随任意项目软链」护栏（防环路、防经软链越出项目）。
     let metadata = match fs::symlink_metadata(current) {
         Ok(metadata) => metadata,
         Err(_) => return,
@@ -228,13 +255,6 @@ fn collect_project_skill_roots(
         return;
     }
 
-    if let Some(agent_types) = project_skill_root_agent_types(&current) {
-        if seen_roots.insert(current.clone()) {
-            roots.push((current, agent_types));
-        }
-        return;
-    }
-
     let entries = match fs::read_dir(&current) {
         Ok(entries) => entries,
         Err(_) => return,
@@ -244,7 +264,9 @@ fn collect_project_skill_roots(
         let Ok(file_type) = entry.file_type() else {
             continue;
         };
-        if !file_type.is_dir() || file_type.is_symlink() {
+        // 真实目录与软链都递归：软链若为已知 root 会在函数顶部被跟随，软链非 root
+        // 则在下钻分支被跳过。
+        if !file_type.is_dir() && !file_type.is_symlink() {
             continue;
         }
 

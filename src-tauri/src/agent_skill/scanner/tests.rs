@@ -101,6 +101,63 @@
         assert!(!skills.iter().any(|skill| skill.name == "external-codex"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn agent_skill_scanner_follows_symlinked_project_skill_root() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let project = temp_dir.path();
+        write_skill(&project.join(".agents/skills/shared"), "Shared");
+        // .claude/skills 以软链指向 .agents/skills：应按 .claude root 识别为 Claude 等，
+        // 与 .agents root 的 Codex/OpenCode/Grok 共存（ADR-0025 多 Agent 根归属）。
+        fs::create_dir_all(project.join(".claude")).expect("claude dir");
+        symlink(
+            project.join(".agents/skills"),
+            project.join(".claude/skills"),
+        )
+        .expect("symlink skills root");
+
+        let skills = scan_project_skills(7, project);
+
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "shared" && skill.agent_type == AgentType::Claude));
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "shared" && skill.agent_type == AgentType::Codex));
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "shared" && skill.agent_type == AgentType::OpenCode));
+        assert!(skills
+            .iter()
+            .any(|skill| skill.name == "shared" && skill.agent_type == AgentType::Grok));
+        assert!(skills.iter().all(|skill| {
+            skill.scope == AgentSkillScope::Project && skill.project_id == Some(7)
+        }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn agent_skill_scanner_does_not_follow_symlinked_project_skill_root_escaping_project() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let project = temp_dir.path().join("project");
+        let external = temp_dir.path().join("external-skills");
+        fs::create_dir_all(&project).expect("project dir");
+        write_skill(&external.join("external-claude"), "External Claude");
+        // .claude/skills 软链指向项目外目录，不应跟随（逃逸护栏）。
+        fs::create_dir_all(project.join(".claude")).expect("claude dir");
+        symlink(&external, project.join(".claude/skills")).expect("symlink to external");
+
+        let skills = scan_project_skills(7, &project);
+
+        assert!(!skills
+            .iter()
+            .any(|skill| skill.name == "external-claude"));
+    }
+
     #[test]
     fn agent_skill_scanner_scans_codex_and_claude_global_roots() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
