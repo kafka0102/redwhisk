@@ -67,14 +67,6 @@ enum UpstreamRelation {
     Diverged,
 }
 
-fn has_upstream(repo_path: &Path) -> Result<bool, GitCommandError> {
-    match command::run_git(repo_path, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
-        Ok(value) => Ok(!value.trim().is_empty()),
-        Err(GitCommandError::Failed { .. }) => Ok(false),
-        Err(error) => Err(error),
-    }
-}
-
 fn upstream_remote_name(repo_path: &Path) -> Result<String, GitCommandError> {
     let branch = command::run_git(repo_path, &["branch", "--show-current"])?;
     let branch = branch.trim();

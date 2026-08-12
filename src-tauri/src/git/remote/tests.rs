@@ -40,14 +40,14 @@
         let env = setup_clone_with_upstream();
         git(&env.local, &["checkout", "-b", "feature/no-upstream"]);
         // 新分支默认无 upstream。
-        assert!(!has_upstream(&env.local).expect("check upstream"));
+        assert!(resolve_primary_upstream(&env.local).expect("check upstream").is_none());
         write_file(&env.local, "feature.txt", "feature\n");
         git(&env.local, &["add", "feature.txt"]);
         git(&env.local, &["commit", "-m", "feature"]);
 
         push(&env.local).expect("push -u origin HEAD");
 
-        assert!(has_upstream(&env.local).expect("upstream after push -u"));
+        assert!(resolve_primary_upstream(&env.local).expect("upstream after push -u").is_some());
         let remote_head = git_output(&env.bare, &["rev-parse", "refs/heads/feature/no-upstream"]);
         let local_head = git_output(&env.local, &["rev-parse", "HEAD"]);
         assert_eq!(remote_head, local_head);
@@ -288,7 +288,7 @@
         );
         git(&other_clone, &["config", "user.name", "RedWhisk Test"]);
 
-        assert!(has_upstream(&local).expect("clone has upstream"));
+        assert!(resolve_primary_upstream(&local).expect("clone has upstream").is_some());
 
         RemoteTestEnv {
             bare,
