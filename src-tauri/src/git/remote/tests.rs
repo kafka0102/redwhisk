@@ -1,108 +1,3 @@
-use std::path::Path;
-
-use super::command::{self, GitCommandError};
-
-/// 有 upstream 且相对远端分叉/无法快进时，`push` 返回的稳定 reason 文案（service 映射用）。
-pub const PUSH_REQUIRES_MANUAL_SYNC: &str = "pushRequiresManualSync";
-
-/// 在指定仓库路径执行 `git pull`。
-pub fn pull(repo_path: impl AsRef<Path>) -> Result<(), GitCommandError> {
-    command::run_git(repo_path.as_ref(), &["pull"]).map(|_| ())
-}
-
-/// 在指定仓库路径安全推送当前分支。
-///
-/// - 无 `@{upstream}`：`git push -u origin HEAD`
-/// - 有 upstream：先 fetch 上游远程；可快进 behind 则 `pull --ff-only` 再 `push`；
-///   ahead-only 直接 `push`；分叉/无法快进返回 `PUSH_REQUIRES_MANUAL_SYNC`，不进入 merge/rebase。
-pub fn push(repo_path: impl AsRef<Path>) -> Result<(), GitCommandError> {
-    let repo_path = repo_path.as_ref();
-    if !has_upstream(repo_path)? {
-        return command::run_git(repo_path, &["push", "-u", "origin", "HEAD"]).map(|_| ());
-    }
-
-    let remote = upstream_remote_name(repo_path)?;
-    command::run_git(repo_path, &["fetch", &remote]).map(|_| ())?;
-
-    match classify_upstream_relation(repo_path)? {
-        UpstreamRelation::Equal | UpstreamRelation::AheadOnly => {
-            command::run_git(repo_path, &["push"]).map(|_| ())
-        }
-        UpstreamRelation::BehindOnly => {
-            command::run_git(repo_path, &["pull", "--ff-only"]).map(|_| ())?;
-            command::run_git(repo_path, &["push"]).map(|_| ())
-        }
-        UpstreamRelation::Diverged => Err(GitCommandError::Failed {
-            command: "git push".to_string(),
-            message: PUSH_REQUIRES_MANUAL_SYNC.to_string(),
-        }),
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UpstreamRelation {
-    Equal,
-    AheadOnly,
-    BehindOnly,
-    Diverged,
-}
-
-fn has_upstream(repo_path: &Path) -> Result<bool, GitCommandError> {
-    match command::run_git(repo_path, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
-        Ok(value) => Ok(!value.trim().is_empty()),
-        Err(GitCommandError::Failed { .. }) => Ok(false),
-        Err(error) => Err(error),
-    }
-}
-
-fn upstream_remote_name(repo_path: &Path) -> Result<String, GitCommandError> {
-    let branch = command::run_git(repo_path, &["branch", "--show-current"])?;
-    let branch = branch.trim();
-    if branch.is_empty() {
-        return Err(GitCommandError::Failed {
-            command: "git branch --show-current".to_string(),
-            message: "detached HEAD has no upstream remote".to_string(),
-        });
-    }
-    let key = format!("branch.{branch}.remote");
-    let remote = command::run_git(repo_path, &["config", "--get", &key])?;
-    let remote = remote.trim();
-    if remote.is_empty() {
-        return Err(GitCommandError::Failed {
-            command: format!("git config --get {key}"),
-            message: "upstream remote is empty".to_string(),
-        });
-    }
-    Ok(remote.to_string())
-}
-
-fn classify_upstream_relation(repo_path: &Path) -> Result<UpstreamRelation, GitCommandError> {
-    let head_is_ancestor_of_upstream = is_ancestor(repo_path, "HEAD", "@{upstream}")?;
-    let upstream_is_ancestor_of_head = is_ancestor(repo_path, "@{upstream}", "HEAD")?;
-    Ok(
-        match (head_is_ancestor_of_upstream, upstream_is_ancestor_of_head) {
-            (true, true) => UpstreamRelation::Equal,
-            (true, false) => UpstreamRelation::BehindOnly,
-            (false, true) => UpstreamRelation::AheadOnly,
-            (false, false) => UpstreamRelation::Diverged,
-        },
-    )
-}
-
-fn is_ancestor(
-    repo_path: &Path,
-    maybe_ancestor: &str,
-    maybe_descendant: &str,
-) -> Result<bool, GitCommandError> {
-    let output = command::run_git_raw(
-        repo_path,
-        &["merge-base", "--is-ancestor", maybe_ancestor, maybe_descendant],
-    )?;
-    Ok(output.status.success())
-}
-
-#[cfg(test)]
-mod tests {
     use super::*;
     use std::fs;
     use std::process::Command;
@@ -263,6 +158,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pull_with_pull_rebase_and_multiple_merge_refs_succeeds_on_primary_upstream() {
+        // 回归：裸 `git pull` + pull.rebase=true + 多 branch.*.merge
+        // （第二 merge 在远端也存在）会 fatal: Cannot rebase onto multiple branches。
+        let env = setup_clone_with_upstream();
+        git(&env.local, &["config", "pull.rebase", "true"]);
+        // 远端存在 develop，使第二 merge ref 成为可拉取目标。
+        git(&env.other_clone, &["branch", "develop"]);
+        git(&env.other_clone, &["push", "-u", "origin", "develop"]);
+        git(
+            &env.local,
+            &["config", "--add", "branch.main.merge", "refs/heads/develop"],
+        );
+
+        write_file(&env.local, "local.txt", "local\n");
+        git(&env.local, &["add", "local.txt"]);
+        git(&env.local, &["commit", "-m", "local ahead"]);
+
+        write_file(&env.other_clone, "remote.txt", "remote\n");
+        git(&env.other_clone, &["add", "remote.txt"]);
+        git(&env.other_clone, &["commit", "-m", "remote ahead"]);
+        git(&env.other_clone, &["push", "origin", "main"]);
+
+        pull(&env.local).expect("pull should target primary upstream only");
+
+        assert!(
+            env.local.join("remote.txt").exists(),
+            "should integrate primary upstream commit"
+        );
+        assert!(
+            env.local.join("local.txt").exists(),
+            "should keep rebased local commit tree"
+        );
+        assert_clean_sync_state(&env.local);
+    }
+
+    #[test]
+    fn push_with_multiple_merge_refs_updates_primary_upstream() {
+        let env = setup_clone_with_upstream();
+        git(
+            &env.local,
+            &["config", "--add", "branch.main.merge", "refs/heads/develop"],
+        );
+        write_file(&env.local, "local.txt", "local\n");
+        git(&env.local, &["add", "local.txt"]);
+        git(&env.local, &["commit", "-m", "local ahead"]);
+
+        push(&env.local).expect("push should target primary upstream only");
+
+        git(&env.other_clone, &["pull"]);
+        assert_eq!(
+            fs::read_to_string(env.other_clone.join("local.txt")).expect("read pushed file"),
+            "local\n"
+        );
+    }
+
     fn assert_clean_sync_state(repo: &std::path::Path) {
         let git_dir = repo.join(".git");
         assert!(
@@ -389,4 +340,3 @@ mod tests {
             .trim_end_matches(['\r', '\n'])
             .to_string()
     }
-}
