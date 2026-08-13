@@ -25,8 +25,8 @@ pub struct CheckoutBranchList {
 }
 
 /// 列出主 checkout 可签出的本地/远程分支（不 fetch）。
-/// 本地排除其他 worktree 占用分支，以及已删除 worktree 残留的 issue 工作分支；
-/// 远程排除 `*/HEAD` 符号 ref。
+/// 本地排除其他 worktree 占用分支；远程排除 `*/HEAD` 符号 ref。
+/// 未关闭完成的 RedWhisk worktree 分支由上层按 Session / Issue 状态再过滤。
 /// 各段按 committed_at 降序。
 pub fn list_checkout_branches(
     repo_path: impl AsRef<Path>,
@@ -39,7 +39,6 @@ pub fn list_checkout_branches(
     let local_branches = list_ref_entries(repo_path, "refs/heads/")?
         .into_iter()
         .filter(|entry| !occupied.contains(&entry.name))
-        .filter(|entry| !crate::git::worktree_name::is_issue_worktree_branch(&entry.name))
         .collect::<Vec<_>>();
 
     let remote_branches = list_ref_entries(repo_path, "refs/remotes/")?
@@ -180,32 +179,6 @@ mod tests {
         assert!(
             list.local_branches[0].committed_at_seconds
                 >= list.local_branches[1].committed_at_seconds
-        );
-    }
-
-    #[test]
-    fn list_hides_leftover_issue_worktree_branches() {
-        let temp = tempdir().expect("temp");
-        let repo = temp.path().join("repo");
-        create_repo(&repo);
-        write_commit(&repo, "base.txt", "base\n", "base");
-        git(&repo, &["branch", "-M", "main"]);
-        git(&repo, &["branch", "feature-keep"]);
-        git(&repo, &["branch", "issue-1"]);
-        git(&repo, &["branch", "issue-9"]);
-        git(&repo, &["branch", "issue-58-redwhisk"]);
-
-        let list = list_checkout_branches(&repo).expect("list");
-        let names: Vec<&str> = list
-            .local_branches
-            .iter()
-            .map(|b| b.name.as_str())
-            .collect();
-        assert!(names.contains(&"main"), "{names:?}");
-        assert!(names.contains(&"feature-keep"), "{names:?}");
-        assert!(
-            !names.iter().any(|name| name.starts_with("issue-")),
-            "leftover issue worktree branches must be hidden: {names:?}"
         );
     }
 

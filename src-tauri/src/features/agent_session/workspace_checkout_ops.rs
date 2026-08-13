@@ -8,7 +8,10 @@ use crate::types::session_workspace::{
     ProjectCreateBranchResponse, ProjectWorkspaceInput,
 };
 
-use super::workspace::{map_git_command_error, SessionWorkspaceService};
+use super::workspace::{
+    map_git_command_error, workspace_persistence_error, SessionWorkspaceService,
+};
+use super::workspace_checkout_filter::reserved_active_worktree_branches;
 
 impl SessionWorkspaceService<'_> {
     /// 列出主 checkout 可签出的本地/远程分支（不 fetch）。
@@ -17,6 +20,11 @@ impl SessionWorkspaceService<'_> {
         input: ProjectWorkspaceInput,
     ) -> Result<ProjectCheckoutBranchesResponse, CommandError> {
         let root = self.require_project_root_for_remote_ops(&input)?;
+        let reserved = reserved_active_worktree_branches(
+            self.agent_session_repository
+                .list_by_project_id(input.project_id)
+                .map_err(workspace_persistence_error)?,
+        );
         let list = crate::git::checkout_branches::list_checkout_branches(&root)
             .map_err(map_git_command_error)?;
         Ok(ProjectCheckoutBranchesResponse {
@@ -25,6 +33,7 @@ impl SessionWorkspaceService<'_> {
             local_branches: list
                 .local_branches
                 .into_iter()
+                .filter(|entry| !reserved.contains(&entry.name))
                 .map(map_checkout_branch_item)
                 .collect(),
             remote_branches: list
@@ -100,6 +109,7 @@ mod tests {
 
     use rusqlite::params;
 
+    use super::super::workspace::SessionWorkspaceService;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
@@ -108,7 +118,6 @@ mod tests {
         CheckoutBranchKind, ProjectCheckoutBranchInput, ProjectCreateBranchInput,
         ProjectWorkspaceInput,
     };
-    use super::super::workspace::SessionWorkspaceService;
 
     #[test]
     fn list_checkout_branches_rejects_linked_worktree() {
@@ -345,7 +354,6 @@ mod tests {
         let current = git_output(&repo_root, &["branch", "--show-current"]);
         assert_eq!(current, "feature-a");
     }
-
 
     #[test]
     fn create_branch_rejects_linked_worktree() {
