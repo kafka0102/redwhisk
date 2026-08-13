@@ -1,9 +1,17 @@
 import type { ReactElement, ReactNode } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NodeRendererProps } from "react-arborist";
 
 import { I18nProvider } from "../i18n/i18n";
+import { toast } from "../toast";
 import type {
   WorkspaceChangeKind,
   WorkspaceFileTreeNode,
@@ -16,6 +24,21 @@ type FileTreeRowRenderer = (
 
 const treeHeights: number[] = [];
 const treeRowRenderers: FileTreeRowRenderer[] = [];
+
+vi.mock("../toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    loading: vi.fn(),
+    message: vi.fn(),
+    dismiss: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
+const toastSuccessMock = vi.mocked(toast.success);
 
 vi.mock("react-arborist", () => ({
   Tree: ({
@@ -292,10 +315,196 @@ describe("FileTreePanel", () => {
     );
     expect(directoryRow.querySelector(".session-file-tree__status")).toBeNull();
   });
+
+  describe("workspace path context menu", () => {
+    const writeTextMock = vi.fn();
+
+    beforeEach(() => {
+      toastSuccessMock.mockReset();
+      writeTextMock.mockReset();
+      writeTextMock.mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: writeTextMock },
+      });
+    });
+
+    it("copies file name, relative path, and absolute path from the file row menu", async () => {
+      const row = renderPanelAndOpenableRow(
+        {
+          id: "src/a.ts",
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          isIgnored: false,
+        },
+        "/repo",
+      );
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual([
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+      ]);
+
+      fireEvent.click(items[0]);
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("a.ts");
+        expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+      });
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Copy relative path" }),
+      );
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("src/a.ts");
+        expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+      });
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+      );
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("/repo/src/a.ts");
+        expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+      });
+    });
+
+    it("uses the same copy menu for directory rows", async () => {
+      const row = renderPanelAndOpenableRow(
+        {
+          id: "src",
+          name: "src",
+          path: "src",
+          kind: "directory",
+          isIgnored: false,
+          children: [],
+        },
+        "/repo",
+      );
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual([
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+      ]);
+
+      fireEvent.click(items[0]);
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("src");
+        expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+      });
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Copy relative path" }),
+      );
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("src");
+      });
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+      );
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("/repo/src");
+      });
+    });
+
+    it("hides copy absolute path when workspacePath is missing", async () => {
+      const row = renderPanelAndOpenableRow(
+        {
+          id: "src/a.ts",
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          isIgnored: false,
+        },
+        null,
+      );
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual([
+        "Copy file name",
+        "Copy relative path",
+      ]);
+      expect(
+        screen.queryByRole("menuitem", { name: "Copy absolute path" }),
+      ).toBeNull();
+    });
+
+    it("silently ignores clipboard write failure", async () => {
+      writeTextMock.mockRejectedValue(new Error("denied"));
+      const row = renderPanelAndOpenableRow(
+        {
+          id: "src/a.ts",
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          isIgnored: false,
+        },
+        "/repo",
+      );
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      fireEvent.click(
+        await screen.findByRole("menuitem", { name: "Copy file name" }),
+      );
+
+      await waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith("a.ts");
+      });
+      expect(toastSuccessMock).not.toHaveBeenCalled();
+    });
+  });
 });
 
 function renderWithI18n(component: ReactNode) {
   return render(<I18nProvider fixedLocale="en">{component}</I18nProvider>);
+}
+
+function renderPanelAndOpenableRow(
+  nodeData: WorkspaceFileTreeNode,
+  workspacePath?: string | null,
+): HTMLElement {
+  renderWithI18n(
+    <FileTreePanel
+      errorMessage={null}
+      fileTree={sampleTree}
+      isLoading={false}
+      onOpenFile={() => {}}
+      workspacePath={workspacePath}
+    />,
+  );
+
+  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
+  expect(renderer).toBeTypeOf("function");
+
+  const rowElement = renderer({
+    node: {
+      data: nodeData,
+      level: 0,
+      isOpen: false,
+      toggle: () => {},
+    },
+    style: {},
+  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
+
+  const { container } = render(rowElement);
+  const row = container.firstElementChild;
+  expect(row).toBeInstanceOf(HTMLElement);
+  return row as HTMLElement;
 }
 
 function renderTreeRow(

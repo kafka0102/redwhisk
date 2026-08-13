@@ -25,13 +25,11 @@ import {
   getChangeKindStatusClassName,
   getChangeKindStatusLabel,
 } from "./workspace-change-status";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-} from "../../components/ui/context-menu";
-import { toast } from "../toast";
 import { useI18n } from "../i18n/i18n";
+import {
+  WorkspacePathContextMenu,
+  type WorkspacePathContextMenuTarget,
+} from "./workspace-path-context-menu";
 
 // react-arborist 的 Tree 需要数值高度做虚拟化。当无法测得真实高度时
 // （如 jsdom 无布局、或视口尚未布局完成），回退到该高度保证 Tree 可渲染。
@@ -54,12 +52,6 @@ export interface FileTreePanelProps {
   changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
   /** 目录路径 → 聚合变更类型，仅用于目录名着色（不渲染汇总字母徽标）。 */
   directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
-}
-
-interface FileTreeContextMenuState {
-  node: WorkspaceFileTreeNode;
-  x: number;
-  y: number;
 }
 
 /**
@@ -87,7 +79,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   const [viewportHeight, setViewportHeight] = useState(
     FILE_TREE_FALLBACK_HEIGHT,
   );
-  const [menu, setMenu] = useState<FileTreeContextMenuState | null>(null);
+  const [menu, setMenu] = useState<WorkspacePathContextMenuTarget | null>(null);
   // 文件树数据异步到达前 viewport 不挂载；必须在 hasFileTree 变为 true 后
   // 再测量，否则首次 useLayoutEffect 会在 ref 仍为 null 时空跑并卡住 fallback 高度。
   const hasFileTree = fileTree.length > 0 && !errorMessage;
@@ -134,7 +126,12 @@ export const FileTreePanel = memo(function FileTreePanel({
 
   const handleContextMenuNode = useCallback(
     (node: WorkspaceFileTreeNode, x: number, y: number) => {
-      setMenu({ node, x, y });
+      setMenu({
+        displayName: node.name,
+        relativePath: node.path,
+        x,
+        y,
+      });
     },
     [],
   );
@@ -150,18 +147,6 @@ export const FileTreePanel = memo(function FileTreePanel({
       />
     ),
     [changedFileKinds, directoryKinds, handleContextMenuNode, onOpenFile],
-  );
-
-  const handleCopy = useCallback(
-    async (text: string) => {
-      try {
-        await navigator.clipboard?.writeText(text);
-        toast.success(messages.agentsFeature.copiedToClipboard);
-      } catch {
-        // 剪贴板写入失败时静默忽略，与 terminal 的既有处理保持一致。
-      }
-    },
-    [messages.agentsFeature.copiedToClipboard],
   );
 
   return (
@@ -204,48 +189,11 @@ export const FileTreePanel = memo(function FileTreePanel({
           </Tree>
         </div>
       ) : null}
-      <ContextMenu
-        open={menu !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setMenu(null);
-          }
-        }}
-      >
-        <ContextMenuContent anchor={menu ? { x: menu.x, y: menu.y } : null}>
-          <ContextMenuItem
-            onClick={() => {
-              if (menu) {
-                void handleCopy(menu.node.name);
-              }
-            }}
-          >
-            {messages.agentsFeature.copyFileName}
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              if (menu) {
-                void handleCopy(menu.node.path);
-              }
-            }}
-          >
-            {messages.agentsFeature.copyRelativePath}
-          </ContextMenuItem>
-          {workspacePath ? (
-            <ContextMenuItem
-              onClick={() => {
-                if (menu) {
-                  void handleCopy(
-                    joinWorkspacePath(workspacePath, menu.node.path),
-                  );
-                }
-              }}
-            >
-              {messages.agentsFeature.copyAbsolutePath}
-            </ContextMenuItem>
-          ) : null}
-        </ContextMenuContent>
-      </ContextMenu>
+      <WorkspacePathContextMenu
+        target={menu}
+        workspacePath={workspacePath}
+        onClose={() => setMenu(null)}
+      />
     </div>
   );
 });
@@ -352,14 +300,6 @@ export function FileTreeStatusBadge({ kind }: { kind: WorkspaceChangeKind }) {
       {getChangeKindStatusLabel(kind)}
     </span>
   );
-}
-
-// 拼接 worktree 根的绝对路径与相对路径，去掉根末尾的多余分隔符避免出现 `//`。
-function joinWorkspacePath(
-  workspacePath: string,
-  relativePath: string,
-): string {
-  return `${workspacePath.replace(/\/+$/, "")}/${relativePath}`;
 }
 
 export function FileTypeIcon({ fileName }: { fileName: string }) {
