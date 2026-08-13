@@ -375,3 +375,23 @@ pub struct ProjectCreateBranchResponse {
     pub branch: String,
 }
 
+
+/// `merge_project_branch` 入参：把指定分支合入当前分支。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMergeBranchInput {
+    pub project_id: i64,
+    pub session_id: Option<i64>,
+    #[serde(default)]
+    pub workspace_path: Option<String>,
+    pub kind: CheckoutBranchKind,
+    /// 本地分支短名，或完整 remote-tracking 名（如 `origin/feature/foo`）。
+    pub name: String,
+}
+
+/// `merge_project_branch` 响应：合并后仍停留的当前分支名。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMergeBranchResponse {
+    pub branch: String,
+}

@@ -7,7 +7,8 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
     ProjectCheckoutBranchInput, ProjectCheckoutBranchResponse, ProjectCheckoutBranchesResponse,
-    ProjectCreateBranchInput, ProjectCreateBranchResponse, ProjectWorkspaceInput,
+    ProjectCreateBranchInput, ProjectCreateBranchResponse, ProjectMergeBranchInput,
+    ProjectMergeBranchResponse, ProjectWorkspaceInput,
     ProjectWorkspacePathInput, ProjectWorkspaceWriteFileInput, ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
     ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
@@ -166,6 +167,26 @@ pub async fn create_project_branch(
         run_workspace_blocking(data_dir, move |service| service.create_branch(input)).await?;
     emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
     Ok(response)
+}
+
+#[tauri::command]
+pub async fn list_project_merge_branches(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceInput,
+) -> Result<ProjectCheckoutBranchesResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.list_merge_branches(input)).await
+}
+
+#[tauri::command]
+pub async fn merge_project_branch(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectMergeBranchInput,
+) -> Result<ProjectMergeBranchResponse, CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.merge_branch(input)).await
 }
 
 #[tauri::command]

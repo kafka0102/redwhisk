@@ -22,6 +22,11 @@ vi.mock("./create-branch-dialog", () => ({
     open ? <div role="dialog">创建分支弹窗</div> : null,
 }));
 
+vi.mock("./merge-branch-dialog", () => ({
+  MergeBranchDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog">合并分支弹窗</div> : null,
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   pullProjectWorktree: vi.fn(),
   pushProjectWorktree: vi.fn(),
@@ -99,10 +104,20 @@ describe("ChangesBranchMoreMenu", () => {
     const items = within(menu)
       .getAllByRole("menuitem")
       .map((el) => el.textContent);
-    expect(items).toEqual(["签出", "拉取", "推送", "创建分支"]);
+    expect(items).toEqual(["签出", "拉取", "推送", "创建分支", "合并分支"]);
 
     await user.click(within(menu).getByText("签出"));
     expect(await screen.findByRole("dialog")).toHaveTextContent("签出弹窗");
+  });
+
+  it("opens merge branch dialog after create branch item", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = await screen.findByRole("menu");
+    await user.click(within(menu).getByText("合并分支"));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("合并分支弹窗");
   });
 
   it("opens create branch dialog from project root more menu", async () => {
@@ -127,6 +142,7 @@ describe("ChangesBranchMoreMenu", () => {
     expect(items).toEqual(["删除"]);
     expect(screen.queryByText("签出")).not.toBeInTheDocument();
     expect(screen.queryByText("创建分支")).not.toBeInTheDocument();
+    expect(screen.queryByText("合并分支")).not.toBeInTheDocument();
   });
 
   it("shows pull and push for project root without delete", async () => {
@@ -149,6 +165,7 @@ describe("ChangesBranchMoreMenu", () => {
     expect(screen.queryByText("拉取")).not.toBeInTheDocument();
     expect(screen.queryByText("推送")).not.toBeInTheDocument();
     expect(screen.queryByText("创建分支")).not.toBeInTheDocument();
+    expect(screen.queryByText("合并分支")).not.toBeInTheDocument();
   });
 
   it("pulls selected root path, shows loading then success toast and refreshes", async () => {

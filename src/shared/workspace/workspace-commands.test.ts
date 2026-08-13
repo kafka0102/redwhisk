@@ -11,6 +11,8 @@ import {
   fetchProjectRemotes,
   checkoutProjectBranch,
   createProjectBranch,
+  listProjectMergeBranches,
+  mergeProjectBranch,
   pullProjectWorktree,
   pushProjectWorktree,
   searchProjectWorktreeContent,
@@ -164,6 +166,37 @@ describe("workspace commands", () => {
         projectId: 1,
         workspacePath: "/tmp/root",
         name: "feature-x",
+      },
+    });
+  });
+
+  it("invokes merge branch list and merge commands with envelopes", async () => {
+    await expect(
+      listProjectMergeBranches({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+      }),
+    ).resolves.toEqual({ command: "list_project_merge_branches" });
+    await expect(
+      mergeProjectBranch({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        kind: "local",
+        name: "feature-a",
+      }),
+    ).resolves.toEqual({ command: "merge_project_branch" });
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "list_project_merge_branches",
+      {
+        input: { projectId: 1, workspacePath: "/tmp/root" },
+      },
+    );
+    expect(invokeCommandMock).toHaveBeenCalledWith("merge_project_branch", {
+      input: {
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        kind: "local",
+        name: "feature-a",
       },
     });
   });

@@ -789,6 +789,9 @@
       "closedSessionCannotResume": "已正常关闭的 Session 不能续接。",
       "missingLinkedIssue": "未关联 Issue 的 Session 不能续接。",
       "missingResumeSessionId": "当前 Session 缺少可续接的会话标识。",
+      "mergeAbortedDueToConflict": "合并存在冲突，已中止合并，工作区保持干净。",
+      "mergeRequiresCleanWorktree": "当前有未提交改动，请先处理后再合并。",
+      "mergeRequiresCurrentBranch": "当前不在任何分支上，无法合并。",
       "mustBeRunningToUpdateFollow": "只有运行中的 Agent Session 可以更新关注状态。",
       "tuiResumeNotSupported": "当前 Agent 不支持 TUI 会话续接。",
       "noActiveTerminal": "当前 Session 没有活跃终端。",
@@ -961,7 +964,8 @@
     "cannotDeleteWhileRunning": "该工作区仍有进行中的智能体任务，无法删除。",
     "createBranch": "创建分支",
     "creating": "正在创建分支…",
-    "createSuccess": "已创建并签出 {{branch}}"
+    "createSuccess": "已创建并签出 {{branch}}",
+    "mergeBranch": "合并分支"
   },
   "changesSync": {
     "syncChangesBehind": "同步更改 {{count}}↓",
@@ -1003,6 +1007,19 @@
     "dirtyConfirmAction": "切换",
     "checkingOut": "正在签出…",
     "checkoutSuccess": "已签出到 {{branch}}"
+  },
+  "changesMerge": {
+    "selectBranchTitle": "选择要合并的分支",
+    "localSection": "本地分支",
+    "remoteSection": "远程分支",
+    "refreshRemotes": "刷新远程分支",
+    "loadingBranches": "正在加载分支…",
+    "emptyLocal": "暂无本地分支",
+    "emptyRemote": "暂无远程分支",
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}",
+    "dirtyAlert": "当前有未提交改动，请先处理后再合并。",
+    "merging": "正在合并…",
+    "mergeSuccess": "已将 {{branch}} 合入 {{current}}"
   },
   "changesCreateBranch": {
     "title": "创建分支",

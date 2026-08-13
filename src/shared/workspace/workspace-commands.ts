@@ -350,6 +350,33 @@ export function createProjectBranch(
   });
 }
 
+export function listProjectMergeBranches(
+  input: ProjectWorkspaceInput,
+): Promise<ProjectCheckoutBranchesResponse> {
+  return invokeCommand<ProjectCheckoutBranchesResponse>(
+    "list_project_merge_branches",
+    { input },
+  );
+}
+
+export interface ProjectMergeBranchInput extends ProjectWorkspaceInput {
+  kind: CheckoutBranchKind;
+  /** 本地分支短名，或完整 remote-tracking 名（如 origin/feature/foo）。 */
+  name: string;
+}
+
+export interface ProjectMergeBranchResponse {
+  branch: string;
+}
+
+export function mergeProjectBranch(
+  input: ProjectMergeBranchInput,
+): Promise<ProjectMergeBranchResponse> {
+  return invokeCommand<ProjectMergeBranchResponse>("merge_project_branch", {
+    input,
+  });
+}
+
 export function pullProjectWorktree(
   input: ProjectWorkspaceInput,
 ): Promise<void> {

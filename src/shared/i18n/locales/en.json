@@ -789,6 +789,9 @@
       "closedSessionCannotResume": "A normally closed Session cannot be resumed.",
       "missingLinkedIssue": "Sessions without a linked Issue cannot be resumed.",
       "missingResumeSessionId": "The current Session is missing a resumable session identifier.",
+      "mergeAbortedDueToConflict": "Merge had conflicts and was aborted. The worktree is clean.",
+      "mergeRequiresCleanWorktree": "You have uncommitted changes. Resolve them before merging.",
+      "mergeRequiresCurrentBranch": "You are not on a branch, so merge is unavailable.",
       "mustBeRunningToUpdateFollow": "Only running Agent Sessions can update follow status.",
       "tuiResumeNotSupported": "This Agent does not support TUI session resume.",
       "noActiveTerminal": "The current Session has no active terminal.",
@@ -961,7 +964,8 @@
     "cannotDeleteWhileRunning": "This workspace still has a running agent turn and cannot be deleted.",
     "createBranch": "Create Branch",
     "creating": "Creating branch…",
-    "createSuccess": "Created and checked out {{branch}}"
+    "createSuccess": "Created and checked out {{branch}}",
+    "mergeBranch": "Merge Branch"
   },
   "changesSync": {
     "syncChangesBehind": "Sync Changes {{count}}↓",
@@ -1003,6 +1007,19 @@
     "dirtyConfirmAction": "Switch",
     "checkingOut": "Checking out…",
     "checkoutSuccess": "Checked out {{branch}}"
+  },
+  "changesMerge": {
+    "selectBranchTitle": "Select a branch to merge",
+    "localSection": "Local branches",
+    "remoteSection": "Remote branches",
+    "refreshRemotes": "Refresh remote branches",
+    "loadingBranches": "Loading branches…",
+    "emptyLocal": "No local branches",
+    "emptyRemote": "No remote branches",
+    "metaLine": "{{author}} · {{shortHash}} · {{message}}",
+    "dirtyAlert": "You have uncommitted changes. Resolve them before merging.",
+    "merging": "Merging…",
+    "mergeSuccess": "Merged {{branch}} into {{current}}"
   },
   "changesCreateBranch": {
     "title": "Create Branch",

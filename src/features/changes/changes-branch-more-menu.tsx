@@ -25,6 +25,7 @@ import {
 } from "../agents/agent-session-commands";
 import { CheckoutBranchDialog } from "./checkout-branch-dialog";
 import { CreateBranchDialog } from "./create-branch-dialog";
+import { MergeBranchDialog } from "./merge-branch-dialog";
 
 export interface ChangesBranchMoreMenuProps {
   projectId: number;
@@ -37,7 +38,7 @@ type BusyAction = "pull" | "push" | "delete" | null;
 
 /**
  * 变更 Activity 分支栏右侧「更多」菜单。
- * 主 checkout：签出 / 拉取 / 推送 / 创建分支；linked worktree：删除。
+ * 主 checkout：签出 / 拉取 / 推送 / 创建分支 / 合并分支；linked worktree：删除。
  */
 export function ChangesBranchMoreMenu({
   projectId,
@@ -50,6 +51,7 @@ export function ChangesBranchMoreMenu({
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
+  const [mergeBranchOpen, setMergeBranchOpen] = useState(false);
 
   const isBusy = busyAction !== null;
   const isProjectRoot = selectedRoot?.isProjectRoot === true;
@@ -212,6 +214,15 @@ export function ChangesBranchMoreMenu({
               >
                 {t("changesBranchMenu.createBranch")}
               </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isBusy}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setMergeBranchOpen(true);
+                }}
+              >
+                {t("changesBranchMenu.mergeBranch")}
+              </DropdownMenuItem>
             </>
           ) : selectedRoot ? (
             <DropdownMenuItem
@@ -245,6 +256,15 @@ export function ChangesBranchMoreMenu({
         <CreateBranchDialog
           open={createBranchOpen}
           onOpenChange={setCreateBranchOpen}
+          projectId={projectId}
+          workspacePath={workspacePath}
+          onSuccess={onSuccess}
+        />
+      ) : null}
+      {workspacePath ? (
+        <MergeBranchDialog
+          open={mergeBranchOpen}
+          onOpenChange={setMergeBranchOpen}
           projectId={projectId}
           workspacePath={workspacePath}
           onSuccess={onSuccess}

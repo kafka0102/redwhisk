@@ -59,12 +59,12 @@ pub fn fetch_all_prune(repo_path: impl AsRef<Path>) -> Result<(), GitCommandErro
     command::run_git(repo_path.as_ref(), &["fetch", "--all", "--prune"]).map(|_| ())
 }
 
-fn current_branch_name(repo_path: &Path) -> Result<String, GitCommandError> {
+pub(super) fn current_branch_name(repo_path: &Path) -> Result<String, GitCommandError> {
     let name = command::run_git(repo_path, &["branch", "--show-current"])?;
     Ok(name)
 }
 
-fn has_uncommitted_changes(repo_path: &Path) -> Result<bool, GitCommandError> {
+pub(super) fn has_uncommitted_changes(repo_path: &Path) -> Result<bool, GitCommandError> {
     let status = command::run_git(repo_path, &["status", "--porcelain=v1"])?;
     Ok(!status.trim().is_empty())
 }
@@ -86,7 +86,7 @@ fn other_worktree_branches(
     Ok(branches)
 }
 
-fn list_ref_entries(
+pub(super) fn list_ref_entries(
     repo_path: &Path,
     pattern: &str,
 ) -> Result<Vec<CheckoutBranchEntry>, GitCommandError> {
@@ -126,7 +126,7 @@ fn list_ref_entries(
     Ok(entries)
 }
 
-fn is_remote_head_ref(name: &str) -> bool {
+pub(super) fn is_remote_head_ref(name: &str) -> bool {
     // 排除 origin/HEAD、裸 HEAD，以及 for-each-ref 对符号 ref 给出的无斜杠名（如 origin）。
     name == "HEAD" || name.ends_with("/HEAD") || !name.contains('/')
 }

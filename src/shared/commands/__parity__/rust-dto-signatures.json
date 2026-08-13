@@ -834,6 +834,20 @@
         "branch": "required"
       }
     },
+    "ProjectMergeBranchInput": {
+      "fields": {
+        "kind": "required",
+        "name": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "workspacePath": "optional"
+      }
+    },
+    "ProjectMergeBranchResponse": {
+      "fields": {
+        "branch": "required"
+      }
+    },
     "ProjectGitBranchListInput": {
       "fields": {
         "projectId": "required"
