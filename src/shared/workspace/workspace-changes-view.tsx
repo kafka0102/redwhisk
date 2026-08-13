@@ -24,6 +24,10 @@ import {
   getCommitFileStatusClassName,
   renderCommitFileStatusIcon,
 } from "./workspace-commit-file-status";
+import {
+  WorkspacePathContextMenu,
+  type WorkspacePathContextMenuTarget,
+} from "./workspace-path-context-menu";
 
 interface CommitContextMenuState {
   commit: WorkspaceCommitRecord;
@@ -50,6 +54,8 @@ interface CommittedChangesTimelineProps {
   /** 可解析的 github.com remote；有值时显示「在 GitHub 上打开」，与 isPushed 无关。 */
   githubRemote?: WorkspaceGithubRemote | null;
   onToggleCommit: (hash: string) => void;
+  // worktree / 代码根的绝对路径，用于已提交文件行复制绝对路径；为空时隐藏该项。
+  workspacePath?: string | null;
 }
 
 export function CommittedChangesTimeline({
@@ -63,6 +69,7 @@ export function CommittedChangesTimeline({
   onOpenCommitChanges,
   githubRemote = null,
   onToggleCommit,
+  workspacePath,
 }: CommittedChangesTimelineProps) {
   const { messages } = useI18n();
   const [menu, setMenu] = useState<CommitContextMenuState | null>(null);
@@ -220,6 +227,7 @@ export function CommittedChangesTimeline({
                       file={file}
                       key={`${commit.hash}:${file.status}:${file.filePath}:${file.oldPath ?? ""}`}
                       onOpenCommittedChangedFile={onOpenCommittedChangedFile}
+                      workspacePath={workspacePath}
                     />
                   ))}
                 </ul>
@@ -303,14 +311,18 @@ interface CommittedFileRowProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
+  workspacePath?: string | null;
 }
 
 function CommittedFileRow({
   commitHash,
   file,
   onOpenCommittedChangedFile,
+  workspacePath,
 }: CommittedFileRowProps) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const [pathMenu, setPathMenu] =
+    useState<WorkspacePathContextMenuTarget | null>(null);
   const parentPath = getParentPath(file.filePath);
   return (
     <li>
@@ -320,6 +332,15 @@ function CommittedFileRow({
         type="button"
         onBlur={() => setIsTooltipVisible(false)}
         onClick={() => onOpenCommittedChangedFile(commitHash, file)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setPathMenu({
+            displayName: file.fileName,
+            relativePath: file.filePath,
+            x: event.clientX,
+            y: event.clientY,
+          });
+        }}
         onFocus={() => setIsTooltipVisible(true)}
         onMouseEnter={() => setIsTooltipVisible(true)}
         onMouseLeave={() => setIsTooltipVisible(false)}
@@ -342,6 +363,11 @@ function CommittedFileRow({
           </span>
         ) : null}
       </button>
+      <WorkspacePathContextMenu
+        target={pathMenu}
+        workspacePath={workspacePath}
+        onClose={() => setPathMenu(null)}
+      />
     </li>
   );
 }
@@ -349,49 +375,69 @@ function CommittedFileRow({
 interface ChangedFileRowProps {
   file: WorkspaceChangedFile;
   onOpenChangedFile: (file: WorkspaceChangedFile) => void;
+  workspacePath?: string | null;
 }
 
 export function ChangedFileRow({
   file,
   onOpenChangedFile,
+  workspacePath,
 }: ChangedFileRowProps) {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const [pathMenu, setPathMenu] =
+    useState<WorkspacePathContextMenuTarget | null>(null);
   const kindStatus = getChangeKindStatusLabel(file.kind);
   const kindStatusClassName = getChangeKindStatusClassName(file.kind);
 
   return (
-    <button
-      className={`session-change-row${file.kind === "deleted" ? " session-change-row--deleted" : ""}`}
-      type="button"
-      onBlur={() => setIsTooltipVisible(false)}
-      onClick={() => onOpenChangedFile(file)}
-      onFocus={() => setIsTooltipVisible(true)}
-      onMouseEnter={() => setIsTooltipVisible(true)}
-      onMouseLeave={() => setIsTooltipVisible(false)}
-    >
-      <span className="session-change-row__name">
-        <span>{file.fileName}</span>
-        <span className="session-change-row__path">
-          {getParentPath(file.filePath)}
+    <>
+      <button
+        className={`session-change-row${file.kind === "deleted" ? " session-change-row--deleted" : ""}`}
+        type="button"
+        onBlur={() => setIsTooltipVisible(false)}
+        onClick={() => onOpenChangedFile(file)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setPathMenu({
+            displayName: file.fileName,
+            relativePath: file.filePath,
+            x: event.clientX,
+            y: event.clientY,
+          });
+        }}
+        onFocus={() => setIsTooltipVisible(true)}
+        onMouseEnter={() => setIsTooltipVisible(true)}
+        onMouseLeave={() => setIsTooltipVisible(false)}
+      >
+        <span className="session-change-row__name">
+          <span>{file.fileName}</span>
+          <span className="session-change-row__path">
+            {getParentPath(file.filePath)}
+          </span>
         </span>
-      </span>
-      <span className="session-change-row__actions">
-        <span className="session-change-row__stats">
-          <span className="session-change-row__added">{`+${file.additions}`}</span>
-          <span className="session-change-row__deleted">{`-${file.deletions}`}</span>
+        <span className="session-change-row__actions">
+          <span className="session-change-row__stats">
+            <span className="session-change-row__added">{`+${file.additions}`}</span>
+            <span className="session-change-row__deleted">{`-${file.deletions}`}</span>
+          </span>
+          <span
+            className={`session-change-row__status session-commit-file__status ${kindStatusClassName}`}
+          >
+            {kindStatus}
+          </span>
         </span>
-        <span
-          className={`session-change-row__status session-commit-file__status ${kindStatusClassName}`}
-        >
-          {kindStatus}
-        </span>
-      </span>
-      {isTooltipVisible ? (
-        <span className="session-change-row__tooltip" role="tooltip">
-          {file.filePath}
-        </span>
-      ) : null}
-    </button>
+        {isTooltipVisible ? (
+          <span className="session-change-row__tooltip" role="tooltip">
+            {file.filePath}
+          </span>
+        ) : null}
+      </button>
+      <WorkspacePathContextMenu
+        target={pathMenu}
+        workspacePath={workspacePath}
+        onClose={() => setPathMenu(null)}
+      />
+    </>
   );
 }
 

@@ -6,8 +6,10 @@ import {
   WholeWord,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useRef,
+  useState,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
@@ -23,6 +25,10 @@ import {
   type WorkspaceContentSearchMatch,
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
+import {
+  WorkspacePathContextMenu,
+  type WorkspacePathContextMenuTarget,
+} from "../../shared/workspace/workspace-path-context-menu";
 import { CodeSearchFilterTags } from "./code-search-filter-tags";
 import type { CodeContentSearchState } from "./code-search-state";
 
@@ -58,6 +64,20 @@ export function CodeSearchPanel({
   const { messages, t } = useI18n();
   const copy = messages.agentsFeature;
   const queryInputRef = useRef<HTMLInputElement | null>(null);
+  const [pathMenu, setPathMenu] =
+    useState<WorkspacePathContextMenuTarget | null>(null);
+
+  const handleFileGroupContextMenu = useCallback(
+    (group: WorkspaceContentSearchFileGroup, x: number, y: number) => {
+      setPathMenu({
+        displayName: group.fileName,
+        relativePath: group.filePath,
+        x,
+        y,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (queryFocusRequest <= 0) {
@@ -235,8 +255,14 @@ export function CodeSearchPanel({
           copy={copy}
           onToggleFile={toggleFile}
           onOpenMatch={onOpenMatch}
+          onFileGroupContextMenu={handleFileGroupContextMenu}
         />
       </div>
+      <WorkspacePathContextMenu
+        target={pathMenu}
+        workspacePath={workspacePath}
+        onClose={() => setPathMenu(null)}
+      />
     </div>
   );
 }
@@ -246,11 +272,17 @@ function SearchResultsBody({
   copy,
   onToggleFile,
   onOpenMatch,
+  onFileGroupContextMenu,
 }: {
   state: CodeContentSearchState;
   copy: ReturnType<typeof useI18n>["messages"]["agentsFeature"];
   onToggleFile: (filePath: string) => void;
   onOpenMatch: CodeSearchPanelProps["onOpenMatch"];
+  onFileGroupContextMenu: (
+    group: WorkspaceContentSearchFileGroup,
+    x: number,
+    y: number,
+  ) => void;
 }) {
   if (state.isSearching) {
     return (
@@ -306,6 +338,7 @@ function SearchResultsBody({
             copy={copy}
             onToggle={() => onToggleFile(group.filePath)}
             onOpenMatch={onOpenMatch}
+            onContextMenu={onFileGroupContextMenu}
           />
         ))}
       </ul>
@@ -319,12 +352,18 @@ function SearchFileGroup({
   copy,
   onToggle,
   onOpenMatch,
+  onContextMenu,
 }: {
   group: WorkspaceContentSearchFileGroup;
   collapsed: boolean;
   copy: ReturnType<typeof useI18n>["messages"]["agentsFeature"];
   onToggle: () => void;
   onOpenMatch: CodeSearchPanelProps["onOpenMatch"];
+  onContextMenu: (
+    group: WorkspaceContentSearchFileGroup,
+    x: number,
+    y: number,
+  ) => void;
 }) {
   return (
     <li className="code-workspace__search-file-group">
@@ -334,6 +373,10 @@ function SearchFileGroup({
         aria-expanded={!collapsed}
         aria-label={copy.contentSearchToggleFile(group.fileName)}
         onClick={onToggle}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenu(group, event.clientX, event.clientY);
+        }}
       >
         {collapsed ? (
           <ChevronRight

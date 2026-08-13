@@ -1,9 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
+import { toast } from "../../shared/toast";
 import type { WorkspaceFileTreeNode } from "../../shared/workspace/workspace-commands";
 import { searchProjectWorktreeContent } from "../../shared/workspace/workspace-commands";
 import { CodeSearchPanel } from "./code-search-panel";
@@ -16,6 +23,21 @@ import "../../shared/styles/code-workspace.css";
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   searchProjectWorktreeContent: vi.fn(),
 }));
+
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    loading: vi.fn(),
+    message: vi.fn(),
+    dismiss: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
+const toastSuccessMock = vi.mocked(toast.success);
 
 const SAMPLE_TREE: WorkspaceFileTreeNode[] = [
   {
@@ -323,5 +345,124 @@ describe("CodeSearchPanel", () => {
       "true",
     );
     expect(searchProjectWorktreeContent).not.toHaveBeenCalled();
+  });
+});
+
+const SEARCH_FILE_GROUP = {
+  filePath: "src/app.ts",
+  fileName: "app.ts",
+  matchCount: 1,
+  matches: [{ lineNumber: 3, lineText: "  const foo = 1;" }],
+};
+
+function renderSearchResultsPanel(
+  workspacePath: string | null = "/tmp/root",
+): void {
+  render(
+    <I18nProvider initialLocale="en">
+      <CodeSearchPanel
+        state={{
+          ...DEFAULT_CODE_CONTENT_SEARCH_STATE,
+          results: {
+            fileCount: 1,
+            matchCount: 1,
+            truncated: false,
+            files: [SEARCH_FILE_GROUP],
+          },
+        }}
+        onChange={() => {}}
+        projectId={1}
+        workspacePath={workspacePath}
+        fileTree={SAMPLE_TREE}
+        onOpenMatch={() => {}}
+      />
+    </I18nProvider>,
+  );
+}
+
+describe("CodeSearchPanel workspace path context menu", () => {
+  const writeTextMock = vi.fn();
+
+  beforeEach(() => {
+    toastSuccessMock.mockReset();
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+  });
+
+  it("copies file name, relative path, and absolute path from the file group header", async () => {
+    renderSearchResultsPanel();
+    const header = screen.getByRole("button", {
+      name: "Toggle results for app.ts",
+    });
+    fireEvent.contextMenu(header, { clientX: 40, clientY: 80 });
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+    ]);
+
+    fireEvent.click(items[0]);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+
+    fireEvent.contextMenu(header, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+
+    fireEvent.contextMenu(header, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("/tmp/root/src/app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+  });
+
+  it("hides copy absolute path when workspacePath is missing", async () => {
+    renderSearchResultsPanel(null);
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "Toggle results for app.ts" }),
+      { clientX: 40, clientY: 80 },
+    );
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+    ]);
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy absolute path" }),
+    ).toBeNull();
+  });
+
+  it("does not open the path menu or prevent default on a match row", () => {
+    renderSearchResultsPanel();
+    const matchRow = screen.getByRole("button", {
+      name: "Open app.ts at line 3",
+    });
+    const event = createEvent.contextMenu(matchRow, {
+      clientX: 40,
+      clientY: 80,
+    });
+    fireEvent(matchRow, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy file name" }),
+    ).toBeNull();
   });
 });

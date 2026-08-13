@@ -229,6 +229,7 @@ export function WorkspaceChangesPanels({
                     key={file.filePath}
                     file={file}
                     onOpenChangedFile={onOpenChangedFile}
+                    workspacePath={workspaceInput?.workspacePath}
                   />
                 ))}
               </div>
@@ -263,6 +264,7 @@ export function WorkspaceChangesPanels({
               onOpenCommitChanges={onOpenCommitChanges}
               githubRemote={githubRemote}
               onToggleCommit={handleToggleCommit}
+              workspacePath={workspaceInput?.workspacePath}
             />
             {isLoadingMoreCommitHistory ? (
               <div

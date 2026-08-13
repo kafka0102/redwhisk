@@ -5,8 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n/i18n";
 import { toast } from "../toast";
 import { openCommitOnGithub } from "./open-commit-on-github";
-import { CommittedChangesTimeline } from "./workspace-changes-view";
-import type { WorkspaceCommitRecord } from "./workspace-commands";
+import {
+  ChangedFileRow,
+  CommittedChangesTimeline,
+} from "./workspace-changes-view";
+import type {
+  WorkspaceChangedFile,
+  WorkspaceCommitChangedFile,
+  WorkspaceCommitRecord,
+} from "./workspace-commands";
 
 vi.mock("../toast", () => ({
   toast: {
@@ -430,5 +437,283 @@ describe("CommittedChangesTimeline commit context menu", () => {
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith("Could not reach GitHub");
     });
+  });
+});
+
+function makeChangedFile(
+  overrides: Partial<WorkspaceChangedFile> = {},
+): WorkspaceChangedFile {
+  return {
+    filePath: overrides.filePath ?? "src/app.ts",
+    oldPath: overrides.oldPath ?? null,
+    fileName: overrides.fileName ?? "app.ts",
+    kind: overrides.kind ?? "modified",
+    status: overrides.status ?? "M",
+    additions: overrides.additions ?? 1,
+    deletions: overrides.deletions ?? 0,
+    isBinary: overrides.isBinary ?? false,
+    contentHash: overrides.contentHash ?? "hash",
+    metadataSignature: overrides.metadataSignature ?? "sig",
+  };
+}
+
+describe("ChangedFileRow workspace path context menu", () => {
+  const writeTextMock = vi.fn();
+
+  beforeEach(() => {
+    toastSuccessMock.mockReset();
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+  });
+
+  function renderChangedRow(
+    file: WorkspaceChangedFile = makeChangedFile(),
+    workspacePath: string | null = "/repo",
+  ): HTMLElement {
+    const view = render(
+      <ChangedFileRow
+        file={file}
+        onOpenChangedFile={noop}
+        workspacePath={workspacePath}
+      />,
+      { wrapper },
+    );
+    return view.getByRole("button");
+  }
+
+  it("copies file name, relative path, and absolute path from an uncommitted file row", async () => {
+    const row = renderChangedRow();
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+    ]);
+
+    fireEvent.click(items[0]);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("/repo/src/app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+  });
+
+  it("copies the new filePath for a renamed file, not oldPath", async () => {
+    const row = renderChangedRow(
+      makeChangedFile({
+        fileName: "next.ts",
+        filePath: "src/next.ts",
+        oldPath: "src/old.ts",
+        kind: "renamed",
+      }),
+    );
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/next.ts");
+    });
+    expect(writeTextMock).not.toHaveBeenCalledWith("src/old.ts");
+  });
+
+  it("still copies the recorded filePath for a deleted file", async () => {
+    const row = renderChangedRow(
+      makeChangedFile({
+        fileName: "gone.ts",
+        filePath: "src/gone.ts",
+        kind: "deleted",
+      }),
+    );
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/gone.ts");
+    });
+  });
+
+  it("hides copy absolute path when workspacePath is missing", async () => {
+    const row = renderChangedRow(makeChangedFile(), null);
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+    ]);
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy absolute path" }),
+    ).toBeNull();
+  });
+});
+
+function makeCommittedFile(
+  overrides: Partial<WorkspaceCommitChangedFile> = {},
+): WorkspaceCommitChangedFile {
+  return {
+    filePath: overrides.filePath ?? "src/app.ts",
+    oldPath: overrides.oldPath ?? null,
+    fileName: overrides.fileName ?? "app.ts",
+    kind: overrides.kind ?? "modified",
+    status: overrides.status ?? "M",
+  };
+}
+
+describe("CommittedFileRow workspace path context menu", () => {
+  const writeTextMock = vi.fn();
+
+  beforeEach(() => {
+    toastSuccessMock.mockReset();
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: writeTextMock },
+    });
+  });
+
+  function renderExpandedTimeline(
+    files: WorkspaceCommitChangedFile[] = [makeCommittedFile()],
+    workspacePath: string | null = "/repo",
+  ) {
+    return render(
+      <CommittedChangesTimeline
+        {...baseProps}
+        commits={[
+          makeCommit({
+            hash: "abcdef1234567890",
+            shortHash: "abcdef1",
+            message: "fix: timeline menu",
+            files,
+          }),
+        ]}
+        expandedCommitHashes={new Set(["abcdef1234567890"])}
+        isWorktree={false}
+        workspacePath={workspacePath}
+      />,
+      { wrapper },
+    );
+  }
+
+  it("copies file name, relative path, and absolute path from a committed file row", async () => {
+    renderExpandedTimeline();
+    const fileRow = screen.getByRole("button", { name: "app.ts src M" });
+    fireEvent.contextMenu(fileRow, { clientX: 40, clientY: 80 });
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+    ]);
+    expect(screen.queryByRole("menuitem", { name: "Open Changes" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy Commit ID" }),
+    ).toBeNull();
+
+    fireEvent.click(items[0]);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("app.ts");
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied to clipboard");
+    });
+
+    fireEvent.contextMenu(fileRow, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/app.ts");
+    });
+
+    fireEvent.contextMenu(fileRow, { clientX: 40, clientY: 80 });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("/repo/src/app.ts");
+    });
+  });
+
+  it("copies the new filePath for a renamed committed file", async () => {
+    renderExpandedTimeline([
+      makeCommittedFile({
+        fileName: "next.ts",
+        filePath: "src/next.ts",
+        oldPath: "src/old.ts",
+        kind: "renamed",
+        status: "R",
+      }),
+    ]);
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "next.ts src R" }),
+      { clientX: 40, clientY: 80 },
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Copy relative path" }),
+    );
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("src/next.ts");
+    });
+    expect(writeTextMock).not.toHaveBeenCalledWith("src/old.ts");
+  });
+
+  it("hides copy absolute path when workspacePath is missing", async () => {
+    renderExpandedTimeline([makeCommittedFile()], null);
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: "app.ts src M" }),
+      {
+        clientX: 40,
+        clientY: 80,
+      },
+    );
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+    ]);
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy absolute path" }),
+    ).toBeNull();
+  });
+
+  it("still opens the commit context menu on the commit message row", async () => {
+    renderExpandedTimeline();
+    fireEvent.contextMenu(
+      screen.getByRole("button", { name: /fix: timeline menu/i }),
+      { clientX: 40, clientY: 80 },
+    );
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Open Changes",
+      "Copy Commit ID",
+      "Copy Commit Message",
+    ]);
   });
 });
