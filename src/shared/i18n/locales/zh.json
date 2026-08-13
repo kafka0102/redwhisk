@@ -522,6 +522,7 @@
     "files": "文件",
     "uncommitted": "未提交",
     "uncommittedChanges": "未提交变更",
+    "uncommittedChangesWithCount": "未提交变更 ({{count}})",
     "committed": "已提交",
     "committedChanges": "已提交变更",
     "loadingChanges": "正在加载变更...",

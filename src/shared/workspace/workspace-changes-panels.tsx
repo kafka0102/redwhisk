@@ -196,7 +196,13 @@ export function WorkspaceChangesPanels({
           ) : (
             <ChevronRight aria-hidden="true" size={13} strokeWidth={2} />
           )}
-          <span>{messages.agentsFeature.uncommittedChanges}</span>
+          <span>
+            {changesErrorMessage
+              ? messages.agentsFeature.uncommittedChanges
+              : messages.agentsFeature.uncommittedChangesWithCount(
+                  changes.length,
+                )}
+          </span>
         </button>
         {isUncommittedExpanded ? (
           <div className="code-workspace__panel-body">

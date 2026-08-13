@@ -487,6 +487,7 @@ export interface I18nMessages {
     files: string;
     uncommitted: string;
     uncommittedChanges: string;
+    uncommittedChangesWithCount: (count: number) => string;
     committed: string;
     committedChanges: string;
     loadingChanges: string;

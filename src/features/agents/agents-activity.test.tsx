@@ -6421,7 +6421,7 @@ describe("AgentsActivity", () => {
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
     // Session 变更页改为两折叠面板：未提交默认展开、已提交默认收起，无 Tabs、无刷新按钮。
     const uncommittedHeader = within(panel).getByRole("button", {
-      name: "Uncommitted changes",
+      name: "Uncommitted changes (6)",
     });
     expect(uncommittedHeader).toHaveAttribute("aria-expanded", "true");
     expect(
@@ -6435,7 +6435,7 @@ describe("AgentsActivity", () => {
       screen.getByRole("heading", { name: "#20 Existing issue" }),
     );
     expect(
-      within(panel).getByRole("button", { name: "Uncommitted changes" }),
+      within(panel).getByRole("button", { name: "Uncommitted changes (6)" }),
     ).toBeInTheDocument();
 
     await user.hover(

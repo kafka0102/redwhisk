@@ -522,6 +522,7 @@
     "files": "Files",
     "uncommitted": "Uncommitted",
     "uncommittedChanges": "Uncommitted changes",
+    "uncommittedChangesWithCount": "Uncommitted changes ({{count}})",
     "committed": "Committed",
     "committedChanges": "Committed changes",
     "loadingChanges": "Loading changes...",

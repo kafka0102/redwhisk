@@ -108,11 +108,6 @@
   flex-direction: column;
 }
 
-.code-workspace__changes-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
 .code-workspace__panel-empty {
   padding: 12px;
   color: var(--color-text-muted);

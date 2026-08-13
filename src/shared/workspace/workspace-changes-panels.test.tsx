@@ -4,10 +4,28 @@ import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
 import { WorkspaceChangesPanels } from "./workspace-changes-panels";
-import type { WorkspaceCommitRecord } from "./workspace-commands";
+import type {
+  WorkspaceChangedFile,
+  WorkspaceCommitRecord,
+} from "./workspace-commands";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
+}
+
+function makeChangedFile(fileName: string): WorkspaceChangedFile {
+  return {
+    filePath: fileName,
+    oldPath: null,
+    fileName,
+    kind: "modified",
+    status: "M",
+    additions: 1,
+    deletions: 0,
+    isBinary: false,
+    contentHash: "h",
+    metadataSignature: "m",
+  };
 }
 
 function makeCommit(hash: string): WorkspaceCommitRecord {
@@ -39,6 +57,56 @@ const baseProps = {
   isCommittedExpanded: true,
   onToggleCommittedExpanded: () => {},
 };
+
+describe("WorkspaceChangesPanels uncommitted title count", () => {
+  it("shows the current file count on a successful list, including zero", () => {
+    const { rerender } = render(<WorkspaceChangesPanels {...baseProps} />, {
+      wrapper,
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Uncommitted changes (0)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Committed changes" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <WorkspaceChangesPanels
+          {...baseProps}
+          changes={[makeChangedFile("a.ts"), makeChangedFile("b.ts")]}
+          isChangesLoading={true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Uncommitted changes (2)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Committed changes" }),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the count when the uncommitted list fails", () => {
+    render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        changes={[makeChangedFile("a.ts")]}
+        changesErrorMessage="failed to load changes"
+      />,
+      { wrapper },
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Uncommitted changes" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Uncommitted changes \(\d+\)/ }),
+    ).not.toBeInTheDocument();
+  });
+});
 
 describe("WorkspaceChangesPanels commit history infinite scroll", () => {
   it("calls onLoadMoreCommitHistory when scrolled near the bottom while expanded", () => {
