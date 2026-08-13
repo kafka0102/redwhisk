@@ -5,19 +5,20 @@ use super::command::{self, GitCommandError};
 /// 有 upstream 且相对远端分叉/无法快进时，`push` 返回的稳定 reason 文案（service 映射用）。
 pub const PUSH_REQUIRES_MANUAL_SYNC: &str = "pushRequiresManualSync";
 
-/// 在指定仓库路径执行 `git pull`。
+/// 在指定仓库路径拉取主上游。
 ///
-/// 有 `@{upstream}` 时显式 `git pull <remote> <branch>`，只针对主上游，
-/// 避免 `pull.rebase=true` 且配置了多个 `branch.*.merge` 时出现
-/// `fatal: Cannot rebase onto multiple branches`。
+/// 有 `@{upstream}` 时：只 fetch 主上游 tracking ref，再对单个
+/// `<remote>/<branch>` rebase/merge。不调用 `git pull`。
+/// `git pull` 会读取 FETCH_HEAD 里全部 for-merge；`pull.rebase=true`
+/// 且存在多个 `branch.*.merge`，或变更页后台 `fetch --all` 与拉取竞态时，
+/// 会 `fatal: Cannot rebase onto multiple branches`。
 pub fn pull(repo_path: impl AsRef<Path>) -> Result<(), GitCommandError> {
     let repo_path = repo_path.as_ref();
     match resolve_primary_upstream(repo_path)? {
-        Some(upstream) => command::run_git(
-            repo_path,
-            &["pull", &upstream.remote, &upstream.branch],
-        )
-        .map(|_| ()),
+        Some(upstream) => {
+            fetch_primary_upstream(repo_path, &upstream)?;
+            integrate_primary_upstream(repo_path, &upstream)
+        }
         None => command::run_git(repo_path, &["pull"]).map(|_| ()),
     }
 }
@@ -25,7 +26,7 @@ pub fn pull(repo_path: impl AsRef<Path>) -> Result<(), GitCommandError> {
 /// 在指定仓库路径安全推送当前分支。
 ///
 /// - 无 `@{upstream}`：`git push -u origin HEAD`
-/// - 有 upstream：先 fetch 上游远程；可快进 behind 则 `pull --ff-only <remote> <branch>` 再
+/// - 有 upstream：先 fetch 上游远程；可快进 behind 则 `merge --ff-only <remote>/<branch>` 再
 ///   `push <remote> HEAD:<branch>`；ahead-only 直接 push 显式 refspec；
 ///   分叉/无法快进返回 `PUSH_REQUIRES_MANUAL_SYNC`，不进入 merge/rebase。
 ///
@@ -45,11 +46,8 @@ pub fn push(repo_path: impl AsRef<Path>) -> Result<(), GitCommandError> {
             command::run_git(repo_path, &["push", &upstream.remote, &push_refspec]).map(|_| ())
         }
         UpstreamRelation::BehindOnly => {
-            command::run_git(
-                repo_path,
-                &["pull", "--ff-only", &upstream.remote, &upstream.branch],
-            )
-            .map(|_| ())?;
+            let onto = tracking_ref(&upstream);
+            command::run_git(repo_path, &["merge", "--ff-only", &onto]).map(|_| ())?;
             command::run_git(repo_path, &["push", &upstream.remote, &push_refspec]).map(|_| ())
         }
         UpstreamRelation::Diverged => Err(GitCommandError::Failed {
@@ -88,6 +86,69 @@ fn upstream_remote_name(repo_path: &Path) -> Result<String, GitCommandError> {
     Ok(remote.to_string())
 }
 
+fn tracking_ref(upstream: &PrimaryUpstream) -> String {
+    format!("{}/{}", upstream.remote, upstream.branch)
+}
+
+fn fetch_primary_upstream(
+    repo_path: &Path,
+    upstream: &PrimaryUpstream,
+) -> Result<(), GitCommandError> {
+    let refspec = format!(
+        "+refs/heads/{}:refs/remotes/{}/{}",
+        upstream.branch, upstream.remote, upstream.branch
+    );
+    command::run_git(repo_path, &["fetch", &upstream.remote, &refspec]).map(|_| ())
+}
+
+fn integrate_primary_upstream(
+    repo_path: &Path,
+    upstream: &PrimaryUpstream,
+) -> Result<(), GitCommandError> {
+    let onto = tracking_ref(upstream);
+    if rebase_configured(repo_path)? {
+        command::run_git(repo_path, &["rebase", &onto]).map(|_| ())
+    } else {
+        command::run_git(repo_path, &["merge", &onto]).map(|_| ())
+    }
+}
+
+fn rebase_configured(repo_path: &Path) -> Result<bool, GitCommandError> {
+    let branch = command::run_git(repo_path, &["branch", "--show-current"])?;
+    let branch = branch.trim();
+    if !branch.is_empty() {
+        if let Some(value) = git_config_get(repo_path, &format!("branch.{branch}.rebase"))? {
+            return Ok(is_enabled_rebase_value(&value));
+        }
+    }
+    if let Some(value) = git_config_get(repo_path, "pull.rebase")? {
+        return Ok(is_enabled_rebase_value(&value));
+    }
+    Ok(false)
+}
+
+fn git_config_get(repo_path: &Path, key: &str) -> Result<Option<String>, GitCommandError> {
+    let output = command::run_git_raw(repo_path, &["config", "--get", key])?;
+    if output.status.success() {
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok((!value.is_empty()).then_some(value));
+    }
+    if output.status.code() == Some(1) {
+        return Ok(None);
+    }
+    Err(GitCommandError::Failed {
+        command: format!("git config --get {key}"),
+        message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+    })
+}
+
+fn is_enabled_rebase_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "true" | "1" | "yes" | "on" | "merges" | "interactive" | "i"
+    )
+}
+
 fn classify_upstream_relation(repo_path: &Path) -> Result<UpstreamRelation, GitCommandError> {
     let head_is_ancestor_of_upstream = is_ancestor(repo_path, "HEAD", "@{upstream}")?;
     let upstream_is_ancestor_of_head = is_ancestor(repo_path, "@{upstream}", "HEAD")?;
@@ -108,7 +169,12 @@ fn is_ancestor(
 ) -> Result<bool, GitCommandError> {
     let output = command::run_git_raw(
         repo_path,
-        &["merge-base", "--is-ancestor", maybe_ancestor, maybe_descendant],
+        &[
+            "merge-base",
+            "--is-ancestor",
+            maybe_ancestor,
+            maybe_descendant,
+        ],
     )?;
     Ok(output.status.success())
 }

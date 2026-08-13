@@ -181,7 +181,26 @@
         git(&env.other_clone, &["commit", "-m", "remote ahead"]);
         git(&env.other_clone, &["push", "origin", "main"]);
 
+        // 模拟变更页后台 `fetch --all`：FETCH_HEAD 留下 main + develop 两条 for-merge。
+        git(&env.local, &["fetch", "origin"]);
+        let fetch_head = fs::read_to_string(env.local.join(".git/FETCH_HEAD")).expect("FETCH_HEAD");
+        let for_merge = fetch_head
+            .lines()
+            .filter(|line| !line.contains("not-for-merge"))
+            .count();
+        assert!(
+            for_merge >= 2,
+            "precondition: leftover FETCH_HEAD must have multiple for-merge lines:\n{fetch_head}"
+        );
+
         pull(&env.local).expect("pull should target primary upstream only");
+
+        let parents = git_output(&env.local, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+        assert_eq!(
+            parents.split_whitespace().count(),
+            2,
+            "pull.rebase=true should rebase onto primary upstream, not create a merge commit: {parents}"
+        );
 
         assert!(
             env.local.join("remote.txt").exists(),
