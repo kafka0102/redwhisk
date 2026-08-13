@@ -305,7 +305,6 @@ pub struct ProbeGithubCommitResponse {
     pub commit_url: Option<String>,
 }
 
-
 /// 签出弹窗中的单条分支（本地或远程 tracking）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -375,7 +374,6 @@ pub struct ProjectCreateBranchResponse {
     pub branch: String,
 }
 
-
 /// `merge_project_branch` 入参：把指定分支合入当前分支。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -394,4 +392,6 @@ pub struct ProjectMergeBranchInput {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMergeBranchResponse {
     pub branch: String,
+    /// 当前分支已包含对方全部提交，HEAD 未变。
+    pub already_up_to_date: bool,
 }

@@ -201,6 +201,25 @@ describe("workspace commands", () => {
     });
   });
 
+  it("invokes merge_project_branch with remote tracking name", async () => {
+    await expect(
+      mergeProjectBranch({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        kind: "remote",
+        name: "origin/foo",
+      }),
+    ).resolves.toEqual({ command: "merge_project_branch" });
+    expect(invokeCommandMock).toHaveBeenCalledWith("merge_project_branch", {
+      input: {
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        kind: "remote",
+        name: "origin/foo",
+      },
+    });
+  });
+
   it("invokes write_project_worktree_file with path and content envelope", async () => {
     await expect(
       writeProjectWorktreeFile({

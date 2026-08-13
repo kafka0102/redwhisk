@@ -1019,6 +1019,7 @@
     "metaLine": "{{author}} · {{shortHash}} · {{message}}",
     "dirtyAlert": "当前有未提交改动，请先处理后再合并。",
     "merging": "正在合并…",
+    "alreadyUpToDate": "{{current}} 已包含 {{branch}} 的全部提交",
     "mergeSuccess": "已将 {{branch}} 合入 {{current}}"
   },
   "changesCreateBranch": {

@@ -63,6 +63,13 @@ const sampleResponse = {
       message: "remote tip",
       committedAt: Date.now() - 7_200_000,
     },
+    {
+      name: "origin/main",
+      authorName: "Bob",
+      shortHash: "def5678",
+      message: "remote main tip",
+      committedAt: Date.now() - 3_600_000,
+    },
   ],
 };
 
@@ -97,7 +104,7 @@ describe("MergeBranchDialog", () => {
     toastSuccessMock.mockReset();
     listMock.mockResolvedValue(sampleResponse);
     fetchMock.mockResolvedValue(undefined);
-    mergeMock.mockResolvedValue({ branch: "main" });
+    mergeMock.mockResolvedValue({ branch: "main", alreadyUpToDate: false });
   });
 
   it("loads merge candidates without fetch and hides current local branch", async () => {
@@ -148,16 +155,58 @@ describe("MergeBranchDialog", () => {
     expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
-  it("does not merge remote branch in this ticket", async () => {
-    renderDialog(true);
+  it("merges remote tracking ref with kind remote", async () => {
+    const user = userEvent.setup();
+    const { onOpenChange, onSuccess } = renderDialog(true);
     await screen.findByText("origin/feature-remote");
 
     const remoteButton = screen
       .getAllByRole("button")
       .find((btn) => btn.textContent?.includes("origin/feature-remote"));
     expect(remoteButton).toBeTruthy();
-    expect(remoteButton).toBeDisabled();
-    expect(mergeMock).not.toHaveBeenCalled();
+    expect(remoteButton).not.toBeDisabled();
+
+    await user.click(screen.getByText("origin/feature-remote"));
+
+    await waitFor(() => {
+      expect(mergeMock).toHaveBeenCalledWith({
+        projectId: 7,
+        workspacePath: "/tmp/repo",
+        kind: "remote",
+        name: "origin/feature-remote",
+      });
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        "已将 origin/feature-remote 合入 main",
+      );
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps origin/current branch visible in remote list", async () => {
+    renderDialog(true);
+    expect(await screen.findByText("origin/main")).toBeInTheDocument();
+    expect(screen.queryByText("origin/HEAD")).not.toBeInTheDocument();
+    expect(screen.queryByText("origin/HEAD")).toBeNull();
+  });
+
+  it("toasts already up to date when merge has no new commits", async () => {
+    const user = userEvent.setup();
+    mergeMock.mockResolvedValue({ branch: "main", alreadyUpToDate: true });
+    const { onOpenChange, onSuccess } = renderDialog(true);
+    await screen.findByText("origin/feature-remote");
+
+    await user.click(screen.getByText("origin/feature-remote"));
+
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith(
+        "main 已包含 origin/feature-remote 的全部提交",
+      );
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
   it("alerts dirty workspace and does not call merge", async () => {

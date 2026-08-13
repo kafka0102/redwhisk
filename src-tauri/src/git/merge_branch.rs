@@ -12,6 +12,15 @@ pub const MERGE_ABORTED_DUE_TO_CONFLICT: &str = "mergeAbortedDueToConflict";
 /// detached HEAD 等无当前分支时拒绝合并。
 pub const MERGE_REQUIRES_CURRENT_BRANCH: &str = "mergeRequiresCurrentBranch";
 
+/// 把引用合入当前分支的结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeRefResult {
+    /// 合并后仍停留的当前分支名。
+    pub branch: String,
+    /// 当前分支已包含对方全部提交，HEAD 未变。
+    pub already_up_to_date: bool,
+}
+
 /// 将 `name`（本地分支或 remote-tracking 引用）合入当前分支。
 ///
 /// 可快进则快进，否则创建 merge commit。脏工作区 / detached HEAD 直接拒绝。
@@ -20,7 +29,7 @@ pub const MERGE_REQUIRES_CURRENT_BRANCH: &str = "mergeRequiresCurrentBranch";
 pub fn merge_ref_into_current_branch(
     repo_path: impl AsRef<Path>,
     name: &str,
-) -> Result<String, GitCommandError> {
+) -> Result<MergeRefResult, GitCommandError> {
     let repo_path = repo_path.as_ref();
     let name = name.trim();
     if name.is_empty() {
@@ -45,6 +54,8 @@ pub fn merge_ref_into_current_branch(
         });
     }
 
+    let head_before = command::run_git(repo_path, &["rev-parse", "HEAD"])?;
+
     if let Err(error) = command::run_git(repo_path, &["merge", "--no-edit", name]) {
         let started_merge = merge_in_progress(repo_path)?;
         abort_merge_if_in_progress(repo_path)?;
@@ -57,7 +68,11 @@ pub fn merge_ref_into_current_branch(
         return Err(error);
     }
 
-    Ok(current)
+    let head_after = command::run_git(repo_path, &["rev-parse", "HEAD"])?;
+    Ok(MergeRefResult {
+        branch: current,
+        already_up_to_date: head_before == head_after,
+    })
 }
 
 fn current_branch_name(repo_path: &Path) -> Result<String, GitCommandError> {
@@ -139,9 +154,10 @@ mod tests {
         git(&repo, &["checkout", "main"]);
         let feature_tip = rev_parse(&repo, "feature");
 
-        let branch = merge_ref_into_current_branch(&repo, "feature").expect("ff merge");
+        let result = merge_ref_into_current_branch(&repo, "feature").expect("ff merge");
 
-        assert_eq!(branch, "main");
+        assert_eq!(result.branch, "main");
+        assert!(!result.already_up_to_date);
         assert_eq!(current_branch(&repo), "main");
         assert_eq!(rev_parse(&repo, "HEAD"), feature_tip);
         assert!(!is_merge_commit(&repo, "HEAD"));
@@ -163,9 +179,10 @@ mod tests {
         let main_before = rev_parse(&repo, "HEAD");
         let feature_tip = rev_parse(&repo, "feature");
 
-        let branch = merge_ref_into_current_branch(&repo, "feature").expect("merge commit");
+        let result = merge_ref_into_current_branch(&repo, "feature").expect("merge commit");
 
-        assert_eq!(branch, "main");
+        assert_eq!(result.branch, "main");
+        assert!(!result.already_up_to_date);
         assert_eq!(current_branch(&repo), "main");
         assert!(is_merge_commit(&repo, "HEAD"));
         assert_eq!(rev_parse(&repo, "HEAD^1"), main_before);
@@ -201,6 +218,107 @@ mod tests {
         assert_eq!(
             fs::read_to_string(repo.join("conflict.txt")).expect("read"),
             "main\n"
+        );
+    }
+
+    #[test]
+    fn merge_remote_tracking_ref_does_not_create_local_branch() {
+        let temp = tempdir().expect("temp");
+        let repo = temp.path().join("repo");
+        create_repo(&repo);
+        write_commit(&repo, "base.txt", "base\n", "base");
+        git(&repo, &["branch", "-M", "main"]);
+        git(&repo, &["checkout", "-b", "feature"]);
+        write_commit(&repo, "feat.txt", "feat\n", "feature tip");
+        let feature_tip = rev_parse(&repo, "feature");
+        git(&repo, &["checkout", "main"]);
+        git(
+            &repo,
+            &["update-ref", "refs/remotes/origin/feature", &feature_tip],
+        );
+        git(&repo, &["branch", "-D", "feature"]);
+
+        let result = merge_ref_into_current_branch(&repo, "origin/feature").expect("remote merge");
+
+        assert_eq!(result.branch, "main");
+        assert!(!result.already_up_to_date);
+        assert_eq!(current_branch(&repo), "main");
+        assert_eq!(rev_parse(&repo, "HEAD"), feature_tip);
+        assert_eq!(
+            git_stdout(&repo, &["branch", "--list", "feature"]).trim(),
+            ""
+        );
+        assert!(!is_merge_in_progress(&repo));
+        assert_eq!(git_stdout(&repo, &["status", "--porcelain"]).trim(), "");
+    }
+
+    #[test]
+    fn merge_remote_tracking_ref_aborts_conflict_and_keeps_worktree_clean() {
+        let temp = tempdir().expect("temp");
+        let repo = temp.path().join("repo");
+        create_repo(&repo);
+        write_commit(&repo, "conflict.txt", "base\n", "base");
+        git(&repo, &["branch", "-M", "main"]);
+        git(&repo, &["checkout", "-b", "feature"]);
+        write_commit(&repo, "conflict.txt", "feature\n", "feature change");
+        let feature_tip = rev_parse(&repo, "feature");
+        git(&repo, &["checkout", "main"]);
+        write_commit(&repo, "conflict.txt", "main\n", "main change");
+        let main_before = rev_parse(&repo, "HEAD");
+        git(
+            &repo,
+            &["update-ref", "refs/remotes/origin/feature", &feature_tip],
+        );
+        git(&repo, &["branch", "-D", "feature"]);
+
+        let err = merge_ref_into_current_branch(&repo, "origin/feature").expect_err("conflict");
+        match err {
+            GitCommandError::Failed { message, .. } => {
+                assert_eq!(message, MERGE_ABORTED_DUE_TO_CONFLICT);
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+        assert_eq!(current_branch(&repo), "main");
+        assert_eq!(rev_parse(&repo, "HEAD"), main_before);
+        assert!(!is_merge_in_progress(&repo));
+        assert_eq!(git_stdout(&repo, &["status", "--porcelain"]).trim(), "");
+        assert_eq!(
+            fs::read_to_string(repo.join("conflict.txt")).expect("read"),
+            "main\n"
+        );
+        assert_eq!(
+            git_stdout(&repo, &["branch", "--list", "feature"]).trim(),
+            ""
+        );
+    }
+
+    #[test]
+    fn merge_already_up_to_date_keeps_head_and_succeeds() {
+        let temp = tempdir().expect("temp");
+        let repo = temp.path().join("repo");
+        create_repo(&repo);
+        write_commit(&repo, "base.txt", "base\n", "base");
+        git(&repo, &["branch", "-M", "main"]);
+        let ancestor = rev_parse(&repo, "HEAD");
+        git(
+            &repo,
+            &["update-ref", "refs/remotes/origin/feature", &ancestor],
+        );
+        write_commit(&repo, "later.txt", "later\n", "later on main");
+        let head_before = rev_parse(&repo, "HEAD");
+
+        let result =
+            merge_ref_into_current_branch(&repo, "origin/feature").expect("already up to date");
+
+        assert_eq!(result.branch, "main");
+        assert!(result.already_up_to_date);
+        assert_eq!(current_branch(&repo), "main");
+        assert_eq!(rev_parse(&repo, "HEAD"), head_before);
+        assert!(!is_merge_in_progress(&repo));
+        assert_eq!(git_stdout(&repo, &["status", "--porcelain"]).trim(), "");
+        assert_eq!(
+            git_stdout(&repo, &["branch", "--list", "feature"]).trim(),
+            ""
         );
     }
 

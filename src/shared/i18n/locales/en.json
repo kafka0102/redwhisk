@@ -1019,6 +1019,7 @@
     "metaLine": "{{author}} · {{shortHash}} · {{message}}",
     "dirtyAlert": "You have uncommitted changes. Resolve them before merging.",
     "merging": "Merging…",
+    "alreadyUpToDate": "{{current}} already contains all commits from {{branch}}",
     "mergeSuccess": "Merged {{branch}} into {{current}}"
   },
   "changesCreateBranch": {

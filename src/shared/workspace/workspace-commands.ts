@@ -367,6 +367,7 @@ export interface ProjectMergeBranchInput extends ProjectWorkspaceInput {
 
 export interface ProjectMergeBranchResponse {
   branch: string;
+  alreadyUpToDate: boolean;
 }
 
 export function mergeProjectBranch(

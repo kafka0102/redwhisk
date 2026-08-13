@@ -49,9 +49,12 @@ impl SessionWorkspaceService<'_> {
             limit: None,
             offset: None,
         })?;
-        let branch = crate::git::merge_branch::merge_ref_into_current_branch(&root, &input.name)
+        let result = crate::git::merge_branch::merge_ref_into_current_branch(&root, &input.name)
             .map_err(map_merge_error)?;
-        Ok(ProjectMergeBranchResponse { branch })
+        Ok(ProjectMergeBranchResponse {
+            branch: result.branch,
+            already_up_to_date: result.already_up_to_date,
+        })
     }
 }
 

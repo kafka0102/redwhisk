@@ -40,7 +40,7 @@ type LoadState =
 
 /**
  * 主 checkout「合并分支」选择弹窗：本地/远程两段列表 + 刷新。
- * 点本地分支合入当前分支；远程点选留给后续票。
+ * 点本地或远程跟踪引用后合入当前分支；远程不创建本地分支。
  */
 export function MergeBranchDialog({
   open,
@@ -123,12 +123,15 @@ export function MergeBranchDialog({
     }
   }
 
-  async function handleSelectLocal(name: string): Promise<void> {
+  async function handleSelect(
+    kind: CheckoutBranchKind,
+    name: string,
+  ): Promise<void> {
     if (merging || refreshing || loadState.status !== "ready") {
       return;
     }
     const { data } = loadState;
-    if (name === data.currentBranch) {
+    if (kind === "local" && name === data.currentBranch) {
       return;
     }
     if (data.hasUncommittedChanges) {
@@ -144,14 +147,19 @@ export function MergeBranchDialog({
       const result = await mergeProjectBranch({
         projectId,
         workspacePath,
-        kind: "local",
+        kind,
         name,
       });
       toast.success(
-        t("changesMerge.mergeSuccess", {
-          branch: name,
-          current: result.branch,
-        }),
+        result.alreadyUpToDate
+          ? t("changesMerge.alreadyUpToDate", {
+              branch: name,
+              current: result.branch,
+            })
+          : t("changesMerge.mergeSuccess", {
+              branch: name,
+              current: result.branch,
+            }),
       );
       handleOpenChange(false);
       onSuccess?.();
@@ -244,7 +252,7 @@ export function MergeBranchDialog({
                     })
                   }
                   onSelect={(branchName) => {
-                    void handleSelectLocal(branchName);
+                    void handleSelect("local", branchName);
                   }}
                 />
                 <BranchSection
@@ -253,7 +261,7 @@ export function MergeBranchDialog({
                   emptyLabel={t("changesMerge.emptyRemote")}
                   sectionLabel={t("changesMerge.remoteSection")}
                   disabled={merging || refreshing}
-                  selectable={false}
+                  selectable
                   formatRelativeTime={(ms) => formatBranchRelativeTime(ms, t)}
                   formatMeta={(branch) =>
                     t("changesMerge.metaLine", {
@@ -262,8 +270,8 @@ export function MergeBranchDialog({
                       message: branch.message,
                     })
                   }
-                  onSelect={() => {
-                    // 远程合入留给后续票。
+                  onSelect={(branchName) => {
+                    void handleSelect("remote", branchName);
                   }}
                 />
               </div>

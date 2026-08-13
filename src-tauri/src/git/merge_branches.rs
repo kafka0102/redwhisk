@@ -82,6 +82,61 @@ mod tests {
         assert!(names.contains(&"feature-free"), "{names:?}");
     }
 
+    #[test]
+    fn list_includes_origin_current_and_excludes_remote_head() {
+        let temp = tempdir().expect("temp");
+        let repo = temp.path().join("repo");
+        create_repo(&repo);
+        write_commit(&repo, "base.txt", "base\n", "base");
+        git(&repo, &["branch", "-M", "main"]);
+        git(&repo, &["branch", "feature"]);
+        git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        git(
+            &repo,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        git(
+            &repo,
+            &[
+                "update-ref",
+                "refs/remotes/origin/feature",
+                "refs/heads/feature",
+            ],
+        );
+
+        let list = list_merge_branches(&repo).expect("list");
+        let remote_names: Vec<&str> = list
+            .remote_branches
+            .iter()
+            .map(|branch| branch.name.as_str())
+            .collect();
+        let local_names: Vec<&str> = list
+            .local_branches
+            .iter()
+            .map(|branch| branch.name.as_str())
+            .collect();
+        assert_eq!(list.current_branch, "main");
+        assert!(
+            remote_names.contains(&"origin/main"),
+            "origin/current must remain: {remote_names:?}"
+        );
+        assert!(remote_names.contains(&"origin/feature"), "{remote_names:?}");
+        assert!(
+            remote_names
+                .iter()
+                .all(|name| !name.ends_with("/HEAD") && *name != "HEAD"),
+            "remote HEAD must be excluded: {remote_names:?}"
+        );
+        assert!(
+            !local_names.contains(&"main"),
+            "current local branch must be hidden: {local_names:?}"
+        );
+    }
+
     fn create_repo(repo_dir: &Path) {
         fs::create_dir_all(repo_dir).expect("create");
         git(repo_dir, &["init"]);
