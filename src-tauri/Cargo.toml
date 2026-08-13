@@ -1,6 +1,6 @@
 [package]
 name = "redwhisk"
-version = "0.0.11"
+version = "0.0.12"
 description = "RedWhisk desktop workbench"
 authors = ["RedWhisk contributors"]
 edition = "2021"
