@@ -142,6 +142,21 @@ describe("CheckoutBranchDialog", () => {
     expect(screen.getByText(/Alice · abc1234 · newest/)).toBeInTheDocument();
   });
 
+  it("keeps the branch list inside the dialog with a vertical scrollbar", async () => {
+    renderDialog(true);
+    await screen.findByText("feature-new");
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toMatch(/overflow-hidden/);
+    expect(dialog.className).toMatch(/max-h-/);
+    const scroller = dialog.querySelector(".overflow-y-auto");
+    expect(scroller).not.toBeNull();
+    expect(scroller).toContainElement(screen.getByText("feature-new"));
+    expect(scroller).toContainElement(
+      screen.getByText("origin/feature-remote"),
+    );
+  });
+
   it("refresh runs fetch then re-lists and keeps list on refresh failure", async () => {
     const user = userEvent.setup();
     renderDialog(true);

@@ -80,7 +80,7 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter(|line| !worktree_branches.contains(*line))
-        .filter(|line| !is_issue_worktree_branch(line))
+        .filter(|line| !crate::git::worktree_name::is_issue_worktree_branch(line))
         .map(str::to_string)
         .collect::<Vec<_>>();
     local_branches.sort();
@@ -509,17 +509,6 @@ fn list_worktree_branches(
     }
 
     Ok(branches)
-}
-
-fn is_issue_worktree_branch(branch: &str) -> bool {
-    branch
-        .strip_prefix("issue-")
-        .and_then(|suffix| suffix.chars().next())
-        .is_some_and(|first| first.is_ascii_digit())
-        || branch
-            .strip_prefix("issue/")
-            .and_then(|suffix| suffix.chars().next())
-            .is_some_and(|first| first.is_ascii_digit())
 }
 
 fn ensure_repo_dir(repo_path: &Path) -> Result<PathBuf, GitWorktreeError> {

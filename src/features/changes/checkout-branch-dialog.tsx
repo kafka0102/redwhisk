@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -191,7 +190,7 @@ export function CheckoutBranchDialog({
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className="flex max-h-[min(80vh,640px)] w-full flex-col gap-3 sm:max-w-[500px]"
+          className="flex max-h-[min(80vh,640px)] w-full flex-col gap-3 overflow-hidden sm:max-w-[500px]"
           showCloseButton
         >
           <DialogHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pr-8">
@@ -227,7 +226,7 @@ export function CheckoutBranchDialog({
             </p>
           ) : null}
 
-          <ScrollArea className="min-h-0 flex-1 pr-2">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
             {loadState.status === "loading" || loadState.status === "idle" ? (
               <p className="text-muted-foreground py-8 text-center text-sm">
                 {t("changesCheckout.loadingBranches")}
@@ -281,7 +280,7 @@ export function CheckoutBranchDialog({
                 />
               </div>
             ) : null}
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
       <LoadingDialog

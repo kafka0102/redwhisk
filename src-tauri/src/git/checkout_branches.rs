@@ -25,7 +25,8 @@ pub struct CheckoutBranchList {
 }
 
 /// 列出主 checkout 可签出的本地/远程分支（不 fetch）。
-/// 本地排除其他 worktree 占用分支；远程排除 `*/HEAD` 符号 ref。
+/// 本地排除其他 worktree 占用分支，以及已删除 worktree 残留的 issue 工作分支；
+/// 远程排除 `*/HEAD` 符号 ref。
 /// 各段按 committed_at 降序。
 pub fn list_checkout_branches(
     repo_path: impl AsRef<Path>,
@@ -38,6 +39,7 @@ pub fn list_checkout_branches(
     let local_branches = list_ref_entries(repo_path, "refs/heads/")?
         .into_iter()
         .filter(|entry| !occupied.contains(&entry.name))
+        .filter(|entry| !crate::git::worktree_name::is_issue_worktree_branch(&entry.name))
         .collect::<Vec<_>>();
 
     let remote_branches = list_ref_entries(repo_path, "refs/remotes/")?
@@ -113,11 +115,7 @@ fn list_ref_entries(
         let author_name = parts.next().unwrap_or_default().to_string();
         let short_hash = parts.next().unwrap_or_default().to_string();
         let message = parts.next().unwrap_or_default().to_string();
-        let committed_at_seconds = parts
-            .next()
-            .unwrap_or_default()
-            .parse::<i64>()
-            .unwrap_or(0);
+        let committed_at_seconds = parts.next().unwrap_or_default().parse::<i64>().unwrap_or(0);
         entries.push(CheckoutBranchEntry {
             name,
             author_name,
@@ -166,7 +164,11 @@ mod tests {
         assert_eq!(list.current_branch, "main");
         assert!(!list.has_uncommitted_changes);
 
-        let names: Vec<&str> = list.local_branches.iter().map(|b| b.name.as_str()).collect();
+        let names: Vec<&str> = list
+            .local_branches
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
         assert_eq!(names, vec!["feature-new", "feature-old", "main"]);
 
         let newest = &list.local_branches[0];
@@ -178,6 +180,32 @@ mod tests {
         assert!(
             list.local_branches[0].committed_at_seconds
                 >= list.local_branches[1].committed_at_seconds
+        );
+    }
+
+    #[test]
+    fn list_hides_leftover_issue_worktree_branches() {
+        let temp = tempdir().expect("temp");
+        let repo = temp.path().join("repo");
+        create_repo(&repo);
+        write_commit(&repo, "base.txt", "base\n", "base");
+        git(&repo, &["branch", "-M", "main"]);
+        git(&repo, &["branch", "feature-keep"]);
+        git(&repo, &["branch", "issue-1"]);
+        git(&repo, &["branch", "issue-9"]);
+        git(&repo, &["branch", "issue-58-redwhisk"]);
+
+        let list = list_checkout_branches(&repo).expect("list");
+        let names: Vec<&str> = list
+            .local_branches
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
+        assert!(names.contains(&"main"), "{names:?}");
+        assert!(names.contains(&"feature-keep"), "{names:?}");
+        assert!(
+            !names.iter().any(|name| name.starts_with("issue-")),
+            "leftover issue worktree branches must be hidden: {names:?}"
         );
     }
 
@@ -201,7 +229,11 @@ mod tests {
         );
 
         let list = list_checkout_branches(&repo).expect("list");
-        let names: Vec<&str> = list.local_branches.iter().map(|b| b.name.as_str()).collect();
+        let names: Vec<&str> = list
+            .local_branches
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
         assert!(names.contains(&"main"));
         assert!(
             !names.contains(&"feature-occupied"),
@@ -232,7 +264,9 @@ mod tests {
             "expected origin/remote-only in {remote_names:?}"
         );
         assert!(
-            remote_names.iter().all(|n| !n.ends_with("/HEAD") && *n != "HEAD"),
+            remote_names
+                .iter()
+                .all(|n| !n.ends_with("/HEAD") && *n != "HEAD"),
             "remote HEAD must be excluded: {remote_names:?}"
         );
         assert!(
@@ -279,23 +313,18 @@ mod tests {
 
         // before fetch, local clone should not see after-fetch
         let before = list_checkout_branches(&env.local).expect("list before");
-        assert!(
-            before
-                .remote_branches
-                .iter()
-                .all(|b| b.name != "origin/after-fetch")
-        );
+        assert!(before
+            .remote_branches
+            .iter()
+            .all(|b| b.name != "origin/after-fetch"));
 
         fetch_all_prune(&env.local).expect("fetch");
         let after = list_checkout_branches(&env.local).expect("list after");
-        assert!(
-            after
-                .remote_branches
-                .iter()
-                .any(|b| b.name == "origin/after-fetch")
-        );
+        assert!(after
+            .remote_branches
+            .iter()
+            .any(|b| b.name == "origin/after-fetch"));
     }
-
 
     struct RemoteEnv {
         bare: std::path::PathBuf,
@@ -367,5 +396,4 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-
 }

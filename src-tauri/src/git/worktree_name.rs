@@ -9,6 +9,20 @@ use pinyin::ToPinyin;
 /// reponame 段最长字符数（仅 ASCII slug，按字节长度等价）。
 const REPO_SLUG_MAX_LEN: usize = 20;
 
+/// 判断本地分支名是否为 Issue Worktree 工作分支（含已删除 worktree 残留）。
+///
+/// 匹配 `issue-{number}...` 与历史 `issue/{number}...`，不匹配 `issue-foo` 等非编号名。
+pub fn is_issue_worktree_branch(branch: &str) -> bool {
+    branch
+        .strip_prefix("issue-")
+        .and_then(|suffix| suffix.chars().next())
+        .is_some_and(|first| first.is_ascii_digit())
+        || branch
+            .strip_prefix("issue/")
+            .and_then(|suffix| suffix.chars().next())
+            .is_some_and(|first| first.is_ascii_digit())
+}
+
 /// 由 issue 项目内编号与仓库路径生成 Issue Worktree 主名（分支名与目录主名）。
 ///
 /// - reponame 取 `repo_path` 最后一级目录名，经本地 slug 规范化；
@@ -95,6 +109,18 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn issue_worktree_branch_matches_number_prefixed_names() {
+        assert!(is_issue_worktree_branch("issue-1"));
+        assert!(is_issue_worktree_branch("issue-58-redwhisk"));
+        assert!(is_issue_worktree_branch("issue/9"));
+        assert!(!is_issue_worktree_branch("issue"));
+        assert!(!is_issue_worktree_branch("issue-foo"));
+        assert!(!is_issue_worktree_branch("feature-issue-1"));
+        assert!(!is_issue_worktree_branch("meek-horse"));
+        assert!(!is_issue_worktree_branch("main"));
+    }
+
+    #[test]
     fn ascii_basename_becomes_issue_number_and_slug() {
         assert_eq!(
             issue_worktree_base_name(137, Path::new("/Users/dev/redwhisk")),
@@ -128,10 +154,7 @@ mod tests {
             issue_worktree_base_name(9, Path::new("/tmp/...")),
             "issue-9"
         );
-        assert_eq!(
-            issue_worktree_base_name(9, Path::new("/")),
-            "issue-9"
-        );
+        assert_eq!(issue_worktree_base_name(9, Path::new("/")), "issue-9");
     }
 
     #[test]
@@ -144,7 +167,10 @@ mod tests {
         // "my-super-long-tooling" = 20 exactly if last word fits; "my-super-long-tool" next?
         // my(2) + super(5) + long(4) + repository(10) with dashes = 2+1+5+1+4+1+10 = 24 > 20
         // my-super-long = 13, next repository needs 11 → stop at my-super-long
-        assert_eq!(slugify_repo_basename("my-super-long-repository"), "my-super-long");
+        assert_eq!(
+            slugify_repo_basename("my-super-long-repository"),
+            "my-super-long"
+        );
     }
 
     #[test]
