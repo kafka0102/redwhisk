@@ -859,15 +859,13 @@ fn read_directory_nodes(
         let file_type = entry.file_type().map_err(workspace_io_error)?;
 
         // 目录软链（如 .claude/skills/<skill> 指向仓库内共享 skill）需要展开；
-        // 越出工作区则跳过。文件软链仍跳过，避免把外部敏感文件暴露在树中。
+        // 文件软链（如 CLAUDE.md -> AGENTS.md）按文件展示。
+        // 越出工作区的软链一律跳过，避免把外部敏感文件暴露在树中。
         let is_directory = if file_type.is_symlink() {
             let Ok(target_meta) = fs::metadata(&path) else {
                 continue;
             };
-            if !target_meta.is_dir() {
-                continue;
-            }
-            true
+            target_meta.is_dir()
         } else {
             file_type.is_dir()
         };
@@ -914,8 +912,19 @@ fn read_directory_nodes(
                 modified_at: modified_at_millis(&metadata),
                 is_ignored,
             });
-        } else if file_type.is_file() {
-            let metadata = entry.metadata().map_err(workspace_io_error)?;
+        } else if file_type.is_file() || file_type.is_symlink() {
+            if file_type.is_symlink() {
+                let Ok(canonical_file) = path.canonicalize() else {
+                    continue;
+                };
+                if !canonical_file.starts_with(canonical_root) {
+                    continue;
+                }
+            }
+            let metadata = fs::metadata(&path).map_err(workspace_io_error)?;
+            if !metadata.is_file() {
+                continue;
+            }
             nodes.push(WorkspaceFileTreeNode {
                 id: relative_path.clone(),
                 name,
@@ -1224,13 +1233,9 @@ struct WorkspaceFile {
 
 fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile, CommandError> {
     let absolute_path = resolve_workspace_relative_path(root, file_path)?;
-    let metadata = fs::symlink_metadata(&absolute_path).map_err(workspace_io_error)?;
-    if metadata.file_type().is_symlink() {
-        return Err(
-            workspace_validation_error("路径不能是符号链接。", file_path)
-                .with_reason("pathCannotBeSymlink"),
-        );
-    }
+    // 跟随仓库内文件软链（如 CLAUDE.md -> AGENTS.md）；越界目标已在
+    // resolve_workspace_relative_path 用 canonicalize 拒绝。
+    let metadata = fs::metadata(&absolute_path).map_err(workspace_io_error)?;
     if !metadata.is_file() {
         return Err(
             workspace_validation_error("路径不是文件。", file_path).with_reason("pathNotFile")
@@ -1653,6 +1658,71 @@ mod tests {
             "expected SKILL.md under directory symlink, got {:?}",
             linked.children
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_tree_includes_in_workspace_file_symlink() {
+        // 复现：CLAUDE.md -> AGENTS.md 这类仓库内文件软链应出现在 code 文件树。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("AGENTS.md"), "# agents\n").expect("write agents");
+        std::os::unix::fs::symlink("AGENTS.md", root.join("CLAUDE.md")).expect("symlink claude");
+
+        let tree = read_workspace_file_tree(root).expect("read file tree");
+        let claude = tree
+            .nodes
+            .iter()
+            .find(|node| node.name == "CLAUDE.md")
+            .expect("in-workspace file symlink should appear");
+        assert_eq!(claude.kind, WorkspaceFileTreeNodeKind::File);
+        assert_eq!(claude.path, "CLAUDE.md");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_file_through_in_workspace_file_symlink() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        fs::write(root.join("AGENTS.md"), "# agents\n").expect("write agents");
+        std::os::unix::fs::symlink("AGENTS.md", root.join("CLAUDE.md")).expect("symlink claude");
+
+        let content = read_workspace_file(root, "CLAUDE.md")
+            .expect("read through in-workspace file symlink");
+        assert_eq!(content.content, "# agents\n");
+        assert!(!content.is_binary);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_tree_skips_file_symlink_escaping_workspace() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("workspace");
+        let outside = temp_dir.path().join("secret.txt");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(&outside, "secret").expect("write outside");
+        std::os::unix::fs::symlink(&outside, root.join("CLAUDE.md")).expect("symlink");
+
+        let tree = read_workspace_file_tree(&root).expect("read file tree");
+        assert!(
+            tree.nodes.iter().all(|node| node.name != "CLAUDE.md"),
+            "escaping file symlink must not appear in file tree, got {:?}",
+            tree.nodes
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_file_rejects_escaping_file_symlink() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("workspace");
+        let outside = temp_dir.path().join("secret.txt");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(&outside, "secret").expect("write outside");
+        std::os::unix::fs::symlink(&outside, root.join("CLAUDE.md")).expect("symlink");
+
+        let err = read_workspace_file(&root, "CLAUDE.md").expect_err("escape read");
+        assert_eq!(err.reason.as_deref(), Some("filePathOutsideRepo"));
     }
 
     #[test]
