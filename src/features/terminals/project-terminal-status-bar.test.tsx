@@ -194,7 +194,7 @@ describe("ProjectTerminalStatusBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses a 300px min-width for the shortcut commands menu", async () => {
+  it("uses a 400px min-width for the shortcut commands menu", async () => {
     listCommandsMock.mockResolvedValue({
       commands: [{ id: 1, projectId: 1, command: "git status", sortOrder: 0 }],
     });
@@ -211,7 +211,7 @@ describe("ProjectTerminalStatusBar", () => {
     const menu = await screen.findByText("git status");
     const menuRoot = menu.closest(".project-terminal-status-bar__menu");
     expect(menuRoot).toBeTruthy();
-    expect(window.getComputedStyle(menuRoot!).minWidth).toBe("300px");
+    expect(window.getComputedStyle(menuRoot!).minWidth).toBe("400px");
   });
 
   it("caps shortcut menu height and keeps manage item sticky", async () => {

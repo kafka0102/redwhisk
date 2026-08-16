@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import "../../shared/styles/terminals.css";
 import { TerminalShortcutCommandsDialog } from "./terminal-shortcut-commands-dialog";
 import type { ProjectTerminalShortcutCommandRecord } from "./project-terminal-commands";
 
@@ -175,6 +176,45 @@ describe("TerminalShortcutCommandsDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("sizes the dialog to 550px by 570px and scrolls the command list", () => {
+    render(
+      <TerminalShortcutCommandsDialog
+        commands={[makeCommand({ id: 1, command: "git status", sortOrder: 0 })]}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Quick commands" });
+    const dialogStyle = window.getComputedStyle(dialog);
+    const loadedCss = [...document.styleSheets]
+      .map((sheet) =>
+        sheet.ownerNode instanceof HTMLStyleElement
+          ? (sheet.ownerNode.textContent ?? "")
+          : "",
+      )
+      .join("\n");
+    expect(loadedCss).toMatch(
+      /\.terminal-shortcut-commands-dialog\s*\{[^}]*width:\s*min\(550px/,
+    );
+    expect(dialogStyle.maxHeight).toMatch(/min\(570px/);
+
+    const list = screen.getByText("git status").closest("ul");
+    expect(list).toBeTruthy();
+    const listStyle = window.getComputedStyle(list!);
+    expect(listStyle.overflowY).toBe("auto");
+    expect(listStyle.minHeight).toBe("0px");
+    expect(listStyle.flexGrow).toBe("1");
+
+    const body = list!.parentElement;
+    expect(body).toBeTruthy();
+    const bodyStyle = window.getComputedStyle(body!);
+    expect(bodyStyle.display).toBe("flex");
+    expect(bodyStyle.flexDirection).toBe("column");
+    expect(bodyStyle.minHeight).toBe("0px");
   });
 
   it("keeps cancel label on the edit-row cancel control", async () => {
