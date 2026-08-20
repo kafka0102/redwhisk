@@ -48,6 +48,7 @@ import { useCodeUnsavedConfirm } from "./use-code-unsaved-confirm";
 import { buildActiveFileSignature } from "./use-code-active-file-refresh";
 import { useCodeActiveFileRefreshBinding } from "./use-code-active-file-refresh-binding";
 import { useCodeLanguageDefinition } from "./use-code-language-definition";
+import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
@@ -459,6 +460,11 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   );
 
   useCodeLanguageDefinition({
+    onOpenMatch: openMatchFromSearch,
+    projectId,
+    workspacePath: selectedRootWorkspacePath,
+  });
+  useCodeLanguageReferences({
     onOpenMatch: openMatchFromSearch,
     projectId,
     workspacePath: selectedRootWorkspacePath,

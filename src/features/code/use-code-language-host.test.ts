@@ -12,6 +12,7 @@ vi.mock("./code-language-commands", () => ({
   ensureCodeLanguageHost: vi.fn(),
   notifyCodeLanguageDocument: vi.fn(),
   requestCodeLanguageDefinition: vi.fn(),
+  requestCodeLanguageReferences: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
 }));
 

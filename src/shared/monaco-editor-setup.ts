@@ -6,6 +6,11 @@ import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 
+import {
+  MenuId,
+  MenuRegistry,
+} from "monaco-editor/esm/vs/platform/actions/common/actions.js";
+import { filterEditorContextMenuItems } from "./monaco-builtin-navigation-menu";
 import { registerPrismaLanguage } from "./monaco-prisma-language";
 
 interface MonacoEnvironmentConfig {
@@ -64,7 +69,7 @@ export function configureMonacoEditor() {
     hovers: true,
     documentSymbols: true,
     definitions: false,
-    references: true,
+    references: false,
     documentHighlights: true,
     rename: true,
     diagnostics: true,
@@ -80,6 +85,23 @@ export function configureMonacoEditor() {
   monaco.typescript.javascriptDefaults.setModeConfiguration(
     languageModeConfiguration,
   );
+  hideBuiltinCodeLanguageNavigationMenuItems();
 
   hasConfiguredMonacoEditor = true;
+}
+
+function hideBuiltinCodeLanguageNavigationMenuItems(): void {
+  const registry = MenuRegistry as {
+    getMenuItems: (id: unknown) => Array<{ command?: { id?: string } }>;
+  };
+  const originalGetMenuItems = registry.getMenuItems.bind(MenuRegistry);
+  registry.getMenuItems = (
+    id: unknown,
+  ): Array<{ command?: { id?: string } }> => {
+    const items = originalGetMenuItems(id);
+    if (id !== MenuId.EditorContext) {
+      return items;
+    }
+    return filterEditorContextMenuItems(items);
+  };
 }

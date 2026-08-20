@@ -79,6 +79,9 @@ function createFakeHost(
     async requestDefinition() {
       return { locations: [] };
     },
+    async requestReferences() {
+      return { locations: [] };
+    },
     subscribeDiagnostics(handler) {
       listeners.add(handler);
       return () => {

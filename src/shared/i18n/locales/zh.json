@@ -1041,6 +1041,8 @@
     "createSuccess": "已创建并签出 {{branch}}"
   },
   "codeLanguage": {
+    "goToDefinition": "转到定义",
+    "findReferences": "查找引用",
     "unavailable": {
       "nodeNotFound": "本机没有 Node，TS/JS 语言智能不可用。",
       "spawnFailed": "TS/JS 语言智能启动失败。"

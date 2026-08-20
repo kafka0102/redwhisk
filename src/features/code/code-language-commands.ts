@@ -67,6 +67,17 @@ export interface CodeLanguageDefinitionResult {
   locations: CodeLanguageLocation[];
 }
 
+export interface CodeLanguageReferencesInput {
+  projectId: number;
+  workspacePath: string;
+  uri: string;
+  position: CodeLanguagePosition;
+}
+
+export interface CodeLanguageReferencesResult {
+  locations: CodeLanguageLocation[];
+}
+
 export async function ensureCodeLanguageHost(
   input: CodeLanguageHostInput,
 ): Promise<CodeLanguageHostStatus> {
@@ -92,6 +103,15 @@ export async function requestCodeLanguageDefinition(
 ): Promise<CodeLanguageDefinitionResult> {
   return invokeCommand<CodeLanguageDefinitionResult>(
     "code_language_definition",
+    { input },
+  );
+}
+
+export async function requestCodeLanguageReferences(
+  input: CodeLanguageReferencesInput,
+): Promise<CodeLanguageReferencesResult> {
+  return invokeCommand<CodeLanguageReferencesResult>(
+    "code_language_references",
     { input },
   );
 }

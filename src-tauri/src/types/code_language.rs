@@ -125,3 +125,18 @@ pub struct CodeLanguageLocation {
     pub file_path: String,
     pub range: CodeLanguageRange,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageReferencesInput {
+    pub project_id: i64,
+    pub workspace_path: String,
+    pub uri: String,
+    pub position: CodeLanguagePosition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageReferencesResult {
+    pub locations: Vec<CodeLanguageLocation>,
+}

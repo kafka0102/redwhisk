@@ -4,9 +4,12 @@ import {
   ensureCodeLanguageHost,
   notifyCodeLanguageDocument,
   requestCodeLanguageDefinition,
+  requestCodeLanguageReferences,
   stopCodeLanguageHost,
   type CodeLanguageDefinitionInput,
   type CodeLanguageDefinitionResult,
+  type CodeLanguageReferencesInput,
+  type CodeLanguageReferencesResult,
   type CodeLanguageDiagnosticsEvent,
   type CodeLanguageDocumentInput,
   type CodeLanguageHostInput,
@@ -20,6 +23,9 @@ export interface CodeLanguageHostPort {
   requestDefinition(
     input: CodeLanguageDefinitionInput,
   ): Promise<CodeLanguageDefinitionResult>;
+  requestReferences(
+    input: CodeLanguageReferencesInput,
+  ): Promise<CodeLanguageReferencesResult>;
   subscribeDiagnostics(
     handler: (payload: CodeLanguageDiagnosticsEvent) => void,
   ): () => void;
@@ -43,6 +49,7 @@ export function createTauriCodeLanguageHostPort(): CodeLanguageHostPort {
     stop: stopCodeLanguageHost,
     notifyDocument: notifyCodeLanguageDocument,
     requestDefinition: requestCodeLanguageDefinition,
+    requestReferences: requestCodeLanguageReferences,
     subscribeDiagnostics: (
       handler: (payload: CodeLanguageDiagnosticsEvent) => void,
     ): (() => void) =>

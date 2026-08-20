@@ -7,6 +7,7 @@ import { useI18n } from "../../shared/i18n/i18n";
 import type { CodeLanguageUnavailableReason } from "./code-language-commands";
 import { syncCodeLanguageMarkersToModel } from "./code-language-markers";
 import { toCodeLanguageFileUri } from "./code-language-uri";
+import { applyCodeLanguageNavigationActions } from "./code-language-navigation-actions";
 import { isCodeLanguageFile } from "./is-code-language-file";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import {
@@ -202,8 +203,13 @@ export function CodeContent({
     const scrollDisposable = editor.onDidScrollChange(() => {
       persistViewState();
     });
+    const navigationDisposable = applyCodeLanguageNavigationActions(editor, {
+      goToDefinition: t("codeLanguage.goToDefinition"),
+      findReferences: t("codeLanguage.findReferences"),
+    });
     editor.onDidDispose(() => {
       scrollDisposable.dispose();
+      navigationDisposable.dispose();
     });
   };
 
@@ -255,6 +261,7 @@ export function CodeContent({
           gotoLocation: {
             multiple: "peek",
             multipleDefinitions: "peek",
+            multipleReferences: "peek",
           },
         }}
         value={tab.content.content}

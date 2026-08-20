@@ -38,6 +38,8 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
         dispose: vi.fn(),
       })),
       onDidDispose: vi.fn((_listener: () => void) => undefined),
+      addAction: vi.fn((_descriptor: unknown) => ({ dispose: vi.fn() })),
+      getAction: vi.fn((_id: string) => ({ run: vi.fn() })),
       reset() {
         this.lastRestoredViewState = null;
         this.saveViewState.mockClear();
@@ -47,6 +49,8 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
         this.focus.mockClear();
         this.onDidScrollChange.mockClear();
         this.onDidDispose.mockClear();
+        this.addAction.mockClear();
+        this.getAction.mockClear();
       },
     },
   };
@@ -69,14 +73,18 @@ vi.mock("monaco-editor", () => ({
       fsPath: value,
     }),
   },
+  KeyMod: { Shift: 1024 },
+  KeyCode: { F12: 70 },
   languages: {
     registerDefinitionProvider: () => ({ dispose: vi.fn() }),
+    registerReferenceProvider: () => ({ dispose: vi.fn() }),
   },
   editor: {
     getModel: () => null,
     getModels: () => [],
     setModelMarkers: vi.fn(),
     registerEditorOpener: () => ({ dispose: vi.fn() }),
+    addKeybindingRule: () => ({ dispose: vi.fn() }),
   },
 }));
 
@@ -107,6 +115,8 @@ vi.mock("@monaco-editor/react", () => ({
       restoreViewState: (state: unknown) => void;
       onDidScrollChange: (listener: () => void) => { dispose: () => void };
       onDidDispose: (listener: () => void) => void;
+      addAction: (descriptor: unknown) => { dispose: () => void };
+      getAction: (id: string) => { run: () => void } | null;
     }) => void;
   }) => {
     editorThemeProp.current = theme;
@@ -120,6 +130,8 @@ vi.mock("@monaco-editor/react", () => ({
       onDidScrollChange: (listener) =>
         monacoEditorApi.onDidScrollChange(listener),
       onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
+      addAction: (descriptor) => monacoEditorApi.addAction(descriptor),
+      getAction: (id) => monacoEditorApi.getAction(id),
     });
     return (
       <div
@@ -145,11 +157,13 @@ const {
   stopCodeLanguageHost,
   notifyCodeLanguageDocument,
   requestCodeLanguageDefinition,
+  requestCodeLanguageReferences,
 } = vi.hoisted(() => ({
   ensureCodeLanguageHost: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
   notifyCodeLanguageDocument: vi.fn(),
   requestCodeLanguageDefinition: vi.fn(),
+  requestCodeLanguageReferences: vi.fn(),
 }));
 
 vi.mock("./code-language-commands", () => ({
@@ -158,6 +172,7 @@ vi.mock("./code-language-commands", () => ({
   stopCodeLanguageHost,
   notifyCodeLanguageDocument,
   requestCodeLanguageDefinition,
+  requestCodeLanguageReferences,
 }));
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
@@ -322,10 +337,12 @@ describe("CodeActivity", () => {
     stopCodeLanguageHost.mockReset();
     notifyCodeLanguageDocument.mockReset();
     requestCodeLanguageDefinition.mockReset();
+    requestCodeLanguageReferences.mockReset();
     ensureCodeLanguageHost.mockResolvedValue({ status: "ready" });
     stopCodeLanguageHost.mockResolvedValue(undefined);
     notifyCodeLanguageDocument.mockResolvedValue(undefined);
     requestCodeLanguageDefinition.mockResolvedValue({ locations: [] });
+    requestCodeLanguageReferences.mockResolvedValue({ locations: [] });
     vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => ({
       ...fileContent,
       content: input.content,

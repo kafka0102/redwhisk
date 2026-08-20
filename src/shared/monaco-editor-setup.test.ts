@@ -9,6 +9,22 @@ const languagesGetLanguagesMock = vi.hoisted(() => vi.fn(() => []));
 const languagesRegisterMock = vi.hoisted(() => vi.fn());
 const languagesSetMonarchTokensProviderMock = vi.hoisted(() => vi.fn());
 
+vi.mock("monaco-editor/esm/vs/platform/actions/common/actions.js", () => {
+  const EditorContext = { id: "EditorContext" };
+  const items = [
+    { command: { id: "editor.action.revealDefinition" } },
+    { command: { id: "editor.action.goToReferences" } },
+    { command: { id: "editor.action.clipboardCopyAction" } },
+  ];
+  return {
+    MenuId: { EditorContext },
+    MenuRegistry: {
+      getMenuItems: (id: { id?: string }) =>
+        id === EditorContext || id.id === "EditorContext" ? [...items] : [],
+    },
+  };
+});
+
 vi.mock("@monaco-editor/react", () => ({
   loader: {
     config: loaderConfigMock,
@@ -129,11 +145,25 @@ describe("configureMonacoEditor", () => {
     configureMonacoEditor();
 
     expect(typescriptDefaultsSetModeConfigurationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ definitions: false }),
+      expect.objectContaining({ definitions: false, references: false }),
     );
     expect(javascriptDefaultsSetModeConfigurationMock).toHaveBeenCalledWith(
-      expect.objectContaining({ definitions: false }),
+      expect.objectContaining({ definitions: false, references: false }),
     );
+  });
+
+  it("hides monaco default definition and references context menu items", async () => {
+    const { MenuId, MenuRegistry } =
+      await import("monaco-editor/esm/vs/platform/actions/common/actions.js");
+    const { configureMonacoEditor } = await import("./monaco-editor-setup");
+
+    configureMonacoEditor();
+
+    expect(
+      MenuRegistry.getMenuItems(MenuId.EditorContext).map(
+        (item: { command?: { id?: string } }) => item.command?.id,
+      ),
+    ).toEqual(["editor.action.clipboardCopyAction"]);
   });
 
   it("registers prisma language for schema highlighting", async () => {

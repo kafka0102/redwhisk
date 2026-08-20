@@ -10,6 +10,7 @@ import {
   ensureCodeLanguageHost,
   notifyCodeLanguageDocument,
   requestCodeLanguageDefinition,
+  requestCodeLanguageReferences,
   stopCodeLanguageHost,
 } from "./code-language-commands";
 
@@ -111,6 +112,48 @@ describe("code language commands", () => {
     });
 
     expect(invokeMock).toHaveBeenCalledWith("code_language_definition", {
+      input: {
+        projectId: 7,
+        workspacePath: "/tmp/redwhisk",
+        uri: "file:///tmp/redwhisk/src/file.ts",
+        position: { line: 0, character: 6 },
+      },
+    });
+  });
+
+  it("requests reference locations for a document position", async () => {
+    invokeMock.mockResolvedValueOnce({
+      locations: [
+        {
+          filePath: "src/usage.ts",
+          range: {
+            start: { line: 2, character: 4 },
+            end: { line: 2, character: 7 },
+          },
+        },
+      ],
+    });
+
+    await expect(
+      requestCodeLanguageReferences({
+        projectId: 7,
+        workspacePath: "/tmp/redwhisk",
+        uri: "file:///tmp/redwhisk/src/file.ts",
+        position: { line: 0, character: 6 },
+      }),
+    ).resolves.toEqual({
+      locations: [
+        {
+          filePath: "src/usage.ts",
+          range: {
+            start: { line: 2, character: 4 },
+            end: { line: 2, character: 7 },
+          },
+        },
+      ],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("code_language_references", {
       input: {
         projectId: 7,
         workspacePath: "/tmp/redwhisk",

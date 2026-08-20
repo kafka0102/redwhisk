@@ -15,6 +15,7 @@ use crate::db::project_repository::ProjectRepository;
 use crate::types::code_language::{
     CodeLanguageDefinitionInput, CodeLanguageDefinitionResult, CodeLanguageDiagnosticsEvent,
     CodeLanguageDocumentInput, CodeLanguageHostInput, CodeLanguageHostStatus,
+    CodeLanguageReferencesInput, CodeLanguageReferencesResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -73,18 +74,34 @@ pub async fn code_language_definition(
     state: State<'_, AppState>,
     input: CodeLanguageDefinitionInput,
 ) -> Result<CodeLanguageDefinitionResult, CommandError> {
-    if input.uri.trim().is_empty() {
-        return Err(CommandError::new(
-            CommandErrorCode::CodeLanguageValidationFailed,
-            "文档 URI 不能为空。",
-        )
-        .with_reason("documentUriRequired"));
-    }
+    require_document_uri(&input.uri)?;
     let registry = state.code_language_hosts.clone();
     let workspace_path = canonicalize_workspace_path(&input.workspace_path);
     tauri::async_runtime::spawn_blocking(move || {
         Ok(CodeLanguageDefinitionResult {
             locations: registry.request_definition(
+                input.project_id,
+                &workspace_path,
+                input.uri.trim(),
+                &input.position,
+            ),
+        })
+    })
+    .await
+    .map_err(|error| join_error(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn code_language_references(
+    state: State<'_, AppState>,
+    input: CodeLanguageReferencesInput,
+) -> Result<CodeLanguageReferencesResult, CommandError> {
+    require_document_uri(&input.uri)?;
+    let registry = state.code_language_hosts.clone();
+    let workspace_path = canonicalize_workspace_path(&input.workspace_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(CodeLanguageReferencesResult {
+            locations: registry.request_references(
                 input.project_id,
                 &workspace_path,
                 input.uri.trim(),
@@ -138,6 +155,17 @@ fn ensure_host_blocking(
             )
         },
     ))
+}
+
+fn require_document_uri(uri: &str) -> Result<(), CommandError> {
+    if uri.trim().is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::CodeLanguageValidationFailed,
+            "文档 URI 不能为空。",
+        )
+        .with_reason("documentUriRequired"));
+    }
+    Ok(())
 }
 
 fn canonicalize_workspace_path(workspace_path: &str) -> String {

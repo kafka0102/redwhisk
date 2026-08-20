@@ -1041,6 +1041,8 @@
     "createSuccess": "Created and checked out {{branch}}"
   },
   "codeLanguage": {
+    "goToDefinition": "Go to Definition",
+    "findReferences": "Find References",
     "unavailable": {
       "nodeNotFound": "Node.js was not found, so TS/JS language intelligence is unavailable.",
       "spawnFailed": "TS/JS language intelligence failed to start."

@@ -17,6 +17,8 @@ const monacoEditorApi = vi.hoisted(() => ({
     dispose: vi.fn(),
   })),
   onDidDispose: vi.fn((_listener: () => void) => undefined),
+  addAction: vi.fn((_descriptor: unknown) => ({ dispose: vi.fn() })),
+  getAction: vi.fn((_id: string) => ({ run: vi.fn() })),
   reset() {
     this.restoreViewState.mockClear();
     this.saveViewState.mockClear();
@@ -25,6 +27,8 @@ const monacoEditorApi = vi.hoisted(() => ({
     this.focus.mockClear();
     this.onDidScrollChange.mockClear();
     this.onDidDispose.mockClear();
+    this.addAction.mockClear();
+    this.getAction.mockClear();
   },
 }));
 
@@ -33,6 +37,8 @@ const lastEditorOptions = vi.hoisted(() => ({
 }));
 
 vi.mock("monaco-editor", () => ({
+  KeyMod: { Shift: 1024 },
+  KeyCode: { F12: 70 },
   MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
   Uri: {
     parse: (value: string) => ({
@@ -45,6 +51,7 @@ vi.mock("monaco-editor", () => ({
     getModel: () => null,
     getModels: () => [],
     setModelMarkers: vi.fn(),
+    addKeybindingRule: vi.fn(() => ({ dispose: vi.fn() })),
   },
 }));
 
@@ -72,6 +79,8 @@ vi.mock("@monaco-editor/react", () => ({
       restoreViewState: (state: unknown) => void;
       onDidScrollChange: (listener: () => void) => { dispose: () => void };
       onDidDispose: (listener: () => void) => void;
+      addAction: (descriptor: unknown) => { dispose: () => void };
+      getAction: (id: string) => { run: () => void } | null;
     }) => void;
   }) => {
     const didMountRef = useRef(false);
@@ -91,6 +100,8 @@ vi.mock("@monaco-editor/react", () => ({
         onDidScrollChange: (listener) =>
           monacoEditorApi.onDidScrollChange(listener),
         onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
+        addAction: (descriptor) => monacoEditorApi.addAction(descriptor),
+        getAction: (id) => monacoEditorApi.getAction(id),
       });
     }, [onMount]);
     return (
@@ -260,8 +271,24 @@ describe("CodeContent edit interactions", () => {
       gotoLocation: {
         multiple: "peek",
         multipleDefinitions: "peek",
+        multipleReferences: "peek",
       },
     });
+    await waitFor(() => {
+      expect(monacoEditorApi.addAction).toHaveBeenCalled();
+    });
+    expect(monacoEditorApi.addAction.mock.calls.map((call) => call[0])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "codeLanguage.goToDefinition",
+          contextMenuGroupId: "navigation",
+        }),
+        expect.objectContaining({
+          id: "codeLanguage.findReferences",
+          contextMenuGroupId: "navigation",
+        }),
+      ]),
+    );
   });
 
   it("keeps validation decorations off for markdown", async () => {

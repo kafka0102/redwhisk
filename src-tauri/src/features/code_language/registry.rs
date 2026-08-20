@@ -120,19 +120,8 @@ impl CodeLanguageHostRegistry {
         uri: &str,
         position: &crate::types::code_language::CodeLanguagePosition,
     ) -> Vec<crate::types::code_language::CodeLanguageLocation> {
-        let key = HostKey {
-            project_id,
-            workspace_path: workspace_path.to_string(),
-        };
-        let host = {
-            let hosts = match self.inner.lock() {
-                Ok(hosts) => hosts,
-                Err(_) => return Vec::new(),
-            };
-            match hosts.get(&key).and_then(|slot| slot.host.clone()) {
-                Some(host) => host,
-                None => return Vec::new(),
-            }
+        let Some(host) = self.host_for(project_id, workspace_path) else {
+            return Vec::new();
         };
         super::definition::request_definition(
             &host,
@@ -140,6 +129,33 @@ impl CodeLanguageHostRegistry {
             uri,
             position,
         )
+    }
+
+    pub fn request_references(
+        &self,
+        project_id: i64,
+        workspace_path: &str,
+        uri: &str,
+        position: &crate::types::code_language::CodeLanguagePosition,
+    ) -> Vec<crate::types::code_language::CodeLanguageLocation> {
+        let Some(host) = self.host_for(project_id, workspace_path) else {
+            return Vec::new();
+        };
+        super::references::request_references(
+            &host,
+            std::path::Path::new(workspace_path),
+            uri,
+            position,
+        )
+    }
+
+    fn host_for(&self, project_id: i64, workspace_path: &str) -> Option<Arc<LanguageHost>> {
+        let key = HostKey {
+            project_id,
+            workspace_path: workspace_path.to_string(),
+        };
+        let hosts = self.inner.lock().ok()?;
+        hosts.get(&key).and_then(|slot| slot.host.clone())
     }
 
     pub fn notify_document(

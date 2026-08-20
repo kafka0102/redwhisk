@@ -317,6 +317,19 @@
         "start": "required"
       }
     },
+    "CodeLanguageReferencesInput": {
+      "fields": {
+        "position": "required",
+        "projectId": "required",
+        "uri": "required",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageReferencesResult": {
+      "fields": {
+        "locations": "required"
+      }
+    },
     "CodeWorkspaceRoot": {
       "fields": {
         "branch": "required",

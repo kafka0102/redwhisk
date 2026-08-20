@@ -1,23 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const definitionProviders: Array<{
+const referenceProviders: Array<{
   language: string;
   provider: {
-    provideDefinition: (
+    provideReferences: (
       model: { uri: { toString(): string } },
       position: { lineNumber: number; column: number },
-    ) => Promise<
-      Array<{
-        uri: { toString(): string };
-        range: {
-          startLineNumber: number;
-          startColumn: number;
-          endLineNumber: number;
-          endColumn: number;
-        };
-      }>
-    >;
+    ) => Promise<Array<{ uri: { toString(): string }; range: unknown }> | []>;
   };
 }> = [];
 const editorOpeners: Array<{
@@ -27,6 +17,15 @@ const editorOpeners: Array<{
     selectionOrPosition?: { startLineNumber?: number; lineNumber?: number },
   ) => boolean;
 }> = [];
+const {
+  registerCompletionItemProvider,
+  registerHoverProvider,
+  registerCodeActionProvider,
+} = vi.hoisted(() => ({
+  registerCompletionItemProvider: vi.fn(),
+  registerHoverProvider: vi.fn(),
+  registerCodeActionProvider: vi.fn(),
+}));
 
 vi.mock("monaco-editor", () => {
   class Range {
@@ -57,13 +56,16 @@ vi.mock("monaco-editor", () => {
       }),
     },
     languages: {
-      registerDefinitionProvider: (
+      registerReferenceProvider: (
         language: string,
-        provider: (typeof definitionProviders)[number]["provider"],
+        provider: (typeof referenceProviders)[number]["provider"],
       ) => {
-        definitionProviders.push({ language, provider });
+        referenceProviders.push({ language, provider });
         return { dispose: vi.fn() };
       },
+      registerCompletionItemProvider,
+      registerHoverProvider,
+      registerCodeActionProvider,
     },
     editor: {
       registerEditorOpener: (opener: (typeof editorOpeners)[number]) => {
@@ -75,7 +77,7 @@ vi.mock("monaco-editor", () => {
 });
 
 import type { CodeLanguageHostPort } from "./code-language-host-port";
-import { useCodeLanguageDefinition } from "./use-code-language-definition";
+import { useCodeLanguageReferences } from "./use-code-language-references";
 
 const workspacePath = "/tmp/redwhisk";
 
@@ -88,10 +90,10 @@ function createFakeHost(
     };
   }> = [],
 ): CodeLanguageHostPort & {
-  definitionRequests: unknown[];
+  referenceRequests: unknown[];
 } {
   return {
-    definitionRequests: [],
+    referenceRequests: [],
     async ensure() {
       return { status: "ready" };
     },
@@ -101,12 +103,12 @@ function createFakeHost(
     async notifyDocument() {
       return undefined;
     },
-    async requestDefinition(input) {
-      this.definitionRequests.push(input);
-      return { locations };
-    },
-    async requestReferences() {
+    async requestDefinition() {
       return { locations: [] };
+    },
+    async requestReferences(input) {
+      this.referenceRequests.push(input);
+      return { locations };
     },
     subscribeDiagnostics() {
       return () => undefined;
@@ -121,19 +123,22 @@ async function settle(): Promise<void> {
   });
 }
 
-describe("useCodeLanguageDefinition", () => {
+describe("useCodeLanguageReferences", () => {
   beforeEach(() => {
-    definitionProviders.length = 0;
+    referenceProviders.length = 0;
     editorOpeners.length = 0;
+    registerCompletionItemProvider.mockClear();
+    registerHoverProvider.mockClear();
+    registerCodeActionProvider.mockClear();
   });
 
-  it("opens an in-root definition and ignores out-of-root targets", async () => {
+  it("lists in-root references, opens a peek match, and ignores out-of-root targets", async () => {
     const host = createFakeHost([
       {
-        filePath: "src/lib.ts",
+        filePath: "src/usage.ts",
         range: {
-          start: { line: 1, character: 0 },
-          end: { line: 1, character: 3 },
+          start: { line: 2, character: 4 },
+          end: { line: 2, character: 7 },
         },
       },
       {
@@ -146,7 +151,7 @@ describe("useCodeLanguageDefinition", () => {
     ]);
     const openMatch = vi.fn();
     renderHook(() =>
-      useCodeLanguageDefinition({
+      useCodeLanguageReferences({
         projectId: 7,
         workspacePath,
         onOpenMatch: openMatch,
@@ -155,15 +160,15 @@ describe("useCodeLanguageDefinition", () => {
     );
     await settle();
 
-    expect(definitionProviders.map((item) => item.language)).toEqual([
+    expect(referenceProviders.map((item) => item.language)).toEqual([
       "typescript",
       "javascript",
     ]);
-    const locations = await definitionProviders[0]?.provider.provideDefinition(
+    const locations = await referenceProviders[0]?.provider.provideReferences(
       { uri: { toString: () => "file:///tmp/redwhisk/src/file.ts" } },
       { lineNumber: 1, column: 7 },
     );
-    expect(host.definitionRequests).toEqual([
+    expect(host.referenceRequests).toEqual([
       {
         projectId: 7,
         workspacePath,
@@ -172,24 +177,20 @@ describe("useCodeLanguageDefinition", () => {
       },
     ]);
     expect(locations?.map((location) => location.uri.toString())).toEqual([
-      "file:///tmp/redwhisk/src/lib.ts",
+      "file:///tmp/redwhisk/src/usage.ts",
     ]);
-    expect(locations?.[0]?.range).toMatchObject({
-      startLineNumber: 2,
-      startColumn: 1,
-    });
 
     expect(
       editorOpeners[0]?.openCodeEditor(
         null,
-        { toString: () => "file:///tmp/redwhisk/src/lib.ts" },
-        { startLineNumber: 2 },
+        { toString: () => "file:///tmp/redwhisk/src/usage.ts" },
+        { startLineNumber: 3 },
       ),
     ).toBe(true);
     expect(openMatch).toHaveBeenCalledWith({
-      fileName: "lib.ts",
-      filePath: "src/lib.ts",
-      lineNumber: 2,
+      fileName: "usage.ts",
+      filePath: "src/usage.ts",
+      lineNumber: 3,
     });
 
     openMatch.mockClear();
@@ -201,12 +202,15 @@ describe("useCodeLanguageDefinition", () => {
       ),
     ).toBe(false);
     expect(openMatch).not.toHaveBeenCalled();
+    expect(registerCompletionItemProvider).not.toHaveBeenCalled();
+    expect(registerHoverProvider).not.toHaveBeenCalled();
+    expect(registerCodeActionProvider).not.toHaveBeenCalled();
   });
 
   it("does not query the host for models outside the current code root", async () => {
     const host = createFakeHost();
     renderHook(() =>
-      useCodeLanguageDefinition({
+      useCodeLanguageReferences({
         projectId: 7,
         workspacePath,
         onOpenMatch: vi.fn(),
@@ -215,11 +219,11 @@ describe("useCodeLanguageDefinition", () => {
     );
     await settle();
 
-    const locations = await definitionProviders[0]?.provider.provideDefinition(
+    const locations = await referenceProviders[0]?.provider.provideReferences(
       { uri: { toString: () => "file:///tmp/session/file.ts" } },
       { lineNumber: 1, column: 1 },
     );
     expect(locations).toEqual([]);
-    expect(host.definitionRequests).toEqual([]);
+    expect(host.referenceRequests).toEqual([]);
   });
 });

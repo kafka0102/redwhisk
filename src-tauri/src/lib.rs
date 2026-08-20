@@ -14,8 +14,8 @@ use agent::latest_output_writer::LatestOutputWriter;
 use app_state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use features::settings::agent_skill_commands::trigger_global_skill_refresh;
-use local_data_service::LocalDataService;
 use local_data_path::redwhisk_data_dir;
+use local_data_service::LocalDataService;
 use logging::Logger;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -211,7 +211,8 @@ pub fn run() {
             features::code_language::commands::ensure_code_language_host,
             features::code_language::commands::stop_code_language_host,
             features::code_language::commands::notify_code_language_document,
-            features::code_language::commands::code_language_definition
+            features::code_language::commands::code_language_definition,
+            features::code_language::commands::code_language_references
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
