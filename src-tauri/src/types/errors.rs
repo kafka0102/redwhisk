@@ -37,6 +37,7 @@ pub enum CommandErrorCode {
     UserProfileValidationFailed,
     AppUpdatePersistenceFailed,
     AppUpdateValidationFailed,
+    CodeLanguageValidationFailed,
     UnknownCommandError,
 }
 

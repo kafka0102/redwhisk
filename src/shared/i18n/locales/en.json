@@ -946,6 +946,15 @@
     "USER_PROFILE_VALIDATION_FAILED": {
       "avatarFormatInvalid": "Avatar must be a PNG, JPG, or WebP image.",
       "nameTooLong": "Name is limited to 20 characters."
+    },
+    "CODE_LANGUAGE_VALIDATION_FAILED": {
+      "default": "Code language intelligence validation failed.",
+      "dataDirUnavailable": "The code language intelligence data directory is unavailable.",
+      "joinFailed": "Code language intelligence failed to start.",
+      "projectQueryFailed": "Code language intelligence validation failed.",
+      "workspaceNotFound": "The code workspace does not exist.",
+      "workspacePathInvalid": "The workspace path is invalid.",
+      "workspacePathRequired": "The workspace path is required."
     }
   },
   "changesBranchMenu": {
@@ -1030,5 +1039,11 @@
     "cancel": "Cancel",
     "creating": "Creating branch…",
     "createSuccess": "Created and checked out {{branch}}"
+  },
+  "codeLanguage": {
+    "unavailable": {
+      "nodeNotFound": "Node.js was not found, so TS/JS language intelligence is unavailable.",
+      "spawnFailed": "TS/JS language intelligence failed to start."
+    }
   }
 }

@@ -1547,6 +1547,18 @@
         "projectId": "required",
         "sessionId": "required"
       }
+    },
+    "CodeLanguageHostInput": {
+      "fields": {
+        "projectId": "required",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageHostStatus": {
+      "fields": {
+        "reason": "optional",
+        "status": "required"
+      }
     }
   },
   "enums": {
@@ -1693,6 +1705,7 @@
         "USER_PROFILE_VALIDATION_FAILED",
         "APP_UPDATE_PERSISTENCE_FAILED",
         "APP_UPDATE_VALIDATION_FAILED",
+        "CODE_LANGUAGE_VALIDATION_FAILED",
         "UNKNOWN_COMMAND_ERROR"
       ]
     },
@@ -1953,6 +1966,20 @@
       "variants": [
         "redwhisk",
         "external"
+      ]
+    },
+    "CodeLanguageHostStatusKind": {
+      "rename": "camelCase",
+      "variants": [
+        "ready",
+        "unavailable"
+      ]
+    },
+    "CodeLanguageUnavailableReason": {
+      "rename": "camelCase",
+      "variants": [
+        "nodeNotFound",
+        "spawnFailed"
       ]
     }
   }

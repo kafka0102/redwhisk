@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { I18nProvider } from "../../shared/i18n/i18n";
 import type { CodeFileTab } from "./code-workspace-cache";
 import { CodeContent } from "./code-content";
 
@@ -235,5 +236,25 @@ describe("CodeContent edit interactions", () => {
       selectionHighlight: false,
       renderValidationDecorations: "off",
     });
+  });
+
+  it("shows a lightweight unavailable hint above the editor", async () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeContent
+          projectId={1}
+          tab={buildTab()}
+          contentFontSize={14}
+          messages={messages}
+          theme="light"
+          unavailableReason="nodeNotFound"
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Node.js was not found, so TS/JS language intelligence is unavailable.",
+    );
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
   });
 });

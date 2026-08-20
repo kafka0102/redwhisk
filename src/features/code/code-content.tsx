@@ -4,6 +4,7 @@ import { CodeMarkdownPreview } from "./code-markdown-preview";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
+import type { CodeLanguageUnavailableReason } from "./code-language-commands";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import {
   getCodeEditorViewState,
@@ -35,6 +36,7 @@ export function CodeContent({
   theme,
   onContentChange,
   revealRequest = null,
+  unavailableReason = null,
   viewMode = "source",
 }: {
   projectId: number;
@@ -44,6 +46,7 @@ export function CodeContent({
   theme: "light" | "dark";
   onContentChange?: (value: string) => void;
   revealRequest?: CodeRevealRequest | null;
+  unavailableReason?: CodeLanguageUnavailableReason | null;
   viewMode?: "source" | "preview";
 }) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
@@ -51,6 +54,7 @@ export function CodeContent({
   const projectIdRef = useRef(projectId);
   const filePathRef = useRef(tab.filePath);
   const isMonacoReady = useMonacoEditorReady();
+  const { t } = useI18n();
 
   useEffect(() => {
     projectIdRef.current = projectId;
@@ -206,30 +210,40 @@ export function CodeContent({
   }
 
   const isReadOnly = !tab.isEditable;
+  const unavailableMessage = unavailableReason
+    ? t(`codeLanguage.unavailable.${unavailableReason}`)
+    : null;
 
   return (
-    <Editor
-      height="100%"
-      theme={theme === "dark" ? "vs-dark" : "light"}
-      language={tab.content.language ?? undefined}
-      options={{
-        readOnly: isReadOnly,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        fontSize: contentFontSize,
-        // 轻量编辑/只读查看均不做 IDE 诊断；关闭词丛高亮，避免 env 等重复 token 误闪选。
-        occurrencesHighlight: "off",
-        selectionHighlight: false,
-        renderValidationDecorations: "off",
-      }}
-      value={tab.content.content}
-      onChange={(value) => {
-        if (isReadOnly || value == null) {
-          return;
-        }
-        onContentChange?.(value);
-      }}
-      onMount={onMount}
-    />
+    <div className="code-workspace__editor-pane">
+      {unavailableMessage ? (
+        <p className="code-workspace__language-unavailable" role="status">
+          {unavailableMessage}
+        </p>
+      ) : null}
+      <Editor
+        height="100%"
+        theme={theme === "dark" ? "vs-dark" : "light"}
+        language={tab.content.language ?? undefined}
+        options={{
+          readOnly: isReadOnly,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          fontSize: contentFontSize,
+          // 轻量编辑/只读查看均不做 IDE 诊断；关闭词丛高亮，避免 env 等重复 token 误闪选。
+          occurrencesHighlight: "off",
+          selectionHighlight: false,
+          renderValidationDecorations: "off",
+        }}
+        value={tab.content.content}
+        onChange={(value) => {
+          if (isReadOnly || value == null) {
+            return;
+          }
+          onContentChange?.(value);
+        }}
+        onMount={onMount}
+      />
+    </div>
   );
 }

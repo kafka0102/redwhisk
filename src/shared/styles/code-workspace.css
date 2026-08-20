@@ -727,3 +727,21 @@
   color: var(--color-danger, #c44);
   font-size: 11px;
 }
+
+.code-workspace__editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.code-workspace__language-unavailable {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}

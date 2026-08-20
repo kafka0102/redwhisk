@@ -946,6 +946,15 @@
     "USER_PROFILE_VALIDATION_FAILED": {
       "avatarFormatInvalid": "头像必须是 PNG、JPG 或 WebP 图片。",
       "nameTooLong": "用户名不能超过 20 个字符。"
+    },
+    "CODE_LANGUAGE_VALIDATION_FAILED": {
+      "default": "代码语言智能校验失败。",
+      "dataDirUnavailable": "代码语言智能数据目录不可用。",
+      "joinFailed": "代码语言智能启动失败。",
+      "projectQueryFailed": "代码语言智能校验失败。",
+      "workspaceNotFound": "代码工作区不存在。",
+      "workspacePathInvalid": "工作区路径无效。",
+      "workspacePathRequired": "工作区路径不能为空。"
     }
   },
   "changesBranchMenu": {
@@ -1030,5 +1039,11 @@
     "cancel": "取消",
     "creating": "正在创建分支…",
     "createSuccess": "已创建并签出 {{branch}}"
+  },
+  "codeLanguage": {
+    "unavailable": {
+      "nodeNotFound": "本机没有 Node，TS/JS 语言智能不可用。",
+      "spawnFailed": "TS/JS 语言智能启动失败。"
+    }
   }
 }

@@ -36,6 +36,7 @@ const tsFiles = [
   path.join(srcDir, "shared/commands/app-commands.ts"),
   path.join(srcDir, "shared/commands/app-update-commands.ts"),
   path.join(srcDir, "shared/workspace/workspace-commands.ts"),
+  path.join(srcDir, "features/code/code-language-commands.ts"),
 ];
 
 const ts = extractAllTsSignatures(tsFiles);

@@ -207,7 +207,9 @@ pub fn run() {
             features::settings::commands::get_user_profile,
             features::settings::commands::update_user_profile,
             features::app_update::commands::get_update_status,
-            features::app_update::commands::dismiss_update_prompt
+            features::app_update::commands::dismiss_update_prompt,
+            features::code_language::commands::ensure_code_language_host,
+            features::code_language::commands::stop_code_language_host
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

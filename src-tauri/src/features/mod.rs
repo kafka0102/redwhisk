@@ -3,6 +3,7 @@
 
 pub mod agent_session;
 pub mod app_update;
+pub mod code_language;
 pub mod issue;
 pub mod project;
 pub mod project_terminal;

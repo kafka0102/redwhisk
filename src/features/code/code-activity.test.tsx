@@ -112,6 +112,16 @@ vi.mock("@monaco-editor/react", () => ({
   },
 }));
 
+const { ensureCodeLanguageHost, stopCodeLanguageHost } = vi.hoisted(() => ({
+  ensureCodeLanguageHost: vi.fn(),
+  stopCodeLanguageHost: vi.fn(),
+}));
+
+vi.mock("./code-language-commands", () => ({
+  ensureCodeLanguageHost,
+  stopCodeLanguageHost,
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   getProjectWorktreeChanges: vi.fn(),
@@ -270,6 +280,10 @@ describe("CodeActivity", () => {
       modifiedAt: fileContent.modifiedAt,
     });
     vi.mocked(writeProjectWorktreeFile).mockReset();
+    ensureCodeLanguageHost.mockReset();
+    stopCodeLanguageHost.mockReset();
+    ensureCodeLanguageHost.mockResolvedValue({ status: "ready" });
+    stopCodeLanguageHost.mockResolvedValue(undefined);
     vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => ({
       ...fileContent,
       content: input.content,
@@ -2156,5 +2170,99 @@ describe("CodeActivity", () => {
       "title",
       "Binary files cannot be edited",
     );
+  });
+
+  it("ensures the language host when opening a typescript file", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(ensureCodeLanguageHost).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("does not ensure the language host for markdown files", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(markdownContent);
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    });
+    expect(ensureCodeLanguageHost).not.toHaveBeenCalled();
+  });
+
+  it("does not ensure the language host for binary files", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue({
+      ...fileContent,
+      content: "",
+      isBinary: true,
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Binary files cannot be previewed."),
+      ).toBeInTheDocument();
+    });
+    expect(ensureCodeLanguageHost).not.toHaveBeenCalled();
+  });
+
+  it("stops the language host when the code activity unmounts", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(ensureCodeLanguageHost).toHaveBeenCalled();
+    });
+    unmount();
+    expect(stopCodeLanguageHost).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+    });
+  });
+
+  it("shows an in-editor unavailable hint when node is missing", async () => {
+    const user = userEvent.setup();
+    ensureCodeLanguageHost.mockResolvedValue({
+      status: "unavailable",
+      reason: "nodeNotFound",
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Node.js was not found, so TS/JS language intelligence is unavailable.",
+    );
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
   });
 });
