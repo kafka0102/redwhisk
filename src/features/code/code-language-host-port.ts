@@ -3,7 +3,10 @@ import {
   CODE_LANGUAGE_DIAGNOSTICS_EVENT,
   ensureCodeLanguageHost,
   notifyCodeLanguageDocument,
+  requestCodeLanguageDefinition,
   stopCodeLanguageHost,
+  type CodeLanguageDefinitionInput,
+  type CodeLanguageDefinitionResult,
   type CodeLanguageDiagnosticsEvent,
   type CodeLanguageDocumentInput,
   type CodeLanguageHostInput,
@@ -14,6 +17,9 @@ export interface CodeLanguageHostPort {
   ensure(input: CodeLanguageHostInput): Promise<CodeLanguageHostStatus>;
   stop(input: CodeLanguageHostInput): Promise<void>;
   notifyDocument(input: CodeLanguageDocumentInput): Promise<void>;
+  requestDefinition(
+    input: CodeLanguageDefinitionInput,
+  ): Promise<CodeLanguageDefinitionResult>;
   subscribeDiagnostics(
     handler: (payload: CodeLanguageDiagnosticsEvent) => void,
   ): () => void;
@@ -36,6 +42,7 @@ export function createTauriCodeLanguageHostPort(): CodeLanguageHostPort {
     ensure: ensureCodeLanguageHost,
     stop: stopCodeLanguageHost,
     notifyDocument: notifyCodeLanguageDocument,
+    requestDefinition: requestCodeLanguageDefinition,
     subscribeDiagnostics: (
       handler: (payload: CodeLanguageDiagnosticsEvent) => void,
     ): (() => void) =>

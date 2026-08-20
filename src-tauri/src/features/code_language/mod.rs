@@ -1,4 +1,5 @@
 pub mod commands;
+mod definition;
 mod host;
 mod protocol;
 mod reader;

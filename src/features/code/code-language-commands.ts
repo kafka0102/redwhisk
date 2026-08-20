@@ -51,6 +51,22 @@ export interface CodeLanguageDiagnosticsEvent {
   diagnostics: CodeLanguageDiagnostic[];
 }
 
+export interface CodeLanguageDefinitionInput {
+  projectId: number;
+  workspacePath: string;
+  uri: string;
+  position: CodeLanguagePosition;
+}
+
+export interface CodeLanguageLocation {
+  filePath: string;
+  range: CodeLanguageRange;
+}
+
+export interface CodeLanguageDefinitionResult {
+  locations: CodeLanguageLocation[];
+}
+
 export async function ensureCodeLanguageHost(
   input: CodeLanguageHostInput,
 ): Promise<CodeLanguageHostStatus> {
@@ -69,4 +85,13 @@ export async function notifyCodeLanguageDocument(
   input: CodeLanguageDocumentInput,
 ): Promise<void> {
   await invokeCommand<void>("notify_code_language_document", { input });
+}
+
+export async function requestCodeLanguageDefinition(
+  input: CodeLanguageDefinitionInput,
+): Promise<CodeLanguageDefinitionResult> {
+  return invokeCommand<CodeLanguageDefinitionResult>(
+    "code_language_definition",
+    { input },
+  );
 }

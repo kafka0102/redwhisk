@@ -76,10 +76,7 @@ pub fn parse_publish_diagnostics(message: &Value) -> Option<(String, Vec<CodeLan
 fn parse_diagnostic(value: &Value) -> Option<CodeLanguageDiagnostic> {
     let range = value.get("range")?;
     Some(CodeLanguageDiagnostic {
-        range: CodeLanguageRange {
-            start: parse_position(range.get("start")?)?,
-            end: parse_position(range.get("end")?)?,
-        },
+        range: parse_range(range)?,
         message: value.get("message")?.as_str()?.to_string(),
         severity: value
             .get("severity")
@@ -93,11 +90,38 @@ fn parse_diagnostic(value: &Value) -> Option<CodeLanguageDiagnostic> {
     })
 }
 
-fn parse_position(value: &Value) -> Option<CodeLanguagePosition> {
+pub(super) fn parse_range(value: &Value) -> Option<CodeLanguageRange> {
+    Some(CodeLanguageRange {
+        start: parse_position(value.get("start")?)?,
+        end: parse_position(value.get("end")?)?,
+    })
+}
+
+pub(super) fn parse_position(value: &Value) -> Option<CodeLanguagePosition> {
     Some(CodeLanguagePosition {
         line: value.get("line")?.as_u64()? as u32,
         character: value.get("character")?.as_u64()? as u32,
     })
+}
+
+pub fn parse_definition_result(result: &Value) -> Vec<(String, CodeLanguageRange)> {
+    match result {
+        Value::Null => Vec::new(),
+        Value::Array(items) => items.iter().filter_map(parse_definition_location).collect(),
+        other => parse_definition_location(other).into_iter().collect(),
+    }
+}
+
+fn parse_definition_location(value: &Value) -> Option<(String, CodeLanguageRange)> {
+    if let Some(uri) = value.get("uri").and_then(Value::as_str) {
+        return Some((uri.to_string(), parse_range(value.get("range")?)?));
+    }
+    let uri = value.get("targetUri").and_then(Value::as_str)?;
+    let range = value
+        .get("targetSelectionRange")
+        .or_else(|| value.get("targetRange"))
+        .and_then(parse_range)?;
+    Some((uri.to_string(), range))
 }
 
 fn parse_code(value: Option<&Value>) -> Option<String> {
@@ -194,5 +218,46 @@ mod tests {
             "params": { "type": 3, "message": "hi" }
         });
         assert!(parse_publish_diagnostics(&message).is_none());
+    }
+
+    #[test]
+    fn parses_definition_location_array_and_location_link() {
+        let locations = parse_definition_result(&json!([
+            {
+                "uri": "file:///tmp/repo/src/lib.ts",
+                "range": {
+                    "start": { "line": 1, "character": 0 },
+                    "end": { "line": 1, "character": 3 }
+                }
+            },
+            {
+                "targetUri": "file:///tmp/repo/src/other.ts",
+                "targetRange": {
+                    "start": { "line": 4, "character": 0 },
+                    "end": { "line": 10, "character": 1 }
+                },
+                "targetSelectionRange": {
+                    "start": { "line": 4, "character": 9 },
+                    "end": { "line": 4, "character": 12 }
+                }
+            }
+        ]));
+        assert_eq!(locations[0].0, "file:///tmp/repo/src/lib.ts");
+        assert_eq!(locations[0].1.start.line, 1);
+        assert_eq!(locations[1].0, "file:///tmp/repo/src/other.ts");
+        assert_eq!(locations[1].1.start.character, 9);
+    }
+
+    #[test]
+    fn parses_single_definition_location_and_null() {
+        let locations = parse_definition_result(&json!({
+            "uri": "file:///tmp/repo/src/lib.ts",
+            "range": {
+                "start": { "line": 0, "character": 0 },
+                "end": { "line": 0, "character": 3 }
+            }
+        }));
+        assert_eq!(locations.len(), 1);
+        assert!(parse_definition_result(&json!(null)).is_empty());
     }
 }

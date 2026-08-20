@@ -15,7 +15,7 @@ struct HostKey {
 
 struct HostSlot {
     status: CodeLanguageHostStatus,
-    host: Option<LanguageHost>,
+    host: Option<Arc<LanguageHost>>,
 }
 
 #[derive(Clone)]
@@ -89,7 +89,7 @@ impl CodeLanguageHostRegistry {
         };
         if let Ok(mut hosts) = self.inner.lock() {
             if let Some(mut slot) = hosts.remove(&key) {
-                if let Some(mut host) = slot.host.take() {
+                if let Some(host) = slot.host.take() {
                     host.stop();
                 }
             }
@@ -105,12 +105,41 @@ impl CodeLanguageHostRegistry {
                 .collect();
             for key in keys {
                 if let Some(mut slot) = hosts.remove(&key) {
-                    if let Some(mut host) = slot.host.take() {
+                    if let Some(host) = slot.host.take() {
                         host.stop();
                     }
                 }
             }
         }
+    }
+
+    pub fn request_definition(
+        &self,
+        project_id: i64,
+        workspace_path: &str,
+        uri: &str,
+        position: &crate::types::code_language::CodeLanguagePosition,
+    ) -> Vec<crate::types::code_language::CodeLanguageLocation> {
+        let key = HostKey {
+            project_id,
+            workspace_path: workspace_path.to_string(),
+        };
+        let host = {
+            let hosts = match self.inner.lock() {
+                Ok(hosts) => hosts,
+                Err(_) => return Vec::new(),
+            };
+            match hosts.get(&key).and_then(|slot| slot.host.clone()) {
+                Some(host) => host,
+                None => return Vec::new(),
+            }
+        };
+        super::definition::request_definition(
+            &host,
+            std::path::Path::new(workspace_path),
+            uri,
+            position,
+        )
     }
 
     pub fn notify_document(
@@ -130,7 +159,7 @@ impl CodeLanguageHostRegistry {
         let Some(slot) = hosts.get_mut(&key) else {
             return false;
         };
-        let Some(host) = slot.host.as_mut() else {
+        let Some(host) = slot.host.as_ref() else {
             return false;
         };
         host.write_message(payload).is_ok()
@@ -140,7 +169,7 @@ impl CodeLanguageHostRegistry {
         let mut hosts = self.inner.lock().ok()?;
         let slot = hosts.get_mut(key)?;
         if slot.status.status == crate::types::code_language::CodeLanguageHostStatusKind::Ready {
-            if let Some(host) = slot.host.as_mut() {
+            if let Some(host) = slot.host.as_ref() {
                 if host.is_alive() {
                     return Some(slot.status.clone());
                 }
@@ -158,7 +187,7 @@ impl CodeLanguageHostRegistry {
                 .collect();
             for key in keys {
                 if let Some(mut slot) = hosts.remove(&key) {
-                    if let Some(mut host) = slot.host.take() {
+                    if let Some(host) = slot.host.take() {
                         host.stop();
                     }
                 }
@@ -173,8 +202,14 @@ impl CodeLanguageHostRegistry {
         host: Option<LanguageHost>,
     ) {
         if let Ok(mut hosts) = self.inner.lock() {
-            if let Some(mut previous) = hosts.insert(key, HostSlot { status, host }) {
-                if let Some(mut host) = previous.host.take() {
+            if let Some(mut previous) = hosts.insert(
+                key,
+                HostSlot {
+                    status,
+                    host: host.map(Arc::new),
+                },
+            ) {
+                if let Some(host) = previous.host.take() {
                     host.stop();
                 }
             }

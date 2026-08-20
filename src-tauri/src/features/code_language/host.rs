@@ -1,17 +1,24 @@
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use super::reader::{handshake_and_listen, DiagnosticsListener};
+use super::reader::{handshake_and_listen, DiagnosticsListener, PendingResponses};
 use super::resolver::LanguageRuntime;
 use super::rpc::{file_uri, write_rpc};
 use crate::types::code_language::CodeLanguageUnavailableReason;
 
+const NEXT_REQUEST_ID: i64 = 3;
+
 #[derive(Debug)]
 pub struct LanguageHost {
-    child: Child,
+    child: Mutex<Child>,
     stdin: Arc<Mutex<ChildStdin>>,
+    pending: PendingResponses,
+    next_id: AtomicI64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +59,7 @@ impl LanguageHost {
                 CodeLanguageUnavailableReason::SpawnFailed,
             ))?;
         let stdin = Arc::new(Mutex::new(stdin));
+        let pending: PendingResponses = Arc::new(Mutex::new(Default::default()));
 
         let initialize = json!({
             "jsonrpc": "2.0",
@@ -71,21 +79,30 @@ impl LanguageHost {
             }
         });
 
-        if let Err(reason) =
-            handshake_and_listen(Arc::clone(&stdin), stdout, initialize, on_diagnostics)
-        {
+        if let Err(reason) = handshake_and_listen(
+            Arc::clone(&stdin),
+            stdout,
+            initialize,
+            on_diagnostics,
+            Arc::clone(&pending),
+        ) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(SpawnLanguageHostError::Unavailable(reason));
         }
 
-        Ok(Self { child, stdin })
+        Ok(Self {
+            child: Mutex::new(child),
+            stdin,
+            pending,
+            next_id: AtomicI64::new(NEXT_REQUEST_ID),
+        })
     }
 
-    pub fn is_alive(&mut self) -> bool {
-        match self.child.try_wait() {
-            Ok(None) => true,
-            _ => false,
+    pub fn is_alive(&self) -> bool {
+        match self.child.lock() {
+            Ok(mut child) => matches!(child.try_wait(), Ok(None)),
+            Err(_) => false,
         }
     }
 
@@ -97,7 +114,47 @@ impl LanguageHost {
         write_rpc(&mut *stdin, value)
     }
 
-    pub fn stop(&mut self) {
+    pub fn request(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> std::io::Result<Value> {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let request_id = json!(id);
+        let (sender, receiver) = mpsc::channel();
+        {
+            let mut pending = self.pending.lock().map_err(|error| {
+                std::io::Error::new(std::io::ErrorKind::Other, error.to_string())
+            })?;
+            pending.insert(request_id.clone(), sender);
+        }
+        if let Err(error) = self.write_message(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params
+        })) {
+            if let Ok(mut pending) = self.pending.lock() {
+                pending.remove(&request_id);
+            }
+            return Err(error);
+        }
+        match receiver.recv_timeout(timeout) {
+            Ok(message) => Ok(message),
+            Err(error) => {
+                if let Ok(mut pending) = self.pending.lock() {
+                    pending.remove(&request_id);
+                }
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    error.to_string(),
+                ))
+            }
+        }
+    }
+
+    pub fn stop(&self) {
         let _ = self.write_message(&json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -109,8 +166,10 @@ impl LanguageHost {
             "method": "exit",
             "params": null
         }));
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -210,7 +269,7 @@ while True:
         let temp_dir = tempdir().expect("temp dir");
         let workspace = temp_dir.path().join("repo");
         let runtime = runtime_with_script(&workspace, fake_lsp_script());
-        let mut host = LanguageHost::spawn(&runtime).expect("spawn fake host");
+        let host = LanguageHost::spawn(&runtime).expect("spawn fake host");
         assert!(host.is_alive(), "握手完成后宿主应仍在运行");
         host.stop();
         assert!(!host.is_alive(), "停止后宿主应退出");
@@ -222,7 +281,7 @@ while True:
         let workspace = temp_dir.path().join("repo");
         let runtime = runtime_with_script(&workspace, fake_lsp_script());
         let (sender, receiver) = mpsc::channel::<(String, Vec<CodeLanguageDiagnostic>)>();
-        let mut host = LanguageHost::spawn_with_diagnostics(
+        let host = LanguageHost::spawn_with_diagnostics(
             &runtime,
             Arc::new(move |uri, diagnostics| {
                 let _ = sender.send((uri, diagnostics));

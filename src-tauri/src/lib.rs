@@ -210,7 +210,8 @@ pub fn run() {
             features::app_update::commands::dismiss_update_prompt,
             features::code_language::commands::ensure_code_language_host,
             features::code_language::commands::stop_code_language_host,
-            features::code_language::commands::notify_code_language_document
+            features::code_language::commands::notify_code_language_document,
+            features::code_language::commands::code_language_definition
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -54,6 +54,14 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
 
 vi.mock("monaco-editor", () => ({
   MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+  Range: class Range {
+    constructor(
+      public startLineNumber: number,
+      public startColumn: number,
+      public endLineNumber: number,
+      public endColumn: number,
+    ) {}
+  },
   Uri: {
     parse: (value: string) => ({
       toString: () => value,
@@ -61,10 +69,14 @@ vi.mock("monaco-editor", () => ({
       fsPath: value,
     }),
   },
+  languages: {
+    registerDefinitionProvider: () => ({ dispose: vi.fn() }),
+  },
   editor: {
     getModel: () => null,
     getModels: () => [],
     setModelMarkers: vi.fn(),
+    registerEditorOpener: () => ({ dispose: vi.fn() }),
   },
 }));
 
@@ -132,10 +144,12 @@ const {
   ensureCodeLanguageHost,
   stopCodeLanguageHost,
   notifyCodeLanguageDocument,
+  requestCodeLanguageDefinition,
 } = vi.hoisted(() => ({
   ensureCodeLanguageHost: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
   notifyCodeLanguageDocument: vi.fn(),
+  requestCodeLanguageDefinition: vi.fn(),
 }));
 
 vi.mock("./code-language-commands", () => ({
@@ -143,6 +157,7 @@ vi.mock("./code-language-commands", () => ({
   ensureCodeLanguageHost,
   stopCodeLanguageHost,
   notifyCodeLanguageDocument,
+  requestCodeLanguageDefinition,
 }));
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
@@ -306,9 +321,11 @@ describe("CodeActivity", () => {
     ensureCodeLanguageHost.mockReset();
     stopCodeLanguageHost.mockReset();
     notifyCodeLanguageDocument.mockReset();
+    requestCodeLanguageDefinition.mockReset();
     ensureCodeLanguageHost.mockResolvedValue({ status: "ready" });
     stopCodeLanguageHost.mockResolvedValue(undefined);
     notifyCodeLanguageDocument.mockResolvedValue(undefined);
+    requestCodeLanguageDefinition.mockResolvedValue({ locations: [] });
     vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => ({
       ...fileContent,
       content: input.content,

@@ -257,6 +257,10 @@ describe("CodeContent edit interactions", () => {
       occurrencesHighlight: "off",
       selectionHighlight: false,
       renderValidationDecorations: "on",
+      gotoLocation: {
+        multiple: "peek",
+        multipleDefinitions: "peek",
+      },
     });
   });
 

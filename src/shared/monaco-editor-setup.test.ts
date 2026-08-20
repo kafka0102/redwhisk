@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const loaderConfigMock = vi.hoisted(() => vi.fn());
 const typescriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
 const javascriptDefaultsSetDiagnosticsMock = vi.hoisted(() => vi.fn());
+const typescriptDefaultsSetModeConfigurationMock = vi.hoisted(() => vi.fn());
+const javascriptDefaultsSetModeConfigurationMock = vi.hoisted(() => vi.fn());
 const languagesGetLanguagesMock = vi.hoisted(() => vi.fn(() => []));
 const languagesRegisterMock = vi.hoisted(() => vi.fn());
 const languagesSetMonarchTokensProviderMock = vi.hoisted(() => vi.fn());
@@ -23,9 +25,11 @@ vi.mock("monaco-editor", () => ({
   typescript: {
     typescriptDefaults: {
       setDiagnosticsOptions: typescriptDefaultsSetDiagnosticsMock,
+      setModeConfiguration: typescriptDefaultsSetModeConfigurationMock,
     },
     javascriptDefaults: {
       setDiagnosticsOptions: javascriptDefaultsSetDiagnosticsMock,
+      setModeConfiguration: javascriptDefaultsSetModeConfigurationMock,
     },
   },
 }));
@@ -55,6 +59,8 @@ describe("configureMonacoEditor", () => {
     loaderConfigMock.mockClear();
     typescriptDefaultsSetDiagnosticsMock.mockClear();
     javascriptDefaultsSetDiagnosticsMock.mockClear();
+    typescriptDefaultsSetModeConfigurationMock.mockClear();
+    javascriptDefaultsSetModeConfigurationMock.mockClear();
     languagesGetLanguagesMock.mockClear();
     languagesRegisterMock.mockClear();
     languagesSetMonarchTokensProviderMock.mockClear();
@@ -115,6 +121,19 @@ describe("configureMonacoEditor", () => {
       noSemanticValidation: true,
       noSyntaxValidation: true,
     });
+  });
+
+  it("disables the built-in typescript definition provider", async () => {
+    const { configureMonacoEditor } = await import("./monaco-editor-setup");
+
+    configureMonacoEditor();
+
+    expect(typescriptDefaultsSetModeConfigurationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ definitions: false }),
+    );
+    expect(javascriptDefaultsSetModeConfigurationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ definitions: false }),
+    );
   });
 
   it("registers prisma language for schema highlighting", async () => {

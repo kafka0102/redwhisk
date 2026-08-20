@@ -76,6 +76,9 @@ function createFakeHost(
     async notifyDocument(input) {
       this.documents.push(input);
     },
+    async requestDefinition() {
+      return { locations: [] };
+    },
     subscribeDiagnostics(handler) {
       listeners.add(handler);
       return () => {

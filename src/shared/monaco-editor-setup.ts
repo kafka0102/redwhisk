@@ -59,6 +59,27 @@ export function configureMonacoEditor() {
     noSemanticValidation: true,
     noSyntaxValidation: true,
   });
+  const languageModeConfiguration = {
+    completionItems: true,
+    hovers: true,
+    documentSymbols: true,
+    definitions: false,
+    references: true,
+    documentHighlights: true,
+    rename: true,
+    diagnostics: true,
+    documentRangeFormattingEdits: true,
+    signatureHelp: true,
+    onTypeFormattingEdits: true,
+    codeActions: true,
+    inlayHints: true,
+  };
+  monaco.typescript.typescriptDefaults.setModeConfiguration(
+    languageModeConfiguration,
+  );
+  monaco.typescript.javascriptDefaults.setModeConfiguration(
+    languageModeConfiguration,
+  );
 
   hasConfiguredMonacoEditor = true;
 }

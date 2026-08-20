@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{BufReader, Read};
 use std::process::ChildStdin;
 use std::sync::mpsc;
@@ -14,12 +15,14 @@ use crate::types::code_language::{CodeLanguageDiagnostic, CodeLanguageUnavailabl
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub type DiagnosticsListener = Arc<dyn Fn(String, Vec<CodeLanguageDiagnostic>) + Send + Sync>;
+pub type PendingResponses = Arc<Mutex<HashMap<Value, mpsc::Sender<Value>>>>;
 
 pub fn handshake_and_listen(
     stdin: Arc<Mutex<ChildStdin>>,
     stdout: impl Read + Send + 'static,
     initialize: Value,
     on_diagnostics: DiagnosticsListener,
+    pending: PendingResponses,
 ) -> Result<(), CodeLanguageUnavailableReason> {
     let (sender, receiver) = mpsc::channel();
     let reader_stdin = Arc::clone(&stdin);
@@ -29,7 +32,7 @@ pub fn handshake_and_listen(
         let ok = handshake.is_ok();
         let _ = sender.send(handshake);
         if ok {
-            dispatch_loop(&mut reader, reader_stdin, on_diagnostics);
+            dispatch_loop(&mut reader, reader_stdin, on_diagnostics, pending);
         }
     });
 
@@ -56,6 +59,7 @@ fn dispatch_loop(
     reader: &mut BufReader<impl Read>,
     stdin: Arc<Mutex<ChildStdin>>,
     on_diagnostics: DiagnosticsListener,
+    pending: PendingResponses,
 ) {
     loop {
         let message = match read_rpc(reader) {
@@ -66,15 +70,25 @@ fn dispatch_loop(
             on_diagnostics(uri, diagnostics);
             continue;
         }
-        if let (Some(id), Some(_)) = (message.get("id"), message.get("method")) {
-            let _ = write_locked(
-                &stdin,
-                &json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": null
-                }),
-            );
+        if message.get("method").is_some() {
+            if let Some(id) = message.get("id") {
+                let _ = write_locked(
+                    &stdin,
+                    &json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": null
+                    }),
+                );
+            }
+            continue;
+        }
+        if let Some(id) = message.get("id") {
+            if let Ok(mut pending) = pending.lock() {
+                if let Some(sender) = pending.remove(id) {
+                    let _ = sender.send(message);
+                }
+            }
         }
     }
 }

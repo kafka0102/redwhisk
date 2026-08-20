@@ -103,3 +103,25 @@ pub struct CodeLanguagePosition {
     pub line: u32,
     pub character: u32,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageDefinitionInput {
+    pub project_id: i64,
+    pub workspace_path: String,
+    pub uri: String,
+    pub position: CodeLanguagePosition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageDefinitionResult {
+    pub locations: Vec<CodeLanguageLocation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageLocation {
+    pub file_path: String,
+    pub range: CodeLanguageRange,
+}

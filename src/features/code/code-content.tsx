@@ -252,6 +252,10 @@ export function CodeContent({
           occurrencesHighlight: "off",
           selectionHighlight: false,
           renderValidationDecorations: isLanguageFile ? "on" : "off",
+          gotoLocation: {
+            multiple: "peek",
+            multipleDefinitions: "peek",
+          },
         }}
         value={tab.content.content}
         onChange={(value) => {

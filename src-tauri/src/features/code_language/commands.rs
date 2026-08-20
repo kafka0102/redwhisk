@@ -13,8 +13,8 @@ use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::code_language::{
-    CodeLanguageDiagnosticsEvent, CodeLanguageDocumentInput, CodeLanguageHostInput,
-    CodeLanguageHostStatus,
+    CodeLanguageDefinitionInput, CodeLanguageDefinitionResult, CodeLanguageDiagnosticsEvent,
+    CodeLanguageDocumentInput, CodeLanguageHostInput, CodeLanguageHostStatus,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -63,6 +63,34 @@ pub async fn notify_code_language_document(
     tauri::async_runtime::spawn_blocking(move || {
         let _ = registry.notify_document(input.project_id, &workspace_path, &payload);
         Ok(())
+    })
+    .await
+    .map_err(|error| join_error(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn code_language_definition(
+    state: State<'_, AppState>,
+    input: CodeLanguageDefinitionInput,
+) -> Result<CodeLanguageDefinitionResult, CommandError> {
+    if input.uri.trim().is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::CodeLanguageValidationFailed,
+            "文档 URI 不能为空。",
+        )
+        .with_reason("documentUriRequired"));
+    }
+    let registry = state.code_language_hosts.clone();
+    let workspace_path = canonicalize_workspace_path(&input.workspace_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(CodeLanguageDefinitionResult {
+            locations: registry.request_definition(
+                input.project_id,
+                &workspace_path,
+                input.uri.trim(),
+                &input.position,
+            ),
+        })
     })
     .await
     .map_err(|error| join_error(error.to_string()))?

@@ -246,6 +246,19 @@
         "sessionId": "required"
       }
     },
+    "CodeLanguageDefinitionInput": {
+      "fields": {
+        "position": "required",
+        "projectId": "required",
+        "uri": "required",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageDefinitionResult": {
+      "fields": {
+        "locations": "required"
+      }
+    },
     "CodeLanguageDiagnostic": {
       "fields": {
         "code": "optional",
@@ -284,6 +297,12 @@
       "fields": {
         "reason": "optional",
         "status": "required"
+      }
+    },
+    "CodeLanguageLocation": {
+      "fields": {
+        "filePath": "required",
+        "range": "required"
       }
     },
     "CodeLanguagePosition": {

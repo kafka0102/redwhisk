@@ -11,6 +11,7 @@ vi.mock("./code-language-commands", () => ({
   CODE_LANGUAGE_DIAGNOSTICS_EVENT: "code-language-diagnostics",
   ensureCodeLanguageHost: vi.fn(),
   notifyCodeLanguageDocument: vi.fn(),
+  requestCodeLanguageDefinition: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
 }));
 

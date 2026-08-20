@@ -9,6 +9,7 @@ import {
   CODE_LANGUAGE_DIAGNOSTICS_EVENT,
   ensureCodeLanguageHost,
   notifyCodeLanguageDocument,
+  requestCodeLanguageDefinition,
   stopCodeLanguageHost,
 } from "./code-language-commands";
 
@@ -75,5 +76,47 @@ describe("code language commands", () => {
 
   it("exports the diagnostics event name", () => {
     expect(CODE_LANGUAGE_DIAGNOSTICS_EVENT).toBe("code-language-diagnostics");
+  });
+
+  it("requests definition locations for a document position", async () => {
+    invokeMock.mockResolvedValueOnce({
+      locations: [
+        {
+          filePath: "src/lib.ts",
+          range: {
+            start: { line: 1, character: 0 },
+            end: { line: 1, character: 3 },
+          },
+        },
+      ],
+    });
+
+    await expect(
+      requestCodeLanguageDefinition({
+        projectId: 7,
+        workspacePath: "/tmp/redwhisk",
+        uri: "file:///tmp/redwhisk/src/file.ts",
+        position: { line: 0, character: 6 },
+      }),
+    ).resolves.toEqual({
+      locations: [
+        {
+          filePath: "src/lib.ts",
+          range: {
+            start: { line: 1, character: 0 },
+            end: { line: 1, character: 3 },
+          },
+        },
+      ],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("code_language_definition", {
+      input: {
+        projectId: 7,
+        workspacePath: "/tmp/redwhisk",
+        uri: "file:///tmp/redwhisk/src/file.ts",
+        position: { line: 0, character: 6 },
+      },
+    });
   });
 });
