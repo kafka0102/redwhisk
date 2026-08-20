@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodeFileTab } from "./code-workspace-cache";
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(vi.fn())),
+}));
+
 vi.mock("./code-language-commands", () => ({
+  CODE_LANGUAGE_DIAGNOSTICS_EVENT: "code-language-diagnostics",
   ensureCodeLanguageHost: vi.fn(),
+  notifyCodeLanguageDocument: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
 }));
 
@@ -56,7 +62,7 @@ describe("useCodeLanguageHost", () => {
   });
 
   it("ensures the host for a typescript file", async () => {
-    renderHook(() =>
+    const { result } = renderHook(() =>
       useCodeLanguageHost({
         projectId: 7,
         workspacePath: "/tmp/redwhisk",
@@ -69,6 +75,7 @@ describe("useCodeLanguageHost", () => {
       projectId: 7,
       workspacePath: "/tmp/redwhisk",
     });
+    expect(result.current.isReady).toBe(true);
   });
 
   it("does not ensure for markdown, binary, or too-large files", async () => {

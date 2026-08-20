@@ -201,7 +201,8 @@
         "modelTypeLabel": "required",
         "supportsModelSwitching": "required",
         "supportsModes": "required",
-        "supportsReasoningEffort": "required"
+        "supportsReasoningEffort": "required",
+        "supportsTuiResume": "required"
       }
     },
     "AgentUsage": {
@@ -243,6 +244,58 @@
       "fields": {
         "projectId": "required",
         "sessionId": "required"
+      }
+    },
+    "CodeLanguageDiagnostic": {
+      "fields": {
+        "code": "optional",
+        "message": "required",
+        "range": "required",
+        "severity": "optional",
+        "source": "optional"
+      }
+    },
+    "CodeLanguageDiagnosticsEvent": {
+      "fields": {
+        "diagnostics": "required",
+        "projectId": "required",
+        "uri": "required",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageDocumentInput": {
+      "fields": {
+        "kind": "required",
+        "languageId": "optional",
+        "projectId": "required",
+        "text": "optional",
+        "uri": "required",
+        "version": "optional",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageHostInput": {
+      "fields": {
+        "projectId": "required",
+        "workspacePath": "required"
+      }
+    },
+    "CodeLanguageHostStatus": {
+      "fields": {
+        "reason": "optional",
+        "status": "required"
+      }
+    },
+    "CodeLanguagePosition": {
+      "fields": {
+        "character": "required",
+        "line": "required"
+      }
+    },
+    "CodeLanguageRange": {
+      "fields": {
+        "end": "required",
+        "start": "required"
       }
     },
     "CodeWorkspaceRoot": {
@@ -462,6 +515,25 @@
     "DismissUpdatePromptInput": {
       "fields": {
         "action": "required"
+      }
+    },
+    "EnsureProjectTerminalFailure": {
+      "fields": {
+        "configId": "required",
+        "message": "required",
+        "name": "required",
+        "reason": "optional"
+      }
+    },
+    "EnsureProjectTerminalsInput": {
+      "fields": {
+        "projectId": "required"
+      }
+    },
+    "EnsureProjectTerminalsResult": {
+      "fields": {
+        "shellFailures": "required",
+        "terminals": "required"
       }
     },
     "ErrorDetail": {
@@ -834,21 +906,6 @@
         "branch": "required"
       }
     },
-    "ProjectMergeBranchInput": {
-      "fields": {
-        "kind": "required",
-        "name": "required",
-        "projectId": "required",
-        "sessionId": "optional",
-        "workspacePath": "optional"
-      }
-    },
-    "ProjectMergeBranchResponse": {
-      "fields": {
-        "alreadyUpToDate": "required",
-        "branch": "required"
-      }
-    },
     "ProjectGitBranchListInput": {
       "fields": {
         "projectId": "required"
@@ -892,6 +949,21 @@
     "ProjectListResponse": {
       "fields": {
         "projects": "required"
+      }
+    },
+    "ProjectMergeBranchInput": {
+      "fields": {
+        "kind": "required",
+        "name": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "workspacePath": "optional"
+      }
+    },
+    "ProjectMergeBranchResponse": {
+      "fields": {
+        "alreadyUpToDate": "required",
+        "branch": "required"
       }
     },
     "ProjectSummary": {
@@ -1547,18 +1619,6 @@
         "projectId": "required",
         "sessionId": "required"
       }
-    },
-    "CodeLanguageHostInput": {
-      "fields": {
-        "projectId": "required",
-        "workspacePath": "required"
-      }
-    },
-    "CodeLanguageHostStatus": {
-      "fields": {
-        "reason": "optional",
-        "status": "required"
-      }
     }
   },
   "enums": {
@@ -1669,6 +1729,28 @@
       "variants": [
         "local",
         "remote"
+      ]
+    },
+    "CodeLanguageDocumentKind": {
+      "rename": "camelCase",
+      "variants": [
+        "didOpen",
+        "didChange",
+        "didClose"
+      ]
+    },
+    "CodeLanguageHostStatusKind": {
+      "rename": "camelCase",
+      "variants": [
+        "ready",
+        "unavailable"
+      ]
+    },
+    "CodeLanguageUnavailableReason": {
+      "rename": "camelCase",
+      "variants": [
+        "nodeNotFound",
+        "spawnFailed"
       ]
     },
     "CommandErrorCode": {
@@ -1966,20 +2048,6 @@
       "variants": [
         "redwhisk",
         "external"
-      ]
-    },
-    "CodeLanguageHostStatusKind": {
-      "rename": "camelCase",
-      "variants": [
-        "ready",
-        "unavailable"
-      ]
-    },
-    "CodeLanguageUnavailableReason": {
-      "rename": "camelCase",
-      "variants": [
-        "nodeNotFound",
-        "spawnFailed"
       ]
     }
   }

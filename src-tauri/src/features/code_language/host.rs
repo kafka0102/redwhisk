@@ -1,21 +1,17 @@
-use std::io::{BufRead, BufReader, Read, Write};
-use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
+use super::reader::{handshake_and_listen, DiagnosticsListener};
 use super::resolver::LanguageRuntime;
+use super::rpc::{file_uri, write_rpc};
 use crate::types::code_language::CodeLanguageUnavailableReason;
-
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug)]
 pub struct LanguageHost {
     child: Child,
-    stdin: ChildStdin,
+    stdin: Arc<Mutex<ChildStdin>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +21,13 @@ pub enum SpawnLanguageHostError {
 
 impl LanguageHost {
     pub fn spawn(runtime: &LanguageRuntime) -> Result<Self, SpawnLanguageHostError> {
+        Self::spawn_with_diagnostics(runtime, Arc::new(|_, _| {}))
+    }
+
+    pub fn spawn_with_diagnostics(
+        runtime: &LanguageRuntime,
+        on_diagnostics: DiagnosticsListener,
+    ) -> Result<Self, SpawnLanguageHostError> {
         let mut command = Command::new(&runtime.program);
         command
             .args(&runtime.args)
@@ -36,7 +39,7 @@ impl LanguageHost {
         let mut child = command.spawn().map_err(|_| {
             SpawnLanguageHostError::Unavailable(CodeLanguageUnavailableReason::SpawnFailed)
         })?;
-        let mut stdin = child
+        let stdin = child
             .stdin
             .take()
             .ok_or(SpawnLanguageHostError::Unavailable(
@@ -48,11 +51,32 @@ impl LanguageHost {
             .ok_or(SpawnLanguageHostError::Unavailable(
                 CodeLanguageUnavailableReason::SpawnFailed,
             ))?;
+        let stdin = Arc::new(Mutex::new(stdin));
 
-        if let Err(error) = handshake(&mut stdin, stdout, &runtime.cwd, &runtime.tsserver_path) {
+        let initialize = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "processId": null,
+                "rootUri": file_uri(&runtime.cwd),
+                "rootPath": runtime.cwd,
+                "capabilities": {},
+                "initializationOptions": {
+                    "hostInfo": "RedWhisk",
+                    "tsserver": {
+                        "path": runtime.tsserver_path
+                    }
+                }
+            }
+        });
+
+        if let Err(reason) =
+            handshake_and_listen(Arc::clone(&stdin), stdout, initialize, on_diagnostics)
+        {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(error);
+            return Err(SpawnLanguageHostError::Unavailable(reason));
         }
 
         Ok(Self { child, stdin })
@@ -65,24 +89,26 @@ impl LanguageHost {
         }
     }
 
+    pub fn write_message(&self, value: &Value) -> std::io::Result<()> {
+        let mut stdin = self
+            .stdin
+            .lock()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error.to_string()))?;
+        write_rpc(&mut *stdin, value)
+    }
+
     pub fn stop(&mut self) {
-        let _ = write_rpc(
-            &mut self.stdin,
-            &json!({
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "shutdown",
-                "params": null
-            }),
-        );
-        let _ = write_rpc(
-            &mut self.stdin,
-            &json!({
-                "jsonrpc": "2.0",
-                "method": "exit",
-                "params": null
-            }),
-        );
+        let _ = self.write_message(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "shutdown",
+            "params": null
+        }));
+        let _ = self.write_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "exit",
+            "params": null
+        }));
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -94,139 +120,15 @@ impl Drop for LanguageHost {
     }
 }
 
-fn handshake(
-    stdin: &mut ChildStdin,
-    stdout: impl Read + Send + 'static,
-    workspace_root: &Path,
-    tsserver_path: &Path,
-) -> Result<(), SpawnLanguageHostError> {
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        let result = read_initialize_result(&mut reader);
-        let _ = sender.send(result);
-        drain_reader(reader);
-    });
-
-    let root_uri = file_uri(workspace_root);
-    write_rpc(
-        stdin,
-        &json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "processId": null,
-                "rootUri": root_uri,
-                "rootPath": workspace_root,
-                "capabilities": {},
-                "initializationOptions": {
-                    "hostInfo": "RedWhisk",
-                    "tsserver": {
-                        "path": tsserver_path
-                    }
-                }
-            }
-        }),
-    )
-    .map_err(|_| SpawnLanguageHostError::Unavailable(CodeLanguageUnavailableReason::SpawnFailed))?;
-
-    match receiver.recv_timeout(HANDSHAKE_TIMEOUT) {
-        Ok(Ok(_)) => {}
-        _ => {
-            return Err(SpawnLanguageHostError::Unavailable(
-                CodeLanguageUnavailableReason::SpawnFailed,
-            ));
-        }
-    }
-
-    write_rpc(
-        stdin,
-        &json!({
-            "jsonrpc": "2.0",
-            "method": "initialized",
-            "params": {}
-        }),
-    )
-    .map_err(|_| SpawnLanguageHostError::Unavailable(CodeLanguageUnavailableReason::SpawnFailed))?;
-
-    Ok(())
-}
-
-fn drain_reader(mut reader: BufReader<impl Read>) {
-    let mut buffer = [0_u8; 4096];
-    while let Ok(size) = reader.read(&mut buffer) {
-        if size == 0 {
-            break;
-        }
-    }
-}
-
-fn read_initialize_result(reader: &mut BufReader<impl Read>) -> Result<Value, ()> {
-    loop {
-        let message = read_rpc(reader).map_err(|_| ())?;
-        if message.get("id") == Some(&json!(1)) {
-            if message.get("error").is_some() {
-                return Err(());
-            }
-            if message.get("result").is_some() {
-                return Ok(message);
-            }
-        }
-    }
-}
-
-fn write_rpc(writer: &mut impl Write, value: &Value) -> std::io::Result<()> {
-    let body = serde_json::to_vec(value)?;
-    write!(writer, "Content-Length: {}\r\n\r\n", body.len())?;
-    writer.write_all(&body)?;
-    writer.flush()
-}
-
-fn read_rpc(reader: &mut BufReader<impl Read>) -> std::io::Result<Value> {
-    let mut content_length = None;
-    loop {
-        let mut line = String::new();
-        let size = reader.read_line(&mut line)?;
-        if size == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "lsp stream closed",
-            ));
-        }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            break;
-        }
-        if let Some(value) = trimmed.strip_prefix("Content-Length:") {
-            content_length =
-                Some(value.trim().parse::<usize>().map_err(|error| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, error)
-                })?);
-        }
-    }
-    let length = content_length.ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing Content-Length")
-    })?;
-    let mut body = vec![0_u8; length];
-    reader.read_exact(&mut body)?;
-    serde_json::from_slice(&body)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
-}
-
-fn file_uri(path: &Path) -> String {
-    let display = path.display().to_string();
-    if display.starts_with('/') {
-        format!("file://{display}")
-    } else {
-        format!("file:///{display}")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::code_language::CodeLanguageDiagnostic;
+    use serde_json::json;
     use std::fs;
+    use std::path::Path;
+    use std::sync::mpsc;
+    use std::time::Duration;
     use tempfile::tempdir;
 
     fn write_file(path: &Path, contents: &str) {
@@ -267,6 +169,23 @@ while True:
     method = message.get("method")
     if method == "initialize":
         write_msg({"jsonrpc": "2.0", "id": message["id"], "result": {"capabilities": {}}})
+    elif method == "textDocument/didOpen":
+        uri = message["params"]["textDocument"]["uri"]
+        write_msg({
+            "jsonrpc": "2.0",
+            "method": "textDocument/publishDiagnostics",
+            "params": {
+                "uri": uri,
+                "diagnostics": [{
+                    "range": {
+                        "start": {"line": 0, "character": 12},
+                        "end": {"line": 0, "character": 15}
+                    },
+                    "severity": 1,
+                    "message": "Cannot find name 'bar'."
+                }]
+            }
+        })
     elif method == "shutdown":
         write_msg({"jsonrpc": "2.0", "id": message["id"], "result": None})
     elif method == "exit":
@@ -295,6 +214,43 @@ while True:
         assert!(host.is_alive(), "握手完成后宿主应仍在运行");
         host.stop();
         assert!(!host.is_alive(), "停止后宿主应退出");
+    }
+
+    #[test]
+    fn did_open_delivers_publish_diagnostics() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace = temp_dir.path().join("repo");
+        let runtime = runtime_with_script(&workspace, fake_lsp_script());
+        let (sender, receiver) = mpsc::channel::<(String, Vec<CodeLanguageDiagnostic>)>();
+        let mut host = LanguageHost::spawn_with_diagnostics(
+            &runtime,
+            Arc::new(move |uri, diagnostics| {
+                let _ = sender.send((uri, diagnostics));
+            }),
+        )
+        .expect("spawn fake host");
+
+        let uri = file_uri(&workspace.join("src/file.ts"));
+        host.write_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "typescript",
+                    "version": 1,
+                    "text": "const foo = bar;\n"
+                }
+            }
+        }))
+        .expect("didOpen");
+
+        let (received_uri, diagnostics) = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("diagnostics from fake host");
+        assert_eq!(received_uri, uri);
+        assert_eq!(diagnostics[0].message, "Cannot find name 'bar'.");
+        host.stop();
     }
 
     #[test]

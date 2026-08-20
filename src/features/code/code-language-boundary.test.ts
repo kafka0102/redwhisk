@@ -49,7 +49,9 @@ describe("code language intelligence boundaries", () => {
       const source = readFileSync(join(process.cwd(), file), "utf8");
       expect(source).not.toMatch(/ensureCodeLanguageHost/);
       expect(source).not.toMatch(/use-code-language-host/);
+      expect(source).not.toMatch(/use-code-language-intelligence/);
       expect(source).not.toMatch(/code-language-commands/);
+      expect(source).not.toMatch(/code-language-markers/);
     }
   });
 });

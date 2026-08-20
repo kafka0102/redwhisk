@@ -113,6 +113,29 @@ impl CodeLanguageHostRegistry {
         }
     }
 
+    pub fn notify_document(
+        &self,
+        project_id: i64,
+        workspace_path: &str,
+        payload: &serde_json::Value,
+    ) -> bool {
+        let key = HostKey {
+            project_id,
+            workspace_path: workspace_path.to_string(),
+        };
+        let mut hosts = match self.inner.lock() {
+            Ok(hosts) => hosts,
+            Err(_) => return false,
+        };
+        let Some(slot) = hosts.get_mut(&key) else {
+            return false;
+        };
+        let Some(host) = slot.host.as_mut() else {
+            return false;
+        };
+        host.write_message(payload).is_ok()
+    }
+
     fn ready_status(&self, key: &HostKey) -> Option<CodeLanguageHostStatus> {
         let mut hosts = self.inner.lock().ok()?;
         let slot = hosts.get_mut(key)?;
@@ -352,5 +375,11 @@ while True:
         assert_eq!(third.status, CodeLanguageHostStatusKind::Ready);
         assert_eq!(spawn_count.load(Ordering::SeqCst), 2);
         registry.stop(7, workspace.to_str().expect("utf8"));
+    }
+
+    #[test]
+    fn notify_document_returns_false_when_host_missing() {
+        let registry = CodeLanguageHostRegistry::new();
+        assert!(!registry.notify_document(7, "/tmp/missing", &serde_json::json!({})));
     }
 }

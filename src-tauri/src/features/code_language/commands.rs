@@ -1,6 +1,9 @@
-use tauri::{Manager, State};
+use std::sync::Arc;
+
+use tauri::{Emitter, Manager, State};
 
 use super::host::LanguageHost;
+use super::protocol::document_notification_payload;
 use super::registry::CodeLanguageHostRegistry;
 use super::resolver::resolve_bundled_runtime;
 use super::workspace::validate_code_language_workspace;
@@ -9,8 +12,13 @@ use crate::app_state::AppState;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
-use crate::types::code_language::{CodeLanguageHostInput, CodeLanguageHostStatus};
+use crate::types::code_language::{
+    CodeLanguageDiagnosticsEvent, CodeLanguageDocumentInput, CodeLanguageHostInput,
+    CodeLanguageHostStatus,
+};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+
+pub const CODE_LANGUAGE_DIAGNOSTICS_EVENT: &str = "code-language-diagnostics";
 
 #[tauri::command]
 pub async fn ensure_code_language_host(
@@ -21,8 +29,9 @@ pub async fn ensure_code_language_host(
     let data_dir = prepare_data_dir(&app, &state)?;
     let resource_dir = app.path().resource_dir().ok();
     let registry = state.code_language_hosts.clone();
+    let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        ensure_host_blocking(data_dir, resource_dir, registry, input)
+        ensure_host_blocking(app_handle, data_dir, resource_dir, registry, input)
     })
     .await
     .map_err(|error| join_error(error.to_string()))?
@@ -34,10 +43,7 @@ pub async fn stop_code_language_host(
     input: CodeLanguageHostInput,
 ) -> Result<(), CommandError> {
     let registry = state.code_language_hosts.clone();
-    let workspace_path = std::path::Path::new(input.workspace_path.trim())
-        .canonicalize()
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| input.workspace_path.trim().to_string());
+    let workspace_path = canonicalize_workspace_path(&input.workspace_path);
     tauri::async_runtime::spawn_blocking(move || {
         registry.stop(input.project_id, &workspace_path);
         Ok(())
@@ -46,7 +52,31 @@ pub async fn stop_code_language_host(
     .map_err(|error| join_error(error.to_string()))?
 }
 
+#[tauri::command]
+pub async fn notify_code_language_document(
+    state: State<'_, AppState>,
+    input: CodeLanguageDocumentInput,
+) -> Result<(), CommandError> {
+    let payload = document_notification_payload(&input)?;
+    let registry = state.code_language_hosts.clone();
+    let workspace_path = canonicalize_workspace_path(&input.workspace_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = registry.notify_document(input.project_id, &workspace_path, &payload);
+        Ok(())
+    })
+    .await
+    .map_err(|error| join_error(error.to_string()))?
+}
+
+pub fn emit_code_language_diagnostics(
+    app: &tauri::AppHandle,
+    payload: &CodeLanguageDiagnosticsEvent,
+) {
+    let _ = app.emit(CODE_LANGUAGE_DIAGNOSTICS_EVENT, payload);
+}
+
 fn ensure_host_blocking(
+    app: tauri::AppHandle,
     data_dir: std::path::PathBuf,
     resource_dir: Option<std::path::PathBuf>,
     registry: CodeLanguageHostRegistry,
@@ -56,13 +86,37 @@ fn ensure_host_blocking(
     let workspace = validate_code_language_workspace(&input.workspace_path, &project.repo_path)?;
     let bundled = resolve_bundled_runtime(resource_dir.as_deref());
     let workspace_path = workspace.to_string_lossy().into_owned();
+    let event_workspace_path = input.workspace_path.trim().to_string();
+    let project_id = input.project_id;
     Ok(registry.ensure(
-        input.project_id,
+        project_id,
         &workspace_path,
         bundled.as_ref(),
         || run_command_lookup("node"),
-        LanguageHost::spawn,
+        move |runtime| {
+            LanguageHost::spawn_with_diagnostics(
+                runtime,
+                Arc::new(move |uri, diagnostics| {
+                    emit_code_language_diagnostics(
+                        &app,
+                        &CodeLanguageDiagnosticsEvent {
+                            project_id,
+                            workspace_path: event_workspace_path.clone(),
+                            uri,
+                            diagnostics,
+                        },
+                    );
+                }),
+            )
+        },
     ))
+}
+
+fn canonicalize_workspace_path(workspace_path: &str) -> String {
+    std::path::Path::new(workspace_path.trim())
+        .canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| workspace_path.trim().to_string())
 }
 
 fn find_project(

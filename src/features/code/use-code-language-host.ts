@@ -1,23 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { CodeFileTab } from "./code-workspace-cache";
 import {
-  ensureCodeLanguageHost,
-  stopCodeLanguageHost,
-  type CodeLanguageUnavailableReason,
-} from "./code-language-commands";
+  getCodeLanguageHostPort,
+  type CodeLanguageHostPort,
+} from "./code-language-host-port";
+import type { CodeLanguageUnavailableReason } from "./code-language-commands";
 import { isCodeLanguageFile } from "./is-code-language-file";
 
 export function useCodeLanguageHost(options: {
   projectId: number;
   workspacePath: string | null;
   activeTab: CodeFileTab | null;
+  port?: CodeLanguageHostPort;
 }): {
   unavailableReason: CodeLanguageUnavailableReason | null;
+  isReady: boolean;
 } {
-  const { projectId, workspacePath, activeTab } = options;
+  const { projectId, workspacePath, activeTab, port } = options;
+  const portRef = useRef(port ?? getCodeLanguageHostPort());
   const [hostReason, setHostReason] =
     useState<CodeLanguageUnavailableReason | null>(null);
+  const [readyWorkspaceKey, setReadyWorkspaceKey] = useState<string | null>(
+    null,
+  );
+  const workspaceKey = workspacePath ? `${projectId}:${workspacePath}` : null;
+
+  useEffect(() => {
+    portRef.current = port ?? getCodeLanguageHostPort();
+  });
   const shouldEnsure = Boolean(
     workspacePath &&
     activeTab?.content &&
@@ -32,8 +43,9 @@ export function useCodeLanguageHost(options: {
     if (!workspacePath) {
       return;
     }
+    const hostPort = portRef.current;
     return () => {
-      void stopCodeLanguageHost({ projectId, workspacePath });
+      void hostPort.stop({ projectId, workspacePath });
     };
   }, [projectId, workspacePath]);
 
@@ -42,20 +54,23 @@ export function useCodeLanguageHost(options: {
       return;
     }
     let cancelled = false;
-    void ensureCodeLanguageHost({ projectId, workspacePath }).then(
+    void portRef.current.ensure({ projectId, workspacePath }).then(
       (status) => {
         if (cancelled) {
           return;
         }
-        setHostReason(
-          status.status === "unavailable"
-            ? (status.reason ?? "spawnFailed")
-            : null,
-        );
+        if (status.status === "unavailable") {
+          setHostReason(status.reason ?? "spawnFailed");
+          setReadyWorkspaceKey(null);
+          return;
+        }
+        setHostReason(null);
+        setReadyWorkspaceKey(`${projectId}:${workspacePath}`);
       },
       () => {
         if (!cancelled) {
           setHostReason("spawnFailed");
+          setReadyWorkspaceKey(null);
         }
       },
     );
@@ -64,5 +79,8 @@ export function useCodeLanguageHost(options: {
     };
   }, [projectId, shouldEnsure, workspacePath]);
 
-  return { unavailableReason: shouldEnsure ? hostReason : null };
+  return {
+    unavailableReason: shouldEnsure ? hostReason : null,
+    isReady: workspaceKey !== null && readyWorkspaceKey === workspaceKey,
+  };
 }

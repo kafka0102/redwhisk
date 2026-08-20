@@ -52,6 +52,22 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
   };
 });
 
+vi.mock("monaco-editor", () => ({
+  MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+  Uri: {
+    parse: (value: string) => ({
+      toString: () => value,
+      path: value,
+      fsPath: value,
+    }),
+  },
+  editor: {
+    getModel: () => null,
+    getModels: () => [],
+    setModelMarkers: vi.fn(),
+  },
+}));
+
 vi.mock("../../shared/use-monaco-editor-ready", () => ({
   useMonacoEditorReady: () => true,
 }));
@@ -112,14 +128,21 @@ vi.mock("@monaco-editor/react", () => ({
   },
 }));
 
-const { ensureCodeLanguageHost, stopCodeLanguageHost } = vi.hoisted(() => ({
+const {
+  ensureCodeLanguageHost,
+  stopCodeLanguageHost,
+  notifyCodeLanguageDocument,
+} = vi.hoisted(() => ({
   ensureCodeLanguageHost: vi.fn(),
   stopCodeLanguageHost: vi.fn(),
+  notifyCodeLanguageDocument: vi.fn(),
 }));
 
 vi.mock("./code-language-commands", () => ({
+  CODE_LANGUAGE_DIAGNOSTICS_EVENT: "code-language-diagnostics",
   ensureCodeLanguageHost,
   stopCodeLanguageHost,
+  notifyCodeLanguageDocument,
 }));
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
@@ -282,8 +305,10 @@ describe("CodeActivity", () => {
     vi.mocked(writeProjectWorktreeFile).mockReset();
     ensureCodeLanguageHost.mockReset();
     stopCodeLanguageHost.mockReset();
+    notifyCodeLanguageDocument.mockReset();
     ensureCodeLanguageHost.mockResolvedValue({ status: "ready" });
     stopCodeLanguageHost.mockResolvedValue(undefined);
+    notifyCodeLanguageDocument.mockResolvedValue(undefined);
     vi.mocked(writeProjectWorktreeFile).mockImplementation(async (input) => ({
       ...fileContent,
       content: input.content,
@@ -2264,5 +2289,50 @@ describe("CodeActivity", () => {
       "Node.js was not found, so TS/JS language intelligence is unavailable.",
     );
     expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("opens the typescript buffer with the language host", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(notifyCodeLanguageDocument).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        uri: "file:///tmp/redwhisk/src/file.ts",
+        kind: "didOpen",
+        languageId: "typescript",
+        version: 1,
+        text: fileContent.content,
+      });
+    });
+  });
+
+  it("closes the language document when the tab is closed", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(notifyCodeLanguageDocument).toHaveBeenCalled();
+    });
+    await user.click(screen.getByLabelText("Close file.ts"));
+    await waitFor(() => {
+      expect(notifyCodeLanguageDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "didClose",
+          uri: "file:///tmp/redwhisk/src/file.ts",
+        }),
+      );
+    });
   });
 });

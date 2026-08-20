@@ -47,7 +47,7 @@ import {
 import { useCodeUnsavedConfirm } from "./use-code-unsaved-confirm";
 import { buildActiveFileSignature } from "./use-code-active-file-refresh";
 import { useCodeActiveFileRefreshBinding } from "./use-code-active-file-refresh-binding";
-import { useCodeLanguageHost } from "./use-code-language-host";
+import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
@@ -157,9 +157,10 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     () => tabs.find((tab) => tab.filePath === activePath) ?? null,
     [activePath, tabs],
   );
-  const { unavailableReason } = useCodeLanguageHost({
+  const { unavailableReason } = useCodeLanguageIntelligence({
     activeTab,
     projectId,
+    tabs,
     workspacePath: selectedRootWorkspacePath,
   });
   const knownActiveSignature =
@@ -756,6 +757,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                   revealRequest={revealRequest}
                   theme={theme}
                   unavailableReason={unavailableReason}
+                  workspacePath={selectedRootWorkspacePath}
                   viewMode={
                     isMarkdownPreviewable(activeTab)
                       ? markdownViewMode

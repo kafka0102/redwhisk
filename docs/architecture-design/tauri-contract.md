@@ -24,7 +24,7 @@
 | Settings     | command 检测、`test_agent_command`、profile、`preview_agent_command_args`、label、保存的 skill CRUD、`get_user_profile`、`update_user_profile`                       | `features/settings/settings-commands.ts`                            | `features/settings/commands.rs`          |
 | Skill 索引   | `list_agent_skills`、`refresh_agent_skills`（返回 `changedCount`）、`reconcile_saved_agent_skills`                                                                   | `features/settings/settings-commands.ts`                            | `features/settings/agent_skill_commands.rs` |
 | 会话监控窗口 | 打开/关闭 monitor、列出与定位会话                                                                                                                                  | `features/agents/session-notifications/session-monitor-commands.ts` | `features/agent_session/session_monitor_commands.rs` |
-| 代码语言智能 | `ensure_code_language_host`、`stop_code_language_host`                                                                                                               | `features/code/code-language-commands.ts`                           | `features/code_language/commands.rs`     |
+| 代码语言智能 | `ensure_code_language_host`、`stop_code_language_host`、`notify_code_language_document`                                                                              | `features/code/code-language-commands.ts`                           | `features/code_language/commands.rs`     |
 | 应用更新     | `get_update_status`、`dismiss_update_prompt`                                                                                                                       | `shared/commands/app-update-commands.ts`                            | `features/app_update/commands.rs`        |
 | 应用主题     | `set_app_theme`（入参 `themePreference` + 已解析 `theme`；当前挂在 `project_terminal` 模块，语义属应用级，未来宜迁出）                                              | `shared/commands/app-commands.ts`                                   | `features/project_terminal/commands.rs`、`types/app_theme.rs`  |
 
@@ -52,6 +52,7 @@
 | `update-prompt-changed`         | `UpdateStatus`                                                                  | `features/app_update/commands.rs` | 应用更新提示状态变更；前端 `app-update/use-update-status.ts` 刷新徽章 |
 | `app-theme-preference-changed`  | `AppThemePreferenceChangedEvent`（`themePreference`）                           | `features/project_terminal/commands.rs`（`emit_app_theme_preference_changed`） | 全局主题偏好跨窗同步；前端 `shared/i18n/i18n-provider.tsx` 更新偏好/localStorage 并本地解析 light/dark |
 | `issue-timeline-changed`        | Issue 时间轴变更                                                                | `features/issue/completion_comment.rs`  | 评论自动发表后广播；前端 `issues/issue-detail/issue-timeline.tsx` 刷新当前 Issue 时间轴 |
+| `code-language-diagnostics`     | `CodeLanguageDiagnosticsEvent`（`projectId`、`workspacePath`、`uri`、`diagnostics`） | `features/code_language/commands.rs`（`emit_code_language_diagnostics`） | 代码页 TS/JS 诊断推送；前端 `code/use-code-language-diagnostics.ts` 应用到当前根 Monaco markers |
 
 新增 event 必须有 kebab-case 名、定位实体 ID、Rust payload 类型、前端 listener 的释放逻辑和至少一条序列/重连行为测试。事件名以 `pub const`（或文件内 `const`）定义；生产者封装为 `emit_*` 函数；跨窗口广播用 `emit_to`；前端 listener 必须在卸载时释放并覆盖序列/重连测试。
 

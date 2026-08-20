@@ -32,6 +32,22 @@ const lastEditorOptions = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
 
+vi.mock("monaco-editor", () => ({
+  MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
+  Uri: {
+    parse: (value: string) => ({
+      toString: () => value,
+      path: value,
+      fsPath: value,
+    }),
+  },
+  editor: {
+    getModel: () => null,
+    getModels: () => [],
+    setModelMarkers: vi.fn(),
+  },
+}));
+
 vi.mock("../../shared/use-monaco-editor-ready", () => ({
   useMonacoEditorReady: () => true,
 }));
@@ -39,11 +55,13 @@ vi.mock("../../shared/use-monaco-editor-ready", () => ({
 vi.mock("@monaco-editor/react", () => ({
   Editor: ({
     value,
+    path,
     options,
     onChange,
     onMount,
   }: {
     value?: string;
+    path?: string;
     options?: Record<string, unknown>;
     onChange?: (value: string | undefined) => void;
     onMount?: (editor: {
@@ -76,7 +94,11 @@ vi.mock("@monaco-editor/react", () => ({
       });
     }, [onMount]);
     return (
-      <div data-testid="monaco-editor" data-value={value ?? ""}>
+      <div
+        data-testid="monaco-editor"
+        data-path={path ?? ""}
+        data-value={value ?? ""}
+      >
         <button
           type="button"
           data-testid="monaco-edit"
@@ -217,7 +239,7 @@ describe("CodeContent edit interactions", () => {
     });
   });
 
-  it("disables occurrence highlighting and validation decorations", async () => {
+  it("keeps occurrence highlighting off and enables validation decorations for typescript", async () => {
     render(
       <CodeContent
         projectId={1}
@@ -234,8 +256,57 @@ describe("CodeContent edit interactions", () => {
     expect(lastEditorOptions.current).toMatchObject({
       occurrencesHighlight: "off",
       selectionHighlight: false,
+      renderValidationDecorations: "on",
+    });
+  });
+
+  it("keeps validation decorations off for markdown", async () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "readme.md",
+          filePath: "docs/readme.md",
+          content: {
+            filePath: "docs/readme.md",
+            language: "markdown",
+            content: "# hi\n",
+            modifiedAt: 1000,
+            sizeBytes: 5,
+            isBinary: false,
+            isTooLarge: false,
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="dark"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(lastEditorOptions.current).not.toBeNull();
+    });
+    expect(lastEditorOptions.current).toMatchObject({
       renderValidationDecorations: "off",
     });
+  });
+
+  it("uses a stable file uri as the editor path", async () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+        workspacePath="/tmp/redwhisk"
+      />,
+    );
+
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-path",
+      "file:///tmp/redwhisk/src/file.ts",
+    );
   });
 
   it("shows a lightweight unavailable hint above the editor", async () => {

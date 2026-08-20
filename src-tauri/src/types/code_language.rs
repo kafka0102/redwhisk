@@ -44,3 +44,62 @@ pub enum CodeLanguageUnavailableReason {
     NodeNotFound,
     SpawnFailed,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageDocumentInput {
+    pub project_id: i64,
+    pub workspace_path: String,
+    pub uri: String,
+    pub kind: CodeLanguageDocumentKind,
+    #[serde(default)]
+    pub language_id: Option<String>,
+    #[serde(default)]
+    pub version: Option<i32>,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CodeLanguageDocumentKind {
+    DidOpen,
+    DidChange,
+    DidClose,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageDiagnosticsEvent {
+    pub project_id: i64,
+    pub workspace_path: String,
+    pub uri: String,
+    pub diagnostics: Vec<CodeLanguageDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageDiagnostic {
+    pub range: CodeLanguageRange,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguageRange {
+    pub start: CodeLanguagePosition,
+    pub end: CodeLanguagePosition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeLanguagePosition {
+    pub line: u32,
+    pub character: u32,
+}

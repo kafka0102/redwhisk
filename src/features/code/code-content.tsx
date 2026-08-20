@@ -5,6 +5,9 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import type { CodeLanguageUnavailableReason } from "./code-language-commands";
+import { syncCodeLanguageMarkersToModel } from "./code-language-markers";
+import { toCodeLanguageFileUri } from "./code-language-uri";
+import { isCodeLanguageFile } from "./is-code-language-file";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import {
   getCodeEditorViewState,
@@ -38,6 +41,7 @@ export function CodeContent({
   revealRequest = null,
   unavailableReason = null,
   viewMode = "source",
+  workspacePath = null,
 }: {
   projectId: number;
   tab: CodeFileTab;
@@ -48,6 +52,7 @@ export function CodeContent({
   revealRequest?: CodeRevealRequest | null;
   unavailableReason?: CodeLanguageUnavailableReason | null;
   viewMode?: "source" | "preview";
+  workspacePath?: string | null;
 }) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const appliedRevealTokenRef = useRef<number | null>(null);
@@ -169,8 +174,20 @@ export function CodeContent({
     );
   }
 
+  const isLanguageFile = isCodeLanguageFile({
+    isBinary: tab.content.isBinary,
+    isTooLarge: tab.content.isTooLarge,
+    language: tab.content.language,
+  });
+  const fileUri = workspacePath
+    ? toCodeLanguageFileUri(workspacePath, tab.filePath)
+    : undefined;
+
   const onMount: OnMount = (editor) => {
     editorRef.current = editor;
+    if (fileUri && isLanguageFile) {
+      syncCodeLanguageMarkersToModel(fileUri);
+    }
     if (
       revealRequest &&
       revealRequest.filePath === tab.filePath &&
@@ -223,6 +240,7 @@ export function CodeContent({
       ) : null}
       <Editor
         height="100%"
+        path={fileUri}
         theme={theme === "dark" ? "vs-dark" : "light"}
         language={tab.content.language ?? undefined}
         options={{
@@ -230,10 +248,10 @@ export function CodeContent({
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           fontSize: contentFontSize,
-          // 轻量编辑/只读查看均不做 IDE 诊断；关闭词丛高亮，避免 env 等重复 token 误闪选。
+          // 关闭词丛高亮，避免 env 等重复 token 误闪选。TS/JS 诊断来自代码根语言宿主。
           occurrencesHighlight: "off",
           selectionHighlight: false,
-          renderValidationDecorations: "off",
+          renderValidationDecorations: isLanguageFile ? "on" : "off",
         }}
         value={tab.content.content}
         onChange={(value) => {
