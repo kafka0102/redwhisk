@@ -28,17 +28,26 @@ pub fn resolve_bundled_runtime(resource_dir: Option<&Path>) -> Option<BundledLan
     }
     candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../node_modules"));
 
-    for root in candidates {
-        let tsserver_path = root.join("typescript/lib/tsserver.js");
-        let language_server_entry = root.join("typescript-language-server/lib/cli.mjs");
-        if tsserver_path.is_file() && language_server_entry.is_file() {
-            return Some(BundledLanguageRuntime {
-                tsserver_path,
-                language_server_entry,
-            });
-        }
+    candidates
+        .into_iter()
+        .find_map(|root| bundled_runtime_from_root(&root))
+}
+
+fn bundled_runtime_from_root(root: &Path) -> Option<BundledLanguageRuntime> {
+    let tsserver_path = root.join("typescript/lib/tsserver.js");
+    let language_server_entry = root.join("typescript-language-server/lib/cli.mjs");
+    let language_server_manifest = root.join("typescript-language-server/package.json");
+    if tsserver_path.is_file()
+        && language_server_entry.is_file()
+        && language_server_manifest.is_file()
+    {
+        Some(BundledLanguageRuntime {
+            tsserver_path,
+            language_server_entry,
+        })
+    } else {
+        None
     }
-    None
 }
 
 pub fn find_project_tsserver(workspace_root: &Path) -> Option<PathBuf> {
@@ -211,6 +220,74 @@ mod tests {
         assert_eq!(
             error,
             ResolveLanguageRuntimeError::Unavailable(CodeLanguageUnavailableReason::SpawnFailed)
+        );
+    }
+
+    fn language_runtime_resource_dir(root: &Path) -> PathBuf {
+        root.join("language-runtime")
+    }
+
+    fn write_incomplete_language_runtime(root: &Path) {
+        write_file(
+            &language_runtime_resource_dir(root).join("typescript/lib/tsserver.js"),
+            "bundled-tsserver",
+        );
+        write_file(
+            &language_runtime_resource_dir(root).join("typescript-language-server/lib/cli.mjs"),
+            "bundled-language-server",
+        );
+    }
+
+    #[test]
+    fn bundled_runtime_rejects_language_server_without_package_json() {
+        let temp_dir = tempdir().expect("temp dir");
+        write_incomplete_language_runtime(temp_dir.path());
+
+        assert_eq!(
+            bundled_runtime_from_root(&language_runtime_resource_dir(temp_dir.path())),
+            None
+        );
+    }
+
+    #[test]
+    fn bundled_runtime_accepts_language_server_with_package_json() {
+        let temp_dir = tempdir().expect("temp dir");
+        write_incomplete_language_runtime(temp_dir.path());
+        write_file(
+            &language_runtime_resource_dir(temp_dir.path())
+                .join("typescript-language-server/package.json"),
+            r#"{"name":"typescript-language-server","version":"6.0.0"}"#,
+        );
+
+        let bundled = bundled_runtime_from_root(&language_runtime_resource_dir(temp_dir.path()))
+            .expect("complete bundle");
+        assert_eq!(
+            bundled.language_server_entry,
+            language_runtime_resource_dir(temp_dir.path())
+                .join("typescript-language-server/lib/cli.mjs")
+        );
+    }
+
+    #[test]
+    fn tauri_bundle_includes_language_server_package_json() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tauri.conf.json"
+        )))
+        .expect("parse tauri.conf.json");
+        let resources = conf
+            .get("bundle")
+            .and_then(|bundle| bundle.get("resources"))
+            .and_then(|resources| resources.as_object())
+            .expect("bundle.resources object");
+        let has_package_json = resources.iter().any(|(source, destination)| {
+            source.ends_with("typescript-language-server/package.json")
+                && destination.as_str()
+                    == Some("language-runtime/typescript-language-server/package.json")
+        });
+        assert!(
+            has_package_json,
+            "tauri bundle must include typescript-language-server/package.json"
         );
     }
 }
