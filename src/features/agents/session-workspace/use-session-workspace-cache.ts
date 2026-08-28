@@ -93,6 +93,31 @@ interface SessionWorkspaceCache {
   sidePanelTab: SessionSidePanelTab;
 }
 
+const sessionWorkspaceCacheBySessionId = new Map<
+  number,
+  SessionWorkspaceCache
+>();
+const fileTreeRequestSequenceBySessionId = new Map<number, number>();
+
+/**
+ * 清除指定 sessionId 的 workspace tab 缓存。
+ *
+ * 供 Session 删除流程调用：agent_sessions.id 无 AUTOINCREMENT，删除后可能被复用，
+ * 不清则旧 file / change tab 会串入复用该 id 的新 Session。
+ */
+export function clearSessionWorkspaceCache(sessionId: number): void {
+  sessionWorkspaceCacheBySessionId.delete(sessionId);
+  fileTreeRequestSequenceBySessionId.delete(sessionId);
+}
+
+/**
+ * 清空全部 session workspace cache。仅供测试隔离使用：module-level 单例会跨用例残留。
+ */
+export function clearSessionWorkspaceCacheForTest(): void {
+  sessionWorkspaceCacheBySessionId.clear();
+  fileTreeRequestSequenceBySessionId.clear();
+}
+
 const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   activeWorkspaceTab: "session",
   changeTab: null,
@@ -131,12 +156,12 @@ export function useSessionWorkspaceCache({
   isSidePanelOpen,
 }: UseSessionWorkspaceCacheInput) {
   const { t } = useI18n();
-  const cacheBySessionRef = useRef<Map<number, SessionWorkspaceCache>>(
-    new Map(),
-  );
+  // 跨 Activity 卸载复用同一份 module-level Map：切走 Issues/Code 再回来时
+  // 保留已打开的 file / change tab，而不是随着 hook 实例销毁丢失。
+  const cacheBySessionRef = useRef(sessionWorkspaceCacheBySessionId);
   // 请求序号放 ref，避免轮询仅 bump sequence 就触发整树 re-render。
-  const fileTreeRequestSequenceBySessionRef = useRef<Map<number, number>>(
-    new Map(),
+  const fileTreeRequestSequenceBySessionRef = useRef(
+    fileTreeRequestSequenceBySessionId,
   );
   const [, setCacheVersion] = useState(0);
 

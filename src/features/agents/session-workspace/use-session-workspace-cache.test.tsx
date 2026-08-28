@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../../shared/i18n/i18n";
-import { useSessionWorkspaceCache } from "./use-session-workspace-cache";
+import {
+  clearSessionWorkspaceCache,
+  clearSessionWorkspaceCacheForTest,
+  useSessionWorkspaceCache,
+} from "./use-session-workspace-cache";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -34,6 +38,10 @@ const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
 }
+
+afterEach(() => {
+  clearSessionWorkspaceCacheForTest();
+});
 
 // flush async refresh* 微任务链（fake timers 下需显式 await），并在 act 内提交 React
 // 状态更新，使 result.current 与 effect 调用次数反映最新值。
@@ -739,5 +747,131 @@ describe("useSessionWorkspaceCache multi-diff change tab", () => {
     });
     expect(result.current.changeTab).toBeNull();
     expect(result.current.activeWorkspaceTab).toBe("session");
+  });
+});
+
+describe("useSessionWorkspaceCache remount persistence", () => {
+  beforeEach(() => {
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+    readProjectWorktreeDiffMock.mockReset();
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "old",
+      modifiedContent: "new",
+      isBinary: false,
+      isTooLarge: false,
+    });
+  });
+
+  it("restores the opened change tab after the hook remounts", async () => {
+    const changed: WorkspaceChangedFile = {
+      filePath: "src/a.ts",
+      oldPath: null,
+      fileName: "a.ts",
+      kind: "modified",
+      status: "M",
+      additions: 1,
+      deletions: 0,
+      isBinary: false,
+      contentHash: "h",
+      metadataSignature: "s",
+    };
+
+    const { result, unmount } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.openChange(changed);
+    });
+    expect(result.current.activeWorkspaceTab).toBe("changes");
+    expect(result.current.changeTab).toMatchObject({
+      mode: "file",
+      fileName: "a.ts",
+    });
+
+    unmount();
+
+    const remounted = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    expect(remounted.result.current.activeWorkspaceTab).toBe("changes");
+    expect(remounted.result.current.changeTab).toMatchObject({
+      mode: "file",
+      fileName: "a.ts",
+    });
+  });
+
+  it("does not restore a change tab after the session cache is cleared", async () => {
+    const changed: WorkspaceChangedFile = {
+      filePath: "src/a.ts",
+      oldPath: null,
+      fileName: "a.ts",
+      kind: "modified",
+      status: "M",
+      additions: 1,
+      deletions: 0,
+      isBinary: false,
+      contentHash: "h",
+      metadataSignature: "s",
+    };
+
+    const { result, unmount } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.openChange(changed);
+    });
+    expect(result.current.changeTab).toMatchObject({ fileName: "a.ts" });
+
+    unmount();
+    clearSessionWorkspaceCache(1);
+
+    const remounted = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    expect(remounted.result.current.activeWorkspaceTab).toBe("session");
+    expect(remounted.result.current.changeTab).toBeNull();
   });
 });

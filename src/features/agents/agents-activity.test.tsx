@@ -15,6 +15,8 @@ import type { AgentSessionListChangedEvent } from "./agent-session-events";
 import claudeLogoSrc from "../../assets/images/claude.svg";
 import codexLogoSrc from "../../assets/images/codex.svg";
 import { AgentsActivity } from "./agents-activity";
+import { clearSessionToolTabsCacheForTest } from "./use-session-tool-tabs";
+import { clearSessionWorkspaceCacheForTest } from "./session-workspace/use-session-workspace-cache";
 import {
   injectAgentSessionPrompt,
   deleteAgentSession,
@@ -770,6 +772,8 @@ describe("AgentsActivity", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    clearSessionToolTabsCacheForTest();
+    clearSessionWorkspaceCacheForTest();
   });
 
   it("renders a flat session list, workspace and info pane for the selected session", async () => {
@@ -1513,6 +1517,56 @@ describe("AgentsActivity", () => {
     await user.click(screen.getByRole("button", { name: /Existing issue/ }));
 
     expect(screen.getByRole("tab", { name: "a.ts" })).toBeInTheDocument();
+  });
+
+  it("keeps opened change and terminal tabs after remounting the activity", async () => {
+    const user = userEvent.setup();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes",
+      files: [changedFile("src/a.ts", "modified")],
+    });
+    readProjectWorktreeDiffMock.mockResolvedValue({
+      filePath: "src/a.ts",
+      oldPath: null,
+      kind: "modified",
+      language: "typescript",
+      originalContent: "old",
+      modifiedContent: "new",
+      isBinary: false,
+      isTooLarge: false,
+    });
+    createTemporaryProjectTerminalMock.mockResolvedValue({
+      sessionId: -11,
+      name: "redwhisk",
+      workingDir: "/tmp/redwhisk",
+      launchCommand: "/bin/zsh",
+    });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [runningSession(301)],
+    });
+
+    const { unmount } = render(
+      <AgentsActivity activeSessionId={301} projectId={1} />,
+    );
+    await user.click(await screen.findByLabelText("Open session side panel"));
+    await user.click(screen.getByRole("tab", { name: "Changes" }));
+    await user.click(await screen.findByRole("button", { name: /a.ts/ }));
+    expect(
+      await screen.findByRole("tab", { name: "a.ts" }),
+    ).toBeInTheDocument();
+
+    await addSessionTool(user, "Terminal");
+    expect(
+      await screen.findByRole("tab", { name: "redwhisk" }),
+    ).toBeInTheDocument();
+
+    unmount();
+
+    render(<AgentsActivity activeSessionId={301} projectId={1} />);
+    await screen.findByRole("heading", { name: "#20 Existing issue" });
+
+    expect(screen.getByRole("tab", { name: "a.ts" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "redwhisk" })).toBeInTheDocument();
   });
 
   it("opens a read-only diff for a changed file without placeholder text", async () => {

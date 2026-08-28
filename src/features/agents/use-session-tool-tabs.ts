@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import {
   closeProjectTerminal,
@@ -22,6 +22,22 @@ const MAX_SESSION_TERMINAL_TABS = 10;
 
 export interface SessionBrowserToolTab {
   id: number;
+}
+
+let terminalPanelStateBySessionIdStore: Record<
+  number,
+  SessionInlineTerminalPanelState
+> = {};
+let browserTabsBySessionIdStore: Record<number, SessionBrowserToolTab[]> = {};
+let nextBrowserTabId = 1;
+
+/**
+ * 清空全部 session tool tab 状态。仅供测试隔离使用：module-level 单例会跨用例残留。
+ */
+export function clearSessionToolTabsCacheForTest(): void {
+  terminalPanelStateBySessionIdStore = {};
+  browserTabsBySessionIdStore = {};
+  nextBrowserTabId = 1;
 }
 
 type CloseableWorkspaceTab = Exclude<
@@ -53,6 +69,7 @@ interface UseSessionToolTabsOptions {
  * 每个 session 维护一组 terminal 面板状态与 browser 标签页，负责创建 / 关闭 /
  * 选中，并把选中态同步给 workspaceCache。terminal / browser 的 React 元素由
  * 容器的 sessionWorkspaces memo 持有（保证池化不卸载），本 hook 只管数据。
+ * tab 列表存在 module-level，切走 Activity 再回来时仍能恢复。
  */
 export function useSessionToolTabs({
   projectId,
@@ -61,11 +78,12 @@ export function useSessionToolTabs({
   workspaceCache,
 }: UseSessionToolTabsOptions) {
   const [terminalPanelStateBySessionId, setTerminalPanelStateBySessionId] =
-    useState<Record<number, SessionInlineTerminalPanelState>>({});
+    useState<Record<number, SessionInlineTerminalPanelState>>(
+      () => terminalPanelStateBySessionIdStore,
+    );
   const [browserTabsBySessionId, setBrowserTabsBySessionId] = useState<
     Record<number, SessionBrowserToolTab[]>
-  >({});
-  const nextBrowserTabIdRef = useRef(1);
+  >(() => browserTabsBySessionIdStore);
 
   function setTerminalPanelState(
     sessionId: number,
@@ -81,13 +99,16 @@ export function useSessionToolTabs({
       if (nextState === null) {
         const { [sessionId]: _removedState, ...remainingStateBySessionId } =
           currentStateBySessionId;
+        terminalPanelStateBySessionIdStore = remainingStateBySessionId;
         return remainingStateBySessionId;
       }
 
-      return {
+      const nextStateBySessionId = {
         ...currentStateBySessionId,
         [sessionId]: nextState,
       };
+      terminalPanelStateBySessionIdStore = nextStateBySessionId;
+      return nextStateBySessionId;
     });
   }
 
@@ -149,13 +170,17 @@ export function useSessionToolTabs({
 
   function handleCreateBrowserTabForSession(sessionId: number) {
     const browserTab: SessionBrowserToolTab = {
-      id: nextBrowserTabIdRef.current,
+      id: nextBrowserTabId,
     };
-    nextBrowserTabIdRef.current += 1;
-    setBrowserTabsBySessionId((currentTabsBySessionId) => ({
-      ...currentTabsBySessionId,
-      [sessionId]: [...(currentTabsBySessionId[sessionId] ?? []), browserTab],
-    }));
+    nextBrowserTabId += 1;
+    setBrowserTabsBySessionId((currentTabsBySessionId) => {
+      const nextTabsBySessionId = {
+        ...currentTabsBySessionId,
+        [sessionId]: [...(currentTabsBySessionId[sessionId] ?? []), browserTab],
+      };
+      browserTabsBySessionIdStore = nextTabsBySessionId;
+      return nextTabsBySessionId;
+    });
     workspaceCache.selectWorkspaceTabForSession(
       sessionId,
       `browser:${browserTab.id}`,
@@ -235,13 +260,16 @@ export function useSessionToolTabs({
         if (remainingTabs.length === 0) {
           const { [sessionId]: _removed, ...remaining } =
             currentTabsBySessionId;
+          browserTabsBySessionIdStore = remaining;
           return remaining;
         }
 
-        return {
+        const nextTabsBySessionId = {
           ...currentTabsBySessionId,
           [sessionId]: remainingTabs,
         };
+        browserTabsBySessionIdStore = nextTabsBySessionId;
+        return nextTabsBySessionId;
       });
       const tabState = workspaceCache.getWorkspaceTabState(sessionId);
       if (tabState.activeWorkspaceTab === tab) {
@@ -256,10 +284,16 @@ export function useSessionToolTabs({
   /** 删除 session 时清掉它名下的 terminal / browser 标签页状态。 */
   function clearToolTabsForSession(sessionId: number) {
     setTerminalPanelStateBySessionId(
-      ({ [sessionId]: _removedState, ...remainingState }) => remainingState,
+      ({ [sessionId]: _removedState, ...remainingState }) => {
+        terminalPanelStateBySessionIdStore = remainingState;
+        return remainingState;
+      },
     );
     setBrowserTabsBySessionId(
-      ({ [sessionId]: _removedState, ...remainingState }) => remainingState,
+      ({ [sessionId]: _removedState, ...remainingState }) => {
+        browserTabsBySessionIdStore = remainingState;
+        return remainingState;
+      },
     );
   }
 

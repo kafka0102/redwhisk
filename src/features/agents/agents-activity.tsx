@@ -42,7 +42,10 @@ import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
 import { SessionTerminalTab } from "./session-workspace/session-terminal-tab";
 import type { SessionWorkspaceToolTab } from "./session-workspace/session-workspace-tabs";
-import { useSessionWorkspaceCache } from "./session-workspace/use-session-workspace-cache";
+import {
+  clearSessionWorkspaceCache,
+  useSessionWorkspaceCache,
+} from "./session-workspace/use-session-workspace-cache";
 import { useSessionPaneCache } from "./session-pane/use-session-pane-cache";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
@@ -398,6 +401,7 @@ export function AgentsActivity({
       // 不清则旧草稿串入复用该 id 的新 session（ADR 0006）。
       clearComposerDraft(deletedSessionId);
       clearToolTabsForSession(deletedSessionId);
+      clearSessionWorkspaceCache(deletedSessionId);
       setAllSessions((currentSessions) =>
         currentSessions.filter(
           (session) => session.sessionId !== deletedSessionId,
