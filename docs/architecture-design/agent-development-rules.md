@@ -324,6 +324,8 @@ Agent command 检测和测试由 Rust 后端 完成，React 不直接执行 shel
 
 Agent command 检测必须考虑桌面应用启动环境与用户终端环境的差异。macOS 上从 Finder、Dock 或 Tauri 启动的进程通常不会继承交互终端中的 `PATH`、`nvm`、`rbenv` 等初始化结果；Rust 后端 做 `command -v` 时不得只依赖当前进程环境。检测裸命令名（例如 `codex`）时，应优先保持非交互登录 shell 查询，并在失败时补充交互登录 shell 查询，以覆盖用户在 `.zshrc` 等交互 shell 启动脚本中配置的命令路径。
 
+Git 命令 adapter（`src-tauri/src/git/command.rs`）必须把同一套 login+interactive `PATH` 注入 git 子进程，使 `pre-push` / `pre-commit` 等 hook 能找到用户终端里的 `pnpm` / `node`。解析失败则继承当前进程 PATH，不阻断 git 本身。
+
 ## 文案与国际化
 
 前端 i18n 运行时基于 `i18next` + `react-i18next`，资源为 `src/shared/i18n/locales/{en,zh}.json`。前端页面文本必须按 locale 统一管理，不再允许继续扩大硬编码文案范围。
