@@ -12,7 +12,6 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
-import { ISSUE_DELIVERY_SUMMARY_INSTRUCTION } from "./issue-run/run-prompt-builder";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 import {
@@ -443,13 +442,9 @@ const globalLabel = {
 const existingIssueRunPrompt = [
   "using skill bmad-dev-story for task:",
   "Existing description",
-  ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
 ].join("\n\n");
 
-const existingIssueRunPromptWithoutSkill = [
-  "Existing description",
-  ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
-].join("\n\n");
+const existingIssueRunPromptWithoutSkill = "Existing description";
 
 function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
   const completedIssue: IssueRecord = {
@@ -2584,11 +2579,9 @@ describe("IssuesActivity", () => {
       name: "Run Issue #1",
     });
     expect(within(runDialog).getByLabelText("Final prompt")).toHaveValue(
-      [
-        "using skill bmad-dev-story for task:",
-        "Updated description",
-        ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
-      ].join("\n\n"),
+      ["using skill bmad-dev-story for task:", "Updated description"].join(
+        "\n\n",
+      ),
     );
 
     expect(startAgentSessionMock).not.toHaveBeenCalled();
@@ -2829,11 +2822,7 @@ describe("IssuesActivity", () => {
       "skill-b",
     );
     expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
-      [
-        "using skill skill-b for task:",
-        "Existing description",
-        ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
-      ].join("\n\n"),
+      ["using skill skill-b for task:", "Existing description"].join("\n\n"),
     );
   });
 

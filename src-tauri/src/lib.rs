@@ -60,18 +60,7 @@ pub fn run() {
             state
                 .agent_event_broadcaster
                 .set_app_handle(app.handle().clone());
-            // ADR-0003 / Multica：TurnCompleted 快照 source+turn_id → Issue 交付评论。
-            let completion_comment_app = app.handle().clone();
-            state
-                .agent_event_broadcaster
-                .set_turn_completed_handler(move |session_id, turn_source, turn_id| {
-                    features::issue::handle_turn_completed(
-                        &completion_comment_app,
-                        session_id,
-                        turn_source,
-                        turn_id,
-                    );
-                });
+            // 暂时不启用 Issue 交付摘要自动评论：保留 handle_turn_completed 逻辑，恢复时在此重新接线。
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
             // 异步播种内置 agent（ADR-0020）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
             // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；

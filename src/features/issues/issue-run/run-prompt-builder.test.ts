@@ -244,7 +244,7 @@ describe("buildRunPromptPreview", () => {
     ).toBe("skill-a");
   });
 
-  it("appends isomorphic issue delivery summary instruction to finalPrompt and sources", () => {
+  it("does not inject issue delivery summary instruction into finalPrompt or sources", () => {
     const preview = buildRunPromptPreview({
       issue: {
         title: "Prompt preview",
@@ -256,18 +256,17 @@ describe("buildRunPromptPreview", () => {
       },
     });
 
-    expect(preview.finalPrompt).toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
-    expect(
-      preview.finalPrompt.endsWith(ISSUE_DELIVERY_SUMMARY_INSTRUCTION),
-    ).toBe(true);
-    expect(preview.finalPrompt).toContain("Ship the feature.");
+    expect(preview.finalPrompt).toBe("Ship the feature.");
+    expect(preview.finalPrompt).not.toContain(
+      ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
+    );
     expect(
       preview.sources.find((source) => source.id === "app-instructions")
         ?.content,
-    ).toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
+    ).not.toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
   });
 
-  it("still injects delivery summary instruction when issue description is empty", () => {
+  it("does not inject delivery summary instruction when issue description is empty", () => {
     const preview = buildRunPromptPreview({
       issue: {
         title: "Empty body",
@@ -279,8 +278,10 @@ describe("buildRunPromptPreview", () => {
       },
     });
 
-    expect(preview.finalPrompt).toContain("<issue-comment>");
-    expect(preview.finalPrompt).toContain("精简中文交付摘要");
-    expect(preview.finalPrompt).toContain("系统优先提取为 Issue 评论");
+    expect(preview.finalPrompt).toBe("");
+    expect(preview.finalPrompt).not.toContain("<issue-comment>");
+    expect(preview.finalPrompt).not.toContain(
+      ISSUE_DELIVERY_SUMMARY_INSTRUCTION,
+    );
   });
 });

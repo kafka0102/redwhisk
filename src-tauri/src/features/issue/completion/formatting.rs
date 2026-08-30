@@ -48,7 +48,6 @@ Issue: {issue_title}\n\
 - 不要提交无关改动\n\
 - 先自检再提交\n\
 - 使用中文 Conventional Commit\n\
-- 完成后请回复 commit hash、提交结果与验证命令\n\
-- 完成后在答复正文顶层用 <issue-comment>精简中文交付摘要</issue-comment> 输出本次交付内容（做了什么 / 结果 / 验证命令）；该标签会被系统优先提取为 Issue 评论。不要把标签放进代码块或对其转义\n"
+- 完成后请回复 commit hash、提交结果与验证命令\n"
     )
 }
