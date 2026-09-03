@@ -26,8 +26,11 @@ fn grok_tui_trims_without_always_approve_when_safe() {
 #[test]
 fn grok_tui_does_not_duplicate_always_approve() {
     assert_eq!(
-        descriptor_for(&AgentType::Grok)
-            .build_tui_command_snapshot("grok --always-approve", "full-access", true),
+        descriptor_for(&AgentType::Grok).build_tui_command_snapshot(
+            "grok --always-approve",
+            "full-access",
+            true
+        ),
         "grok --always-approve"
     );
 }
@@ -54,7 +57,7 @@ fn grok_list_models_reads_default_from_config() {
     )
     .expect("write config");
 
-    let models = descriptor_for(&AgentType::Grok).list_models(temp.path());
+    let models = descriptor_for(&AgentType::Grok).list_models(temp.path(), "grok");
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].model_id, "grok-build");
     assert_eq!(models[0].is_default, Some(true));
@@ -63,11 +66,9 @@ fn grok_list_models_reads_default_from_config() {
 #[test]
 fn grok_list_models_empty_when_no_config() {
     let temp = tempfile::tempdir().expect("temp");
-    assert!(
-        descriptor_for(&AgentType::Grok)
-            .list_models(temp.path())
-            .is_empty()
-    );
+    assert!(descriptor_for(&AgentType::Grok)
+        .list_models(temp.path(), "grok")
+        .is_empty());
 }
 
 #[test]

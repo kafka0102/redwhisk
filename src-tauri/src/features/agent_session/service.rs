@@ -8,7 +8,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use crate::agent::agent_event_broadcaster::{AgentEventBroadcaster, TURN_GRACE_MS};
-use crate::local_data_path::user_home_from_data_dir;
 use crate::agent::provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,
     ThreadIdBackfill,
@@ -18,7 +17,6 @@ use crate::agent::pty_session_manager::{
 };
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::features::issue::IssueService;
 use crate::db::agent_profile_repository::{AgentProfileRepository, AgentProfileRow};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -26,18 +24,17 @@ use crate::db::event_repository::EventRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::features::issue::IssueService;
 use crate::git::worktree::{
-    cleanup_worktree, list_local_branches, restore_worktree_for_branch,
-    GitBranchInfo,
+    cleanup_worktree, list_local_branches, restore_worktree_for_branch, GitBranchInfo,
 };
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineResult,
-    ResumeAgentSessionInput, ResumeAgentSessionResult,
-    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
-    StartAgentSessionResult,
+    ResumeAgentSessionInput, ResumeAgentSessionResult, SetAgentSessionAttentionInput,
+    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
     UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -50,16 +47,20 @@ use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
 use crate::types::session_event::SessionEventType;
 
-
-use super::command_snapshot::build_tui_command_snapshot_for_profile;
 use super::codex_session_id_capture::should_attempt_codex_session_capture;
+use super::command_snapshot::build_tui_command_snapshot_for_profile;
+use super::launch::start_provider_session;
+use super::log_path::{
+    build_issue_runtime_structured_log_path, build_pending_structured_log_path,
+    is_archived_issue_log_path, remove_session_log_file,
+};
+use super::timeline::latest_output_from_session_log;
+use super::validation::{
+    validate_injected_prompt, validate_prompt_snapshot, validate_session_title,
+};
+use super::worktree_setup::run_worktree_setup_command;
 use crate::agent::descriptor_for;
 use crate::agent::provider_descriptor::plan_tui_initial_prompt;
-use super::launch::start_provider_session;
-use super::log_path::{build_issue_runtime_structured_log_path, build_pending_structured_log_path, is_archived_issue_log_path, remove_session_log_file};
-use super::timeline::latest_output_from_session_log;
-use super::validation::{validate_injected_prompt, validate_prompt_snapshot, validate_session_title};
-use super::worktree_setup::run_worktree_setup_command;
 
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
@@ -230,7 +231,8 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "未找到关联的 worktree，无需删除。",
-                ).with_reason("worktreeNotFound")
+                )
+                .with_reason("worktreeNotFound")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -238,7 +240,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前 worktree 非 RedWhisk 管理，无法删除。",
-            ).with_reason("worktreeNotManaged")
+            )
+            .with_reason("worktreeNotManaged")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
         }
 
@@ -246,7 +249,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "关联 worktree 缺少工作目录信息，无法删除。",
-            ).with_reason("worktreeMissingWorkDir")
+            )
+            .with_reason("worktreeMissingWorkDir")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
         };
 
@@ -262,7 +266,8 @@ impl<'connection> AgentSessionService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "关联 worktree 缺少工作分支信息，无法删除。",
-            ).with_reason("worktreeMissingBranch")
+            )
+            .with_reason("worktreeMissingBranch")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
         })?;
 
@@ -271,7 +276,8 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionStartFailed,
                     "删除 worktree 失败。",
-                ).with_reason("worktreeDeleteFailed")
+                )
+                .with_reason("worktreeDeleteFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             },
         )?;
@@ -346,7 +352,8 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(input.issue_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -354,7 +361,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Issue 不属于当前 Project。",
-            ).with_reason("issueNotInProject")
+            )
+            .with_reason("issueNotInProject")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
@@ -383,7 +391,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有 backlog Issue 可以启动 Agent Session。",
-            ).with_reason("onlyBacklogCanStart")
+            )
+            .with_reason("onlyBacklogCanStart")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(
                 ErrorDetail::new("IssueStatus")
@@ -643,7 +652,8 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(input.issue_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             })?;
 
@@ -651,7 +661,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Issue 不属于当前 Project。",
-            ).with_reason("issueNotInProject")
+            )
+            .with_reason("issueNotInProject")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id)));
         }
@@ -680,7 +691,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有 backlog Issue 可以启动 Agent Session。",
-            ).with_reason("onlyBacklogCanStart")
+            )
+            .with_reason("onlyBacklogCanStart")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
             .with_detail(
                 ErrorDetail::new("IssueStatus")
@@ -795,8 +807,12 @@ impl<'connection> AgentSessionService<'connection> {
         // 把"running 但不在 registry"的 session 误判为重启遗留并标记 stopped。
         // mark_starting 让 contains 返回 true，reconcile 据此跳过；register 真实
         // handle 时自动清除该标记，失败路径需显式 unmark。
-        let runtime = descriptor_for(&launch.profile.agent_type)
-            .resolve_runtime_config(data_dir, None, None);
+        let runtime = descriptor_for(&launch.profile.agent_type).resolve_runtime_config(
+            data_dir,
+            &launch.command_snapshot,
+            None,
+            None,
+        );
         self.finish_structured_issue_provider_start(
             factory,
             AgentSessionStartRequest {
@@ -811,7 +827,7 @@ impl<'connection> AgentSessionService<'connection> {
                 effort: runtime.effort,
                 resume_thread_id: None,
                 broadcaster: broadcaster.clone(),
-                config_home: user_home_from_data_dir(data_dir),
+                config_home: runtime.config_home,
             },
             agent_registry,
             broadcaster,
@@ -996,7 +1012,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "只有运行中的 Agent Session 可以更新关注状态。",
-            ).with_reason("mustBeRunningToUpdateFollow")
+            )
+            .with_reason("mustBeRunningToUpdateFollow")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
             ));
@@ -1018,7 +1035,8 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent Session 关注状态更新失败。",
-                ).with_reason("followStatusUpdateFailed")
+                )
+                .with_reason("followStatusUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
                 )
@@ -1068,11 +1086,11 @@ impl<'connection> AgentSessionService<'connection> {
         let submitted_prompt = normalize_submitted_prompt(&prompt);
 
         // 按 Session 展示形式快照选择运行时通道（ADR-0022）；membership 只检查是否在跑。
-        let runtime_prompt = match super::lifecycle::runtime_transport_from_raw(&session.display_mode)?
-        {
-            super::lifecycle::RuntimeTransport::InteractiveTui => submitted_prompt,
-            super::lifecycle::RuntimeTransport::StructuredJson => prompt.clone(),
-        };
+        let runtime_prompt =
+            match super::lifecycle::runtime_transport_from_raw(&session.display_mode)? {
+                super::lifecycle::RuntimeTransport::InteractiveTui => submitted_prompt,
+                super::lifecycle::RuntimeTransport::StructuredJson => prompt.clone(),
+            };
         super::lifecycle::inject_prompt(
             &session.display_mode,
             session.id,
@@ -1127,7 +1145,8 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(session_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。").with_reason("sessionNotFound")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                    .with_reason("sessionNotFound")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     )
@@ -1187,7 +1206,8 @@ impl<'connection> AgentSessionService<'connection> {
             .find_by_id(session_id)
             .map_err(agent_session_database_error)?
             .ok_or_else(|| {
-                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。").with_reason("sessionNotFound")
+                CommandError::new(CommandErrorCode::IssueNotFound, "Agent Session 不存在。")
+                    .with_reason("sessionNotFound")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     )
@@ -1197,7 +1217,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Agent Session 不属于当前 Project。",
-            ).with_reason("sessionNotInProject")
+            )
+            .with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id))
             .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id)));
         }
@@ -1218,16 +1239,15 @@ impl<'connection> AgentSessionService<'connection> {
         self.find_project_session(project_id, session_id)
     }
 
-    /// 查询指定 session 的 agent 类型（经 profile 表反查）。
+    /// 查询指定 session 的 agent 类型与启动命令（经 profile / snapshot 反查）。
     ///
-    /// 供 `list_agent_models` / `set_agent_model` 命令按 agent 类型分发：
-    /// Codex 走本地配置驱动的固定 GPT 列表，Claude 走 `~/.claude/settings.json`
-    /// 解析。
-    pub fn find_session_agent_type(
+    /// 供 `list_agent_models` 按命令解析 Codex `CODEX_HOME`：`codex-asxs`
+    /// 读 `~/.codex/profiles/asxs`，而不是默认 `~/.codex`。
+    pub fn find_session_agent_identity(
         &self,
         project_id: i64,
         session_id: i64,
-    ) -> Result<AgentType, CommandError> {
+    ) -> Result<(AgentType, String), CommandError> {
         let session = self.find_project_session(project_id, session_id)?;
         let profile = self
             .agent_profile_repository
@@ -1237,13 +1257,19 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "Agent Session 关联的 Agent Profile 不存在。",
-                ).with_reason("profileNotFound")
+                )
+                .with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("profileId", session.agent_profile_id),
                 )
             })?;
-        Ok(profile.agent_type)
+        let command = if session.command_snapshot.trim().is_empty() {
+            profile.command
+        } else {
+            session.command_snapshot
+        };
+        Ok((profile.agent_type, command))
     }
 
     pub fn delete_standalone_session(
@@ -1256,7 +1282,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "关联 Issue 的 Agent Session 不能从 Sessions 视图删除。",
-            ).with_reason("linkedSessionCannotDelete")
+            )
+            .with_reason("linkedSessionCannotDelete")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
         }
 
@@ -1294,7 +1321,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 删除失败。",
-            ).with_reason("deleteFailed")
+            )
+            .with_reason("deleteFailed")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session_id)));
         }
 
@@ -1313,7 +1341,8 @@ impl<'connection> AgentSessionService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "关联 Issue 的 Agent Session 不能从 Sessions 视图修改标题。",
-            ).with_reason("linkedSessionCannotRename")
+            )
+            .with_reason("linkedSessionCannotRename")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
             ));
@@ -1329,7 +1358,8 @@ impl<'connection> AgentSessionService<'connection> {
                 CommandError::new(
                     CommandErrorCode::AgentSessionPersistenceFailed,
                     "Agent Session 标题更新失败。",
-                ).with_reason("titleUpdateFailed")
+                )
+                .with_reason("titleUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", input.session_id),
                 )
@@ -1439,9 +1469,7 @@ impl AgentSessionService<'_> {
                 "未关联 Issue 的 Session 不能续接。",
             )
             .with_reason("missingLinkedIssue")
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
-            ));
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         };
         let issue = self
             .issue_repository
@@ -1485,9 +1513,7 @@ impl AgentSessionService<'_> {
                 "已正常关闭的 Session 不能续接。",
             )
             .with_reason("closedSessionCannotResume")
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
-            ));
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
 
         // 幂等：structured live handle / TUI 活跃 PTY / mark_starting 均 short-circuit。
@@ -1583,7 +1609,7 @@ impl AgentSessionService<'_> {
         };
         let cwd = self.resolve_session_cwd_for_resume(session)?;
         agent_registry.mark_starting(session.id);
-        let runtime = descriptor.resolve_runtime_config(data_dir, None, None);
+        let runtime = descriptor.resolve_runtime_config(data_dir, &binary, None, None);
         let started = match start_provider_session(
             &DefaultAgentSessionProviderFactory,
             AgentSessionStartRequest {
@@ -1598,7 +1624,7 @@ impl AgentSessionService<'_> {
                 effort: runtime.effort,
                 resume_thread_id: Some(thread_id.clone()),
                 broadcaster: broadcaster.clone(),
-                config_home: user_home_from_data_dir(data_dir),
+                config_home: runtime.config_home,
             },
         ) {
             Ok(started) => started,
@@ -1618,9 +1644,7 @@ impl AgentSessionService<'_> {
                 CommandErrorCode::AgentSessionStreamFailed,
                 "Agent 会话启动后未拿到 threadId。",
             )
-            .with_detail(
-                ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
-            ));
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
         if let Err(error) = self.mark_structured_session_resumed(session, &resumed_thread_id) {
             agent_registry.unmark_starting(session.id);
@@ -1789,7 +1813,8 @@ impl AgentSessionService<'_> {
             session,
             &cwd,
             "Agent Session 工作区不存在，模型列表不可用。",
-        ).with_reason("workspaceMissingForModelList"))
+        )
+        .with_reason("workspaceMissingForModelList"))
     }
 
     fn resolve_session_cwd_for_resume(
@@ -1817,7 +1842,8 @@ impl AgentSessionService<'_> {
             session,
             &cwd,
             "Agent Session 工作区不存在，无法恢复。",
-        ).with_reason("workspaceMissingForResume"))
+        )
+        .with_reason("workspaceMissingForResume"))
     }
 
     fn find_project_summary(
@@ -1856,7 +1882,8 @@ impl AgentSessionService<'_> {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionPersistenceFailed,
                 "Agent Session 恢复失败。",
-            ).with_reason("restoreFailed")
+            )
+            .with_reason("restoreFailed")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
 
@@ -2011,7 +2038,8 @@ impl AgentSessionService<'_> {
                         return Err(CommandError::new(
                             CommandErrorCode::AgentSessionPersistenceFailed,
                             "Agent Session 关闭失败。",
-                        ).with_reason("closeFailed")
+                        )
+                        .with_reason("closeFailed")
                         .with_detail(
                             ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                         )
@@ -2044,7 +2072,8 @@ impl AgentSessionService<'_> {
                         return Err(CommandError::new(
                             CommandErrorCode::AgentSessionPersistenceFailed,
                             "Agent Session 关闭失败。",
-                        ).with_reason("closeFailed")
+                        )
+                        .with_reason("closeFailed")
                         .with_detail(
                             ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                         )
@@ -2360,7 +2389,6 @@ pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> 
     command_error
 }
 
-
 pub(super) fn resolve_target_branch(
     branch_info: &GitBranchInfo,
     target_branch: Option<&str>,
@@ -2381,7 +2409,8 @@ pub(super) fn resolve_target_branch(
     Err(CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "目标分支不存在。",
-    ).with_reason("targetBranchNotFound")
+    )
+    .with_reason("targetBranchNotFound")
     .with_detail(ErrorDetail::new("GitBranch").with_value("targetBranch", target_branch)))
 }
 
@@ -2395,7 +2424,8 @@ pub(super) fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<Str
             CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
                 "Project 路径无效。",
-            ).with_reason("projectPathInvalid")
+            )
+            .with_reason("projectPathInvalid")
         })?;
 
     let path = match project.worktree_location {
@@ -2409,7 +2439,8 @@ pub(super) fn resolve_worktree_root_path(project: &ProjectSummary) -> Result<Str
                 CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
                     "无法解析用户 Home 目录。",
-                ).with_reason("homeDirUnresolved")
+                )
+                .with_reason("homeDirUnresolved")
             })?;
             Path::new(&home_dir)
                 .join(".redwhisk")
@@ -2433,8 +2464,8 @@ fn spawn_agent_process(
 ) -> Result<Child, CommandError> {
     let log_file = File::create(log_path).map_err(agent_session_start_error)?;
     let stderr_file = log_file.try_clone().map_err(agent_session_start_error)?;
-    let command_line = descriptor_for(&profile.agent_type)
-        .build_command_snapshot_with_bypass(&profile.command);
+    let command_line =
+        descriptor_for(&profile.agent_type).build_command_snapshot_with_bypass(&profile.command);
     let (program, args) = split_agent_command_line(&command_line)?;
 
     let mut command = Command::new(program);
@@ -2454,7 +2485,8 @@ fn split_agent_command_line(command: &str) -> Result<(&str, Vec<&str>), CommandE
         CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Agent command 不能为空。",
-        ).with_reason("commandRequired")
+        )
+        .with_reason("commandRequired")
         .with_detail(ErrorDetail::new("Command").with_value("command", command))
     })?;
     Ok((program, parts.collect()))
@@ -2468,7 +2500,8 @@ fn ensure_process_started(child: &mut Child, command: &str) -> Result<(), Comman
             let mut error = CommandError::new(
                 CommandErrorCode::AgentSessionStartFailed,
                 "Agent 进程启动失败。",
-            ).with_reason("processStartFailed")
+            )
+            .with_reason("processStartFailed")
             .with_detail(ErrorDetail::new("Command").with_value("command", command));
 
             if let Some(code) = status.code() {
@@ -2502,7 +2535,8 @@ pub(super) fn agent_session_database_error(error: impl std::fmt::Display) -> Com
     CommandError::new(
         CommandErrorCode::AgentSessionPersistenceFailed,
         "Agent Session 启动失败。",
-    ).with_reason("startFailed")
+    )
+    .with_reason("startFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -2544,7 +2578,8 @@ pub(super) fn agent_session_start_error(error: impl std::fmt::Display) -> Comman
     CommandError::new(
         CommandErrorCode::AgentSessionStartFailed,
         "Agent 进程启动失败。",
-    ).with_reason("processStartFailed")
+    )
+    .with_reason("processStartFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -2554,7 +2589,8 @@ pub(super) fn worktree_create_error(error: impl std::fmt::Display) -> CommandErr
     CommandError::new(
         CommandErrorCode::AgentSessionStartFailed,
         "Agent Session 工作区创建失败。",
-    ).with_reason("worktreeCreateFailed")
+    )
+    .with_reason("worktreeCreateFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -2562,7 +2598,8 @@ pub(crate) fn inactive_terminal_error(error: String) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "当前 Session 没有活跃终端。",
-    ).with_reason("noActiveTerminal")
+    )
+    .with_reason("noActiveTerminal")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error))
 }
 
@@ -2669,13 +2706,6 @@ mod tests {
         normalize_submitted_prompt, preferred_session_cwd, should_restore_redwhisk_worktree,
         AgentSessionService,
     };
-    use crate::features::agent_session::log_path::{
-        build_issue_archive_log_path, build_issue_runtime_structured_log_path,
-        build_issue_session_archive,
-    };
-    use crate::features::agent_session::timeline::{
-        latest_output_from_session_log, read_timeline_from_log_path,
-    };
     use crate::agent::provider_factory::{resolve_codex_mode, PlannedCodexMode};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::db::agent_profile_repository::AgentProfileRepository;
@@ -2684,6 +2714,13 @@ mod tests {
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
+    use crate::features::agent_session::log_path::{
+        build_issue_archive_log_path, build_issue_runtime_structured_log_path,
+        build_issue_session_archive,
+    };
+    use crate::features::agent_session::timeline::{
+        latest_output_from_session_log, read_timeline_from_log_path,
+    };
     use crate::types::agent_profile::{AgentScope, AgentType};
     use crate::types::agent_session::{
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
@@ -2767,7 +2804,6 @@ mod tests {
         assert_eq!(normalize_submitted_prompt("hello\n"), "hello\n");
         assert_eq!(normalize_submitted_prompt("hello\r"), "hello\r");
     }
-
 
     #[test]
     fn codex_profile_default_mode_uses_full_access() {
@@ -5055,7 +5091,6 @@ mod tests {
         );
     }
 
-
     struct ControllableHandle {
         thread_id: Option<String>,
         send_error: Option<String>,
@@ -5120,7 +5155,9 @@ mod tests {
     }
 
     struct ScriptedProviderFactory {
-        result: std::sync::Mutex<Option<Result<crate::agent::provider_factory::StartedSession, AgentSessionError>>>,
+        result: std::sync::Mutex<
+            Option<Result<crate::agent::provider_factory::StartedSession, AgentSessionError>>,
+        >,
     }
 
     impl crate::agent::provider_factory::AgentSessionProviderFactory for ScriptedProviderFactory {
@@ -5217,12 +5254,10 @@ mod tests {
         assert_eq!(error.code, CommandErrorCode::AgentSessionNotRunning);
         assert!(!registry.contains(500));
         // soft delete 后 find_by_id 过滤 del；以 issue 回到 backlog 为准。
-        assert!(
-            AgentSessionRepository::new(&connection)
-                .find_by_id(500)
-                .expect("query")
-                .is_none()
-        );
+        assert!(AgentSessionRepository::new(&connection)
+            .find_by_id(500)
+            .expect("query")
+            .is_none());
         let issue = IssueRepository::new(&connection)
             .find_by_id(50)
             .expect("issue query")
@@ -5239,15 +5274,17 @@ mod tests {
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
         let shutdown_count = Arc::new(std::sync::Mutex::new(0));
         let factory = ScriptedProviderFactory {
-            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
-                handle: Arc::new(ControllableHandle {
+            result: std::sync::Mutex::new(Some(Ok(
+                crate::agent::provider_factory::StartedSession {
+                    handle: Arc::new(ControllableHandle {
+                        thread_id: None,
+                        send_error: None,
+                        shutdown_count: Arc::clone(&shutdown_count),
+                    }),
                     thread_id: None,
-                    send_error: None,
-                    shutdown_count: Arc::clone(&shutdown_count),
-                }),
-                thread_id: None,
-                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
-            }))),
+                    backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+                },
+            ))),
         };
         let launch = issue_launch_context();
         let error = service
@@ -5283,15 +5320,17 @@ mod tests {
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
         let shutdown_count = Arc::new(std::sync::Mutex::new(0));
         let factory = ScriptedProviderFactory {
-            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
-                handle: Arc::new(ControllableHandle {
+            result: std::sync::Mutex::new(Some(Ok(
+                crate::agent::provider_factory::StartedSession {
+                    handle: Arc::new(ControllableHandle {
+                        thread_id: Some("thread-1".into()),
+                        send_error: Some("send failed".into()),
+                        shutdown_count: Arc::clone(&shutdown_count),
+                    }),
                     thread_id: Some("thread-1".into()),
-                    send_error: Some("send failed".into()),
-                    shutdown_count: Arc::clone(&shutdown_count),
-                }),
-                thread_id: Some("thread-1".into()),
-                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
-            }))),
+                    backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+                },
+            ))),
         };
         let launch = issue_launch_context();
         let error = service
@@ -5326,15 +5365,17 @@ mod tests {
         let registry = crate::agent::session_registry::AgentSessionRegistry::new();
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
         let factory = ScriptedProviderFactory {
-            result: std::sync::Mutex::new(Some(Ok(crate::agent::provider_factory::StartedSession {
-                handle: Arc::new(ControllableHandle {
+            result: std::sync::Mutex::new(Some(Ok(
+                crate::agent::provider_factory::StartedSession {
+                    handle: Arc::new(ControllableHandle {
+                        thread_id: Some("thread-ok".into()),
+                        send_error: None,
+                        shutdown_count: Arc::new(std::sync::Mutex::new(0)),
+                    }),
                     thread_id: Some("thread-ok".into()),
-                    send_error: None,
-                    shutdown_count: Arc::new(std::sync::Mutex::new(0)),
-                }),
-                thread_id: Some("thread-ok".into()),
-                backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
-            }))),
+                    backfill: crate::agent::provider_factory::ThreadIdBackfill::Required,
+                },
+            ))),
         };
         let launch = issue_launch_context();
         service
@@ -5364,8 +5405,6 @@ mod tests {
             .expect("issue");
         assert_eq!(format!("{:?}", issue.status).to_lowercase(), "running");
     }
-
-
 
     #[test]
     fn resume_agent_session_rejects_missing_linked_issue() {
@@ -5442,7 +5481,10 @@ mod tests {
             )
             .expect_err("backlog issue must reject resume");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
-        assert_eq!(error.reason.as_deref(), Some("backlogIssueSessionCannotRun"));
+        assert_eq!(
+            error.reason.as_deref(),
+            Some("backlogIssueSessionCannotRun")
+        );
     }
 
     #[test]
@@ -5481,7 +5523,10 @@ mod tests {
             )
             .expect_err("completed issue must reject resume");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
-        assert_eq!(error.reason.as_deref(), Some("completedIssueSessionCannotRun"));
+        assert_eq!(
+            error.reason.as_deref(),
+            Some("completedIssueSessionCannotRun")
+        );
     }
 
     #[test]
@@ -5542,7 +5587,10 @@ mod tests {
             .find_by_id(801)
             .expect("query")
             .expect("session");
-        assert_eq!(session.provider_session_id.as_deref(), Some("thread-migrated"));
+        assert_eq!(
+            session.provider_session_id.as_deref(),
+            Some("thread-migrated")
+        );
     }
 
     #[test]
@@ -5634,7 +5682,6 @@ mod tests {
         assert_eq!(result.session_id, 601);
         assert_eq!(result.thread_id, "thread-active");
     }
-
 
     fn branch_exists(repo_dir: &Path, branch: &str) -> bool {
         let output = Command::new("git")

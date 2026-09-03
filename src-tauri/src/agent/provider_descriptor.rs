@@ -5,11 +5,9 @@
 //! 新增第 3 种 agent：实现 [`AgentProviderDescriptor`] + 在 [`descriptor_for`] 注册一行，
 //! service / command 零改动。见 ADR-0015。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::agent::claude_config;
-use crate::agent::codex_app_server::session::default_codex_models_with_selected;
-use crate::agent::codex_config;
 use crate::agent::grok_config;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::AgentModel;
@@ -17,13 +15,14 @@ use crate::types::agent_session_stream::AgentModel;
 #[path = "provider_descriptor_command.rs"]
 mod command;
 use command::{
-    CLAUDE_FALLBACK_BINARY, CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY,
-    GROK_ALWAYS_APPROVE_ARG, GROK_FALLBACK_BINARY, OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY,
     append_missing_args, build_claude_tui_command_snapshot, build_claude_tui_resume_command,
-    build_codex_tui_command_snapshot, build_codex_tui_resume_command, build_grok_tui_command_snapshot,
-    build_grok_tui_resume_command, build_opencode_structured_command_snapshot,
-    build_opencode_tui_command_snapshot, build_opencode_tui_resume_command, claude_models_from_home,
-    ensure_claude_bypass_permission_args,
+    build_codex_tui_command_snapshot, build_codex_tui_resume_command,
+    build_grok_tui_command_snapshot, build_grok_tui_resume_command,
+    build_opencode_structured_command_snapshot, build_opencode_tui_command_snapshot,
+    build_opencode_tui_resume_command, claude_models_from_home, codex_models_from_command,
+    ensure_claude_bypass_permission_args, resolve_codex_runtime_config, CLAUDE_FALLBACK_BINARY,
+    CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY, GROK_ALWAYS_APPROVE_ARG,
+    GROK_FALLBACK_BINARY, OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY,
 };
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
@@ -32,6 +31,7 @@ use command::{
 pub struct RuntimeConfig {
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub config_home: Option<PathBuf>,
 }
 
 /// TUI 首条 prompt 投递方式（ADR-0022：能作 CLI 参数则注入参数，否则 stdin）。
@@ -90,11 +90,12 @@ pub trait AgentProviderDescriptor: Send + Sync {
 
     /// 解析启动期 model / effort。
     ///
-    /// `data_dir` 用于定位 provider 配置目录；`requested_*` 为调用方显式入参，优先于
-    /// 配置文件读取。各 provider 决定是否读配置、是否忽略 effort。
+    /// `data_dir` 用于定位 provider 配置目录；`command` 供 Codex 解析 `CODEX_HOME`。
+    /// `requested_*` 为调用方显式入参，优先于配置文件读取。
     fn resolve_runtime_config(
         &self,
         data_dir: &Path,
+        command: &str,
         requested_model: Option<&str>,
         requested_effort: Option<&str>,
     ) -> RuntimeConfig;
@@ -119,7 +120,8 @@ pub trait AgentProviderDescriptor: Send + Sync {
     ///
     /// **不**改写 DB 中的 `command_snapshot`；**不**注入额外 prompt。
     /// resume 命令只用于本次 spawn。
-    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String;
+    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str)
+        -> String;
 
     /// TUI 首条 prompt 如何投递（CLI 参数优先，stdin 仅作回退）。
     fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery;
@@ -127,8 +129,8 @@ pub trait AgentProviderDescriptor: Send + Sync {
     /// resume 路径下 `command_snapshot` 为空时的兜底命令（provider 默认 binary + bypass）。
     fn fallback_command_when_snapshot_empty(&self) -> String;
 
-    /// 列出 provider 可切换的模型（读 `home_dir` 下 provider 配置）。
-    fn list_models(&self, home_dir: &Path) -> Vec<AgentModel>;
+    /// 列出 provider 可切换的模型。`command` 供 Codex 解析 `CODEX_HOME`。
+    fn list_models(&self, home_dir: &Path, command: &str) -> Vec<AgentModel>;
 
     /// 模型列表是否只读（第三方接口不允许切换）。
     fn is_model_list_read_only(&self, home_dir: &Path) -> bool;
@@ -168,18 +170,11 @@ impl AgentProviderDescriptor for CodexDescriptor {
     fn resolve_runtime_config(
         &self,
         data_dir: &Path,
+        command: &str,
         requested_model: Option<&str>,
         requested_effort: Option<&str>,
     ) -> RuntimeConfig {
-        // Codex 配置目录 = data_dir 的父目录（~/.codex 与 data_dir 同级约定）。
-        let home = data_dir.parent();
-        let model = requested_model
-            .map(str::to_string)
-            .or_else(|| home.and_then(codex_config::read_model_from_home));
-        let effort = requested_effort
-            .map(str::to_string)
-            .or_else(|| home.and_then(codex_config::read_reasoning_effort_from_home));
-        RuntimeConfig { model, effort }
+        resolve_codex_runtime_config(data_dir, command, requested_model, requested_effort)
     }
 
     fn build_command_snapshot_with_bypass(&self, raw_command: &str) -> String {
@@ -195,7 +190,11 @@ impl AgentProviderDescriptor for CodexDescriptor {
         build_codex_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
-    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+    fn build_tui_resume_command(
+        &self,
+        command_snapshot: &str,
+        provider_session_id: &str,
+    ) -> String {
         build_codex_tui_resume_command(command_snapshot, provider_session_id)
     }
 
@@ -210,8 +209,8 @@ impl AgentProviderDescriptor for CodexDescriptor {
         )
     }
 
-    fn list_models(&self, home_dir: &Path) -> Vec<AgentModel> {
-        default_codex_models_with_selected(codex_config::read_model_from_home(home_dir).as_deref())
+    fn list_models(&self, home_dir: &Path, command: &str) -> Vec<AgentModel> {
+        codex_models_from_command(home_dir, command)
     }
 
     fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
@@ -243,7 +242,8 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
 
     fn resolve_runtime_config(
         &self,
-        _data_dir: &Path,
+        data_dir: &Path,
+        _command: &str,
         requested_model: Option<&str>,
         _requested_effort: Option<&str>,
     ) -> RuntimeConfig {
@@ -251,6 +251,7 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         RuntimeConfig {
             model: requested_model.map(str::to_string),
             effort: None,
+            config_home: data_dir.parent().map(Path::to_path_buf),
         }
     }
 
@@ -266,7 +267,11 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         build_claude_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
-    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+    fn build_tui_resume_command(
+        &self,
+        command_snapshot: &str,
+        provider_session_id: &str,
+    ) -> String {
         build_claude_tui_resume_command(command_snapshot, provider_session_id)
     }
 
@@ -278,7 +283,7 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         ensure_claude_bypass_permission_args(CLAUDE_FALLBACK_BINARY)
     }
 
-    fn list_models(&self, home_dir: &Path) -> Vec<AgentModel> {
+    fn list_models(&self, home_dir: &Path, _command: &str) -> Vec<AgentModel> {
         claude_models_from_home(home_dir)
     }
 
@@ -315,13 +320,15 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
 
     fn resolve_runtime_config(
         &self,
-        _data_dir: &Path,
+        data_dir: &Path,
+        _command: &str,
         requested_model: Option<&str>,
         _requested_effort: Option<&str>,
     ) -> RuntimeConfig {
         RuntimeConfig {
             model: requested_model.map(str::to_string),
             effort: None,
+            config_home: data_dir.parent().map(Path::to_path_buf),
         }
     }
 
@@ -337,7 +344,11 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
         build_opencode_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
-    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+    fn build_tui_resume_command(
+        &self,
+        command_snapshot: &str,
+        provider_session_id: &str,
+    ) -> String {
         build_opencode_tui_resume_command(command_snapshot, provider_session_id)
     }
 
@@ -349,7 +360,7 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
         OPENCODE_FALLBACK_BINARY.to_string()
     }
 
-    fn list_models(&self, _home_dir: &Path) -> Vec<AgentModel> {
+    fn list_models(&self, _home_dir: &Path, _command: &str) -> Vec<AgentModel> {
         Vec::new()
     }
 
@@ -386,13 +397,15 @@ impl AgentProviderDescriptor for GrokDescriptor {
 
     fn resolve_runtime_config(
         &self,
-        _data_dir: &Path,
+        data_dir: &Path,
+        _command: &str,
         requested_model: Option<&str>,
         _requested_effort: Option<&str>,
     ) -> RuntimeConfig {
         RuntimeConfig {
             model: requested_model.map(str::to_string),
             effort: None,
+            config_home: data_dir.parent().map(Path::to_path_buf),
         }
     }
 
@@ -410,7 +423,11 @@ impl AgentProviderDescriptor for GrokDescriptor {
         build_grok_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
-    fn build_tui_resume_command(&self, command_snapshot: &str, provider_session_id: &str) -> String {
+    fn build_tui_resume_command(
+        &self,
+        command_snapshot: &str,
+        provider_session_id: &str,
+    ) -> String {
         build_grok_tui_resume_command(command_snapshot, provider_session_id)
     }
 
@@ -422,7 +439,7 @@ impl AgentProviderDescriptor for GrokDescriptor {
         GROK_FALLBACK_BINARY.to_string()
     }
 
-    fn list_models(&self, home_dir: &Path) -> Vec<AgentModel> {
+    fn list_models(&self, home_dir: &Path, _command: &str) -> Vec<AgentModel> {
         // 只读展示 `[models].default`；读不到则空（前端不展示模型）。
         grok_config::read_default_model_from_home(home_dir)
             .map(|model| AgentModel {
@@ -459,6 +476,10 @@ mod tests;
 #[cfg(test)]
 #[path = "provider_descriptor_grok_tests.rs"]
 mod grok_tests;
+
+#[cfg(test)]
+#[path = "provider_descriptor_codex_home_tests.rs"]
+mod codex_home_tests;
 
 #[cfg(test)]
 #[path = "provider_descriptor_resume_tests.rs"]

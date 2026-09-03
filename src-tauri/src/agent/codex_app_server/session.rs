@@ -122,7 +122,8 @@ pub struct CodexSessionConfig {
     pub model: Option<String>,
     /// 初始 reasoning effort，由模型能力声明。
     pub effort: Option<String>,
-    /// 用户 home，用于 set_model/set_effort 写 provider 配置；None 时回退 `$HOME`。
+    /// Codex 配置根目录（`CODEX_HOME`），用于 set_model/set_effort 写盘；
+    /// None 时回退 `$HOME/.codex`。
     pub config_home: Option<std::path::PathBuf>,
 }
 
@@ -161,9 +162,9 @@ struct PendingPermission {
 }
 
 fn resolve_config_home(config_home: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
-    config_home
-        .map(|path| path.to_path_buf())
-        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+    config_home.map(|path| path.to_path_buf()).or_else(|| {
+        std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".codex"))
+    })
 }
 
 /// Codex session 句柄。
@@ -360,7 +361,7 @@ impl CodexSessionHandle {
     /// 切换模型。下一次 turn/start 会带上新 model；并持久化到 codex 配置。
     pub fn set_model(&self, model_id: String) -> Result<(), CodexAppServerError> {
         if let Some(home) = resolve_config_home(self.config.config_home.as_deref()) {
-            crate::agent::codex_config::write_model_to_home(&home, &model_id)
+            crate::agent::codex_config::write_model_to_codex_home(&home, &model_id)
                 .map_err(CodexAppServerError::Io)?;
         }
         {
@@ -382,8 +383,11 @@ impl CodexSessionHandle {
     pub fn set_effort(&self, effort: Option<String>) -> Result<(), CodexAppServerError> {
         if let Some(effort_value) = effort.as_deref() {
             if let Some(home) = resolve_config_home(self.config.config_home.as_deref()) {
-                crate::agent::codex_config::write_reasoning_effort_to_home(&home, effort_value)
-                    .map_err(CodexAppServerError::Io)?;
+                crate::agent::codex_config::write_reasoning_effort_to_codex_home(
+                    &home,
+                    effort_value,
+                )
+                .map_err(CodexAppServerError::Io)?;
             }
         }
         {
@@ -423,7 +427,11 @@ impl CodexSessionHandle {
 
     /// 列出可用模型。
     pub fn list_models(&self) -> Result<Vec<AgentModel>, CodexAppServerError> {
-        Ok(default_codex_models())
+        let selected = self.config.model.clone().or_else(|| {
+            resolve_config_home(self.config.config_home.as_deref())
+                .and_then(|home| crate::agent::codex_config::read_model_from_codex_home(&home))
+        });
+        Ok(default_codex_models_with_selected(selected.as_deref()))
     }
 
     /// 列出可用模式。
@@ -1724,7 +1732,7 @@ done
         let handle = test_handle_with_config_home(&binary, home.path().to_path_buf());
         CodexSessionHandle::set_model(&handle, "gpt-5.5".into()).expect("set model");
         assert_eq!(
-            crate::agent::codex_config::read_model_from_home(home.path()).as_deref(),
+            crate::agent::codex_config::read_model_from_codex_home(home.path()).as_deref(),
             Some("gpt-5.5")
         );
         handle.shutdown();
@@ -1738,7 +1746,8 @@ done
         let handle = test_handle_with_config_home(&binary, home.path().to_path_buf());
         CodexSessionHandle::set_effort(&handle, Some("high".into())).expect("set effort");
         assert_eq!(
-            crate::agent::codex_config::read_reasoning_effort_from_home(home.path()).as_deref(),
+            crate::agent::codex_config::read_reasoning_effort_from_codex_home(home.path())
+                .as_deref(),
             Some("high")
         );
         handle.shutdown();

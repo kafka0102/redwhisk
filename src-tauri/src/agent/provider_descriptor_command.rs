@@ -3,7 +3,11 @@
 use std::path::Path;
 
 use crate::agent::claude_config;
+use crate::agent::codex_app_server::session::default_codex_models_with_selected;
+use crate::agent::codex_config;
 use crate::types::agent_session_stream::AgentModel;
+
+use super::RuntimeConfig;
 
 pub(super) const CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG: &str =
     "--dangerously-bypass-approvals-and-sandbox";
@@ -22,7 +26,11 @@ pub(super) const GROK_ALWAYS_APPROVE_ARG: &str = "--always-approve";
 pub(super) const GROK_FALLBACK_BINARY: &str = "grok";
 
 /// Codex 交互式 TUI：按 mode/dangerous 映射审批与沙箱，不注入 app-server。
-pub(super) fn build_codex_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+pub(super) fn build_codex_tui_command_snapshot(
+    raw_command: &str,
+    mode: &str,
+    dangerous: bool,
+) -> String {
     let trimmed = raw_command.trim();
     match mode {
         "full-access" | "full-auto" => {
@@ -46,15 +54,17 @@ pub(super) fn build_codex_tui_command_snapshot(raw_command: &str, mode: &str, da
                 CODEX_SANDBOX_READ_ONLY,
             ],
         ),
-        _ if dangerous => {
-            append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG])
-        }
+        _ if dangerous => append_missing_args(trimmed, &[CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG]),
         _ => trimmed.to_string(),
     }
 }
 
 /// Claude 交互式 TUI：按 mode/dangerous 映射 permission-mode，不注入 stream-json / -p。
-pub(super) fn build_claude_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+pub(super) fn build_claude_tui_command_snapshot(
+    raw_command: &str,
+    mode: &str,
+    dangerous: bool,
+) -> String {
     let trimmed = raw_command.trim();
     if command_has_arg(trimmed, CLAUDE_PERMISSION_MODE_ARG) {
         return trimmed.to_string();
@@ -77,7 +87,11 @@ pub(super) fn build_claude_tui_command_snapshot(raw_command: &str, mode: &str, d
 
 /// OpenCode 交互式 TUI：trim；dangerous 或 mode=full-access 追加 `--auto`；
 /// 不注入 `run` / `--format`（structured 见 build_opencode_structured_command_snapshot）。
-pub(super) fn build_opencode_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+pub(super) fn build_opencode_tui_command_snapshot(
+    raw_command: &str,
+    mode: &str,
+    dangerous: bool,
+) -> String {
     let trimmed = raw_command.trim();
     if mode == "full-access" || dangerous {
         append_missing_args(trimmed, &[OPENCODE_AUTO_ARG])
@@ -88,7 +102,11 @@ pub(super) fn build_opencode_tui_command_snapshot(raw_command: &str, mode: &str,
 
 /// Grok 交互式 TUI：trim；`dangerous` 或 mode=full-access 追加 `--always-approve`；
 /// 不注入 `-p` / `--output-format` / `agent stdio` 等结构化协议参数。
-pub(super) fn build_grok_tui_command_snapshot(raw_command: &str, mode: &str, dangerous: bool) -> String {
+pub(super) fn build_grok_tui_command_snapshot(
+    raw_command: &str,
+    mode: &str,
+    dangerous: bool,
+) -> String {
     let trimmed = raw_command.trim();
     if dangerous || mode == "full-access" {
         append_missing_args(trimmed, &[GROK_ALWAYS_APPROVE_ARG])
@@ -109,9 +127,16 @@ fn split_program_and_args(command_snapshot: &str, fallback_binary: &str) -> (Str
 }
 
 /// Codex 交互式 TUI resume：`codex resume <id> [原 snapshot 其余参数]`；不注入 prompt。
-pub(super) fn build_codex_tui_resume_command(command_snapshot: &str, provider_session_id: &str) -> String {
+pub(super) fn build_codex_tui_resume_command(
+    command_snapshot: &str,
+    provider_session_id: &str,
+) -> String {
     let (program, rest) = split_program_and_args(command_snapshot, CODEX_FALLBACK_BINARY);
-    let mut out = vec![program, "resume".to_string(), provider_session_id.to_string()];
+    let mut out = vec![
+        program,
+        "resume".to_string(),
+        provider_session_id.to_string(),
+    ];
     out.extend(rest);
     out.join(" ")
 }
@@ -170,7 +195,9 @@ pub(super) fn build_opencode_structured_command_snapshot(raw_command: &str) -> S
     }
     let parts: Vec<&str> = trimmed.split_whitespace().collect();
     let has_run = parts.iter().any(|p| *p == "run");
-    let has_format_json = parts.windows(2).any(|w| w[0] == "--format" && w[1] == "json")
+    let has_format_json = parts
+        .windows(2)
+        .any(|w| w[0] == "--format" && w[1] == "json")
         || parts.iter().any(|p| *p == "--format=json");
     let mut command = trimmed.to_string();
     if !has_run {
@@ -192,8 +219,6 @@ pub(super) fn ensure_claude_bypass_permission_args(command: &str) -> String {
         )
     }
 }
-
-
 
 /// 为 OpenCode 等 CLI 追加 `--prompt <quoted>`；写入 shell `-lc` 命令串，值用单引号转义。
 pub(super) fn append_prompt_flag_arg(command: &str, prompt: &str) -> String {
@@ -264,4 +289,37 @@ pub(super) fn claude_models_from_home(home_dir: &Path) -> Vec<AgentModel> {
             supported_reasoning_efforts: Vec::new(),
         })
         .collect()
+}
+
+pub(super) fn resolve_codex_runtime_config(
+    data_dir: &Path,
+    command: &str,
+    requested_model: Option<&str>,
+    requested_effort: Option<&str>,
+) -> RuntimeConfig {
+    let config_home = data_dir
+        .parent()
+        .map(|user_home| codex_config::resolve_codex_home(user_home, command));
+    let model = requested_model.map(str::to_string).or_else(|| {
+        config_home
+            .as_ref()
+            .and_then(|home| codex_config::read_model_from_codex_home(home))
+    });
+    let effort = requested_effort.map(str::to_string).or_else(|| {
+        config_home
+            .as_ref()
+            .and_then(|home| codex_config::read_reasoning_effort_from_codex_home(home))
+    });
+    RuntimeConfig {
+        model,
+        effort,
+        config_home,
+    }
+}
+
+pub(super) fn codex_models_from_command(home_dir: &Path, command: &str) -> Vec<AgentModel> {
+    let codex_home = codex_config::resolve_codex_home(home_dir, command);
+    default_codex_models_with_selected(
+        codex_config::read_model_from_codex_home(&codex_home).as_deref(),
+    )
 }

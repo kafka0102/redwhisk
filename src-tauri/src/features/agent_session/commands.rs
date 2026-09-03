@@ -5,12 +5,12 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 
+use super::service::AgentSessionService;
 use crate::agent::descriptor_for;
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
-use super::service::AgentSessionService;
 use crate::features::issue::{analyze_attachment, sanitize_attachment_file_name};
 use crate::logging::CommandResultExt;
 use crate::types::agent_profile::AgentType;
@@ -20,11 +20,10 @@ use crate::types::agent_session::{
     InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
     ListAgentModesInput, ListAgentModesResult, ProjectGitBranchListInput,
     ProjectGitBranchListResult, ReadAgentTimelineInput, ReadAgentTimelineResult,
-    RespondAgentPermissionInput, ResumeAgentSessionInput,
-    ResumeAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
-    SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
-    SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
-    StartAgentSessionResult,
+    RespondAgentPermissionInput, ResumeAgentSessionInput, ResumeAgentSessionResult,
+    SaveAgentAttachmentInput, SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput,
+    SetAgentModelInput, SetAgentSessionAttentionInput, SetAgentSessionAttentionResult,
+    SetAgentThinkingInput, StartAgentSessionInput, StartAgentSessionResult,
     UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -321,7 +320,9 @@ pub(crate) fn open_agent_session_database(
 }
 
 /// 基于已打开的连接构造 `AgentSessionService`。
-pub(crate) fn build_agent_session_service(connection: &rusqlite::Connection) -> AgentSessionService<'_> {
+pub(crate) fn build_agent_session_service(
+    connection: &rusqlite::Connection,
+) -> AgentSessionService<'_> {
     AgentSessionService::new(
         crate::db::issue_repository::IssueRepository::new(connection),
         crate::db::project_repository::ProjectRepository::new(connection),
@@ -518,9 +519,7 @@ pub async fn cancel_agent_turn(
                 agent_sessions.unregister(input.session_id);
                 Ok(())
             }
-            Err(error) => {
-                Err(super::service::agent_session_error_to_command_error(error))
-            }
+            Err(error) => Err(super::service::agent_session_error_to_command_error(error)),
         }
     })
     .await
@@ -669,7 +668,8 @@ pub async fn list_agent_models(
     tauri::async_runtime::spawn_blocking(move || {
         let database = open_agent_session_database(&app)?;
         let service = build_agent_session_service(&database.connection);
-        let agent_type = service.find_session_agent_type(input.project_id, input.session_id)?;
+        let (agent_type, command) =
+            service.find_session_agent_identity(input.project_id, input.session_id)?;
         let descriptor = descriptor_for(&agent_type);
         let home_dir = app.path().home_dir().map_err(|error| {
             let (reason, message) = match descriptor.agent_type() {
@@ -682,7 +682,7 @@ pub async fn list_agent_models(
                 .with_reason(reason)
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
-        let models = descriptor.list_models(&home_dir);
+        let models = descriptor.list_models(&home_dir, &command);
         // 第三方接口（Claude 配置了 base_url / auth_token）不允许切换，前端展示只读标签。
         let is_read_only = descriptor.is_model_list_read_only(&home_dir);
         let capabilities = descriptor.ui_capabilities();
