@@ -12,9 +12,9 @@ use std::sync::Arc;
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
-use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_profile::AgentType;
 
@@ -65,7 +65,8 @@ pub struct StartedSession {
 
 /// 可注入的 provider 构造 seam。
 pub trait AgentSessionProviderFactory: Send + Sync {
-    fn start(&self, request: AgentSessionStartRequest) -> Result<StartedSession, AgentSessionError>;
+    fn start(&self, request: AgentSessionStartRequest)
+        -> Result<StartedSession, AgentSessionError>;
 }
 
 /// 生产默认 factory：内部分发 Codex / Claude，解析 mode_id 等私有细节。
@@ -73,7 +74,10 @@ pub trait AgentSessionProviderFactory: Send + Sync {
 pub struct DefaultAgentSessionProviderFactory;
 
 impl AgentSessionProviderFactory for DefaultAgentSessionProviderFactory {
-    fn start(&self, request: AgentSessionStartRequest) -> Result<StartedSession, AgentSessionError> {
+    fn start(
+        &self,
+        request: AgentSessionStartRequest,
+    ) -> Result<StartedSession, AgentSessionError> {
         let plan = plan_provider_start(&request)?;
         match plan {
             ProviderStartPlan::Codex { mode, backfill } => {
@@ -542,8 +546,8 @@ mod tests {
             .handle
             .set_model("sonnet".into())
             .expect("set model");
-        let settings = crate::agent::claude_config::read_settings_from_home(temp.path())
-            .expect("settings");
+        let settings =
+            crate::agent::claude_config::read_settings_from_home(temp.path()).expect("settings");
         assert_eq!(settings.model.as_deref(), Some("sonnet"));
     }
 
@@ -605,5 +609,4 @@ mod tests {
         assert_eq!(started.backfill, ThreadIdBackfill::WhenPresent);
         assert_eq!(started.handle.thread_id().as_deref(), Some("ses_resume"));
     }
-
 }

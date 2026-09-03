@@ -47,7 +47,12 @@ pub fn search_workspace_content(
         });
     }
 
-    let matcher = build_matcher(query, input.match_case, input.match_whole_word, input.use_regex)?;
+    let matcher = build_matcher(
+        query,
+        input.match_case,
+        input.match_whole_word,
+        input.use_regex,
+    )?;
     let mut files: Vec<WorkspaceContentSearchFileGroup> = Vec::new();
     let mut total_matches: usize = 0;
     let mut truncated = false;
@@ -74,10 +79,7 @@ pub fn search_workspace_content(
 }
 
 enum Matcher {
-    Literal {
-        needle: String,
-        match_case: bool,
-    },
+    Literal { needle: String, match_case: bool },
     Regex(Regex),
 }
 
@@ -131,10 +133,7 @@ fn build_matcher(
 
 fn find_first_match(line: &str, matcher: &Matcher) -> Option<(usize, usize)> {
     match matcher {
-        Matcher::Literal {
-            needle,
-            match_case,
-        } => {
+        Matcher::Literal { needle, match_case } => {
             if *match_case {
                 line.find(needle.as_str())
                     .map(|start| (start, start + needle.len()))

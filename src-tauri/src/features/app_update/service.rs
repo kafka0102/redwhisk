@@ -107,13 +107,14 @@ impl<'connection, S: LatestReleaseSource> AppUpdateService<'connection, S> {
 
         match input.action {
             DismissUpdatePromptAction::Snooze7Days => {
-                let until = self.now + chrono::Duration::from_std(SNOOZE_DURATION).map_err(|e| {
-                    CommandError::new(
-                        CommandErrorCode::AppUpdatePersistenceFailed,
-                        "无法计算冷却结束时间。",
-                    )
-                    .with_detail(ErrorDetail::new("Cause").with_value("message", e.to_string()))
-                })?;
+                let until = self.now
+                    + chrono::Duration::from_std(SNOOZE_DURATION).map_err(|e| {
+                        CommandError::new(
+                            CommandErrorCode::AppUpdatePersistenceFailed,
+                            "无法计算冷却结束时间。",
+                        )
+                        .with_detail(ErrorDetail::new("Cause").with_value("message", e.to_string()))
+                    })?;
                 let until_text = format_rfc3339(until);
                 self.repository
                     .save_snooze_until(Some(&until_text))
@@ -263,15 +264,13 @@ fn with_service<R>(
 }
 
 fn open_update_database(data_dir: &Path) -> Result<crate::db::connection::Database, CommandError> {
-    let database = DatabaseConfig::new(data_dir)
-        .open()
-        .map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::AppUpdatePersistenceFailed,
-                "打开本地数据失败。",
-            )
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
-        })?;
+    let database = DatabaseConfig::new(data_dir).open().map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AppUpdatePersistenceFailed,
+            "打开本地数据失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
     MigrationRunner::default()
         .run(&database.connection)
         .map_err(update_database_error)?;
@@ -293,9 +292,9 @@ fn update_database_error(error: impl ToString) -> CommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::app_update::github::{LatestRelease, LatestReleaseFetchError};
     use crate::db::app_update_repository::AppUpdateRepository;
     use crate::db::migrations::MigrationRunner;
+    use crate::features::app_update::github::{LatestRelease, LatestReleaseFetchError};
     use chrono::TimeZone;
     use rusqlite::Connection;
     use std::cell::Cell;
@@ -463,7 +462,6 @@ mod tests {
         assert!(status.error_code.is_none());
     }
 
-
     #[test]
     fn silent_network_error_negative_caches_within_ttl() {
         let connection = open_db();
@@ -491,7 +489,6 @@ mod tests {
             "second silent check within TTL must not hit network again"
         );
     }
-
 
     #[test]
     fn force_network_error_surfaces_stable_error_code() {
@@ -529,8 +526,7 @@ mod tests {
                 }
                 Ok(Some(LatestRelease {
                     version: "0.2.0".to_string(),
-                    release_url: "https://github.com/example/r/releases/tag/v0.2.0"
-                        .to_string(),
+                    release_url: "https://github.com/example/r/releases/tag/v0.2.0".to_string(),
                 }))
             }
         }

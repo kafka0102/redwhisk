@@ -153,9 +153,6 @@ mod tests {
         let event = build_stream_json_user_event("hi", &attachments).expect("ok");
         let content = event["message"]["content"].as_array().expect("array");
         assert_eq!(content[1]["type"], "text");
-        assert!(content[1]["text"]
-            .as_str()
-            .unwrap()
-            .contains("/tmp/a.pdf"));
+        assert!(content[1]["text"].as_str().unwrap().contains("/tmp/a.pdf"));
     }
 }

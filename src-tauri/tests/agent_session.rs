@@ -6,8 +6,6 @@ use redwhisk_lib::agent::pty_session_manager::{
 };
 use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
-use redwhisk_lib::features::agent_session::AgentSessionService;
-use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
@@ -18,12 +16,15 @@ use redwhisk_lib::db::issue_completion_flow_repository::{
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::features::agent_session::AgentSessionService;
+use redwhisk_lib::features::issue::IssueService;
+use redwhisk_lib::git::worktree_name::issue_worktree_base_name;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
-    ResumeAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput,
-    WorkspaceMode, WorktreeOwner,
+    ResumeAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput, WorkspaceMode,
+    WorktreeOwner,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
@@ -32,7 +33,6 @@ use redwhisk_lib::types::issue::{CompleteIssueManualInput, CreateIssueInput};
 use redwhisk_lib::types::issue_action::IssueActionType;
 use redwhisk_lib::types::issue_completion::IssueCompletionPhase;
 use redwhisk_lib::types::session_event::SessionEventType;
-use redwhisk_lib::git::worktree_name::issue_worktree_base_name;
 use serde_json::Value;
 
 struct NoopStructuredHandle;
@@ -745,9 +745,7 @@ fn start_structured_claude_issue_session_log_path_uses_number_segments() {
                 None,
                 "Claude",
                 AgentType::Claude,
-                success_command(temp_dir.path())
-                    .to_string_lossy()
-                    .as_ref(),
+                success_command(temp_dir.path()).to_string_lossy().as_ref(),
                 &AgentScope::Global,
                 None,
                 "full-auto",
@@ -1464,7 +1462,10 @@ fn start_agent_session_in_worktree_mode_allows_orphan_legacy_issue_dir() {
         .expect("find session")
         .expect("session exists");
     let expected_base = issue_worktree_base_name(issue_number, &repo_path);
-    assert_eq!(session.workspace_branch.as_deref(), Some(expected_base.as_str()));
+    assert_eq!(
+        session.workspace_branch.as_deref(),
+        Some(expected_base.as_str())
+    );
     let workspace_path = session.workspace_path.expect("workspace path");
     assert!(
         workspace_path.replace('\\', "/").ends_with(&expected_base),
@@ -2632,7 +2633,10 @@ fn resume_agent_session_rejects_completed_issue() {
 
     assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
     assert_eq!(error.message, "已完成 Issue 的 Session 不能继续运行。");
-    assert_eq!(error.reason.as_deref(), Some("completedIssueSessionCannotRun"));
+    assert_eq!(
+        error.reason.as_deref(),
+        Some("completedIssueSessionCannotRun")
+    );
 }
 
 #[test]

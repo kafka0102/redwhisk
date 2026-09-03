@@ -8,7 +8,8 @@ pub(super) fn validate_title(title: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "Issue title 不能为空。",
-        ).with_reason("titleRequired")
+        )
+        .with_reason("titleRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "title")));
     }
 
@@ -17,7 +18,8 @@ pub(super) fn validate_title(title: &str) -> Result<String, CommandError> {
 
 pub(super) fn serialize_label_ids(label_ids: &[i64]) -> Result<String, CommandError> {
     serde_json::to_string(label_ids).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
@@ -26,7 +28,8 @@ pub(super) fn invalid_issue_label(label_id: i64, project_id: i64) -> CommandErro
     CommandError::new(
         CommandErrorCode::IssueValidationFailed,
         "Issue labels 配置无效。",
-    ).with_reason("labelsInvalid")
+    )
+    .with_reason("labelsInvalid")
     .with_detail(ErrorDetail::new("IssueLabel").with_value("labelId", label_id))
     .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
 }
@@ -52,12 +55,14 @@ pub(super) fn to_issue_label_record(label: ProjectLabelRow) -> IssueLabelRecord 
 }
 
 pub(super) fn issue_not_found(issue_id: i64) -> CommandError {
-    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
+    CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+        .with_reason("issueNotFound")
         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
 }
 
 pub(crate) fn issue_database_error(error: rusqlite::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+        .with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -65,6 +70,7 @@ pub(super) fn issue_git_error(error: crate::git::status::GitStatusError) -> Comm
     CommandError::new(
         CommandErrorCode::IssueValidationFailed,
         "当前 Project 的 Git 状态不可用。",
-    ).with_reason("gitStatusUnavailable")
+    )
+    .with_reason("gitStatusUnavailable")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

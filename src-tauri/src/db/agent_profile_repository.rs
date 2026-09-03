@@ -183,7 +183,8 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
     Ok(AgentProfileRow {
         id: row.get(0)?,
         name: row.get(1)?,
-        agent_type: AgentType::from_db_str(&row.get::<_, String>(2)?).ok_or(rusqlite::Error::InvalidQuery)?,
+        agent_type: AgentType::from_db_str(&row.get::<_, String>(2)?)
+            .ok_or(rusqlite::Error::InvalidQuery)?,
         command: row.get(3)?,
         scope: scope_from_str(&row.get::<_, String>(4)?)?,
         project_id: row.get(5)?,
@@ -223,7 +224,6 @@ fn bool_to_sqlite(value: bool) -> i64 {
 fn sqlite_to_bool(value: i64) -> bool {
     value != 0
 }
-
 
 #[cfg(test)]
 #[path = "agent_profile_repository_tests.rs"]

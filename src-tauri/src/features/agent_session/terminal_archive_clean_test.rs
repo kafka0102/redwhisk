@@ -153,7 +153,6 @@ fn normalizes_cr_and_trailing_blank_collapse() {
     assert_eq!(got, "› 问\n\n• 答");
 }
 
-
 #[test]
 fn decorative_lines_inside_conclusion_do_not_truncate() {
     let input = "\
@@ -206,9 +205,11 @@ fn ascii_gt_shell_echo_is_not_user_turn() {
   完成。";
     assert_eq!(got, expected);
     assert!(!got.contains("> tsc"), "shell 回显不应成为用户块: {got:?}");
-    assert!(!got.contains("中间进度"), "工具前的中间发言不应保留: {got:?}");
+    assert!(
+        !got.contains("中间进度"),
+        "工具前的中间发言不应保留: {got:?}"
+    );
 }
-
 
 #[test]
 fn without_user_prompt_falls_back_to_light_clean_not_empty() {
@@ -221,10 +222,19 @@ file.txt
 Done with archive.
 ";
     let got = extract_tui_archive_conclusion_text(input);
-    assert!(!got.trim().is_empty(), "fallback must not empty archive: {got:?}");
+    assert!(
+        !got.trim().is_empty(),
+        "fallback must not empty archive: {got:?}"
+    );
     assert!(got.contains("$ ls"), "fallback keeps shell output: {got:?}");
-    assert!(got.contains("Done with archive."), "fallback keeps final text: {got:?}");
-    assert!(!got.contains("Working("), "fallback drops Working status: {got:?}");
+    assert!(
+        got.contains("Done with archive."),
+        "fallback keeps final text: {got:?}"
+    );
+    assert!(
+        !got.contains("Working("),
+        "fallback drops Working status: {got:?}"
+    );
     assert_eq!(
         latest_output_from_archive_text(&got).as_deref(),
         Some("Done with archive.")
@@ -291,9 +301,15 @@ Thought for 11s, committed ca3b03f, ran 1 shell command
 跳过：未跑 workspace 全量 pnpm lint。";
     assert_eq!(got, expected);
     assert!(!got.contains("thinking"), "must drop thinking: {got:?}");
-    assert!(!got.contains("Thought for"), "must drop Thought for: {got:?}");
+    assert!(
+        !got.contains("Thought for"),
+        "must drop Thought for: {got:?}"
+    );
     assert!(!got.contains("Update("), "must drop tool Update: {got:?}");
-    assert!(!got.contains("两处删除完成"), "must drop mid speech: {got:?}");
+    assert!(
+        !got.contains("两处删除完成"),
+        "must drop mid speech: {got:?}"
+    );
     assert!(!got.contains("Slithering"), "must drop Slithering: {got:?}");
     assert!(!got.contains("Brewed for"), "must drop Brewed: {got:?}");
     assert_eq!(
@@ -345,7 +361,10 @@ fn codex_sticky_status_on_conclusion_is_stripped() {
   - .gitignore 增加 .scratch/
   - 提交：360db9d";
     assert_eq!(got, expected);
-    assert!(!got.contains("Use /skills"), "sticky status dropped: {got:?}");
+    assert!(
+        !got.contains("Use /skills"),
+        "sticky status dropped: {got:?}"
+    );
     assert!(!got.contains("Ran printf"), "tool dropped: {got:?}");
 }
 
@@ -373,7 +392,6 @@ Slithering…
     assert!(!got2.contains("Slithering"), "{got2:?}");
     let _ = got;
 }
-
 
 #[test]
 fn indented_grok_style_user_prompt_is_kept() {

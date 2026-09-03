@@ -36,9 +36,7 @@ impl SessionWorkspaceService<'_> {
     }
 }
 
-pub fn probe_github_commit_for_input(
-    input: ProbeGithubCommitInput,
-) -> ProbeGithubCommitResponse {
+pub fn probe_github_commit_for_input(input: ProbeGithubCommitInput) -> ProbeGithubCommitResponse {
     let owner = input.owner.trim();
     let repo = input.repo.trim().trim_end_matches(".git");
     let commit_hash = input.commit_hash.trim();

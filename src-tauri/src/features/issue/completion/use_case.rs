@@ -175,7 +175,10 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
         let action = phase_to_completion_action(outcome.new_state.phase);
         let result_issue = outcome.completed_issue.unwrap_or_else(|| issue.clone());
         let message = completion_message(outcome.new_state.phase, outcome.merge_block.as_ref());
-        let merge_block_reason = outcome.merge_block.as_ref().map(|block| block.reason.clone());
+        let merge_block_reason = outcome
+            .merge_block
+            .as_ref()
+            .map(|block| block.reason.clone());
         Ok(self.project_result(
             action,
             result_issue,
@@ -186,7 +189,10 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
             &session,
         ))
     }
-    pub(crate) fn load_completion_state(&self, issue_id: i64) -> Result<CompletionState, CommandError> {
+    pub(crate) fn load_completion_state(
+        &self,
+        issue_id: i64,
+    ) -> Result<CompletionState, CommandError> {
         let flow = IssueCompletionFlowRepository::new(self.service.issue_repository.connection())
             .find_by_issue_id(issue_id)
             .map_err(issue_database_error)?;
@@ -228,7 +234,8 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
         input: DetectAgentCommitCompletionInput,
     ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
         let project = self.service.require_project(input.project_id)?;
-        let issue = self.service
+        let issue = self
+            .service
             .issue_repository
             .find_by_id(input.issue_id)
             .map_err(issue_database_error)?
@@ -241,7 +248,8 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "Issue 完成必须存在关联 Agent Session。",
-                ).with_reason("sessionRequiredToComplete")
+                )
+                .with_reason("sessionRequiredToComplete")
                 .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             })?;
         let flow = IssueCompletionFlowRepository::new(self.service.issue_repository.connection())
@@ -251,7 +259,8 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "当前 Issue 不在自动提交流程中。",
-                ).with_reason("notInAutoCommitFlow")
+                )
+                .with_reason("notInAutoCommitFlow")
                 .with_detail(
                     ErrorDetail::new("IssueCompletionFlow").with_value("issueId", issue.id),
                 )

@@ -68,11 +68,9 @@ const STARTUP_CHECK_TOTAL_MS: u64 = 500;
 const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 const PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT: i64 = 30;
 
-
 pub struct ProjectTerminalService<'connection> {
     project_repository: ProjectRepository<'connection>,
 }
-
 
 impl<'connection> ProjectTerminalService<'connection> {
     pub fn new(project_repository: ProjectRepository<'connection>) -> Self {
@@ -205,7 +203,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                 CommandError::new(
                     CommandErrorCode::ProjectTerminalValidationFailed,
                     "Agent Session 不存在。",
-                ).with_reason("sessionNotFound")
+                )
+                .with_reason("sessionNotFound")
                 .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
                 .with_detail(
                     ErrorDetail::new("AgentSession")
@@ -217,7 +216,8 @@ impl<'connection> ProjectTerminalService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "Agent Session 不属于当前 Project。",
-            ).with_reason("sessionNotInProject")
+            )
+            .with_reason("sessionNotInProject")
             .with_detail(ErrorDetail::new("Project").with_value("projectId", input.project_id))
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", input.agent_session_id),
@@ -820,7 +820,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                         CommandError::new(
                             CommandErrorCode::ProjectTerminalValidationFailed,
                             "常用命令不存在。",
-                        ).with_reason("shortcutNotFound")
+                        )
+                        .with_reason("shortcutNotFound")
                         .with_detail(
                             ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", id),
                         )
@@ -829,7 +830,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::ProjectTerminalValidationFailed,
                         "常用命令不属于当前项目。",
-                    ).with_reason("shortcutNotInProject")
+                    )
+                    .with_reason("shortcutNotInProject")
                     .with_detail(
                         ErrorDetail::new("ProjectTerminalShortcutCommand")
                             .with_value("id", id)
@@ -853,7 +855,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                             "常用命令最多 {} 条。",
                             PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT
                         ),
-                    ).with_reason("shortcutLimitExceeded")
+                    )
+                    .with_reason("shortcutLimitExceeded")
                     .with_detail(
                         ErrorDetail::new("ProjectTerminalShortcutCommand")
                             .with_value("projectId", input.project_id)
@@ -882,7 +885,8 @@ impl<'connection> ProjectTerminalService<'connection> {
                 CommandError::new(
                     CommandErrorCode::ProjectTerminalValidationFailed,
                     "常用命令不存在或已删除。",
-                ).with_reason("shortcutNotFoundOrDeleted")
+                )
+                .with_reason("shortcutNotFoundOrDeleted")
                 .with_detail(
                     ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
                 )
@@ -898,7 +902,8 @@ impl<'connection> ProjectTerminalService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::ProjectTerminalValidationFailed,
                 "常用命令不存在或已删除。",
-            ).with_reason("shortcutNotFoundOrDeleted")
+            )
+            .with_reason("shortcutNotFoundOrDeleted")
             .with_detail(
                 ErrorDetail::new("ProjectTerminalShortcutCommand").with_value("id", input.id),
             ));
@@ -1028,7 +1033,6 @@ impl<'connection> ProjectTerminalService<'connection> {
     }
 }
 
-
 fn open_project_database(
     data_dir: impl AsRef<Path>,
 ) -> Result<crate::db::connection::Database, CommandError> {
@@ -1041,19 +1045,20 @@ fn open_project_database(
             CommandError::new(
                 CommandErrorCode::ProjectTerminalPersistenceFailed,
                 "Project Terminal 保存失败。",
-            ).with_reason("saveFailed")
+            )
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
     Ok(database)
 }
 
-
 fn project_terminal_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
         "Project Terminal 保存失败。",
-    ).with_reason("saveFailed")
+    )
+    .with_reason("saveFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
@@ -1069,7 +1074,8 @@ fn project_terminal_inactive_error(error: impl Into<String>) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalValidationFailed,
         "Project Terminal 不可用。",
-    ).with_reason("terminalUnavailable")
+    )
+    .with_reason("terminalUnavailable")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.into()))
 }
 
@@ -1077,14 +1083,14 @@ fn project_terminal_delete_error(error: impl Into<String>) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectTerminalPersistenceFailed,
         "Project Terminal 删除失败。",
-    ).with_reason("deleteFailed")
+    )
+    .with_reason("deleteFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.into()))
 }
 
 pub(super) fn project_terminal_persistence_error(message: &str) -> CommandError {
     CommandError::new(CommandErrorCode::ProjectTerminalPersistenceFailed, message)
 }
-
 
 #[cfg(test)]
 #[derive(Default)]
@@ -1112,7 +1118,10 @@ mod project_terminal_name_tests {
 
     #[test]
     fn next_name_starts_from_one_and_uses_max_plus_one() {
-        assert_eq!(next_project_terminal_name(std::iter::empty::<&str>()), "terminal-1");
+        assert_eq!(
+            next_project_terminal_name(std::iter::empty::<&str>()),
+            "terminal-1"
+        );
         assert_eq!(
             next_project_terminal_name(["terminal-1", "terminal-2"]),
             "terminal-3"
@@ -1121,10 +1130,7 @@ mod project_terminal_name_tests {
             next_project_terminal_name(["terminal-1", "terminal-3"]),
             "terminal-4"
         );
-        assert_eq!(
-            next_project_terminal_name(["API", "Worker"]),
-            "terminal-1"
-        );
+        assert_eq!(next_project_terminal_name(["API", "Worker"]), "terminal-1");
         assert_eq!(
             next_project_terminal_name(["API", "terminal-2"]),
             "terminal-3"
@@ -1200,10 +1206,10 @@ mod tests {
     use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
     use crate::agent::pty_session_manager::PtySessionManager;
-    use crate::features::project::ProjectService;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;
+    use crate::features::project::ProjectService;
     use crate::types::agent_session::WorkspaceMode;
     use crate::types::project::{CreateProjectInput, ProjectWorktreeLocation};
     use crate::types::project_terminal::{
@@ -1214,8 +1220,8 @@ mod tests {
     };
 
     use super::{restore_test_hooks, ProjectTerminalService};
-    use crate::features::project_terminal::{purge_terminal_log_dir, ProjectTerminalRegistry};
     use crate::features::project_terminal::log::PROJECT_TERMINAL_LOG_DIR_NAME;
+    use crate::features::project_terminal::{purge_terminal_log_dir, ProjectTerminalRegistry};
 
     fn terminal_test_env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1454,8 +1460,8 @@ mod tests {
             None,
             &temp_dir.path().join("agent-session.log").to_string_lossy(),
             "json",
-                        1,
-            )
+            1,
+        )
         .expect("insert agent session");
         transaction.commit().expect("commit agent session");
 
@@ -1590,10 +1596,7 @@ mod tests {
     fn purge_terminal_log_dir_skips_missing_directory_without_panicking() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         purge_terminal_log_dir(temp_dir.path());
-        assert!(!temp_dir
-            .path()
-            .join(PROJECT_TERMINAL_LOG_DIR_NAME)
-            .exists());
+        assert!(!temp_dir.path().join(PROJECT_TERMINAL_LOG_DIR_NAME).exists());
     }
 
     #[test]
@@ -2961,8 +2964,8 @@ mod tests {
             .expect("run migrations");
         let service = ProjectTerminalService::new(ProjectRepository::new(&database.connection));
 
-        use crate::types::project_terminal_shortcut_command::SaveProjectTerminalShortcutCommandInput;
         use super::PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT;
+        use crate::types::project_terminal_shortcut_command::SaveProjectTerminalShortcutCommandInput;
 
         for index in 0..PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT {
             service
@@ -3000,7 +3003,9 @@ mod tests {
 
         assert_eq!(error.reason.as_deref(), Some("shortcutLimitExceeded"));
         assert!(
-            error.message.contains(&PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT.to_string()),
+            error
+                .message
+                .contains(&PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_COUNT.to_string()),
             "error message should include limit: {}",
             error.message
         );
@@ -3024,7 +3029,10 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(25));
         }
-        assert!(!manager.contains(session_id), "session {session_id} still present");
+        assert!(
+            !manager.contains(session_id),
+            "session {session_id} still present"
+        );
     }
 
     #[test]
@@ -3078,7 +3086,11 @@ mod tests {
             )
             .expect("ensure shell terminals");
 
-        assert!(ensured.shell_failures.is_empty(), "{:?}", ensured.shell_failures);
+        assert!(
+            ensured.shell_failures.is_empty(),
+            "{:?}",
+            ensured.shell_failures
+        );
         assert_eq!(ensured.terminals.len(), 1);
         assert_eq!(ensured.terminals[0].config_id, config.id);
         assert_ne!(
@@ -3144,7 +3156,11 @@ mod tests {
             )
             .expect("ensure after kill");
 
-        assert!(ensured.shell_failures.is_empty(), "{:?}", ensured.shell_failures);
+        assert!(
+            ensured.shell_failures.is_empty(),
+            "{:?}",
+            ensured.shell_failures
+        );
         assert_eq!(ensured.terminals.len(), 1);
         assert_ne!(ensured.terminals[0].session_id, 0);
         assert_ne!(ensured.terminals[0].session_id, created.session_id);
@@ -3225,7 +3241,10 @@ mod tests {
                 session.project_id == project.id && session.config_id == created.config_id
             })
             .count();
-        assert_eq!(matching_sessions, 1, "ensure 不得对同一 config 产生双活 session");
+        assert_eq!(
+            matching_sessions, 1,
+            "ensure 不得对同一 config 产生双活 session"
+        );
     }
 
     #[test]

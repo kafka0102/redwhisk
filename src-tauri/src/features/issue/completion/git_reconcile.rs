@@ -10,7 +10,6 @@ use crate::git::worktree::{
 use crate::types::agent_session::AgentSessionRecord;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
-
 pub(crate) fn discard_session_workspace_changes(
     session: &AgentSessionRecord,
 ) -> Result<(), GitWorktreeError> {

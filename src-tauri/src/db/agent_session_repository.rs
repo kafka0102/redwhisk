@@ -2,8 +2,8 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
-    AgentSessionAttention, AgentSessionRecord, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
-    workspace_mode_to_str,
+    workspace_mode_to_str, AgentSessionAttention, AgentSessionRecord, AgentSessionStatus,
+    WorkspaceMode, WorktreeOwner,
 };
 use crate::types::issue::IssueStatus;
 
@@ -763,7 +763,11 @@ impl<'connection> AgentSessionRepository<'connection> {
     /// `current_turn_id`：新 turn 上下文开始，旧 turn_id 失效，待 `TurnStarted`
     /// 回流时由 `update_current_turn_id` 重新写入。写 source 必须与清 turn_id
     /// 在同一 UPDATE 内原子完成，避免提取任务读到新 source 配旧 turn_id 的中间态。
-    pub fn update_current_turn_source(&self, session_id: i64, source: &str) -> rusqlite::Result<usize> {
+    pub fn update_current_turn_source(
+        &self,
+        session_id: i64,
+        source: &str,
+    ) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
              SET current_turn_source = ?1,
@@ -776,7 +780,11 @@ impl<'connection> AgentSessionRepository<'connection> {
     /// 写入当前 turn 的标识（来自 `TurnStarted` 事件的 turn_id）。仅当 session 仍
     /// 在运行时写入；被新 turn 抢占（source 已被覆盖并清空 turn_id）时本次写入
     /// 会被新一轮 `update_current_turn_source` 覆盖。
-    pub fn update_current_turn_id(&self, session_id: i64, turn_id: &str) -> rusqlite::Result<usize> {
+    pub fn update_current_turn_id(
+        &self,
+        session_id: i64,
+        turn_id: &str,
+    ) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
              SET current_turn_id = ?1
@@ -900,7 +908,8 @@ fn agent_session_list_row_from_row(
         agent_profile_id: row.get(7)?,
         agent_profile_name: row.get(8)?,
         title: row.get(9)?,
-        agent_type: AgentType::from_db_str(&row.get::<_, String>(10)?).ok_or(rusqlite::Error::InvalidQuery)?,
+        agent_type: AgentType::from_db_str(&row.get::<_, String>(10)?)
+            .ok_or(rusqlite::Error::InvalidQuery)?,
         display_mode: row.get(31)?,
         status: agent_session_status_from_str(&row.get::<_, String>(11)?)?,
         attention: agent_session_attention_from_str(&row.get::<_, String>(12)?)?,
@@ -995,11 +1004,11 @@ fn inferred_worktree_owner(workspace_mode: &WorkspaceMode) -> WorktreeOwner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::migrations::{
-        AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
-        AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, MigrationRunner,
-    };
     use crate::db::issue_repository::IssueRepository;
+    use crate::db::migrations::{
+        MigrationRunner, AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
+        AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+    };
 
     // 全量 migration（含 0038），用于校验 repository 编号分配与 schema 产物。
     fn connection_with_all_migrations() -> Connection {
@@ -1014,9 +1023,11 @@ mod tests {
     // 0036 回填为正编号；再插入过渡期 number=0 行，单独执行 0038 SQL，断言回填与唯一索引。
     fn connection_before_sessions_unique_index() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
-        MigrationRunner::runner_skipping(&[AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION])
-            .run(&connection)
-            .expect("run migrations up to 0037");
+        MigrationRunner::runner_skipping(&[
+            AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+        ])
+        .run(&connection)
+        .expect("run migrations up to 0037");
         connection
     }
 
@@ -1135,7 +1146,15 @@ mod tests {
                    '/tmp/repo', 'codex', '', '/tmp/s.log',
                    ?4, ?4, ?5, ?6, ?7
                  )",
-                params![id, project_id, number, started_at, workspace_path, target_branch, del],
+                params![
+                    id,
+                    project_id,
+                    number,
+                    started_at,
+                    workspace_path,
+                    target_branch,
+                    del
+                ],
             )
             .expect("insert worktree session");
     }
@@ -1187,8 +1206,8 @@ mod tests {
                     None,
                     "/tmp/s1.log",
                     "json",
-                                        1_000,
-            )?;
+                    1_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1216,8 +1235,8 @@ mod tests {
                     None,
                     "/tmp/s2.log",
                     "json",
-                                        2_000,
-            )?;
+                    2_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1254,8 +1273,8 @@ mod tests {
                     None,
                     "/tmp/sa1.log",
                     "json",
-                                        1_000,
-            )?;
+                    1_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1280,8 +1299,8 @@ mod tests {
                     None,
                     "/tmp/sa2.log",
                     "json",
-                                        2_000,
-            )?;
+                    2_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1318,8 +1337,8 @@ mod tests {
                         None,
                         log,
                         "json",
-                                                1_000,
-            )?;
+                        1_000,
+                    )?;
                     transaction.commit()?;
                     Ok(session)
                 })
@@ -1361,8 +1380,8 @@ mod tests {
                     None,
                     "/tmp/s1.log",
                     "json",
-                                        1_000,
-            )?;
+                    1_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1387,8 +1406,8 @@ mod tests {
                     None,
                     "/tmp/s2.log",
                     "json",
-                                        2_000,
-            )?;
+                    2_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1415,8 +1434,8 @@ mod tests {
                     None,
                     "/tmp/s3.log",
                     "json",
-                                        3_000,
-            )?;
+                    3_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1463,8 +1482,8 @@ mod tests {
                     None,
                     "/tmp/s.log",
                     "json",
-                                        1_000,
-            )?;
+                    1_000,
+                )?;
                 transaction.commit()?;
                 Ok(session)
             })
@@ -1519,12 +1538,10 @@ mod tests {
         assert_eq!(after_soft_delete.id, 11);
 
         // 无匹配返回 None。
-        assert!(
-            AgentSessionRepository::new(&connection)
-                .find_latest_by_workspace_path(1, "/tmp/repo/worktrees/issue-999")
-                .expect("query missing")
-                .is_none()
-        );
+        assert!(AgentSessionRepository::new(&connection)
+            .find_latest_by_workspace_path(1, "/tmp/repo/worktrees/issue-999")
+            .expect("query missing")
+            .is_none());
     }
 
     #[test]
@@ -1740,7 +1757,10 @@ mod tests {
             .list_by_project_id(1)
             .expect("list sessions with opencode/grok");
         let types: Vec<_> = rows.iter().map(|row| row.agent_type.clone()).collect();
-        assert!(types.contains(&AgentType::OpenCode), "opencode missing: {types:?}");
+        assert!(
+            types.contains(&AgentType::OpenCode),
+            "opencode missing: {types:?}"
+        );
         assert!(types.contains(&AgentType::Grok), "grok missing: {types:?}");
     }
 }

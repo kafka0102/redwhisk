@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use redwhisk_lib::agent::command_detector::AgentCommandDetector;
-use redwhisk_lib::features::settings::SettingsService;
-use redwhisk_lib::features::settings::UserProfileService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_label_repository::ProjectLabelRepository;
 use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::db::saved_agent_skill_repository::SavedAgentSkillRepository;
+use redwhisk_lib::features::settings::SettingsService;
+use redwhisk_lib::features::settings::UserProfileService;
 use redwhisk_lib::types::agent_profile::{
     AgentScope, AgentType, ListAgentProfilesInput, SaveAgentProfileInput, TestAgentCommandInput,
 };

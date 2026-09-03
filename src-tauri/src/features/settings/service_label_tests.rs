@@ -233,9 +233,7 @@ fn test_database(data_dir: &std::path::Path) -> crate::db::connection::Database 
     database
 }
 
-fn test_settings_service<'a>(
-    connection: &'a Connection,
-) -> SettingsService<'a, TestDetector> {
+fn test_settings_service<'a>(connection: &'a Connection) -> SettingsService<'a, TestDetector> {
     SettingsService::new(
         AgentProfileRepository::new(connection),
         ProjectLabelRepository::new(connection),

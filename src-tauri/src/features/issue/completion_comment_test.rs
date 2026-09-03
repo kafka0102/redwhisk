@@ -23,7 +23,12 @@ fn assistant_line(turn_id: &str, text: &str) -> String {
     )
 }
 
-fn seed_session(connection: &Connection, log_path: &FsPath, db_turn_source: &str, db_turn_id: &str) {
+fn seed_session(
+    connection: &Connection,
+    log_path: &FsPath,
+    db_turn_source: &str,
+    db_turn_id: &str,
+) {
     MigrationRunner::default()
         .run(connection)
         .expect("run migrations");
@@ -102,7 +107,10 @@ fn extract_issue_comment_from_assistant_text_cases() {
         ),
         Some("first".to_string())
     );
-    assert_eq!(extract_issue_comment_from_assistant_text("无标签答复"), None);
+    assert_eq!(
+        extract_issue_comment_from_assistant_text("无标签答复"),
+        None
+    );
     assert_eq!(
         extract_issue_comment_from_assistant_text(
             "```\n<issue-comment>in code block</issue-comment>\n```"
@@ -174,10 +182,7 @@ fn is_eligible_turn_source_only_initial_and_completion() {
 
 #[test]
 fn strip_and_trivial_helpers() {
-    assert_eq!(
-        strip_fenced_code_blocks("a\n```\ncode\n```\nb"),
-        "a\nb"
-    );
+    assert_eq!(strip_fenced_code_blocks("a\n```\ncode\n```\nb"), "a\nb");
     assert!(is_trivial_comment_body("ok"));
     assert!(is_trivial_comment_body("  好的！ "));
     assert!(!is_trivial_comment_body("完成了登录模块并验证通过"));
@@ -256,7 +261,10 @@ fn try_publish_follow_up_without_tag_skips() {
     let log = temp.path().join("session.log");
     fs::write(
         &log,
-        assistant_line("t-q", "「最新 n 条」按什么取？\n1. miggoItemId\n2. 视图顺序"),
+        assistant_line(
+            "t-q",
+            "「最新 n 条」按什么取？\n1. miggoItemId\n2. 视图顺序",
+        ),
     )
     .expect("write log");
 

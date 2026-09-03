@@ -4,10 +4,9 @@ use std::path::Path;
 
 use crate::agent::pty_session_manager::{read_terminal_snapshot, PtySessionManager};
 use crate::types::agent_session_terminal::{
-    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, SubscribeAgentSessionTerminalOutputInput,
-    WriteAgentSessionTerminalInput,
+    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
+    SubscribeAgentSessionTerminalOutputInput, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -23,9 +22,7 @@ impl AgentSessionService<'_> {
             return Ok(());
         }
         if !pty_sessions.contains(input.session_id) {
-            return Err(inactive_terminal_error(
-                "session not found".to_string(),
-            ));
+            return Err(inactive_terminal_error("session not found".to_string()));
         }
         pty_sessions
             .write_input(input.session_id, &input.data)
@@ -38,9 +35,7 @@ impl AgentSessionService<'_> {
         pty_sessions: &PtySessionManager,
     ) -> Result<(), CommandError> {
         if !pty_sessions.contains(input.session_id) {
-            return Err(inactive_terminal_error(
-                "session not found".to_string(),
-            ));
+            return Err(inactive_terminal_error("session not found".to_string()));
         }
         pty_sessions
             .resize(input.session_id, input.rows, input.cols)

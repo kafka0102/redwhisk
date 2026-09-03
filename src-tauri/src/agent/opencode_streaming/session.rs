@@ -6,11 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
-use crate::agent::opencode_streaming::argv::{append_attachment_paths, build_opencode_run_args, should_use_auto};
-use crate::agent::opencode_streaming::event_mapper::{map_ndjson_value, MapContext};
-use crate::agent::opencode_streaming::transport::{
-    OpenCodeStreamingError, OpenCodeTransport,
+use crate::agent::opencode_streaming::argv::{
+    append_attachment_paths, build_opencode_run_args, should_use_auto,
 };
+use crate::agent::opencode_streaming::event_mapper::{map_ndjson_value, MapContext};
+use crate::agent::opencode_streaming::transport::{OpenCodeStreamingError, OpenCodeTransport};
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
@@ -322,7 +322,12 @@ impl From<OpenCodeStreamingError> for AgentSessionError {
 }
 
 fn program_from_binary(binary: &str) -> String {
-    binary.split_whitespace().next().filter(|s| !s.is_empty()).unwrap_or("opencode").into()
+    binary
+        .split_whitespace()
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("opencode")
+        .into()
 }
 
 fn handle_message(
@@ -430,8 +435,14 @@ mod tests {
 
     #[test]
     fn program_from_binary_strips_structured_snapshot() {
-        assert_eq!(program_from_binary("opencode run --format json"), "opencode");
-        assert_eq!(program_from_binary("  /usr/bin/opencode --auto "), "/usr/bin/opencode");
+        assert_eq!(
+            program_from_binary("opencode run --format json"),
+            "opencode"
+        );
+        assert_eq!(
+            program_from_binary("  /usr/bin/opencode --auto "),
+            "/usr/bin/opencode"
+        );
         assert_eq!(program_from_binary(""), "opencode");
     }
 

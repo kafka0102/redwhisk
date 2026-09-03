@@ -10,22 +10,22 @@
 //!   （含「Completed 跳过 upsert」迁移不变式）。纯 `advance()` 与调用方的结果投影不变。
 //! - 可测依赖按 local-substitutable：内存 SQLite + temp git + fake `AgentSessionHandle`。
 
+use super::use_case::CompletionFlow;
 use crate::agent::session_registry::AgentSessionRegistry;
+use crate::db::agent_session_repository::AgentSessionRepository;
+use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::features::agent_session::agent_session_error_to_command_error;
+use crate::features::issue::completion::formatting::build_agent_commit_completion_prompt;
+use crate::features::issue::completion::git_reconcile::{
+    discard_session_workspace_changes, merge_block_from_worktree_error, reconcile_session_worktree,
+    WorktreeMergeBlockDescription,
+};
 use crate::features::issue::completion::state_machine::{
     CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
     Transition,
 };
-use crate::features::issue::completion::formatting::build_agent_commit_completion_prompt;
-use crate::features::issue::completion::git_reconcile::{
-    discard_session_workspace_changes, merge_block_from_worktree_error,
-    reconcile_session_worktree, WorktreeMergeBlockDescription,
-};
 use crate::features::issue::time::current_epoch_millis;
-use super::use_case::CompletionFlow;
 use crate::features::issue::validation::issue_database_error;
-use crate::db::agent_session_repository::AgentSessionRepository;
-use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::logging::info_kv;
 use crate::types::agent_session::AgentSessionRecord;
 use crate::types::completion_attempt::CompletionAttemptResult;
@@ -250,6 +250,12 @@ mod tests {
 
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::agent::session_registry::AgentSessionRegistry;
+    use crate::db::agent_session_repository::AgentSessionRepository;
+    use crate::db::completion_attempt_repository::CompletionAttemptRepository;
+    use crate::db::issue_completion_flow_repository::IssueCompletionFlowRepository;
+    use crate::db::issue_repository::IssueRepository;
+    use crate::db::migrations::MigrationRunner;
+    use crate::db::project_repository::ProjectRepository;
     use crate::features::issue::completion::effect_interpreter::EffectContext;
     use crate::features::issue::completion::state_machine::{
         CompletionAttemptResultForEffect, CompletionState, CompletionWorld, Effect, FailurePolicy,
@@ -257,12 +263,6 @@ mod tests {
     };
     use crate::features::issue::completion::use_case::CompletionFlow;
     use crate::features::issue::service::IssueService;
-    use crate::db::agent_session_repository::AgentSessionRepository;
-    use crate::db::completion_attempt_repository::CompletionAttemptRepository;
-    use crate::db::issue_completion_flow_repository::IssueCompletionFlowRepository;
-    use crate::db::issue_repository::IssueRepository;
-    use crate::db::migrations::MigrationRunner;
-    use crate::db::project_repository::ProjectRepository;
     use crate::git::operation_state::GitOperationState;
     use crate::git::status::GitSnapshot;
     use crate::types::agent_session::{
@@ -432,7 +432,10 @@ mod tests {
         let connection = setup_database();
         // turn-source UPDATE 仅对 running session 生效（生产中 InjectCommitPrompt 在 session 运行时触发）。
         connection
-            .execute("UPDATE agent_sessions SET status = 'running' WHERE id = 30", [])
+            .execute(
+                "UPDATE agent_sessions SET status = 'running' WHERE id = 30",
+                [],
+            )
             .expect("set running");
         let service = IssueService::new(
             IssueRepository::new(&connection),
@@ -480,14 +483,20 @@ mod tests {
         // 无完成事务、未到 Completed → flow upsert。
         assert!(outcome.completed_issue.is_none());
         assert!(outcome.flow_record.is_some());
-        assert_eq!(outcome.new_state.phase, IssueCompletionPhase::AutoCommitting);
+        assert_eq!(
+            outcome.new_state.phase,
+            IssueCompletionPhase::AutoCommitting
+        );
     }
 
     #[test]
     fn inject_commit_prompt_skips_send_when_no_handle() {
         let connection = setup_database();
         connection
-            .execute("UPDATE agent_sessions SET status = 'running' WHERE id = 30", [])
+            .execute(
+                "UPDATE agent_sessions SET status = 'running' WHERE id = 30",
+                [],
+            )
             .expect("set running");
         let service = IssueService::new(
             IssueRepository::new(&connection),
@@ -673,11 +682,9 @@ mod tests {
 
         // issue 标记完成。
         let status: String = connection
-            .query_row(
-                "SELECT status FROM issues WHERE id = 16",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT status FROM issues WHERE id = 16", [], |row| {
+                row.get(0)
+            })
             .expect("query status");
         assert_eq!(status, "completed");
         // Completed → flow_record 为 None（CommitCompletion 事务内已清 flow）。

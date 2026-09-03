@@ -17,11 +17,7 @@ pub fn redwhisk_data_dir_from_home(home_dir: impl AsRef<Path>) -> PathBuf {
 /// 生产路径通常为 `$HOME/.redwhisk`，此时 parent 即用户 home。
 /// 测试或自定义 `data_dir` 文件名不是 `.redwhisk` 时，不取 parent，回退 `$HOME`。
 pub fn user_home_from_data_dir(data_dir: &Path) -> Option<PathBuf> {
-    if data_dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        == Some(REDWHISK_DATA_DIR_NAME)
-    {
+    if data_dir.file_name().and_then(|name| name.to_str()) == Some(REDWHISK_DATA_DIR_NAME) {
         return data_dir.parent().map(|path| path.to_path_buf());
     }
 

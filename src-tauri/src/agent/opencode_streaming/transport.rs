@@ -429,7 +429,12 @@ mod tests {
     fn build_shell_command_line_quotes_prompt_with_spaces() {
         let line = build_shell_command_line(
             "opencode",
-            &["run".into(), "--format".into(), "json".into(), "hello world".into()],
+            &[
+                "run".into(),
+                "--format".into(),
+                "json".into(),
+                "hello world".into(),
+            ],
         );
         assert!(line.contains("\"hello world\""));
         assert!(line.starts_with("opencode run --format json "));

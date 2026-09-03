@@ -1,13 +1,13 @@
 use tauri::{Manager, State};
 
+use super::service::ProjectService;
 use crate::app_state::AppState;
 use crate::features::project_terminal::ProjectTerminalService;
 use crate::features::settings::agent_skill_commands::trigger_project_skill_refresh;
-use super::service::ProjectService;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{
-    CreateProjectInput, OpenProjectInput, OpenProjectWindowResponse, ProjectListResponse,
-    DeleteProjectInput, ProjectSummary, RemoveProjectFromListInput, UpdateProjectSettingsInput,
+    CreateProjectInput, DeleteProjectInput, OpenProjectInput, OpenProjectWindowResponse,
+    ProjectListResponse, ProjectSummary, RemoveProjectFromListInput, UpdateProjectSettingsInput,
     ValidateProjectRepoPathInput, ValidateProjectRepoPathResponse,
 };
 
@@ -219,8 +219,7 @@ fn reject_if_project_window_open(
         )
         .with_reason("projectWindowOpen")
         .with_detail(
-            ErrorDetail::new("ProjectWindow")
-                .with_value("projectId", project_id.to_string()),
+            ErrorDetail::new("ProjectWindow").with_value("projectId", project_id.to_string()),
         ));
     }
     Ok(())
@@ -270,17 +269,23 @@ fn project_window_error(project_id: i64, message: &str, cause: String) -> Comman
 
 fn project_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, CommandError> {
     crate::local_data_path::redwhisk_data_dir(app).map_err(|error| {
-        CommandError::new(CommandErrorCode::ProjectPersistenceFailed, "Project 保存失败。")
-            .with_reason("saveFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        CommandError::new(
+            CommandErrorCode::ProjectPersistenceFailed,
+            "Project 保存失败。",
+        )
+        .with_reason("saveFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })
 }
 
 /// spawn_blocking 任务 Join 失败（panic / 取消）的错误映射。
 fn project_join_error(error: impl std::fmt::Display) -> CommandError {
-    CommandError::new(CommandErrorCode::ProjectPersistenceFailed, "Project 操作失败。")
-        .with_reason("joinFailed")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    CommandError::new(
+        CommandErrorCode::ProjectPersistenceFailed,
+        "Project 操作失败。",
+    )
+    .with_reason("joinFailed")
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
 fn prepare_project_data_dir(
@@ -291,7 +296,8 @@ fn prepare_project_data_dir(
         CommandError::new(
             CommandErrorCode::ProjectPersistenceFailed,
             "Project 保存失败。",
-        ).with_reason("saveFailed")
+        )
+        .with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -300,7 +306,8 @@ fn prepare_project_data_dir(
             CommandError::new(
                 CommandErrorCode::ProjectPersistenceFailed,
                 "Project 保存失败。",
-            ).with_reason("saveFailed")
+            )
+            .with_reason("saveFailed")
         })?;
         local_data
             .initialize(&data_dir)

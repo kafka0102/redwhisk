@@ -290,9 +290,15 @@ fn global_skill_roots(home_dir: &Path) -> Vec<(PathBuf, &'static [AgentType])> {
     vec![
         (home_dir.join(".agents/skills"), AGENTS_SHARED_OWNERS),
         (home_dir.join(".codex/skills"), CODEX_ONLY_OWNERS),
-        (home_dir.join(".codex/superpowers/skills"), CODEX_ONLY_OWNERS),
+        (
+            home_dir.join(".codex/superpowers/skills"),
+            CODEX_ONLY_OWNERS,
+        ),
         (home_dir.join(".claude/skills"), CLAUDE_SHARED_OWNERS),
-        (home_dir.join(".config/opencode/skills"), OPENCODE_ONLY_OWNERS),
+        (
+            home_dir.join(".config/opencode/skills"),
+            OPENCODE_ONLY_OWNERS,
+        ),
         (home_dir.join(".grok/skills"), GROK_ONLY_OWNERS),
     ]
 }

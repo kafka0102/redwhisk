@@ -1,15 +1,9 @@
 use std::env;
 use std::ffi::OsStr;
 use std::path::Path;
-use std::process::{
-    Command, Output,
-};
+use std::process::{Command, Output};
 
-use crate::types::errors::{
-    CommandError, CommandErrorCode, ErrorDetail,
-};
-
-
+use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 #[cfg(unix)]
 const DEFAULT_SETUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
@@ -30,7 +24,8 @@ pub(super) fn run_worktree_setup_command(
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Worktree 初始化目录不可访问。",
-        ).with_reason("worktreeInitDirInaccessible")
+        )
+        .with_reason("worktreeInitDirInaccessible")
         .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path)));
     }
 
@@ -38,7 +33,8 @@ pub(super) fn run_worktree_setup_command(
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Worktree 初始化命令执行失败。",
-        ).with_reason("worktreeInitCommandFailed")
+        )
+        .with_reason("worktreeInitCommandFailed")
         .with_detail(ErrorDetail::new("WorkingDir").with_value("path", workspace_path))
         .with_detail(ErrorDetail::new("Command").with_value("command", setup_command))
         .with_detail(ErrorDetail::new("Shell").with_value("shell", failure.shell))
@@ -49,14 +45,12 @@ pub(super) fn run_worktree_setup_command(
     Ok(())
 }
 
-
 #[derive(Debug)]
 struct SetupCommandFailure {
     shell: String,
     exit_code: i32,
     stderr: String,
 }
-
 
 #[cfg(unix)]
 fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupCommandFailure> {
@@ -68,7 +62,6 @@ fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupC
         &[],
     )
 }
-
 
 #[cfg(unix)]
 fn run_setup_command_with_shells_and_env(
@@ -114,7 +107,6 @@ fn run_setup_command_with_shells_and_env(
     }))
 }
 
-
 #[cfg(unix)]
 fn setup_shell_candidates(preferred_shell: Option<&str>) -> Vec<String> {
     let mut shells = Vec::with_capacity(DEFAULT_SETUP_SHELLS.len() + 1);
@@ -135,7 +127,6 @@ fn setup_shell_candidates(preferred_shell: Option<&str>) -> Vec<String> {
     shells
 }
 
-
 #[cfg(not(unix))]
 fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupCommandFailure> {
     match Command::new("cmd")
@@ -153,7 +144,6 @@ fn run_setup_command(workspace: &Path, setup_command: &str) -> Result<(), SetupC
     }
 }
 
-
 fn setup_command_failure(shell: &str, output: Output) -> SetupCommandFailure {
     SetupCommandFailure {
         shell: shell.to_string(),
@@ -162,11 +152,9 @@ fn setup_command_failure(shell: &str, output: Output) -> SetupCommandFailure {
     }
 }
 
-
 fn should_retry_setup_command(failure: &SetupCommandFailure) -> bool {
     failure.exit_code == -1 || failure.exit_code == 126 || failure.exit_code == 127
 }
-
 
 #[cfg(all(test, unix))]
 mod worktree_setup_command_tests {

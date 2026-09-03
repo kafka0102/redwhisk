@@ -16,9 +16,9 @@ use crate::db::issue_repository::IssueRepository;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::features::agent_session::service::AgentSessionService;
+use crate::types::agent_session::AgentSessionStatus;
 use crate::types::agent_session::{StartAgentSessionInput, WorkspaceMode};
 use crate::types::agent_session_terminal::WriteAgentSessionTerminalInput;
-use crate::types::agent_session::AgentSessionStatus;
 
 pub(super) fn create_git_repo(repo_dir: &Path) {
     fs::create_dir_all(repo_dir).expect("create repo dir");
@@ -46,11 +46,7 @@ pub(super) fn run_git(repo_dir: &Path, args: &[&str]) {
 }
 
 pub(super) fn write_sleep_script(path: &Path) {
-    fs::write(
-        path,
-        "#!/bin/sh\n# keep PTY alive for test\nsleep 30\n",
-    )
-    .expect("write script");
+    fs::write(path, "#!/bin/sh\n# keep PTY alive for test\nsleep 30\n").expect("write script");
     let mut perms = fs::metadata(path).expect("meta").permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).expect("chmod");

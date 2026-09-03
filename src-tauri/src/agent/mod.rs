@@ -1,23 +1,24 @@
 pub mod agent_event_broadcaster;
 pub mod claude_config;
 pub mod claude_streaming;
-pub mod opencode_streaming;
 pub mod codex_app_server;
 pub mod codex_config;
-pub mod grok_config;
 pub mod command_detector;
+pub mod grok_config;
 pub mod latest_output_writer;
-pub mod pty_osc_color_reply;
-pub mod pty_session_manager;
-pub mod terminal_log_tail;
+pub mod opencode_streaming;
 pub mod provider_descriptor;
 pub mod provider_factory;
+pub mod pty_osc_color_reply;
+pub mod pty_session_manager;
 pub mod session_handle;
 pub mod session_registry;
+pub mod terminal_log_tail;
 
 pub use provider_descriptor::{
-    AgentProviderDescriptor, ClaudeDescriptor, CodexDescriptor, OpenCodeDescriptor, RuntimeConfig,
-    TuiInitialPromptDelivery, TuiInitialPromptPlan, descriptor_for, plan_tui_initial_prompt,
+    descriptor_for, plan_tui_initial_prompt, AgentProviderDescriptor, ClaudeDescriptor,
+    CodexDescriptor, OpenCodeDescriptor, RuntimeConfig, TuiInitialPromptDelivery,
+    TuiInitialPromptPlan,
 };
 pub use provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, DefaultAgentSessionProviderFactory,

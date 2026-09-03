@@ -223,7 +223,10 @@ fn parse_system(value: &Value) -> ClaudeStreamMessage {
                 .map(String::from),
         },
         "task_notification" => ClaudeStreamMessage::SystemTaskNotification {
-            task_id: value.get("task_id").and_then(Value::as_str).map(String::from),
+            task_id: value
+                .get("task_id")
+                .and_then(Value::as_str)
+                .map(String::from),
             tool_use_id: value
                 .get("tool_use_id")
                 .and_then(Value::as_str)

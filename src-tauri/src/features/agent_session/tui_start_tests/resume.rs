@@ -235,7 +235,10 @@ fn resume_tui_spawns_pty_marks_running_keeps_command_snapshot() {
     assert_eq!(record.status, AgentSessionStatus::Running);
     assert_eq!(record.command_snapshot, command_snapshot);
     assert_eq!(record.display_mode, "tui");
-    assert_eq!(record.provider_session_id.as_deref(), Some("thread-resume-1"));
+    assert_eq!(
+        record.provider_session_id.as_deref(),
+        Some("thread-resume-1")
+    );
     assert_eq!(record.log_path, log_path);
 
     let _ = pty.kill(session_id);

@@ -188,7 +188,10 @@ fn start_runtime_tui_spawns_pty_persists_snapshot_and_lists_display_mode() {
         .expect("start tui session");
 
     assert!(result.session_id > 0);
-    assert!(pty.contains(result.session_id), "tui path must register PTY");
+    assert!(
+        pty.contains(result.session_id),
+        "tui path must register PTY"
+    );
 
     let record = AgentSessionRepository::new(&database.connection)
         .find_by_id(result.session_id)
@@ -323,10 +326,6 @@ fn reconcile_marks_tui_running_without_pty_stopped() {
     assert_eq!(status, "stopped");
 }
 
-
-
-
-
 #[test]
 fn start_tui_with_stdin_prompt_returns_after_register() {
     let temp_dir = tempdir().expect("temp");
@@ -419,7 +418,10 @@ fn start_runtime_tui_grok_appends_always_approve_and_runs() {
         .expect("start grok tui session");
 
     assert!(result.session_id > 0);
-    assert!(pty.contains(result.session_id), "grok tui must register PTY");
+    assert!(
+        pty.contains(result.session_id),
+        "grok tui must register PTY"
+    );
 
     let record = AgentSessionRepository::new(&database.connection)
         .find_by_id(result.session_id)

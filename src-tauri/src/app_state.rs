@@ -51,11 +51,7 @@ impl AppState {
 
     /// 查询项目当前所在窗口 label；调用方需再用 `AppHandle::get_webview_window` 核验窗口仍在。
     pub fn find_project_window(&self, project_id: i64) -> Option<String> {
-        self.project_windows
-            .lock()
-            .ok()?
-            .get(&project_id)
-            .cloned()
+        self.project_windows.lock().ok()?.get(&project_id).cloned()
     }
 
     /// 移除某项目已登记的窗口条目（窗口被销毁或项目重开时清理过期归属）。

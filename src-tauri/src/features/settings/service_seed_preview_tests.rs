@@ -214,7 +214,12 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
             .iter()
             .map(|p| p.agent_type.clone())
             .collect::<Vec<_>>(),
-        vec![AgentType::Codex, AgentType::Claude, AgentType::OpenCode, AgentType::Grok,]
+        vec![
+            AgentType::Codex,
+            AgentType::Claude,
+            AgentType::OpenCode,
+            AgentType::Grok,
+        ]
     );
     let claude = profiles
         .iter()
@@ -302,7 +307,10 @@ fn preview_agent_command_args_returns_bypass_args_for_claude() {
         .expect("preview");
     assert_eq!(
         args,
-        vec!["--permission-mode".to_string(), "bypassPermissions".to_string(),]
+        vec![
+            "--permission-mode".to_string(),
+            "bypassPermissions".to_string(),
+        ]
     );
 }
 

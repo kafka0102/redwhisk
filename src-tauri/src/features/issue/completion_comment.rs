@@ -134,10 +134,8 @@ fn try_publish_completion_comment_with_connection(
         .map(|profile| profile.name)
         .unwrap_or_default();
 
-    let assistant_texts = crate::features::agent_session::read_assistant_texts_for_turn(
-        &session.log_path,
-        turn_id,
-    );
+    let assistant_texts =
+        crate::features::agent_session::read_assistant_texts_for_turn(&session.log_path, turn_id);
 
     // 标签=显式交付意图：任意 turn_source 均可发表。
     // 无标签时仅 initial/completion 走 Multica 兜底，follow_up 跳过以免追问刷屏。
@@ -218,7 +216,9 @@ fn truncate_comment_body(body: &str) -> String {
     }
     format!(
         "{}…",
-        body.chars().take(FALLBACK_BODY_MAX_CHARS).collect::<String>()
+        body.chars()
+            .take(FALLBACK_BODY_MAX_CHARS)
+            .collect::<String>()
     )
 }
 
@@ -262,8 +262,21 @@ pub(crate) fn is_trivial_comment_body(body: &str) -> bool {
             !ch.is_ascii_punctuation()
                 && !matches!(
                     *ch,
-                    '。' | '！' | '？' | '，' | '、' | '…' | '；' | '：' | '“' | '”' | '‘' | '’'
-                        | '（' | '）' | '【' | '】'
+                    '。' | '！'
+                        | '？'
+                        | '，'
+                        | '、'
+                        | '…'
+                        | '；'
+                        | '：'
+                        | '“'
+                        | '”'
+                        | '‘'
+                        | '’'
+                        | '（'
+                        | '）'
+                        | '【'
+                        | '】'
                 )
         })
         .collect::<String>()

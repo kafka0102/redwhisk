@@ -15,7 +15,8 @@ use crate::types::session_workspace::BranchSyncStatus;
 pub fn read_branch_sync_status(repo_path: impl AsRef<Path>) -> Option<BranchSyncStatus> {
     let repo_path = repo_path.as_ref();
 
-    let upstream = match command::run_git(repo_path, &["rev-parse", "--abbrev-ref", "@{upstream}"]) {
+    let upstream = match command::run_git(repo_path, &["rev-parse", "--abbrev-ref", "@{upstream}"])
+    {
         Ok(value) => {
             let value = value.trim();
             if value.is_empty() || value == "@{upstream}" || value.starts_with("HEAD") {
@@ -28,12 +29,13 @@ pub fn read_branch_sync_status(repo_path: impl AsRef<Path>) -> Option<BranchSync
 
     // left = commits reachable from HEAD but not upstream (ahead)
     // right = commits reachable from upstream but not HEAD (behind)
-    let counts =
-        match command::run_git(repo_path, &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
-        {
-            Ok(value) => value,
-            Err(_) => return None,
-        };
+    let counts = match command::run_git(
+        repo_path,
+        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+    ) {
+        Ok(value) => value,
+        Err(_) => return None,
+    };
 
     let parts: Vec<&str> = counts.split_whitespace().collect();
     if parts.len() != 2 {
@@ -163,9 +165,7 @@ mod tests {
                 .current_dir(&env.local)
                 .output()
                 .expect("rev-parse");
-            String::from_utf8_lossy(&output.stdout)
-                .trim()
-                .to_string()
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
         };
         git(&env.local, &["checkout", "--detach", &head]);
 

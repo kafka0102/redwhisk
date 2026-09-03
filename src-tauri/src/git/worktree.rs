@@ -59,7 +59,9 @@ impl std::fmt::Display for GitWorktreeDirtyRole {
 impl From<GitCommandError> for GitWorktreeError {
     fn from(error: GitCommandError) -> Self {
         match error {
-            GitCommandError::Failed { command, message } => Self::GitCommandFailed { command, message },
+            GitCommandError::Failed { command, message } => {
+                Self::GitCommandFailed { command, message }
+            }
             GitCommandError::OutputInvalid { command, message } => {
                 Self::GitOutputInvalid { command, message }
             }
@@ -91,7 +93,9 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
     })
 }
 
-pub fn list_code_workspaces(repo_path: impl AsRef<Path>) -> Result<Vec<CodeWorkspaceRoot>, GitWorktreeError> {
+pub fn list_code_workspaces(
+    repo_path: impl AsRef<Path>,
+) -> Result<Vec<CodeWorkspaceRoot>, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let project_root = repo_path.canonicalize().map_err(|error| {
         GitWorktreeError::InvalidRepoPath(format!("{}: {error}", repo_path.to_string_lossy()))
@@ -101,9 +105,15 @@ pub fn list_code_workspaces(repo_path: impl AsRef<Path>) -> Result<Vec<CodeWorks
     let mut workspace_path: Option<String> = None;
     let mut branch: Option<String> = None;
 
-    let append_workspace = |roots: &mut Vec<CodeWorkspaceRoot>, workspace_path: &mut Option<String>, branch: &mut Option<String>| {
-        let Some(path) = workspace_path.take() else { return; };
-        let is_project_root = Path::new(&path).canonicalize().is_ok_and(|candidate| candidate == project_root);
+    let append_workspace = |roots: &mut Vec<CodeWorkspaceRoot>,
+                            workspace_path: &mut Option<String>,
+                            branch: &mut Option<String>| {
+        let Some(path) = workspace_path.take() else {
+            return;
+        };
+        let is_project_root = Path::new(&path)
+            .canonicalize()
+            .is_ok_and(|candidate| candidate == project_root);
         roots.push(CodeWorkspaceRoot {
             branch: branch.take().unwrap_or_else(|| "HEAD".to_string()),
             path,
@@ -111,11 +121,20 @@ pub fn list_code_workspaces(repo_path: impl AsRef<Path>) -> Result<Vec<CodeWorks
         });
     };
     for line in output.lines().chain(std::iter::once("")) {
-        if let Some(path) = line.strip_prefix("worktree ") { workspace_path = Some(path.to_string()); }
-        else if let Some(value) = line.strip_prefix("branch refs/heads/") { branch = Some(value.to_string()); }
-        else if line.is_empty() { append_workspace(&mut roots, &mut workspace_path, &mut branch); }
+        if let Some(path) = line.strip_prefix("worktree ") {
+            workspace_path = Some(path.to_string());
+        } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
+            branch = Some(value.to_string());
+        } else if line.is_empty() {
+            append_workspace(&mut roots, &mut workspace_path, &mut branch);
+        }
     }
-    roots.sort_by(|left, right| right.is_project_root.cmp(&left.is_project_root).then_with(|| left.branch.cmp(&right.branch)));
+    roots.sort_by(|left, right| {
+        right
+            .is_project_root
+            .cmp(&left.is_project_root)
+            .then_with(|| left.branch.cmp(&right.branch))
+    });
     Ok(roots)
 }
 
@@ -127,7 +146,8 @@ pub fn create_worktree_for_issue(
 ) -> Result<CreatedWorktree, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let worktree_root_path = prepare_worktree_root(worktree_root_path.as_ref())?;
-    let workspace_branch = crate::git::worktree_name::issue_worktree_base_name(issue_number, &repo_path);
+    let workspace_branch =
+        crate::git::worktree_name::issue_worktree_base_name(issue_number, &repo_path);
     let workspace_path = unique_worktree_path(&worktree_root_path, &workspace_branch);
 
     run_git(
@@ -271,7 +291,6 @@ pub fn cleanup_worktree(
     Ok(())
 }
 
-
 /// 丢弃 worktree 工作区内未提交改动（tracked + untracked；不加 `-x`）。
 ///
 /// 路径不存在时 no-op，与 `reconcile_worktree` 一致。
@@ -317,7 +336,6 @@ pub fn restore_worktree_for_branch(
     )?;
     Ok(())
 }
-
 
 /// Narrow inputs for Worktree 对账（不含 owner 策略）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -441,10 +459,7 @@ pub struct ExecutionPathFacts {
 }
 
 /// 基于实际路径与启动快照计算 worktree/漂移事实。
-pub fn inspect_execution_path(
-    actual_path: &str,
-    startup_path: &str,
-) -> ExecutionPathFacts {
+pub fn inspect_execution_path(actual_path: &str, startup_path: &str) -> ExecutionPathFacts {
     if actual_path.trim().is_empty() {
         return ExecutionPathFacts {
             in_worktree: false,
@@ -469,10 +484,7 @@ pub fn inspect_execution_path(
 }
 
 /// 本地分支 `refs/heads/{branch}` 是否存在。
-pub fn branch_exists(
-    repo_path: impl AsRef<Path>,
-    branch: &str,
-) -> Result<bool, GitWorktreeError> {
+pub fn branch_exists(repo_path: impl AsRef<Path>, branch: &str) -> Result<bool, GitWorktreeError> {
     let repo_path = ensure_repo_dir(repo_path.as_ref())?;
     let branch_ref = format!("refs/heads/{branch}");
     let output = command::run_git_raw(
@@ -701,8 +713,12 @@ mod tests {
             "文件内容应还原为 worktree 分支原内容"
         );
         assert!(
-            !worktree_git_dir(&worktree_path).join("rebase-merge").exists()
-                && !worktree_git_dir(&worktree_path).join("rebase-apply").exists(),
+            !worktree_git_dir(&worktree_path)
+                .join("rebase-merge")
+                .exists()
+                && !worktree_git_dir(&worktree_path)
+                    .join("rebase-apply")
+                    .exists(),
             "不得残留 rebase 进行中状态"
         );
         // 主仓库不应被改动，也不得残留冲突。
@@ -731,7 +747,10 @@ mod tests {
 
         assert_eq!(created.workspace_branch, "issue-3-redwhisk");
         assert!(
-            created.workspace_path.replace('\\', "/").ends_with("issue-3-redwhisk"),
+            created
+                .workspace_path
+                .replace('\\', "/")
+                .ends_with("issue-3-redwhisk"),
             "workspace path should end with issue-3-redwhisk, got: {}",
             created.workspace_path
         );
@@ -750,7 +769,17 @@ mod tests {
         write_file(&repo_dir, "base.txt", "base\n");
         git(&repo_dir, &["add", "base.txt"]);
         git(&repo_dir, &["commit", "-m", "initial"]);
-        git(&repo_dir, &["worktree", "add", "-b", "issue-3", worktree_path.to_string_lossy().as_ref(), "main"]);
+        git(
+            &repo_dir,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "issue-3",
+                worktree_path.to_string_lossy().as_ref(),
+                "main",
+            ],
+        );
 
         let roots = list_code_workspaces(&repo_dir).expect("list code workspaces");
 
@@ -783,7 +812,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn classify_merge_block_maps_dirty_roles_and_conflict() {
         let target = GitWorktreeError::DirtyWorktree {
@@ -812,7 +840,10 @@ mod tests {
                 files: "a.txt".into(),
             }
         );
-        assert_eq!(classify_merge_block(&target).reason(), "target_worktree_dirty");
+        assert_eq!(
+            classify_merge_block(&target).reason(),
+            "target_worktree_dirty"
+        );
         assert_eq!(
             classify_merge_block(&workspace),
             MergeBlockClassification::WorkspaceDirty {
@@ -956,7 +987,6 @@ mod tests {
         assert_eq!(current_branch(&repo_dir).expect("branch"), "main");
         assert!(repo_dir.join("feature.txt").is_file());
     }
-
 
     #[test]
     fn discard_worktree_changes_resets_tracked_and_removes_untracked() {

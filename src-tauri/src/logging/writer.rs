@@ -77,7 +77,10 @@ fn flush(logs_dir: &Path, buffer: &mut Vec<LogEntry>) {
     let mut error_groups: HashMap<String, Vec<&LogEntry>> = HashMap::new();
     for entry in buffer.iter() {
         let month_key = month_key_from_epoch(entry.timestamp_millis);
-        normal_groups.entry(month_key.clone()).or_default().push(entry);
+        normal_groups
+            .entry(month_key.clone())
+            .or_default()
+            .push(entry);
         if entry.level == LogLevel::Error {
             error_groups.entry(month_key).or_default().push(entry);
         }
@@ -301,7 +304,11 @@ mod tests {
 
         let mut names: Vec<String> = fs::read_dir(&logs_dir)
             .expect("read logs dir")
-            .filter_map(|entry| entry.ok().map(|entry| entry.file_name().to_string_lossy().to_string()))
+            .filter_map(|entry| {
+                entry
+                    .ok()
+                    .map(|entry| entry.file_name().to_string_lossy().to_string())
+            })
             .collect();
         names.sort();
 

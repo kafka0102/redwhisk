@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 
 use redwhisk_lib::agent::pty_session_manager::PtySessionManager;
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
-use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -16,6 +15,7 @@ use redwhisk_lib::db::issue_completion_flow_repository::IssueCompletionFlowRepos
 use redwhisk_lib::db::issue_repository::IssueRepository;
 use redwhisk_lib::db::migrations::MigrationRunner;
 use redwhisk_lib::db::project_repository::ProjectRepository;
+use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentSessionAttention, AgentSessionStatus, WorktreeOwner,
@@ -437,7 +437,10 @@ fn issue_timeline_returns_all_known_action_types_not_only_created() {
         IssueTimelineActionType::IssueCompleted
     );
     // 全部动作 actor 均回填为当前用户（actor_user_profile_id = 1）。
-    assert!(timeline.entries.iter().all(|entry| entry.actor.name == "Alice"));
+    assert!(timeline
+        .entries
+        .iter()
+        .all(|entry| entry.actor.name == "Alice"));
 }
 
 #[test]
@@ -1331,9 +1334,9 @@ fn complete_issue_manual_closes_running_session_and_records_audit() {
     let completed = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1422,9 +1425,9 @@ fn complete_issue_manual_allows_running_issue_without_review_gate() {
     let completed = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1478,9 +1481,9 @@ fn complete_issue_manual_finishes_when_project_git_status_is_unavailable() {
     let completed = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1581,9 +1584,9 @@ fn complete_issue_manual_merges_and_cleans_up_worktree_session() {
     let completed = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1621,9 +1624,9 @@ fn complete_issue_manual_rejects_issue_without_session_without_partial_write() {
     let error = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1687,9 +1690,9 @@ fn get_issue_summary_falls_back_to_issue_completed_action_for_manual_completion(
     service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1773,9 +1776,9 @@ fn complete_issue_clean_closes_running_session_and_records_audit() {
     let completed = service
         .complete_issue_clean(
             CompleteIssueCleanInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1877,9 +1880,9 @@ fn complete_issue_clean_allows_closed_linked_session() {
     let completed = service
         .complete_issue_clean(
             CompleteIssueCleanInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -1950,9 +1953,9 @@ fn complete_issue_clean_rejects_dirty_worktree_without_partial_write() {
     let error = service
         .complete_issue_clean(
             CompleteIssueCleanInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -2054,9 +2057,9 @@ fn complete_issue_clean_records_blocked_attempt_when_git_operation_is_in_progres
     let error = service
         .complete_issue_clean(
             CompleteIssueCleanInput {
-            project_id,
-            issue_id: issue.id,
-        },
+                project_id,
+                issue_id: issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -2819,10 +2822,21 @@ fn complete_issue_flow_redwhisk_worktree_skip_discards_dirty_then_reconciles() {
     );
     // 已提交内容应合入目标分支。
     write_file(&workspace_path, "tracked.txt", "worktree committed\n");
-    git(&workspace_path, &["commit", "-am", "worktree committed change"]);
+    git(
+        &workspace_path,
+        &["commit", "-am", "worktree committed change"],
+    );
     // 未提交改动（tracked 修改 + untracked 临时文件）应被 Skip 丢弃，不得进入目标。
-    write_file(&workspace_path, "tracked.txt", "worktree dirty uncommitted\n");
-    write_file(&workspace_path, "tmp-scratch.txt", "scratch should be discarded\n");
+    write_file(
+        &workspace_path,
+        "tracked.txt",
+        "worktree dirty uncommitted\n",
+    );
+    write_file(
+        &workspace_path,
+        "tmp-scratch.txt",
+        "scratch should be discarded\n",
+    );
 
     let result = service
         .complete_issue_flow(
@@ -3446,9 +3460,9 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     let manual = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: manual_issue.id,
-        },
+                project_id,
+                issue_id: manual_issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -3478,9 +3492,9 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     let clean = service
         .complete_issue_clean(
             CompleteIssueCleanInput {
-            project_id,
-            issue_id: clean_issue.id,
-        },
+                project_id,
+                issue_id: clean_issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -3529,9 +3543,9 @@ fn legacy_completion_entries_delegate_without_bypassing_flow_audit() {
     let external_error = service
         .complete_issue_manual(
             CompleteIssueManualInput {
-            project_id,
-            issue_id: external_issue.id,
-        },
+                project_id,
+                issue_id: external_issue.id,
+            },
             &PtySessionManager::new(),
             &AgentSessionRegistry::new(),
         )
@@ -4298,7 +4312,6 @@ fn advance_issue_status_allows_completed_to_backlog() {
     assert_eq!(updated.status, IssueStatus::Backlog);
     assert_eq!(updated.id, issue.id);
 }
-
 
 #[test]
 fn advance_issue_status_returns_running_issue_to_backlog_and_soft_deletes_session() {

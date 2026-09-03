@@ -104,10 +104,18 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                 .map_err(issue_database_error)?;
                 issue_archive
             } else {
-                self.service.archive_issue_session_in_transaction(&transaction, &completed_issue, session)?
+                self.service.archive_issue_session_in_transaction(
+                    &transaction,
+                    &completed_issue,
+                    session,
+                )?
             }
         } else {
-            self.service.archive_issue_session_in_transaction(&transaction, &completed_issue, session)?
+            self.service.archive_issue_session_in_transaction(
+                &transaction,
+                &completed_issue,
+                session,
+            )?
         };
 
         let issue_action_payload = json!({
@@ -134,7 +142,8 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                 CommandError::new(
                     CommandErrorCode::IssuePersistenceFailed,
                     "CompletionAttempt 保存失败。",
-                ).with_reason("completionAttemptSaveFailed")
+                )
+                .with_reason("completionAttemptSaveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
         if let Some(attempt_id) = attempt_id {
@@ -151,7 +160,8 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                 CommandError::new(
                     CommandErrorCode::IssuePersistenceFailed,
                     "CompletionAttempt 更新失败。",
-                ).with_reason("completionAttemptUpdateFailed")
+                )
+                .with_reason("completionAttemptUpdateFailed")
                 .with_detail(
                     ErrorDetail::new("CompletionAttempt").with_value("attemptId", attempt_id),
                 )
@@ -192,7 +202,8 @@ impl<'connection> CompletionFlow<'_, 'connection> {
         );
 
         cleanup_runtime_issue_log(issue_archive.as_ref());
-        let completed_issue = self.service
+        let completed_issue = self
+            .service
             .issue_repository
             .find_by_id(completed_issue.id)
             .map_err(issue_database_error)?
@@ -240,5 +251,4 @@ impl<'connection> CompletionFlow<'_, 'connection> {
         transaction.commit().map_err(issue_database_error)?;
         Ok(flow)
     }
-
 }

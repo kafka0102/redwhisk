@@ -1,15 +1,15 @@
 use serde::Serialize;
 use tauri::{Emitter, State};
 
-use crate::app_state::AppState;
 use super::workspace::SessionWorkspaceService;
+use crate::app_state::AppState;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProbeGithubCommitInput, ProbeGithubCommitResponse,
     ProjectCheckoutBranchInput, ProjectCheckoutBranchResponse, ProjectCheckoutBranchesResponse,
     ProjectCreateBranchInput, ProjectCreateBranchResponse, ProjectMergeBranchInput,
-    ProjectMergeBranchResponse, ProjectWorkspaceInput,
-    ProjectWorkspacePathInput, ProjectWorkspaceWriteFileInput, ProjectWorktreeChangesResponse,
+    ProjectMergeBranchResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
+    ProjectWorkspaceWriteFileInput, ProjectWorktreeChangesResponse,
     ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
     ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
     WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent, WorkspaceFileStat,
@@ -117,7 +117,6 @@ pub async fn read_project_worktree_diff(
     run_workspace_blocking(data_dir, move |service| service.read_diff(input)).await
 }
 
-
 #[tauri::command]
 pub async fn list_project_checkout_branches(
     app: tauri::AppHandle,
@@ -125,7 +124,10 @@ pub async fn list_project_checkout_branches(
     input: ProjectWorkspaceInput,
 ) -> Result<ProjectCheckoutBranchesResponse, CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
-    run_workspace_blocking(data_dir, move |service| service.list_checkout_branches(input)).await
+    run_workspace_blocking(data_dir, move |service| {
+        service.list_checkout_branches(input)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -152,7 +154,6 @@ pub async fn checkout_project_branch(
     emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
     Ok(response)
 }
-
 
 #[tauri::command]
 pub async fn create_project_branch(
@@ -230,7 +231,10 @@ pub async fn resolve_workspace_github_remote(
     input: ProjectWorkspaceInput,
 ) -> Result<ResolveWorkspaceGithubRemoteResponse, CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
-    run_workspace_blocking(data_dir, move |service| service.resolve_github_remote(input)).await
+    run_workspace_blocking(data_dir, move |service| {
+        service.resolve_github_remote(input)
+    })
+    .await
 }
 
 /// 探测 github.com 上 commit 是否存在。不读本地 git；纯 HTTP。

@@ -1,7 +1,7 @@
 use tauri::State;
 
-use crate::app_state::AppState;
 use super::service::SettingsService;
+use crate::app_state::AppState;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
     ListAgentProfilesInput, PreviewAgentCommandArgsInput, SaveAgentProfileInput,
@@ -87,17 +87,23 @@ pub async fn list_project_labels(
     input: ListProjectLabelsInput,
 ) -> Result<ProjectLabelListResponse, CommandError> {
     let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
-        CommandError::new(CommandErrorCode::SettingsPersistenceFailed, "设置保存失败。")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        CommandError::new(
+            CommandErrorCode::SettingsPersistenceFailed,
+            "设置保存失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
     tauri::async_runtime::spawn_blocking(move || {
         SettingsService::list_project_labels_in_data_dir(data_dir, input)
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::SettingsPersistenceFailed, "设置查询失败。")
-            .with_reason("queryFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        CommandError::new(
+            CommandErrorCode::SettingsPersistenceFailed,
+            "设置查询失败。",
+        )
+        .with_reason("queryFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
 
@@ -167,9 +173,7 @@ pub fn update_user_profile(
     input: UpdateUserProfileInput,
 ) -> Result<UserProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
-    super::user_profile::UserProfileService::update_profile_in_data_dir(
-        data_dir, input,
-    )
+    super::user_profile::UserProfileService::update_profile_in_data_dir(data_dir, input)
 }
 
 fn prepare_settings_data_dir(

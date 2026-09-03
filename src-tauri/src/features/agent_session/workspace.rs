@@ -14,12 +14,11 @@ use crate::git::worktree::{is_additional_worktree, list_code_workspaces};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::session_workspace::{
     CodeWorkspaceRootsResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
-    ProjectWorkspaceWriteFileInput,
-    ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
-    ProjectWorktreeFileTreeResponse, WorkspaceChangeKind, WorkspaceChangedFile,
-    WorkspaceCommitChangedFile, WorkspaceCommitRecord, WorkspaceContentSearchInput,
-    WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent,
-    WorkspaceFileStat, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
+    ProjectWorkspaceWriteFileInput, ProjectWorktreeChangesResponse,
+    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse, WorkspaceChangeKind,
+    WorkspaceChangedFile, WorkspaceCommitChangedFile, WorkspaceCommitRecord,
+    WorkspaceContentSearchInput, WorkspaceContentSearchResponse, WorkspaceDiffContent,
+    WorkspaceFileContent, WorkspaceFileStat, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
@@ -112,12 +111,7 @@ impl<'connection> SessionWorkspaceService<'connection> {
             input.session_id,
             input.workspace_path.as_deref(),
         );
-        read_workspace_commit_history(
-            &root,
-            base_branch.as_deref(),
-            input.limit,
-            input.offset,
-        )
+        read_workspace_commit_history(&root, base_branch.as_deref(), input.limit, input.offset)
     }
 
     // 读取 session 创建 worktree 时记录的 target_branch，作为 commit history 的精确
@@ -433,21 +427,23 @@ fn read_workspace_commit_history(
     // base_resolution 记录解出的 (merge-base hash, base 分支名)：name 来自 preferred
     // 或 upstream 或启发式候选；仅 worktree 且非主分支且成功解出时回填到响应的
     // base_branch，供前端渲染黄色 base Tag。
-    let (worktree_own_commits, base_resolution): (Option<HashSet<String>>, Option<(String, String)>) =
-        if is_worktree {
-            match branch_name.as_deref() {
-                Some(branch) if !PRIMARY_BRANCHES.contains(&branch) => {
-                    let resolved = find_branch_base(root, branch, base_branch)?;
-                    let own = resolved
-                        .as_ref()
-                        .and_then(|(base_hash, _)| rev_list_range(root, &format!("{base_hash}..HEAD")).ok());
-                    (own, resolved)
-                }
-                _ => (None, None),
+    let (worktree_own_commits, base_resolution): (
+        Option<HashSet<String>>,
+        Option<(String, String)>,
+    ) = if is_worktree {
+        match branch_name.as_deref() {
+            Some(branch) if !PRIMARY_BRANCHES.contains(&branch) => {
+                let resolved = find_branch_base(root, branch, base_branch)?;
+                let own = resolved.as_ref().and_then(|(base_hash, _)| {
+                    rev_list_range(root, &format!("{base_hash}..HEAD")).ok()
+                });
+                (own, resolved)
             }
-        } else {
-            (None, None)
-        };
+            _ => (None, None),
+        }
+    } else {
+        (None, None)
+    };
     let base_branch_name = base_resolution.as_ref().map(|(_, name)| name.clone());
 
     let upstream = current_upstream(root)?;
@@ -824,7 +820,9 @@ fn read_workspace_file_tree(root: &Path) -> Result<ProjectWorktreeFileTreeRespon
     Ok(ProjectWorktreeFileTreeResponse { nodes, signature })
 }
 
-pub(super) fn list_code_workspace_roots(root: &Path) -> Result<CodeWorkspaceRootsResponse, CommandError> {
+pub(super) fn list_code_workspace_roots(
+    root: &Path,
+) -> Result<CodeWorkspaceRootsResponse, CommandError> {
     let roots = list_code_workspaces(root).map_err(|error| {
         CommandError::new(
             CommandErrorCode::AgentSessionValidationFailed,
@@ -892,8 +890,7 @@ fn read_directory_nodes(
 
             let metadata = fs::metadata(&path).map_err(workspace_io_error)?;
             let children = if ancestors.insert(canonical_dir.clone()) {
-                let mut children =
-                    read_directory_nodes(root, canonical_root, &path, ancestors)?;
+                let mut children = read_directory_nodes(root, canonical_root, &path, ancestors)?;
                 children.sort_by(compare_tree_nodes);
                 ancestors.remove(&canonical_dir);
                 children
@@ -1533,14 +1530,26 @@ mod tests {
         assert_eq!(language_from_path("include/util.h"), Some("c".to_string()));
         assert_eq!(language_from_path("main.cpp"), Some("cpp".to_string()));
         assert_eq!(language_from_path("lib.cxx"), Some("cpp".to_string()));
-        assert_eq!(language_from_path("App.mm"), Some("objective-c".to_string()));
-        assert_eq!(language_from_path("ViewController.m"), Some("objective-c".to_string()));
+        assert_eq!(
+            language_from_path("App.mm"),
+            Some("objective-c".to_string())
+        );
+        assert_eq!(
+            language_from_path("ViewController.m"),
+            Some("objective-c".to_string())
+        );
         assert_eq!(language_from_path("schema.sql"), Some("sql".to_string()));
-        assert_eq!(language_from_path("schema.prisma"), Some("prisma".to_string()));
+        assert_eq!(
+            language_from_path("schema.prisma"),
+            Some("prisma".to_string())
+        );
         assert_eq!(language_from_path("Main.cs"), Some("csharp".to_string()));
         assert_eq!(language_from_path("script.sh"), Some("shell".to_string()));
         assert_eq!(language_from_path("deploy.bash"), Some("shell".to_string()));
-        assert_eq!(language_from_path("Dockerfile"), Some("dockerfile".to_string()));
+        assert_eq!(
+            language_from_path("Dockerfile"),
+            Some("dockerfile".to_string())
+        );
         assert_eq!(
             language_from_path("Dockerfile.prod"),
             Some("dockerfile".to_string()),
@@ -1560,28 +1569,28 @@ mod tests {
         assert_eq!(language_from_path("pom.xml"), Some("xml".to_string()));
         assert_eq!(language_from_path("index.php"), Some("php".to_string()));
         assert_eq!(language_from_path("app.rb"), Some("ruby".to_string()));
-        assert_eq!(language_from_path("query.graphql"), Some("graphql".to_string()));
+        assert_eq!(
+            language_from_path("query.graphql"),
+            Some("graphql".to_string())
+        );
         assert_eq!(language_from_path("main.proto"), Some("proto".to_string()));
         assert_eq!(language_from_path("main.tf"), Some("hcl".to_string()));
         assert_eq!(language_from_path("styles.scss"), Some("scss".to_string()));
-        assert_eq!(language_from_path("Component.jsx"), Some("javascript".to_string()));
-        assert_eq!(language_from_path("mod.mts"), Some("typescript".to_string()));
+        assert_eq!(
+            language_from_path("Component.jsx"),
+            Some("javascript".to_string())
+        );
+        assert_eq!(
+            language_from_path("mod.mts"),
+            Some("typescript".to_string())
+        );
         assert_eq!(language_from_path("Main.SQL"), Some("sql".to_string()));
 
         // 已有映射回归
         assert_eq!(language_from_path("main.rs"), Some("rust".to_string()));
-        assert_eq!(
-            language_from_path("a.ts"),
-            Some("typescript".to_string()),
-        );
-        assert_eq!(
-            language_from_path("a.tsx"),
-            Some("typescript".to_string()),
-        );
-        assert_eq!(
-            language_from_path("a.js"),
-            Some("javascript".to_string()),
-        );
+        assert_eq!(language_from_path("a.ts"), Some("typescript".to_string()),);
+        assert_eq!(language_from_path("a.tsx"), Some("typescript".to_string()),);
+        assert_eq!(language_from_path("a.js"), Some("javascript".to_string()),);
         assert_eq!(language_from_path("a.json"), Some("json".to_string()));
         assert_eq!(language_from_path("a.yaml"), Some("yaml".to_string()));
         assert_eq!(language_from_path("a.yml"), Some("yaml".to_string()));
@@ -1687,8 +1696,8 @@ mod tests {
         fs::write(root.join("AGENTS.md"), "# agents\n").expect("write agents");
         std::os::unix::fs::symlink("AGENTS.md", root.join("CLAUDE.md")).expect("symlink claude");
 
-        let content = read_workspace_file(root, "CLAUDE.md")
-            .expect("read through in-workspace file symlink");
+        let content =
+            read_workspace_file(root, "CLAUDE.md").expect("read through in-workspace file symlink");
         assert_eq!(content.content, "# agents\n");
         assert!(!content.is_binary);
     }
@@ -1803,8 +1812,7 @@ mod tests {
             write_workspace_file(root, "payload.bin", "text").expect_err("binary write");
         assert_eq!(binary_err.reason.as_deref(), Some("fileIsBinary"));
 
-        let nul_err =
-            write_workspace_file(root, "note.txt", "has\0nul").expect_err("nul content");
+        let nul_err = write_workspace_file(root, "note.txt", "has\0nul").expect_err("nul content");
         assert_eq!(nul_err.reason.as_deref(), Some("fileContentBinary"));
     }
 
@@ -1843,7 +1851,11 @@ mod tests {
 
         let content = read_workspace_file(root, ".claude/skills/eos-ontology/SKILL.md")
             .expect("read through directory symlink");
-        assert!(content.content.contains("skill body"), "got {:?}", content.content);
+        assert!(
+            content.content.contains("skill body"),
+            "got {:?}",
+            content.content
+        );
         assert!(!content.is_binary);
     }
 
@@ -2005,7 +2017,8 @@ mod tests {
         git(root, &["add", "feature.txt"]);
         git(root, &["commit", "-m", "feature two"]);
 
-        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
+        let history =
+            read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 不再用 base..HEAD 过滤：返回最近 50 条全历史（base + 2 条
         // feature，共 3 条），顺序为 date-order（新→旧）。
@@ -2041,7 +2054,8 @@ mod tests {
         git(root, &["add", "session.txt"]);
         git(root, &["commit", "-m", "session change"]);
 
-        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
+        let history =
+            read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 不再过滤 base，返回最近 50 条全历史（base + session change）。
         assert_eq!(history.commits.len(), 2);
@@ -2209,7 +2223,8 @@ mod tests {
         git(root, &["config", "branch.dev.remote", "origin"]);
         git(root, &["config", "branch.dev.merge", "refs/heads/dev"]);
 
-        let history = read_workspace_commit_history(root, None, None, None).expect("read commit history");
+        let history =
+            read_workspace_commit_history(root, None, None, None).expect("read commit history");
 
         // 非 work tree 的 dev 分支：返回最近 50 条全历史（base + pushed + local = 3）。
         assert_eq!(history.commits.len(), 3);
@@ -2382,7 +2397,6 @@ mod tests {
         assert_eq!(history.commits[2].message, "main one");
         assert!(!history.commits[2].is_created_in_worktree);
     }
-
 
     fn init_git_repo(root: &Path) {
         git(root, &["init"]);

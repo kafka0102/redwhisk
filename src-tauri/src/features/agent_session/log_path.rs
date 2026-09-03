@@ -3,9 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::agent::pty_session_manager::read_terminal_snapshot;
-use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope,
-};
+use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvelope};
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
@@ -29,7 +27,6 @@ pub(crate) struct IssueSessionArchive {
     pub latest_output: Option<String>,
 }
 
-
 pub(super) fn build_log_path(
     data_dir: &Path,
     project_id: i64,
@@ -45,11 +42,9 @@ pub(super) fn build_log_path(
     Ok(path.to_string_lossy().to_string())
 }
 
-
 fn session_log_root_dir(data_dir: &Path) -> PathBuf {
     data_dir.join(SESSION_LOG_DIR_NAME)
 }
-
 
 fn runtime_session_log_project_dir(
     data_dir: &Path,
@@ -62,7 +57,6 @@ fn runtime_session_log_project_dir(
     Ok(logs_dir)
 }
 
-
 fn archive_session_log_project_dir(
     data_dir: &Path,
     project_id: i64,
@@ -74,7 +68,6 @@ fn archive_session_log_project_dir(
     Ok(logs_dir)
 }
 
-
 pub(super) fn build_pending_structured_log_path(
     data_dir: &Path,
     project_id: i64,
@@ -84,7 +77,6 @@ pub(super) fn build_pending_structured_log_path(
     let path = logs_dir.join(format!("pending-session-{started_at}.jsonl"));
     Ok(path.to_string_lossy().to_string())
 }
-
 
 pub(super) fn build_issue_runtime_structured_log_path(
     data_dir: &Path,
@@ -99,9 +91,6 @@ pub(super) fn build_issue_runtime_structured_log_path(
     Ok(path.to_string_lossy().to_string())
 }
 
-
-
-
 pub(crate) fn build_issue_archive_log_path(
     data_dir: &Path,
     project_id: i64,
@@ -115,12 +104,10 @@ pub(crate) fn build_issue_archive_log_path(
     Ok(path.to_string_lossy().to_string())
 }
 
-
 pub(crate) fn is_archived_issue_log_path(data_dir: &Path, log_path: &str) -> bool {
     let archive_root = session_log_root_dir(data_dir).join(SESSION_ARCHIVE_LOG_DIR_NAME);
     Path::new(log_path).starts_with(&archive_root)
 }
-
 
 pub(crate) fn build_issue_session_archive(
     data_dir: &Path,
@@ -287,7 +274,6 @@ fn read_terminal_snapshot_for_archive(runtime_log_path: &str) -> Result<String, 
     }
 }
 
-
 /// 删除 session 日志文件（运行态结构化日志或 issue 归档日志）。
 /// 路径为空或文件不存在时静默跳过；删除失败不向上抛错，避免阻塞 session 软删流程。
 pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
@@ -300,7 +286,6 @@ pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
     }
     let _ = fs::remove_file(path);
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -334,7 +319,10 @@ mod tests {
             !content.trim_start().starts_with('{'),
             "tui archive must be plain text, got: {content:?}"
         );
-        assert!(!content.contains("projectId"), "must not wrap JSON envelope");
+        assert!(
+            !content.contains("projectId"),
+            "must not wrap JSON envelope"
+        );
         assert!(!content.contains("assistant_message"));
         assert!(!content.contains("Working("));
         assert!(content.contains("$ ls"));
@@ -468,7 +456,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let runtime = temp_dir.path().join("runtime.log");
         // 全屏 CUP 重绘：简单剥壳无换行；回放后应得到分行正文
-        let raw = "\u{1b}[1;1H\u{1b}[2J\u{1b}[1;1H❯ fix remote detect\u{1b}[2;1Hdone: added 60s fetch";
+        let raw =
+            "\u{1b}[1;1H\u{1b}[2J\u{1b}[1;1H❯ fix remote detect\u{1b}[2;1Hdone: added 60s fetch";
         std::fs::write(&runtime, raw).expect("write runtime");
         let archive = build_issue_session_archive(
             temp_dir.path(),

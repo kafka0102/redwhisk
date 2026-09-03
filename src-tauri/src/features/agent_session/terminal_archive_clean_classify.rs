@@ -48,8 +48,7 @@ pub(super) fn is_cjk_char(c: char) -> bool {
 
 pub(super) fn strip_user_prompt_prefix(line: &str) -> Option<&str> {
     // Codex TUI：›；Claude Code TUI：❯。不把 ASCII `>` 当作用户 turn。
-    line.strip_prefix('›')
-        .or_else(|| line.strip_prefix('❯'))
+    line.strip_prefix('›').or_else(|| line.strip_prefix('❯'))
 }
 
 pub(super) fn is_status_header_prompt(line: &str) -> bool {
@@ -117,8 +116,7 @@ pub(super) fn is_tool_start_line(line: &str) -> bool {
 }
 
 pub(super) fn strip_claude_bullet_prefix(line: &str) -> Option<&str> {
-    line.strip_prefix('⏺')
-        .or_else(|| line.strip_prefix('•'))
+    line.strip_prefix('⏺').or_else(|| line.strip_prefix('•'))
 }
 
 pub(super) fn is_assistant_speech_lead_line(line: &str) -> bool {
@@ -135,7 +133,6 @@ pub(super) fn is_assistant_speech_lead_line(line: &str) -> bool {
     }
     false
 }
-
 
 pub(super) fn is_process_or_chrome_line(line: &str) -> bool {
     let trimmed = line.trim();
@@ -194,7 +191,10 @@ pub(super) fn is_thinking_noise_line(line: &str) -> bool {
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
             .collect();
-        let compact = without_marks.split_whitespace().collect::<String>().to_ascii_lowercase();
+        let compact = without_marks
+            .split_whitespace()
+            .collect::<String>()
+            .to_ascii_lowercase();
         if compact.contains("thinking") && compact.len() <= 24 {
             return true;
         }
@@ -375,4 +375,3 @@ pub(super) fn is_spinner_only_line(line: &str) -> bool {
 pub(super) fn is_braille_spinner_char(c: char) -> bool {
     matches!(c, '\u{2800}'..='\u{28ff}')
 }
-

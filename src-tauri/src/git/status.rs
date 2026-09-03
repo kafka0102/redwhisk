@@ -48,7 +48,9 @@ pub enum GitStatusError {
 impl From<GitCommandError> for GitStatusError {
     fn from(error: GitCommandError) -> Self {
         match error {
-            GitCommandError::Failed { command, message } => Self::GitCommandFailed { command, message },
+            GitCommandError::Failed { command, message } => {
+                Self::GitCommandFailed { command, message }
+            }
             GitCommandError::OutputInvalid { command, message } => {
                 Self::GitOutputInvalid { command, message }
             }

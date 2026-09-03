@@ -26,10 +26,8 @@ fn codex_tui_resume_uses_resume_subcommand_and_keeps_snapshot_flags() {
 #[test]
 fn claude_tui_resume_injects_resume_flag_and_keeps_permission_mode() {
     assert_eq!(
-        ClaudeDescriptor.build_tui_resume_command(
-            "claude --permission-mode bypassPermissions",
-            "sess-1"
-        ),
+        ClaudeDescriptor
+            .build_tui_resume_command("claude --permission-mode bypassPermissions", "sess-1"),
         "claude --resume sess-1 --permission-mode bypassPermissions"
     );
     assert_eq!(
@@ -65,4 +63,3 @@ fn grok_tui_resume_injects_resume_flag_and_keeps_always_approve() {
         "grok --resume g-2"
     );
 }
-

@@ -2,14 +2,14 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::time::current_epoch_millis;
+use super::validation::issue_database_error;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentRecord,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
 };
-use super::time::current_epoch_millis;
-use super::validation::issue_database_error;
 
 pub(super) struct NewAttachmentPersistence {
     pub(super) temp_token: String,
@@ -57,7 +57,8 @@ pub(super) fn persist_new_attachments(
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "附件源文件不存在。",
-            ).with_reason("attachmentSourceNotFound"));
+            )
+            .with_reason("attachmentSourceNotFound"));
         }
 
         let display_name = attachment.display_name.trim();
@@ -102,7 +103,8 @@ pub(super) fn persist_new_attachments(
             attachment.mime_type.as_deref(),
             i64::try_from(metadata.len()).map_err(|_| {
                 cleanup_created_files(&created_files);
-                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+                CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+                    .with_reason("saveFailed")
             })?,
             analysis.kind,
             analysis.is_previewable,
@@ -132,7 +134,8 @@ pub(super) fn save_issue_attachment_draft_in_data_dir(
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "附件源文件不存在。",
-        ).with_reason("attachmentSourceNotFound"));
+        )
+        .with_reason("attachmentSourceNotFound"));
     }
 
     let display_name = input.display_name.trim();
@@ -172,7 +175,8 @@ pub(super) fn rewrite_attachment_tokens(
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "Issue description 缺少附件标记。",
-            ).with_reason("descriptionMissingAttachmentMarker"));
+            )
+            .with_reason("descriptionMissingAttachmentMarker"));
         }
         rewritten = rewritten.replace(&from, &to);
     }
@@ -301,7 +305,9 @@ pub(super) fn cleanup_created_files(paths: &[PathBuf]) {
     }
 }
 
-pub(super) fn delete_attachment_files(attachments: &[IssueAttachmentRecord]) -> Result<(), CommandError> {
+pub(super) fn delete_attachment_files(
+    attachments: &[IssueAttachmentRecord],
+) -> Result<(), CommandError> {
     for attachment in attachments {
         let path = Path::new(&attachment.absolute_path);
         if path.exists() {
@@ -318,14 +324,15 @@ pub(super) fn read_previewable_text_file(path: &str) -> Result<String, CommandEr
         return Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "附件过大，暂不支持预览。",
-        ).with_reason("attachmentTooLarge"));
+        )
+        .with_reason("attachmentTooLarge"));
     }
 
     fs::read_to_string(path).map_err(issue_io_error)
 }
 
-
 pub(super) fn issue_io_error(error: std::io::Error) -> CommandError {
-    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+    CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+        .with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

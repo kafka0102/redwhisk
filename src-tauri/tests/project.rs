@@ -635,7 +635,6 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
     assert_eq!(count, 1);
 }
 
-
 #[test]
 fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updated_settings() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -1458,7 +1457,6 @@ fn open_project_does_not_restore_terminals_on_hot_path() {
     assert!(manager.contains(listed_after_restore.terminals[0].session_id));
 }
 
-
 #[test]
 fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -1506,9 +1504,7 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
         )
         .expect("insert issue");
 
-    service
-        .delete_project(created.id)
-        .expect("delete project");
+    service.delete_project(created.id).expect("delete project");
 
     assert!(
         repo_dir.join(".git").exists(),
@@ -1529,7 +1525,10 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             |row| row.get(0),
         )
         .expect("project row count");
-    assert_eq!(project_row_count, 0, "projects row must be gone (not soft-removed)");
+    assert_eq!(
+        project_row_count, 0,
+        "projects row must be gone (not soft-removed)"
+    );
 
     let removed_at_count: i64 = database
         .connection
@@ -1539,7 +1538,10 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             |row| row.get(0),
         )
         .expect("removed_at count");
-    assert_eq!(removed_at_count, 0, "hard delete must not leave soft-removed rows");
+    assert_eq!(
+        removed_at_count, 0,
+        "hard delete must not leave soft-removed rows"
+    );
 
     let label_count: i64 = database
         .connection

@@ -43,7 +43,10 @@ pub fn append_attachment_paths(text: &str, attachments: &[AgentMessageAttachment
     }
     let mut lines = vec![text.to_string(), String::new(), "Attachments:".to_string()];
     for attachment in attachments {
-        lines.push(format!("- {}: {}", attachment.display_name, attachment.path));
+        lines.push(format!(
+            "- {}: {}",
+            attachment.display_name, attachment.path
+        ));
     }
     lines.push("请先读取这些附件文件。".to_string());
     lines.join("\n")
@@ -66,8 +69,7 @@ mod tests {
 
     #[test]
     fn build_args_with_resume_model_and_auto() {
-        let args =
-            build_opencode_run_args("continue", Some("ses_abc"), Some("openai/gpt-5"), true);
+        let args = build_opencode_run_args("continue", Some("ses_abc"), Some("openai/gpt-5"), true);
         assert!(args.contains(&"--auto".into()));
         assert!(args.contains(&"-s".into()));
         assert!(args.contains(&"ses_abc".into()));

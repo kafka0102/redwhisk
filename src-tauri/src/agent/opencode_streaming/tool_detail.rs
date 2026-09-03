@@ -114,11 +114,7 @@ mod tests {
 
     #[test]
     fn maps_bash_to_shell() {
-        let (detail, name) = map_tool_detail(
-            "bash",
-            &json!({"command": "ls"}),
-            Some("a.txt"),
-        );
+        let (detail, name) = map_tool_detail("bash", &json!({"command": "ls"}), Some("a.txt"));
         assert_eq!(name, "shell");
         assert!(matches!(
             detail,

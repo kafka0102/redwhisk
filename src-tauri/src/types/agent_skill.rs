@@ -76,4 +76,3 @@ pub struct ReconcileSavedAgentSkillsInput {
     pub scope: AgentSkillScope,
     pub project_id: Option<i64>,
 }
-

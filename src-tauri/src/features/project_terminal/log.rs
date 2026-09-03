@@ -15,7 +15,8 @@ pub(super) fn terminal_log_path(
         CommandError::new(
             CommandErrorCode::ProjectTerminalPersistenceFailed,
             "Project Terminal 保存失败。",
-        ).with_reason("saveFailed")
+        )
+        .with_reason("saveFailed")
         .with_detail(
             ErrorDetail::new("Path").with_value("path", log_dir.to_string_lossy().to_string()),
         )

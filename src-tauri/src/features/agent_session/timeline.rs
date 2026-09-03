@@ -1,18 +1,13 @@
-use std::fs::File;
-use std::io::{
-    BufRead, BufReader,
-};
-use std::path::Path;
 use serde_json::Value;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 use crate::agent::pty_session_manager::read_terminal_snapshot;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
 };
 use crate::types::errors::CommandError;
-
-
-
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
 
@@ -25,7 +20,6 @@ pub(crate) struct StructuredTimelineHistory {
     pub(crate) effort: Option<String>,
 }
 
-
 pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
     matches!(
         item,
@@ -34,9 +28,6 @@ pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
             | AgentTimelineItem::Error { .. }
     )
 }
-
-
-
 
 /// 按 `turn_id` 从 session log 读取该 turn 全部助手答复正文（按日志顺序）。
 /// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`。
@@ -85,7 +76,6 @@ pub(crate) fn read_timeline_from_log_path(
         effort: None,
     })
 }
-
 
 fn read_structured_timeline_log(
     path: &Path,
@@ -168,7 +158,6 @@ fn read_structured_timeline_log(
     }
 }
 
-
 fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
     let stream = serde_json::Deserializer::from_str(line).into_iter::<Value>();
     let mut saw_value = false;
@@ -182,7 +171,6 @@ fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> 
 
     saw_value.then_some(events)
 }
-
 
 fn finalize_pending_reasoning_duration(
     items: &mut [AgentTimelineItem],
@@ -202,7 +190,6 @@ fn finalize_pending_reasoning_duration(
         *duration_ms = Some((end_timestamp - started_at) as u64);
     }
 }
-
 
 fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentTimelineItem) {
     match &item {
@@ -278,7 +265,6 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
     items.push(item);
 }
 
-
 fn merge_reasoning_timeline_item(
     previous: AgentTimelineItem,
     incoming: AgentTimelineItem,
@@ -302,7 +288,6 @@ fn merge_reasoning_timeline_item(
         (_, incoming) => incoming,
     }
 }
-
 
 fn merge_tool_call_timeline_item(
     previous: AgentTimelineItem,
@@ -339,17 +324,14 @@ fn merge_tool_call_timeline_item(
     }
 }
 
-
 fn should_preserve_existing_tool_name(previous: &str, incoming: &str) -> bool {
     !is_generic_tool_name(previous)
         && (incoming.trim().is_empty() || is_generic_tool_name(incoming))
 }
 
-
 fn is_generic_tool_name(name: &str) -> bool {
     name.trim().eq_ignore_ascii_case("tool")
 }
-
 
 fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) -> ToolCallDetail {
     if std::mem::discriminant(&previous) != std::mem::discriminant(&incoming) {
@@ -464,7 +446,6 @@ fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) ->
     }
 }
 
-
 fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
     if let Ok(envelope) = serde_json::from_value::<AgentStreamEventEnvelope>(value.clone()) {
         return Some(envelope.event);
@@ -499,7 +480,6 @@ fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
     }
 }
 
-
 pub(crate) fn latest_effort_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
 ) -> Option<String> {
@@ -510,12 +490,10 @@ pub(crate) fn latest_effort_from_session_log(
         .and_then(|history| history.effort)
 }
 
-
 pub(crate) fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
     message.contains("includeTurns is unavailable before first user message")
         || message.contains("is not materialized yet")
 }
-
 
 fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, CommandError> {
     let snapshot = match read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES) {
@@ -544,7 +522,6 @@ fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, Com
     }])
 }
 
-
 pub(super) fn latest_output_from_session_log(log_path: &str) -> Option<String> {
     if log_path.trim().is_empty() {
         return None;
@@ -563,7 +540,6 @@ pub(super) fn latest_output_from_session_log(log_path: &str) -> Option<String> {
     let snapshot = read_terminal_snapshot(path, TIMELINE_LOG_SNAPSHOT_MAX_BYTES).ok()?;
     latest_output_from_text(&strip_terminal_control_sequences(&snapshot).replace('\r', "\n"))
 }
-
 
 pub(super) fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Option<String> {
     use crate::types::agent_session_stream::ToolCallDetail;
@@ -588,7 +564,6 @@ pub(super) fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Opti
 
     latest_output_from_text(text)
 }
-
 
 fn latest_output_from_text(text: &str) -> Option<String> {
     let latest_line = text

@@ -159,7 +159,7 @@ fn try_consume_osc_color_query(bytes: &[u8]) -> OscQueryParse {
         return OscQueryParse::Incomplete;
     }
     if after_q[0] == 0x07 {
-        // ESC ] 1X ; ? BEL  => 2 + 2 + 1 + 1 + 1 = 7? 
+        // ESC ] 1X ; ? BEL  => 2 + 2 + 1 + 1 + 1 = 7?
         // ESC ] + "10;?" + BEL = 2 + 4 + 1 = 7
         return OscQueryParse::Complete { code, len: 7 };
     }
@@ -216,10 +216,7 @@ pub fn best_effort_write_all(writer: &mut dyn std::io::Write, payload: &[u8]) {
 }
 
 /// 对多个 writer 依次 best-effort 写入同一 payload；单路失败不影响后续。
-pub fn best_effort_write_all_to_each(
-    writers: &mut [&mut dyn std::io::Write],
-    payload: &[u8],
-) {
+pub fn best_effort_write_all_to_each(writers: &mut [&mut dyn std::io::Write], payload: &[u8]) {
     for writer in writers {
         best_effort_write_all(*writer, payload);
     }

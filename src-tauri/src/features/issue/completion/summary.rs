@@ -2,9 +2,7 @@ use rusqlite::Connection;
 
 use crate::db::event_repository::EventRepository;
 use crate::features::issue::validation::issue_database_error;
-use crate::types::completion_attempt::{
-    CompletionAttemptRecord, CompletionAttemptResult,
-};
+use crate::types::completion_attempt::{CompletionAttemptRecord, CompletionAttemptResult};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueSummaryCompletionInfo;
 use crate::types::issue_action::IssueActionType;
@@ -42,7 +40,8 @@ fn latest_completion_from_issue_action(
             CommandError::new(
                 CommandErrorCode::IssuePersistenceFailed,
                 "Issue Summary 解析失败。",
-            ).with_reason("summaryParseFailed")
+            )
+            .with_reason("summaryParseFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             .with_detail(ErrorDetail::new("IssueAction").with_value("issueId", issue_id))
         })?;

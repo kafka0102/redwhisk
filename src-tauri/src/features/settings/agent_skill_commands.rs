@@ -63,7 +63,9 @@ pub async fn refresh_agent_skills(
         refresh_and_reconcile_blocking(
             &index_for_worker,
             &data_dir_for_worker,
-            project_for_worker.as_ref().map(|(id, path)| (*id, path.as_path())),
+            project_for_worker
+                .as_ref()
+                .map(|(id, path)| (*id, path.as_path())),
         )
     })
     .await
@@ -155,11 +157,7 @@ pub async fn reconcile_saved_agent_skills(
                     index_for_worker.project_status(project_id),
                     crate::types::agent_skill::AgentSkillRefreshStatus::Idle
                 ) {
-                    AgentSkillService::refresh_project(
-                        &index_for_worker,
-                        project_id,
-                        &repo_path,
-                    );
+                    AgentSkillService::refresh_project(&index_for_worker, project_id, &repo_path);
                 }
                 if matches!(
                     index_for_worker.global_status(),

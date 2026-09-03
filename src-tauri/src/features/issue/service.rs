@@ -6,10 +6,6 @@ use serde_json::json;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
-use crate::features::agent_session::{
-    build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
-    IssueSessionArchive,
-};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::event_repository::EventRepository;
@@ -18,26 +14,33 @@ use crate::db::issue_comment_repository::IssueCommentRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
-use crate::git::operation_state::{format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext, GitOperationState};
+use crate::features::agent_session::{
+    build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
+    IssueSessionArchive,
+};
+use crate::git::operation_state::{
+    format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext,
+    GitOperationState,
+};
 use crate::git::status::{read_git_snapshot, GitSnapshot};
 use crate::logging::{info_kv, CommandResultExt};
 use crate::types::agent_session::{
-    AgentSessionRecord, AgentSessionStatus, WorktreeOwner,
-    format_agent_session_status_for_summary, workspace_mode_to_str,
+    format_agent_session_status_for_summary, workspace_mode_to_str, AgentSessionRecord,
+    AgentSessionStatus, WorktreeOwner,
 };
 use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
-    AdvanceIssueStatusInput, AgentCommitChangedFileSummary, AgentCommitCompletionPreview,
-    CompleteIssueCleanInput, CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput,
-    DeleteIssueResult, DeleteIssueWorktreeCleanup, DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
-    ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput,
-    IssueAttachmentKind, IssueAttachmentPreview, IssueLabelRecord,
-    IssueListResponse, IssueRecord, IssueStatus, IssueSummaryRecord,
-    IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry, IssueTimelineResponse,
-    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
-    SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
-    SendAgentCommitPromptResult, UpdateIssueInput, issue_status_to_str,
+    issue_status_to_str, AdvanceIssueStatusInput, AgentCommitChangedFileSummary,
+    AgentCommitCompletionPreview, CompleteIssueCleanInput, CompleteIssueManualInput,
+    CreateIssueInput, DeleteIssueInput, DeleteIssueResult, DeleteIssueWorktreeCleanup,
+    DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
+    ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput, IssueAttachmentKind,
+    IssueAttachmentPreview, IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus,
+    IssueSummaryRecord, IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry,
+    IssueTimelineResponse, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
+    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
+    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::issue_completion::{
@@ -50,9 +53,8 @@ use super::archive::{
     rollback_issue_archive,
 };
 use super::attachment::{
-    analyze_attachment, cleanup_created_files, delete_attachment_files,
-    infer_display_name, issue_io_error,
-    parse_attachment_ids, persist_new_attachments, read_previewable_text_file,
+    analyze_attachment, cleanup_created_files, delete_attachment_files, infer_display_name,
+    issue_io_error, parse_attachment_ids, persist_new_attachments, read_previewable_text_file,
     rewrite_attachment_tokens, save_issue_attachment_draft_in_data_dir, ResolvedAttachmentSource,
 };
 use super::completion::flow::legacy_completion_flow_action_error;
@@ -174,7 +176,8 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有已完成 Issue 可以查看 Summary。",
-            ).with_reason("mustBeCompletedToViewSummary")
+            )
+            .with_reason("mustBeCompletedToViewSummary")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -265,11 +268,7 @@ impl<'connection> IssueService<'connection> {
                 continue;
             };
             let (name, avatar_path, resolved_agent_type) = if actor_kind == "agent" {
-                (
-                    agent_name_snapshot.unwrap_or_default(),
-                    None,
-                    agent_type,
-                )
+                (agent_name_snapshot.unwrap_or_default(), None, agent_type)
             } else {
                 (user_name.unwrap_or_default(), user_avatar_path, None)
             };
@@ -351,7 +350,6 @@ impl<'connection> IssueService<'connection> {
         transaction.commit().map_err(issue_database_error)?;
         Ok(())
     }
-
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
         self.require_project(input.project_id)?;
@@ -511,7 +509,8 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前附件不支持预览。",
-            ).with_reason("attachmentPreviewUnsupported"));
+            )
+            .with_reason("attachmentPreviewUnsupported"));
         }
 
         let text_content = if source.kind == IssueAttachmentKind::Text {
@@ -580,7 +579,8 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有运行中的 Issue 可以标记待验收。",
-            ).with_reason("mustBeRunningToAccept")
+            )
+            .with_reason("mustBeRunningToAccept")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -598,7 +598,8 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有存在关联 Agent Session 的 Issue 可以标记待验收。",
-            ).with_reason("mustHaveSessionToAccept")
+            )
+            .with_reason("mustHaveSessionToAccept")
             .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", input.issue_id))
         })?;
 
@@ -613,7 +614,8 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有运行中的 Issue 可以标记待验收。",
-            ).with_reason("mustBeRunningToAccept")
+            )
+            .with_reason("mustBeRunningToAccept")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
@@ -683,10 +685,7 @@ impl<'connection> IssueService<'connection> {
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", input.issue_id)
                     .with_value("status", issue_status_to_str(&issue.status))
-                    .with_value(
-                        "targetStatus",
-                        issue_status_to_str(&input.target_status),
-                    ),
+                    .with_value("targetStatus", issue_status_to_str(&input.target_status)),
             ));
         }
 
@@ -733,9 +732,10 @@ impl<'connection> IssueService<'connection> {
     pub fn delete_issue(&self, input: DeleteIssueInput) -> Result<DeleteIssueResult, CommandError> {
         let project = self.require_project(input.project_id)?;
         // 事务前读取 latest worktree session，避免在未提交事务上复用 connection。
-        let latest_worktree_session = AgentSessionRepository::new(self.issue_repository.connection())
-            .find_latest_worktree_session_by_issue_id(input.issue_id)
-            .map_err(issue_database_error)?;
+        let latest_worktree_session =
+            AgentSessionRepository::new(self.issue_repository.connection())
+                .find_latest_worktree_session_by_issue_id(input.issue_id)
+                .map_err(issue_database_error)?;
 
         let transaction = self
             .issue_repository
@@ -775,7 +775,8 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "删除 Issue 时关闭关联 Session 失败。",
-                    ).with_reason("deleteCloseSessionFailed")
+                    )
+                    .with_reason("deleteCloseSessionFailed")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", session_id),
                     ));
@@ -936,7 +937,8 @@ impl<'connection> IssueService<'connection> {
         Err(CommandError::new(
             CommandErrorCode::IssueValidationFailed,
             "Agent 自动提交路径已停用，等待新流程重写。",
-        ).with_reason("autoCommitDisabled")
+        )
+        .with_reason("autoCommitDisabled")
         .with_detail(ErrorDetail::new("CompletionPolicy").with_value("reason", "deprecated")))
     }
 
@@ -949,8 +951,6 @@ impl<'connection> IssueService<'connection> {
     ) -> Result<CompleteIssueFlowResult, CommandError> {
         self.complete_issue_flow_with_option(input, data_dir, pty_sessions, agent_registry, None)
     }
-
-
 
     fn complete_issue_flow_with_option(
         &self,
@@ -1026,8 +1026,7 @@ impl<'connection> IssueService<'connection> {
         &self,
         input: DetectAgentCommitCompletionInput,
     ) -> Result<DetectAgentCommitCompletionResult, CommandError> {
-        crate::features::issue::completion::use_case::CompletionFlow::new(self)
-            .detect_commit(input)
+        crate::features::issue::completion::use_case::CompletionFlow::new(self).detect_commit(input)
     }
 
     pub fn list_issues_in_data_dir(
@@ -1269,7 +1268,10 @@ impl<'connection> IssueService<'connection> {
             })
     }
 
-    pub(crate) fn hydrate_issue(&self, mut issue: IssueRecord) -> Result<IssueRecord, CommandError> {
+    pub(crate) fn hydrate_issue(
+        &self,
+        mut issue: IssueRecord,
+    ) -> Result<IssueRecord, CommandError> {
         issue.attachments = self
             .issue_attachment_repository
             .list_by_issue_id(issue.id)
@@ -1347,7 +1349,8 @@ impl<'connection> IssueService<'connection> {
                     .find_by_id(attachment_id)
                     .map_err(issue_database_error)?
                     .ok_or_else(|| {
-                        CommandError::new(CommandErrorCode::IssueNotFound, "附件不存在。").with_reason("attachmentNotFound")
+                        CommandError::new(CommandErrorCode::IssueNotFound, "附件不存在。")
+                            .with_reason("attachmentNotFound")
                             .with_detail(
                                 ErrorDetail::new("IssueAttachment")
                                     .with_value("attachmentId", attachment_id),
@@ -1380,7 +1383,8 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "Draft 附件路径不可读取。",
-                    ).with_reason("draftAttachmentUnreadable"));
+                    )
+                    .with_reason("draftAttachmentUnreadable"));
                 }
                 let analysis = analyze_attachment(&file_name, None);
                 Ok(ResolvedAttachmentSource {
@@ -1394,7 +1398,8 @@ impl<'connection> IssueService<'connection> {
             _ => Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "附件预览或导出参数无效。",
-            ).with_reason("attachmentParamsInvalid")),
+            )
+            .with_reason("attachmentParamsInvalid")),
         }
     }
 
@@ -1426,7 +1431,8 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
-                ).with_reason("mustBeAcceptableWithSessionToCommit")
+                )
+                .with_reason("mustBeAcceptableWithSessionToCommit")
                 .with_detail(ErrorDetail::new("AgentSession").with_value("issueId", issue_id))
             })?;
         let session = AgentSessionRepository::new(self.issue_repository.connection())
@@ -1436,7 +1442,8 @@ impl<'connection> IssueService<'connection> {
                 CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "只有存在关联 Agent Session 的待验收 Issue 可以使用 Agent Commit。",
-                ).with_reason("mustBeAcceptableWithSessionToCommit")
+                )
+                .with_reason("mustBeAcceptableWithSessionToCommit")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                 )
@@ -1451,7 +1458,8 @@ impl<'connection> IssueService<'connection> {
                     GitOperationBlockContext::AgentCommit,
                     Some(session.working_dir.as_str()),
                 ),
-            ).with_reason("gitOperationBlockingCommit")
+            )
+            .with_reason("gitOperationBlockingCommit")
             .with_detail(ErrorDetail::new("GitOperation").with_value(
                 "state",
                 format_git_operation_state(snapshot.operation_state),
@@ -1461,7 +1469,8 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "当前仓库无未提交改动，请直接使用 Complete。",
-            ).with_reason("noChangesUseComplete")
+            )
+            .with_reason("noChangesUseComplete")
             .with_detail(
                 ErrorDetail::new("GitStatus")
                     .with_value("head", snapshot.head.clone())
@@ -1481,7 +1490,8 @@ impl<'connection> IssueService<'connection> {
             return Err(CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有待验收 Issue 可以准备 Agent Commit。",
-            ).with_reason("mustBeAcceptableToPrepareCommit")
+            )
+            .with_reason("mustBeAcceptableToPrepareCommit")
             .with_detail(
                 ErrorDetail::new("IssueStatus")
                     .with_value("issueId", issue_id)
@@ -1542,7 +1552,8 @@ impl<'connection> IssueService<'connection> {
                                 CommandError::new(
                                     CommandErrorCode::IssueValidationFailed,
                                     "只有运行中的 Issue 可以标记待验收。",
-                                ).with_reason("mustBeRunningToAccept")
+                                )
+                                .with_reason("mustBeRunningToAccept")
                                 .with_detail(
                                     ErrorDetail::new("IssueStatus")
                                         .with_value("issueId", input.issue_id)
@@ -1595,7 +1606,8 @@ impl<'connection> IssueService<'connection> {
                     return Err(CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "Issue 完成必须通过 complete_issue_flow 执行。",
-                    ).with_reason("mustUseCompletionFlow")
+                    )
+                    .with_reason("mustUseCompletionFlow")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id)));
                 }
                 let linked_session_id = IssueRepository::find_linked_session_id_in_transaction(
@@ -1619,7 +1631,8 @@ impl<'connection> IssueService<'connection> {
                                 CommandError::new(
                                     CommandErrorCode::IssueValidationFailed,
                                     "只有运行中的 Issue 可以标记待验收。",
-                                ).with_reason("mustBeRunningToAccept")
+                                )
+                                .with_reason("mustBeRunningToAccept")
                                 .with_detail(
                                     ErrorDetail::new("IssueStatus")
                                         .with_value("issueId", input.issue_id)
@@ -1776,7 +1789,8 @@ impl<'connection> IssueService<'connection> {
                     CommandError::new(
                         CommandErrorCode::IssueValidationFailed,
                         "退回 Backlog 时关闭关联 Agent Session 失败。",
-                    ).with_reason("backlogCloseSessionFailed")
+                    )
+                    .with_reason("backlogCloseSessionFailed")
                     .with_detail(
                         ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                     )
@@ -1810,7 +1824,8 @@ impl<'connection> IssueService<'connection> {
                 return Err(CommandError::new(
                     CommandErrorCode::IssueValidationFailed,
                     "退回 Backlog 时移除关联 Agent Session 失败。",
-                ).with_reason("backlogRemoveSessionFailed")
+                )
+                .with_reason("backlogRemoveSessionFailed")
                 .with_detail(
                     ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
                 ));
@@ -1875,7 +1890,8 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssueValidationFailed,
                 "只有存在关联 Agent Session 的待验收 Issue 可以手动完成。",
-            ).with_reason("mustBeAcceptableWithSessionToComplete")
+            )
+            .with_reason("mustBeAcceptableWithSessionToComplete")
             .with_detail(
                 ErrorDetail::new("AgentSession").with_value("sessionId", linked_session_id),
             )
@@ -2043,7 +2059,8 @@ impl<'connection> IssueService<'connection> {
             CommandError::new(
                 CommandErrorCode::IssuePersistenceFailed,
                 "Issue 归档失败，关联会话不存在。",
-            ).with_reason("archiveSessionNotFound")
+            )
+            .with_reason("archiveSessionNotFound")
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
         })?;
@@ -2086,18 +2103,18 @@ mod tests {
     use super::IssueService;
     use crate::agent::pty_session_manager::PtySessionManager;
     use crate::agent::session_registry::AgentSessionRegistry;
-    use crate::features::agent_session::build_issue_archive_log_path;
     use crate::db::issue_repository::IssueRepository;
     use crate::db::migrations::MigrationRunner;
     use crate::db::project_repository::ProjectRepository;
+    use crate::features::agent_session::build_issue_archive_log_path;
     use crate::types::agent_session_stream::{
         AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
         ToolCallStatus,
     };
     use crate::types::issue::{
         AdvanceIssueStatusInput, DetectAgentCommitCompletionInput,
-        DetectAgentCommitCompletionOutcome, GetIssueTimelineInput, IssueTimelineActionType,
-        IssueStatus,
+        DetectAgentCommitCompletionOutcome, GetIssueTimelineInput, IssueStatus,
+        IssueTimelineActionType,
     };
     use crate::types::issue_action::IssueActionActor;
     use crate::types::issue_completion::{
@@ -3063,7 +3080,10 @@ mod tests {
             )
             .expect("complete issue");
 
-        assert_eq!(result.action, CompleteIssueFlowAction::ConfirmWorktreeCleanup);
+        assert_eq!(
+            result.action,
+            CompleteIssueFlowAction::ConfirmWorktreeCleanup
+        );
         let phase: String = connection
             .query_row(
                 "SELECT phase FROM issue_completion_flows WHERE issue_id = 16",
@@ -3252,8 +3272,7 @@ mod tests {
         let repo_dir = temp_dir.path().join("repo");
         create_git_repo(&repo_dir);
         // 制造 merge 进行中状态。
-        fs::write(repo_dir.join(".git").join("MERGE_HEAD"), "dummy\n")
-            .expect("write MERGE_HEAD");
+        fs::write(repo_dir.join(".git").join("MERGE_HEAD"), "dummy\n").expect("write MERGE_HEAD");
 
         let connection = setup_issue_completion_database(&repo_dir);
         connection
@@ -3303,7 +3322,9 @@ mod tests {
             result.message
         );
         assert!(
-            result.message.contains(&repo_dir.to_string_lossy().to_string()),
+            result
+                .message
+                .contains(&repo_dir.to_string_lossy().to_string()),
             "message should include working dir: {}",
             result.message
         );
@@ -3501,7 +3522,10 @@ mod tests {
             })
             .expect("detect");
 
-        assert_eq!(result.outcome, DetectAgentCommitCompletionOutcome::CommitDetected);
+        assert_eq!(
+            result.outcome,
+            DetectAgentCommitCompletionOutcome::CommitDetected
+        );
         let (phase, attempt_result, head_after_stored): (String, String, String) = connection
             .query_row(
                 "SELECT f.phase, a.result, a.head_after
@@ -3730,7 +3754,9 @@ mod tests {
 
     #[test]
     fn rewrite_attachment_tokens_handles_bare_and_image_placeholder_tokens() {
-        use crate::features::issue::attachment::{rewrite_attachment_tokens, NewAttachmentPersistence};
+        use crate::features::issue::attachment::{
+            rewrite_attachment_tokens, NewAttachmentPersistence,
+        };
 
         let attachments = vec![
             NewAttachmentPersistence {
@@ -3759,7 +3785,9 @@ mod tests {
 
     #[test]
     fn rewrite_attachment_tokens_errors_when_image_token_missing() {
-        use crate::features::issue::attachment::{rewrite_attachment_tokens, NewAttachmentPersistence};
+        use crate::features::issue::attachment::{
+            rewrite_attachment_tokens, NewAttachmentPersistence,
+        };
 
         let attachments = vec![NewAttachmentPersistence {
             temp_token: "draft-img-1".to_string(),
@@ -3773,8 +3801,10 @@ mod tests {
 
     // ---- resolve_actual_execution_path 单测（Impl-C：路径解析与漂移捕获）----
 
-    use crate::features::issue::completion::flow::{resolve_actual_execution_path, ActualPathSource};
     use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+    use crate::features::issue::completion::flow::{
+        resolve_actual_execution_path, ActualPathSource,
+    };
     use crate::types::agent_session::{
         AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionRecord,
         AgentSessionStatus, WorkspaceMode, WorktreeOwner,

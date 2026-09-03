@@ -4,9 +4,9 @@ use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::State;
 
+use super::service::IssueService;
 use crate::app_state::AppState;
 use crate::features::agent_session::AgentSessionService;
-use super::service::IssueService;
 use crate::types::agent_session::AgentSessionStatus;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -15,10 +15,10 @@ use crate::types::issue::{
     DeleteIssueWorktreeInput, DeleteIssueWorktreeResult, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
     GetIssueTimelineInput, GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse,
-    IssueRecord, IssueStatus, IssueSummaryRecord, IssueTimelineResponse, IssueWorktreeStatusResult, MarkIssueReviewInput,
-    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput,
-    SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
-    UpdateIssueInput,
+    IssueRecord, IssueStatus, IssueSummaryRecord, IssueTimelineResponse, IssueWorktreeStatusResult,
+    MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
+    SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
+    SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 
@@ -60,7 +60,8 @@ pub async fn list_issues(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 查询失败。").with_reason("queryFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 查询失败。")
+            .with_reason("queryFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -77,7 +78,8 @@ pub async fn create_issue(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -94,7 +96,8 @@ pub async fn update_issue(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -114,7 +117,8 @@ pub async fn preview_issue_attachment(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 附件预览失败。",
-        ).with_reason("attachmentPreviewFailed")
+        )
+        .with_reason("attachmentPreviewFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -134,7 +138,8 @@ pub async fn export_issue_attachment(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 附件导出失败。",
-        ).with_reason("attachmentExportFailed")
+        )
+        .with_reason("attachmentExportFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -154,7 +159,8 @@ pub async fn save_issue_attachment_draft(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 附件草稿保存失败。",
-        ).with_reason("attachmentDraftSaveFailed")
+        )
+        .with_reason("attachmentDraftSaveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -174,7 +180,8 @@ pub async fn mark_issue_review(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 状态更新失败。",
-        ).with_reason("statusUpdateFailed")
+        )
+        .with_reason("statusUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -209,7 +216,8 @@ pub async fn advance_issue_status(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 状态更新失败。",
-        ).with_reason("statusUpdateFailed")
+        )
+        .with_reason("statusUpdateFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -235,7 +243,8 @@ pub async fn complete_issue_manual(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。").with_reason("completeFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_reason("completeFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -261,7 +270,8 @@ pub async fn complete_issue_clean(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。").with_reason("completeFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_reason("completeFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -289,7 +299,8 @@ pub async fn complete_issue_flow(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。").with_reason("completeFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 完成失败。")
+            .with_reason("completeFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -309,7 +320,8 @@ pub async fn prepare_agent_commit_completion(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 完成预检失败。",
-        ).with_reason("completePrecheckFailed")
+        )
+        .with_reason("completePrecheckFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -336,7 +348,8 @@ pub async fn send_agent_commit_prompt(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 自动提交失败。",
-        ).with_reason("autoCommitFailed")
+        )
+        .with_reason("autoCommitFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -364,7 +377,8 @@ pub async fn detect_agent_commit_completion(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 完成检测失败。",
-        ).with_reason("completeDetectionFailed")
+        )
+        .with_reason("completeDetectionFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -392,7 +406,8 @@ pub async fn get_issue_summary(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Issue 摘要读取失败。",
-        ).with_reason("summaryReadFailed")
+        )
+        .with_reason("summaryReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -452,7 +467,8 @@ pub async fn delete_issue(
     })
     .await
     .map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 删除失败。").with_reason("deleteFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 删除失败。")
+            .with_reason("deleteFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -472,7 +488,8 @@ pub async fn get_issue_worktree_status(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Worktree 状态查询失败。",
-        ).with_reason("worktreeStatusQueryFailed")
+        )
+        .with_reason("worktreeStatusQueryFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -488,7 +505,11 @@ pub async fn delete_issue_worktree(
     let event_data_dir = data_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = AgentSessionService::delete_issue_worktree_in_data_dir(data_dir, input)?;
-        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(&app, &event_data_dir, project_id);
+        crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
+            &app,
+            &event_data_dir,
+            project_id,
+        );
         Ok(result)
     })
     .await
@@ -496,7 +517,8 @@ pub async fn delete_issue_worktree(
         CommandError::new(
             CommandErrorCode::IssuePersistenceFailed,
             "Worktree 删除失败。",
-        ).with_reason("worktreeDeleteFailed")
+        )
+        .with_reason("worktreeDeleteFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
 }
@@ -506,13 +528,15 @@ fn prepare_issue_data_dir(
     state: &State<'_, AppState>,
 ) -> Result<std::path::PathBuf, CommandError> {
     let data_dir = crate::local_data_path::redwhisk_data_dir(app).map_err(|error| {
-        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+        CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
     {
         let mut local_data = state.local_data.lock().map_err(|_| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+                .with_reason("saveFailed")
         })?;
         local_data
             .initialize(&data_dir)

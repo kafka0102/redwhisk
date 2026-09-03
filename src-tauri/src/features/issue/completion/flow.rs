@@ -16,8 +16,8 @@ use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueRecord;
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption, IssueCompletionFlowRecord,
-    IssueCompletionPhase,
+    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
+    IssueCompletionFlowRecord, IssueCompletionPhase,
 };
 
 pub(crate) fn legacy_completion_flow_action_error(
@@ -152,7 +152,9 @@ pub(crate) fn phase_to_completion_action(phase: IssueCompletionPhase) -> Complet
         IssueCompletionPhase::Completed => CompleteIssueFlowAction::Completed,
         IssueCompletionPhase::Cancelled => CompleteIssueFlowAction::Cancelled,
         IssueCompletionPhase::Blocked => CompleteIssueFlowAction::Blocked,
-        IssueCompletionPhase::PromptingDirtyDecision => CompleteIssueFlowAction::PromptDirtyDecision,
+        IssueCompletionPhase::PromptingDirtyDecision => {
+            CompleteIssueFlowAction::PromptDirtyDecision
+        }
         IssueCompletionPhase::AutoCommitting => CompleteIssueFlowAction::WaitingAutoCommit,
         IssueCompletionPhase::ConfirmingWorktreeCleanup => {
             CompleteIssueFlowAction::ConfirmWorktreeCleanup
@@ -167,7 +169,10 @@ pub(crate) fn phase_to_completion_action(phase: IssueCompletionPhase) -> Complet
     }
 }
 
-pub(crate) fn completion_detection_repo_path(project_repo_path: &str, session: &AgentSessionRecord) -> String {
+pub(crate) fn completion_detection_repo_path(
+    project_repo_path: &str,
+    session: &AgentSessionRecord,
+) -> String {
     if session.workspace_mode == WorkspaceMode::Worktree
         && session
             .workspace_path

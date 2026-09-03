@@ -15,7 +15,9 @@ pub struct IssueActionRecord {
 /// （配置改名或删除后历史仍可读）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IssueActionActor {
-    User { profile_id: i64 },
+    User {
+        profile_id: i64,
+    },
     Agent {
         profile_id: i64,
         name_snapshot: String,

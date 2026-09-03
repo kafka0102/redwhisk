@@ -154,8 +154,11 @@ fn map_tool_use(value: &Value, ctx: &MapContext, session_id: Option<String>) -> 
         None
     };
     let input = state.get("input").cloned().unwrap_or(Value::Null);
-    let output = value_as_string(state.get("output"))
-        .or_else(|| part.get("output").and_then(Value::as_str).map(str::to_string));
+    let output = value_as_string(state.get("output")).or_else(|| {
+        part.get("output")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
 
     let (detail, display_name) = map_tool_detail(tool_name, &input, output.as_deref());
 
@@ -261,7 +264,12 @@ fn tool_error_message(state: &Value) -> Option<String> {
                 .map(str::to_string)
                 .or_else(|| e.get("message").and_then(Value::as_str).map(str::to_string))
         })
-        .or_else(|| state.get("output").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            state
+                .get("output")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 fn value_as_string(value: Option<&Value>) -> Option<String> {
     value.and_then(|v| {
@@ -319,11 +327,7 @@ mod tests {
         let out = map_ndjson_value(&value, &ctx());
         assert!(out.turn_finalized);
         match &out.events[0] {
-            AgentStreamEvent::TurnCompleted {
-                turn_id,
-                usage,
-                ..
-            } => {
+            AgentStreamEvent::TurnCompleted { turn_id, usage, .. } => {
                 assert_eq!(turn_id.as_deref(), Some("part-2"));
                 let usage = usage.as_ref().expect("usage");
                 assert_eq!(usage.input_tokens, Some(10));
@@ -346,7 +350,9 @@ mod tests {
                 ..
             } => {
                 assert_eq!(text, "hello world");
-                assert!(message_id.as_ref().is_some_and(|id| id.contains("opencode-text")));
+                assert!(message_id
+                    .as_ref()
+                    .is_some_and(|id| id.contains("opencode-text")));
             }
             other => panic!("unexpected {other:?}"),
         }
@@ -385,13 +391,14 @@ mod tests {
         let out = map_ndjson_value(&value, &ctx());
         match &out.events[0] {
             AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::ToolCall {
-                    call_id,
-                    name,
-                    detail,
-                    status,
-                    error,
-                },
+                item:
+                    AgentTimelineItem::ToolCall {
+                        call_id,
+                        name,
+                        detail,
+                        status,
+                        error,
+                    },
                 ..
             } => {
                 assert_eq!(call_id, "call-1");
@@ -426,13 +433,14 @@ mod tests {
         let out = map_ndjson_value(&value, &ctx());
         match &out.events[0] {
             AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::ToolCall {
-                    name,
-                    status,
-                    error,
-                    detail,
-                    ..
-                },
+                item:
+                    AgentTimelineItem::ToolCall {
+                        name,
+                        status,
+                        error,
+                        detail,
+                        ..
+                    },
                 ..
             } => {
                 assert_eq!(name, "read");
@@ -457,7 +465,10 @@ mod tests {
         });
         let out = map_ndjson_value(&value, &ctx());
         assert!(out.turn_finalized);
-        assert_eq!(out.session_id.as_deref(), Some("ses_0718724eaffe3Oo6svlXn9Yl8g"));
+        assert_eq!(
+            out.session_id.as_deref(),
+            Some("ses_0718724eaffe3Oo6svlXn9Yl8g")
+        );
         assert_eq!(out.events.len(), 2);
         assert!(matches!(
             &out.events[0],
@@ -486,5 +497,4 @@ mod tests {
         assert_eq!(out.session_id.as_deref(), Some("ses_x"));
         assert!(!out.turn_finalized);
     }
-
 }

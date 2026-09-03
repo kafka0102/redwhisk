@@ -29,7 +29,6 @@ pub const TURN_GRACE_MS: i64 = 3000;
 /// grace 收尾延迟任务的额外缓冲，确保越过 grace 边界后再执行 CAS。
 const TURN_GRACE_FINALIZE_BUFFER_MS: u64 = 1000;
 
-
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentSessionListChangedPayload {
@@ -37,7 +36,6 @@ struct AgentSessionListChangedPayload {
     session_id: Option<i64>,
     reason: &'static str,
 }
-
 
 /// 单个 session 的游标状态。
 #[derive(Debug, Clone)]
@@ -51,7 +49,6 @@ struct SessionPersistenceState {
     log_path: Option<String>,
     last_latest_output_write_at: Option<SystemTime>,
 }
-
 
 /// TurnCompleted 信号订阅方（Issue 交付摘要等）。
 /// 参数：session_id + 快照 turn_source + turn_id；领域反应由 feature 自行完成。
@@ -91,7 +88,9 @@ impl AgentEventBroadcaster {
     where
         F: Fn(i64, String, String) + Send + Sync + 'static,
     {
-        let _ = self.turn_completed_handler.set(std::sync::Arc::new(handler));
+        let _ = self
+            .turn_completed_handler
+            .set(std::sync::Arc::new(handler));
     }
 
     /// 注册一个新 session，分配起始游标。
@@ -298,7 +297,10 @@ impl AgentEventBroadcaster {
                     );
                 });
                 // TurnCompleted 信号：快照 turn_source + turn_id 后转发，领域反应由注入的 handler 完成。
-                if let AgentStreamEvent::TurnCompleted { turn_id: Some(t), .. } = &envelope.event {
+                if let AgentStreamEvent::TurnCompleted {
+                    turn_id: Some(t), ..
+                } = &envelope.event
+                {
                     if let Some(handler) = self.turn_completed_handler.get() {
                         let handler = std::sync::Arc::clone(handler);
                         let session_id = envelope.session_id;

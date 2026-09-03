@@ -41,11 +41,7 @@ pub(super) fn resolve_codex_home() -> Option<PathBuf> {
 ///
 /// 深模块入口：调用方只需提供 codex_home 与会话元信息，轮询节奏（总时长 / 间隔）
 /// 由本模块常量决定。文件命中即返回，未命中按间隔重试至超时。
-pub(super) fn resolve(
-    codex_home: &Path,
-    working_dir: &str,
-    started_at: i64,
-) -> Option<String> {
+pub(super) fn resolve(codex_home: &Path, working_dir: &str, started_at: i64) -> Option<String> {
     detect_codex_session_id_from_home(
         codex_home,
         working_dir,

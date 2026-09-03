@@ -4,10 +4,9 @@ use tauri::State;
 
 use crate::app_state::AppState;
 use crate::types::agent_session_terminal::{
-    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult,
-    ResizeAgentSessionTerminalInput, RestoreAgentSessionTerminalInput,
-    RestoreAgentSessionTerminalResult, SubscribeAgentSessionTerminalOutputInput,
-    WriteAgentSessionTerminalInput,
+    ReadAgentSessionTerminalInput, ReadAgentSessionTerminalResult, ResizeAgentSessionTerminalInput,
+    RestoreAgentSessionTerminalInput, RestoreAgentSessionTerminalResult,
+    SubscribeAgentSessionTerminalOutputInput, WriteAgentSessionTerminalInput,
 };
 use crate::types::errors::CommandError;
 

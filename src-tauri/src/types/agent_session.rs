@@ -260,7 +260,6 @@ impl AgentPermissionDecision {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResumeAgentSessionInput {
@@ -451,4 +450,3 @@ pub struct ReadAgentTimelineResult {
     pub items: Vec<AgentTimelineItem>,
     pub effort: Option<String>,
 }
-

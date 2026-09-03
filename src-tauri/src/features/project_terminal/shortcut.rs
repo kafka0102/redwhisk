@@ -20,14 +20,16 @@ pub(super) fn validate_shortcut_command(command: &str) -> Result<String, Command
         return Err(CommandError::new(
             CommandErrorCode::ProjectTerminalValidationFailed,
             "常用命令不能为空。",
-        ).with_reason("shortcutRequired")
+        )
+        .with_reason("shortcutRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "command")));
     }
     if trimmed.chars().count() > PROJECT_TERMINAL_SHORTCUT_COMMAND_MAX_LENGTH {
         return Err(CommandError::new(
             CommandErrorCode::ProjectTerminalValidationFailed,
             "常用命令过长。",
-        ).with_reason("shortcutTooLong")
+        )
+        .with_reason("shortcutTooLong")
         .with_detail(
             ErrorDetail::new("Field")
                 .with_value("name", "command")

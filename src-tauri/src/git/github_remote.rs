@@ -74,7 +74,9 @@ fn split_owner_repo(path: &str) -> Option<GithubRemote> {
         .trim_end_matches('/')
         .strip_suffix(".git")
         .unwrap_or_else(|| without_query.trim_end_matches('/'));
-    let mut parts = without_git_suffix.split('/').filter(|part| !part.is_empty());
+    let mut parts = without_git_suffix
+        .split('/')
+        .filter(|part| !part.is_empty());
     let owner = parts.next()?.trim();
     let repo = parts.next()?.trim();
     if owner.is_empty() || repo.is_empty() {

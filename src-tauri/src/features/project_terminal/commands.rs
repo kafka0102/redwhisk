@@ -1,7 +1,7 @@
 use tauri::{Emitter, State};
 
-use crate::app_state::AppState;
 use super::service::ProjectTerminalService;
+use crate::app_state::AppState;
 use crate::types::app_theme::{AppThemePreferenceChangedEvent, SetAppThemeInput};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_terminal::{
@@ -148,11 +148,7 @@ pub fn restore_project_terminal(
     state: State<'_, AppState>,
     input: RestoreProjectTerminalInput,
 ) -> Result<RestoreProjectTerminalResult, CommandError> {
-    ProjectTerminalService::restore_terminal(
-        input,
-        &state.project_terminals,
-        &state.pty_sessions,
-    )
+    ProjectTerminalService::restore_terminal(input, &state.project_terminals, &state.pty_sessions)
 }
 
 #[tauri::command]
@@ -185,11 +181,7 @@ pub fn resize_project_terminal(
     input: ResizeProjectTerminalInput,
 ) -> Result<(), CommandError> {
     // 热路径：FitAddon 频繁触发，禁止 open SQLite。
-    ProjectTerminalService::resize_terminal(
-        input,
-        &state.project_terminals,
-        &state.pty_sessions,
-    )
+    ProjectTerminalService::resize_terminal(input, &state.project_terminals, &state.pty_sessions)
 }
 
 #[tauri::command]
@@ -272,11 +264,7 @@ pub fn read_project_terminal_cwd(
     state: State<'_, AppState>,
     input: ReadProjectTerminalCwdInput,
 ) -> Result<ReadProjectTerminalCwdResult, CommandError> {
-    ProjectTerminalService::read_terminal_cwd(
-        input,
-        &state.project_terminals,
-        &state.pty_sessions,
-    )
+    ProjectTerminalService::read_terminal_cwd(input, &state.project_terminals, &state.pty_sessions)
 }
 
 fn prepare_project_terminal_data_dir(
@@ -287,7 +275,8 @@ fn prepare_project_terminal_data_dir(
         CommandError::new(
             CommandErrorCode::ProjectTerminalPersistenceFailed,
             "Project Terminal 保存失败。",
-        ).with_reason("saveFailed")
+        )
+        .with_reason("saveFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
 
@@ -296,7 +285,8 @@ fn prepare_project_terminal_data_dir(
             CommandError::new(
                 CommandErrorCode::ProjectTerminalPersistenceFailed,
                 "Project Terminal 保存失败。",
-            ).with_reason("saveFailed")
+            )
+            .with_reason("saveFailed")
         })?;
         local_data
             .initialize(&data_dir)
@@ -306,14 +296,11 @@ fn prepare_project_terminal_data_dir(
     Ok(data_dir)
 }
 
-
 #[cfg(test)]
 mod set_app_theme_tests {
     use super::apply_set_app_theme;
     use crate::agent::pty_session_manager::PtySessionManager;
-    use crate::types::app_theme::{
-        SetAppThemeInput, TerminalBackgroundTheme, ThemePreference,
-    };
+    use crate::types::app_theme::{SetAppThemeInput, TerminalBackgroundTheme, ThemePreference};
 
     #[test]
     fn apply_set_app_theme_stores_resolved_theme_and_returns_preference_event() {
@@ -326,10 +313,7 @@ mod set_app_theme_tests {
         let event = apply_set_app_theme(&manager, &input);
 
         assert_eq!(event.theme_preference, ThemePreference::System);
-        assert_eq!(
-            manager.theme_for_test(),
-            TerminalBackgroundTheme::Light
-        );
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
     }
 
     #[test]

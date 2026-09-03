@@ -115,18 +115,18 @@ fn describe_git_operation(state: GitOperationState) -> &'static str {
 
 fn git_operation_resolution_commands(state: GitOperationState) -> (&'static str, &'static str) {
     match state {
-        GitOperationState::MergeInProgress => (
-            "解决冲突并 git commit（完成合并）",
-            "git merge --abort",
-        ),
+        GitOperationState::MergeInProgress => {
+            ("解决冲突并 git commit（完成合并）", "git merge --abort")
+        }
         GitOperationState::RebaseInProgress => ("git rebase --continue", "git rebase --abort"),
         GitOperationState::CherryPickInProgress => {
             ("git cherry-pick --continue", "git cherry-pick --abort")
         }
         GitOperationState::RevertInProgress => ("git revert --continue", "git revert --abort"),
-        GitOperationState::SequencerInProgress => {
-            ("按 git status 提示继续当前序列操作", "按 git status 提示中止")
-        }
+        GitOperationState::SequencerInProgress => (
+            "按 git status 提示继续当前序列操作",
+            "按 git status 提示中止",
+        ),
         GitOperationState::Unmerged => (
             "解决冲突后 git add，再提交或继续原操作",
             "按 git status 提示中止原操作",
@@ -153,7 +153,10 @@ mod tests {
             message.contains("/tmp/worktrees/issue-128"),
             "message: {message}"
         );
-        assert!(message.contains("git rebase --continue"), "message: {message}");
+        assert!(
+            message.contains("git rebase --continue"),
+            "message: {message}"
+        );
         assert!(message.contains("git rebase --abort"), "message: {message}");
         assert!(message.contains("手动合并"), "message: {message}");
     }

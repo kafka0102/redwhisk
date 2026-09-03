@@ -80,7 +80,8 @@ where
                 continue;
             }
 
-            let default_input = default_builtin_profile_input(agent_type.clone(), &detected_command);
+            let default_input =
+                default_builtin_profile_input(agent_type.clone(), &detected_command);
             if let Err(error) = self.repository.save_profile(
                 default_input.id,
                 &default_input.name,
@@ -96,9 +97,7 @@ where
                 default_input.enabled,
             ) {
                 // 单条失败不阻断其余 agent 播种；上层 setup 钩子只关心整体是否 OK。
-                eprintln!(
-                    "[settings] 内置 agent {agent_type:?} 播种失败：{error}"
-                );
+                eprintln!("[settings] 内置 agent {agent_type:?} 播种失败：{error}");
             }
         }
         Ok(())
@@ -170,7 +169,8 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Label 必须指定 project_id。",
-                ).with_reason("projectLabelRequiresProjectId")
+                )
+                .with_reason("projectLabelRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -198,7 +198,8 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Agent 必须指定 project_id。",
-                ).with_reason("projectAgentRequiresProjectId")
+                )
+                .with_reason("projectAgentRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -240,7 +241,8 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Label 必须指定 project_id。",
-                ).with_reason("projectLabelRequiresProjectId")
+                )
+                .with_reason("projectLabelRequiresProjectId")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "projectId"))
             })?),
             ProjectLabelScope::Global => None,
@@ -280,7 +282,8 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent Profile 不存在或已删除。",
-        ).with_reason("profileNotFound")
+        )
+        .with_reason("profileNotFound")
         .with_detail(ErrorDetail::new("AgentProfile").with_value("agentProfileId", input.id)))
     }
 
@@ -297,7 +300,8 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 不存在或已删除。",
-        ).with_reason("labelNotFound")
+        )
+        .with_reason("labelNotFound")
         .with_detail(ErrorDetail::new("ProjectLabel").with_value("labelId", input.id)))
     }
 
@@ -327,7 +331,8 @@ where
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "项目级 Skill 必须指定 project_id。",
-                ).with_reason("projectSkillRequiresProjectId")
+                )
+                .with_reason("projectSkillRequiresProjectId")
             })?;
             self.ensure_project_exists(project_id)?;
         }
@@ -364,7 +369,8 @@ where
         Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Skill 不存在或已删除。",
-        ).with_reason("skillNotFound")
+        )
+        .with_reason("skillNotFound")
         .with_detail(ErrorDetail::new("SavedAgentSkill").with_value("savedAgentSkillId", input.id)))
     }
 
@@ -401,7 +407,8 @@ where
         };
 
         Err(
-            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message).with_reason("labelNameNotUnique")
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+                .with_reason("labelNameNotUnique")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
     }
@@ -428,7 +435,8 @@ where
         };
 
         Err(
-            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message).with_reason("skillNameNotUnique")
+            CommandError::new(CommandErrorCode::AgentProfileValidationFailed, message)
+                .with_reason("skillNameNotUnique")
                 .with_detail(ErrorDetail::new("Field").with_value("name", "name")),
         )
     }
@@ -645,9 +653,7 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
 
     /// 启动时播种内置 agent（ADR-0020）；开库 + 迁移 + 构造 service 后调用。
     /// 供 `lib.rs` 的 setup 钩子在 `spawn_blocking` 中调用，失败仅记日志不阻断启动。
-    pub fn seed_builtin_agents_in_data_dir(
-        data_dir: impl AsRef<Path>,
-    ) -> Result<(), CommandError> {
+    pub fn seed_builtin_agents_in_data_dir(data_dir: impl AsRef<Path>) -> Result<(), CommandError> {
         let database = open_settings_database(data_dir)?;
         let repository = AgentProfileRepository::new(&database.connection);
         let project_label_repository = ProjectLabelRepository::new(&database.connection);
@@ -755,7 +761,8 @@ fn validate_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent Profile 名称不能为空。",
-        ).with_reason("nameRequired")
+        )
+        .with_reason("nameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -768,7 +775,8 @@ fn validate_command(command: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Agent command 不能为空。",
-        ).with_reason("commandRequired")
+        )
+        .with_reason("commandRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "command")));
     }
 
@@ -781,7 +789,8 @@ fn validate_project_label_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 名称不能为空。",
-        ).with_reason("labelNameRequired")
+        )
+        .with_reason("labelNameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -789,7 +798,8 @@ fn validate_project_label_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 名称最多 15 个字符。",
-        ).with_reason("labelNameTooLong")
+        )
+        .with_reason("labelNameTooLong")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -806,7 +816,8 @@ fn validate_project_label_color(color: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Label 颜色必须是 #RRGGBB 格式。",
-        ).with_reason("labelColorInvalid")
+        )
+        .with_reason("labelColorInvalid")
         .with_detail(ErrorDetail::new("Field").with_value("name", "color")));
     }
 
@@ -819,7 +830,8 @@ fn validate_saved_agent_skill_name(name: &str) -> Result<String, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::AgentProfileValidationFailed,
             "Skill 名称不能为空。",
-        ).with_reason("skillNameRequired")
+        )
+        .with_reason("skillNameRequired")
         .with_detail(ErrorDetail::new("Field").with_value("name", "name")));
     }
 
@@ -866,7 +878,10 @@ fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
 }
 
 /// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。
-fn default_builtin_profile_input(agent_type: AgentType, detected_command: &str) -> SaveAgentProfileInput {
+fn default_builtin_profile_input(
+    agent_type: AgentType,
+    detected_command: &str,
+) -> SaveAgentProfileInput {
     let (name, display_mode) = match agent_type {
         AgentType::Codex => ("Codex", "json"),
         AgentType::Claude => ("Claude Code", "json"),

@@ -3,9 +3,7 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::local_data::LocalDataStatus;
 
 #[tauri::command]
-pub async fn initialize_local_data(
-    app: tauri::AppHandle,
-) -> Result<LocalDataStatus, CommandError> {
+pub async fn initialize_local_data(app: tauri::AppHandle) -> Result<LocalDataStatus, CommandError> {
     let data_dir = crate::local_data_path::redwhisk_data_dir(&app).map_err(|error| {
         CommandError::new(
             CommandErrorCode::LocalDataInitializationFailed,

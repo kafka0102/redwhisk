@@ -10,25 +10,24 @@ use crate::agent::session_registry::AgentSessionRegistry;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::issue_attachment_repository::IssueAttachmentRepository;
 use crate::db::issue_repository::IssueRepository;
-use crate::git::worktree::{
-    cleanup_worktree, create_worktree_for_issue, list_local_branches,
-};
+use crate::git::worktree::{cleanup_worktree, create_worktree_for_issue, list_local_branches};
 use crate::git::worktree_name::issue_worktree_base_name;
 use crate::types::agent_session::{
     AgentMessageAttachment, StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
-use crate::types::errors::{
-    CommandError, CommandErrorCode, ErrorDetail,
-};
+use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
 
-
-
-use crate::agent::descriptor_for;
 use super::log_path::{build_log_path, remove_session_log_file};
-use super::validation::{validate_profile_not_deleted, validate_profile_scope, validate_working_dir};
+use super::service::{
+    agent_session_database_error, agent_session_error_to_command_error, agent_session_start_error,
+    current_epoch_millis, resolve_target_branch, resolve_worktree_root_path, worktree_create_error,
+};
+use super::validation::{
+    validate_profile_not_deleted, validate_profile_scope, validate_working_dir,
+};
 use super::worktree_setup::run_worktree_setup_command;
-use super::service::{agent_session_database_error, agent_session_error_to_command_error, agent_session_start_error, current_epoch_millis, resolve_target_branch, resolve_worktree_root_path, worktree_create_error};
+use crate::agent::descriptor_for;
 
 impl AgentSessionService<'_> {
     /// DB commit 之后的共享启动后半段（issue 结构化路径）。
@@ -58,7 +57,8 @@ impl AgentSessionService<'_> {
             Err(error) => {
                 agent_registry.unmark_starting(session_id);
                 self.cleanup_owned_worktree(project_id, launch);
-                let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
+                let _ =
+                    self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
                 return Err(error);
             }
         };
@@ -78,10 +78,8 @@ impl AgentSessionService<'_> {
         let _ = self
             .agent_session_repository
             .update_current_turn_source(session_id, "initial");
-        let attachments = load_issue_message_attachments(
-            self.issue_repository.connection(),
-            issue_id,
-        )?;
+        let attachments =
+            load_issue_message_attachments(self.issue_repository.connection(), issue_id)?;
         if let Err(error) = handle.send_message(prompt_snapshot.to_string(), attachments) {
             agent_registry.unmark_starting(session_id);
             handle.shutdown();
@@ -93,7 +91,6 @@ impl AgentSessionService<'_> {
         remove_session_log_file(previous_archive_path);
         Ok(())
     }
-
 
     pub(super) fn rollback_failed_structured_issue_session(
         &self,
@@ -123,7 +120,6 @@ impl AgentSessionService<'_> {
         Ok(())
     }
 
-
     /// Agent 进程启动失败时清理 Redwhisk 自建 worktree。
     ///
     /// 仅在「agent 未真正产出」的启动失败路径调用：此时 worktree 无成果需保留，
@@ -145,7 +141,6 @@ impl AgentSessionService<'_> {
         let _ = cleanup_worktree(&project.repo_path, workspace_path, workspace_branch);
     }
 
-
     pub(super) fn prepare_issue_session_launch(
         &self,
         data_dir: &Path,
@@ -160,7 +155,8 @@ impl AgentSessionService<'_> {
                 CommandError::new(
                     CommandErrorCode::AgentProfileValidationFailed,
                     "Agent Profile 不存在。",
-                ).with_reason("profileNotFound")
+                )
+                .with_reason("profileNotFound")
                 .with_detail(
                     ErrorDetail::new("AgentProfile")
                         .with_value("agentProfileId", input.agent_profile_id),
@@ -178,8 +174,8 @@ impl AgentSessionService<'_> {
             input.agent_profile_id,
             started_at,
         )?;
-        let command_snapshot = descriptor_for(&profile.agent_type)
-            .build_launch_command_snapshot(&profile.command);
+        let command_snapshot =
+            descriptor_for(&profile.agent_type).build_launch_command_snapshot(&profile.command);
         let branch_info =
             list_local_branches(&project.repo_path).map_err(agent_session_start_error)?;
         let workspace_mode = input
@@ -242,7 +238,8 @@ impl AgentSessionService<'_> {
                     .find_by_id(input.issue_id)
                     .map_err(agent_session_database_error)?
                     .ok_or_else(|| {
-                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。").with_reason("issueNotFound")
+                        CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                            .with_reason("issueNotFound")
                             .with_detail(
                                 ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
                             )
@@ -261,9 +258,7 @@ impl AgentSessionService<'_> {
                         CommandErrorCode::IssueWorktreeOccupied,
                         "同名 worktree 已被占用，请删除后再运行。",
                     )
-                    .with_detail(
-                        ErrorDetail::new("Issue").with_value("issueId", input.issue_id),
-                    )
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", input.issue_id))
                     .with_detail(
                         ErrorDetail::new("Worktree")
                             .with_value("workspacePath", primary_worktree_path.to_string_lossy()),
@@ -306,9 +301,6 @@ impl AgentSessionService<'_> {
             }
         }
     }
-
-
-
 }
 
 /// 经可注入 factory 启动 provider 会话（构造侧 seam，ADR-0011）。
@@ -329,7 +321,6 @@ pub(super) fn start_provider_session(
         other => agent_session_error_to_command_error(other),
     })
 }
-
 
 /// 按 `StartedSession.backfill` 声明写回 thread id；service 不按 agent_type 分支。
 pub(super) fn persist_started_session_thread_id(
@@ -361,7 +352,6 @@ pub(super) fn persist_started_session_thread_id(
     }
     Ok(())
 }
-
 
 /// 把 Issue 附件映射为协议中立的 agent 消息附件（仅保留磁盘上仍存在的文件）。
 fn load_issue_message_attachments(

@@ -27,10 +27,10 @@ use super::message::{
     parse_message, AnthropicStreamEvent, ClaudeStreamMessage, ContentBlock, ContentDelta,
 };
 use super::transport::{ClaudeStreamingError, ClaudeTransport};
+use super::user_input::{build_stream_json_user_event, has_image_attachment};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
-use super::user_input::{build_stream_json_user_event, has_image_attachment};
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
 };
@@ -209,9 +209,8 @@ impl ClaudeSessionHandle {
         let use_stream_json_input = has_image_attachment(&attachments);
         let stdin_event = if use_stream_json_input {
             Some(
-                build_stream_json_user_event(&text, &attachments).map_err(|message| {
-                    ClaudeStreamingError::Protocol(message)
-                })?,
+                build_stream_json_user_event(&text, &attachments)
+                    .map_err(|message| ClaudeStreamingError::Protocol(message))?,
             )
         } else {
             None
@@ -816,7 +815,10 @@ fn build_events(
                 AgentTimelineItem::Error { message: desc },
             ));
         }
-        ClaudeStreamMessage::SystemTaskStarted { task_id, tool_use_id } => {
+        ClaudeStreamMessage::SystemTaskStarted {
+            task_id,
+            tool_use_id,
+        } => {
             if let (Some(tool_use_id), true) = (tool_use_id, !task_id.is_empty()) {
                 if let Ok(mut guard) = state.lock() {
                     guard.pending_subagents.insert(task_id, tool_use_id);
@@ -1447,7 +1449,9 @@ mod tests {
     fn build_args_stream_json_input_omits_prompt_arg() {
         let args = build_claude_args("hello", None, Some("sonnet"), true);
         assert_eq!(args[0], "-p");
-        assert!(args.windows(2).any(|w| w == ["--input-format", "stream-json"]));
+        assert!(args
+            .windows(2)
+            .any(|w| w == ["--input-format", "stream-json"]));
         assert!(!args.iter().any(|a| a == "hello"));
         assert!(args.windows(2).any(|w| w == ["--model", "sonnet"]));
     }
@@ -1515,7 +1519,9 @@ mod tests {
             .iter()
             .find_map(|e| match e {
                 AgentStreamEvent::TurnCompleted {
-                    stop_reason, subtype, ..
+                    stop_reason,
+                    subtype,
+                    ..
                 } => Some((stop_reason.clone(), subtype.clone())),
                 _ => None,
             })
@@ -1550,7 +1556,9 @@ mod tests {
             .iter()
             .find_map(|e| match e {
                 AgentStreamEvent::TurnCompleted {
-                    stop_reason, subtype, ..
+                    stop_reason,
+                    subtype,
+                    ..
                 } => Some((stop_reason.clone(), subtype.clone())),
                 _ => None,
             })
@@ -2577,8 +2585,8 @@ mod tests {
     #[test]
     fn set_effort_still_unsupported_for_claude() {
         let handle = ClaudeSessionHandle::start(test_config()).expect("start");
-        let err = AgentSessionHandle::set_effort(&handle, Some("high".into()))
-            .expect_err("unsupported");
+        let err =
+            AgentSessionHandle::set_effort(&handle, Some("high".into())).expect_err("unsupported");
         assert!(matches!(err, AgentSessionError::UnsupportedMode(_)));
     }
 

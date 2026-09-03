@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::features::agent_session::IssueSessionArchive;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
+use crate::features::agent_session::IssueSessionArchive;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 pub(super) fn rollback_issue_archive(archive: Option<&IssueSessionArchive>) {
@@ -47,7 +47,8 @@ pub(super) fn open_issue_database(
     MigrationRunner::default()
         .run(&database.connection)
         .map_err(|error| {
-            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。").with_reason("saveFailed")
+            CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 保存失败。")
+                .with_reason("saveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 

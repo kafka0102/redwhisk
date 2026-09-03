@@ -54,7 +54,6 @@ impl Ord for SemVerParts {
     }
 }
 
-
 fn parse_semver(raw: &str) -> Option<SemVerParts> {
     if raw.is_empty() {
         return None;
@@ -128,14 +127,8 @@ mod tests {
 
     #[test]
     fn compares_numeric_versions() {
-        assert_eq!(
-            compare_versions("0.0.3", "0.0.4"),
-            Some(Ordering::Less)
-        );
-        assert_eq!(
-            compare_versions("v0.0.4", "0.0.3"),
-            Some(Ordering::Greater)
-        );
+        assert_eq!(compare_versions("0.0.3", "0.0.4"), Some(Ordering::Less));
+        assert_eq!(compare_versions("v0.0.4", "0.0.3"), Some(Ordering::Greater));
         assert_eq!(compare_versions("1.0.0", "v1.0.0"), Some(Ordering::Equal));
         assert!(is_newer_version("0.0.4", "0.0.3"));
         assert!(!is_newer_version("0.0.3", "0.0.3"));

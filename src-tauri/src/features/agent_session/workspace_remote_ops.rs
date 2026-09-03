@@ -48,16 +48,20 @@ impl<'connection> SessionWorkspaceService<'connection> {
             })?;
 
         let roots = list_code_workspace_roots(Path::new(&project.repo_path))?.roots;
-        let target = roots.iter().find(|root| root.path == workspace_path).ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "Code workspace not found.",
-            )
-            .with_reason("codeWorkspaceNotFound")
-            .with_detail(
-                ErrorDetail::new("WorkspaceRoot").with_value("path", workspace_path.to_string()),
-            )
-        })?;
+        let target = roots
+            .iter()
+            .find(|root| root.path == workspace_path)
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "Code workspace not found.",
+                )
+                .with_reason("codeWorkspaceNotFound")
+                .with_detail(
+                    ErrorDetail::new("WorkspaceRoot")
+                        .with_value("path", workspace_path.to_string()),
+                )
+            })?;
 
         if target.is_project_root {
             return Err(CommandError::new(
@@ -102,7 +106,6 @@ impl<'connection> SessionWorkspaceService<'connection> {
         Ok(())
     }
 
-
     pub(super) fn require_project_root_for_remote_ops(
         &self,
         input: &ProjectWorkspaceInput,
@@ -130,13 +133,15 @@ impl<'connection> SessionWorkspaceService<'connection> {
                 "Code workspace not found.",
             )
             .with_reason("codeWorkspaceNotFound")
-            .with_detail(ErrorDetail::new("WorkspaceRoot").with_value(
-                "path",
-                input
-                    .workspace_path
-                    .clone()
-                    .unwrap_or_else(|| project.repo_path.clone()),
-            ))
+            .with_detail(
+                ErrorDetail::new("WorkspaceRoot").with_value(
+                    "path",
+                    input
+                        .workspace_path
+                        .clone()
+                        .unwrap_or_else(|| project.repo_path.clone()),
+                ),
+            )
         })?;
 
         if !target.is_project_root {
@@ -238,7 +243,7 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical.clone()),
-                            limit: None,
+                limit: None,
                 offset: None,
             })
             .expect("delete worktree");
@@ -290,7 +295,7 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(repo_canonical.clone()),
-                            limit: None,
+                limit: None,
                 offset: None,
             })
             .expect_err("should reject project root");
@@ -381,7 +386,7 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical.clone()),
-                            limit: None,
+                limit: None,
                 offset: None,
             })
             .expect_err("should reject running turn");
@@ -469,7 +474,7 @@ mod tests {
                 project_id: 1,
                 session_id: None,
                 workspace_path: Some(worktree_canonical),
-                            limit: None,
+                limit: None,
                 offset: None,
             })
             .expect_err("pull should reject worktree");

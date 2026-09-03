@@ -37,10 +37,7 @@ pub fn skill_paths_from_scanned(
 }
 
 /// 比较规范化后的 skill_paths 是否一致。
-pub fn skill_paths_equivalent(
-    left: &[SavedAgentSkillPath],
-    right: &[SavedAgentSkillPath],
-) -> bool {
+pub fn skill_paths_equivalent(left: &[SavedAgentSkillPath], right: &[SavedAgentSkillPath]) -> bool {
     normalize_skill_paths(left) == normalize_skill_paths(right)
 }
 
@@ -94,10 +91,7 @@ pub fn reconcile_saved_skills_in_data_dir(
     let updates = plan_saved_skill_path_updates(&saved, scanned);
 
     for (id, skill_paths) in &updates {
-        let Some(existing) = repository
-            .find_skill_by_id(*id)
-            .map_err(database_error)?
-        else {
+        let Some(existing) = repository.find_skill_by_id(*id).map_err(database_error)? else {
             continue;
         };
         repository
@@ -123,7 +117,9 @@ fn agent_type_rank(agent_type: &AgentType) -> u8 {
     }
 }
 
-fn open_database(data_dir: impl AsRef<Path>) -> Result<crate::db::connection::Database, CommandError> {
+fn open_database(
+    data_dir: impl AsRef<Path>,
+) -> Result<crate::db::connection::Database, CommandError> {
     let database = DatabaseConfig::new(data_dir)
         .open()
         .map_err(CommandError::from)?;

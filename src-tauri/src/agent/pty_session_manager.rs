@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use crate::agent::terminal_log_tail::{safe_terminal_log_tail_start, take_terminal_log_tail};
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
@@ -238,10 +238,7 @@ impl PtySessionManager {
     /// 注入带捕获 writer 的伪存活 session（真实 master/killer，写路径可观测）。
     /// 默认接受主题 OSC 主动推送（对齐 Agent TUI）。
     #[cfg(test)]
-    pub(crate) fn insert_capturing_session_for_test(
-        &self,
-        session_id: i64,
-    ) -> Arc<Mutex<Vec<u8>>> {
+    pub(crate) fn insert_capturing_session_for_test(&self, session_id: i64) -> Arc<Mutex<Vec<u8>>> {
         self.insert_capturing_session_with_theme_push_for_test(session_id, true)
     }
 
@@ -257,11 +254,7 @@ impl PtySessionManager {
             buffer: Arc::clone(&buffer),
             fail: false,
         });
-        self.insert_session_with_writer_for_test(
-            session_id,
-            writer,
-            accepts_proactive_theme_osc,
-        );
+        self.insert_session_with_writer_for_test(session_id, writer, accepts_proactive_theme_osc);
         buffer
     }
 
@@ -616,8 +609,14 @@ impl PtySessionManager {
             handle
         };
 
-        handle.routing.project_id.store(project_id, Ordering::Release);
-        handle.routing.session_id.store(session_id, Ordering::Release);
+        handle
+            .routing
+            .project_id
+            .store(project_id, Ordering::Release);
+        handle
+            .routing
+            .session_id
+            .store(session_id, Ordering::Release);
         handle.routing.registered.store(true, Ordering::Release);
 
         let store = Arc::clone(&self.store);
@@ -874,13 +873,15 @@ fn queue_output_chunk(
         let Ok(mut pending_emits) = store.pending_emits.lock() else {
             return;
         };
-        let entry = pending_emits.entry(session_id).or_insert_with(|| PendingEmit {
-            project_id,
-            session_id,
-            sequence,
-            data: Vec::new(),
-            first_at: Instant::now(),
-        });
+        let entry = pending_emits
+            .entry(session_id)
+            .or_insert_with(|| PendingEmit {
+                project_id,
+                session_id,
+                sequence,
+                data: Vec::new(),
+                first_at: Instant::now(),
+            });
         entry.project_id = project_id;
         entry.session_id = session_id;
         entry.sequence = sequence;
@@ -927,12 +928,7 @@ fn flush_pending_session(store: &PtySessionStore, session_id: i64) {
     if pending.data.is_empty() {
         return;
     }
-    if let Some(output_sink) = store
-        .output_sink
-        .lock()
-        .ok()
-        .and_then(|sink| sink.clone())
-    {
+    if let Some(output_sink) = store.output_sink.lock().ok().and_then(|sink| sink.clone()) {
         output_sink(PtyOutputEvent {
             project_id: pending.project_id,
             session_id: pending.session_id,
@@ -1020,8 +1016,7 @@ pub(crate) fn trim_log_file(path: &Path, max_bytes: usize) -> Result<(), String>
     let mut cut = safe_terminal_log_tail_start(&content, max_bytes);
     if let Some(relative) = content[cut..].iter().position(|byte| *byte == b'\n') {
         let newline_cut = cut.saturating_add(relative).saturating_add(1);
-        if newline_cut < content.len()
-            && content.len() - newline_cut >= max_bytes.saturating_div(2)
+        if newline_cut < content.len() && content.len() - newline_cut >= max_bytes.saturating_div(2)
         {
             cut = newline_cut;
         }
@@ -1366,7 +1361,7 @@ impl Write for CapturingWriter {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_shell_keepalive_command_line, build_shell_command_line, trim_log_file,
+        build_shell_command_line, build_shell_keepalive_command_line, trim_log_file,
         PtySessionManager, TerminalBackgroundTheme,
     };
     use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
@@ -1452,9 +1447,7 @@ mod tests {
 
         let bash_line = build_shell_keepalive_command_line("pnpm dev:admin-api", "/bin/bash");
         assert!(bash_line.starts_with("trap ':' INT; pnpm dev:admin-api; trap - INT; "));
-        assert!(bash_line.contains(
-            "export REDWHISK_LAUNCH_HISTORY_SEED='pnpm dev:admin-api'"
-        ));
+        assert!(bash_line.contains("export REDWHISK_LAUNCH_HISTORY_SEED='pnpm dev:admin-api'"));
         assert!(
             bash_line.contains(r#"history -s -- "$REDWHISK_LAUNCH_HISTORY_SEED""#),
             "bash should seed history via history -s: {bash_line}"
@@ -1652,8 +1645,7 @@ mod tests {
         let manager = PtySessionManager::new();
         let agent_a = manager.insert_capturing_session_with_theme_push_for_test(11, true);
         let agent_b = manager.insert_capturing_session_with_theme_push_for_test(22, true);
-        let project_shell =
-            manager.insert_capturing_session_with_theme_push_for_test(33, false);
+        let project_shell = manager.insert_capturing_session_with_theme_push_for_test(33, false);
 
         manager.set_theme(TerminalBackgroundTheme::Light);
 

@@ -52,8 +52,5 @@ fn plan_tui_initial_prompt_routes_by_provider() {
     assert!(!opencode.inject_stdin_after_register);
 
     let quoted = plan_tui_initial_prompt(&AgentType::OpenCode, "opencode", "it's fine");
-    assert_eq!(
-        quoted.spawn_command,
-        "opencode --prompt 'it'\"'\"'s fine'"
-    );
+    assert_eq!(quoted.spawn_command, "opencode --prompt 'it'\"'\"'s fine'");
 }

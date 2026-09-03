@@ -3,7 +3,7 @@ use rusqlite::{
 };
 
 use crate::types::agent_session::{AgentSessionAttention, AgentSessionStatus};
-use crate::types::issue::{IssueRecord, IssueStatus, IssueStatusTotals, issue_status_to_str};
+use crate::types::issue::{issue_status_to_str, IssueRecord, IssueStatus, IssueStatusTotals};
 
 const ISSUE_SELECT_COLUMNS: &str = "SELECT
     issues.id,
@@ -603,10 +603,10 @@ fn issue_status_from_str(value: &str) -> rusqlite::Result<IssueStatus> {
 mod tests {
     use super::*;
     use crate::db::migrations::{
-        AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+        MigrationRunner, AGENT_SESSIONS_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
         ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_SQL,
-        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION, ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL,
-        ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION, MigrationRunner,
+        ISSUES_PROJECT_SCOPED_NUMBER_UNIQUE_MIGRATION_VERSION,
+        ISSUES_STATUS_CHANGED_AT_MIGRATION_SQL, ISSUES_STATUS_CHANGED_AT_MIGRATION_VERSION,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_SQL,
         PROJECT_SCOPED_ISSUE_SESSION_NUMBERS_MIGRATION_VERSION,
     };
@@ -974,13 +974,8 @@ mod tests {
         let tx_issue = connection
             .transaction()
             .and_then(|transaction| {
-                let issue = IssueRepository::insert_in_transaction(
-                    &transaction,
-                    1,
-                    "via-tx",
-                    "",
-                    "[]",
-                )?;
+                let issue =
+                    IssueRepository::insert_in_transaction(&transaction, 1, "via-tx", "", "[]")?;
                 transaction.commit()?;
                 Ok(issue)
             })

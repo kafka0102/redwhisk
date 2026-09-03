@@ -95,7 +95,8 @@ impl<'connection> ProjectService<'connection> {
     pub fn open_project(&self, input: OpenProjectInput) -> Result<ProjectSummary, CommandError> {
         self.project_available_for_open(input.project_id)?;
 
-        let project = self.repository
+        let project = self
+            .repository
             .update_last_opened_at(input.project_id)
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -105,7 +106,9 @@ impl<'connection> ProjectService<'connection> {
         &self,
         input: OpenProjectInput,
     ) -> Result<ProjectSummary, CommandError> {
-        Ok(populate_code_workspaces(self.project_available_for_open(input.project_id)?))
+        Ok(populate_code_workspaces(
+            self.project_available_for_open(input.project_id)?,
+        ))
     }
 
     pub fn update_project_settings(
@@ -118,7 +121,8 @@ impl<'connection> ProjectService<'connection> {
 
         self.project_by_id(input.project_id)?;
 
-        let project = self.repository
+        let project = self
+            .repository
             .update_settings(
                 input.project_id,
                 &project_name,
@@ -154,7 +158,8 @@ impl<'connection> ProjectService<'connection> {
                 CommandError::new(
                     CommandErrorCode::ProjectPersistenceFailed,
                     "Project 保存失败。",
-                ).with_reason("saveFailed")
+                )
+                .with_reason("saveFailed")
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
 
@@ -262,7 +267,8 @@ fn open_project_database(
             CommandError::new(
                 CommandErrorCode::ProjectPersistenceFailed,
                 "Project 保存失败。",
-            ).with_reason("saveFailed")
+            )
+            .with_reason("saveFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
 
@@ -275,14 +281,16 @@ fn normalize_repo_path(path: &str) -> Result<PathBuf, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::ProjectRepoPathInvalid,
             "Project 路径无效。",
-        ).with_reason("pathInvalid"));
+        )
+        .with_reason("pathInvalid"));
     }
 
     let repo_path = Path::new(trimmed).canonicalize().map_err(|error| {
         CommandError::new(
             CommandErrorCode::ProjectRepoPathInvalid,
             "Project 路径无效。",
-        ).with_reason("pathInvalid")
+        )
+        .with_reason("pathInvalid")
         .with_detail(ErrorDetail::new("RepoPath").with_value("path", trimmed.to_string()))
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
@@ -291,7 +299,8 @@ fn normalize_repo_path(path: &str) -> Result<PathBuf, CommandError> {
         return Err(CommandError::new(
             CommandErrorCode::ProjectRepoPathInvalid,
             "Project 路径无效。",
-        ).with_reason("pathInvalid")
+        )
+        .with_reason("pathInvalid")
         .with_detail(
             ErrorDetail::new("RepoPath")
                 .with_value("path", repo_path.to_string_lossy().to_string()),
@@ -323,7 +332,8 @@ fn validate_repo_path(path: &str) -> Result<ValidatedRepoPath, CommandError> {
             CommandError::new(
                 CommandErrorCode::ProjectRepoPathInvalid,
                 "Project 路径无效。",
-            ).with_reason("pathInvalid")
+            )
+            .with_reason("pathInvalid")
             .with_detail(
                 ErrorDetail::new("RepoPath")
                     .with_value("path", repo_path.to_string_lossy().to_string()),
@@ -343,7 +353,8 @@ fn normalize_project_name(name: &str, repo_path: &Path) -> Result<String, Comman
         return Err(CommandError::new(
             CommandErrorCode::ProjectRepoPathInvalid,
             "Project 名称不能为空。",
-        ).with_reason("nameRequired")
+        )
+        .with_reason("nameRequired")
         .with_detail(
             ErrorDetail::new("RepoPath")
                 .with_value("path", repo_path.to_string_lossy().to_string()),
@@ -366,7 +377,8 @@ fn validate_worktree_location(
         CommandError::new(
             CommandErrorCode::ProjectRepoPathInvalid,
             "选择仓库内 .worktrees 目录时，仓库必须包含 .gitignore。",
-        ).with_reason("worktreesRequiresGitignore")
+        )
+        .with_reason("worktreesRequiresGitignore")
         .with_detail(
             ErrorDetail::new("RepoPath")
                 .with_value("path", repo_path.to_string_lossy().to_string()),
@@ -380,7 +392,8 @@ fn validate_worktree_location(
     Err(CommandError::new(
         CommandErrorCode::ProjectRepoPathInvalid,
         "选择仓库内 .worktrees 目录时，.gitignore 必须忽略 .worktrees/。",
-    ).with_reason("worktreesMustBeIgnored")
+    )
+    .with_reason("worktreesMustBeIgnored")
     .with_detail(
         ErrorDetail::new("RepoPath").with_value("path", repo_path.to_string_lossy().to_string()),
     ))
@@ -448,6 +461,7 @@ fn project_database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectPersistenceFailed,
         "Project 保存失败。",
-    ).with_reason("saveFailed")
+    )
+    .with_reason("saveFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

@@ -88,11 +88,10 @@ fn local_branch_exists(repo_path: &Path, name: &str) -> Result<bool, GitCommandE
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::command::{self, GitCommandError};
+    use super::*;
     use std::fs;
     use std::process::Command;
 
@@ -107,8 +106,8 @@ mod tests {
         git(&repo, &["branch", "-M", "main"]);
         git(&repo, &["branch", "feature-a"]);
 
-        let branch = checkout_branch(&repo, CheckoutTargetKind::Local, "feature-a")
-            .expect("checkout local");
+        let branch =
+            checkout_branch(&repo, CheckoutTargetKind::Local, "feature-a").expect("checkout local");
         assert_eq!(branch, "feature-a");
         assert_eq!(current_branch(&repo), "feature-a");
     }
@@ -139,20 +138,13 @@ mod tests {
         git(&env.local, &["fetch", "--all"]);
 
         assert!(!local_branch_exists(&env.local, "remote-only").expect("exists"));
-        let branch = checkout_branch(
-            &env.local,
-            CheckoutTargetKind::Remote,
-            "origin/remote-only",
-        )
-        .expect("checkout remote");
+        let branch = checkout_branch(&env.local, CheckoutTargetKind::Remote, "origin/remote-only")
+            .expect("checkout remote");
         assert_eq!(branch, "remote-only");
         assert_eq!(current_branch(&env.local), "remote-only");
         // 跟踪关系
-        let upstream = command::run_git(
-            &env.local,
-            &["rev-parse", "--abbrev-ref", "@{upstream}"],
-        )
-        .expect("upstream");
+        let upstream = command::run_git(&env.local, &["rev-parse", "--abbrev-ref", "@{upstream}"])
+            .expect("upstream");
         assert_eq!(upstream, "origin/remote-only");
     }
 
@@ -208,7 +200,6 @@ mod tests {
         );
         assert_eq!(current_branch(&repo), "main");
     }
-
 
     struct RemoteEnv {
         bare: std::path::PathBuf,

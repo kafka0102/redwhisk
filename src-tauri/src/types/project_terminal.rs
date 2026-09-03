@@ -170,4 +170,3 @@ pub struct EnsureProjectTerminalsResult {
     pub terminals: Vec<ProjectTerminalSummary>,
     pub shell_failures: Vec<EnsureProjectTerminalFailure>,
 }
-

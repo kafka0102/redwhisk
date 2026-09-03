@@ -17,8 +17,8 @@ pub fn create_and_checkout_branch(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::command::GitCommandError;
+    use super::*;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
