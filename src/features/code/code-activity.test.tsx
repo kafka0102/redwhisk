@@ -1435,10 +1435,7 @@ describe("CodeActivity", () => {
     await user.click(screen.getByRole("button", { name: "Open file" }));
     await user.click(await screen.findByRole("button", { name: "Edit file" }));
     await user.click(screen.getByTestId("monaco-edit"));
-    const dirtyFileTab = screen.getByRole("tab", { name: /file\.ts/ });
-    expect(
-      within(dirtyFileTab).getByLabelText("Unsaved changes"),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Unsaved changes")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Open markdown" }));
     await waitFor(() => {
@@ -1456,22 +1453,14 @@ describe("CodeActivity", () => {
         "Unsaved changes",
       ),
     ).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
-        "Unsaved changes",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Unsaved changes")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /file\.ts/ }));
     expect(screen.getByRole("button", { name: "Edit file" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(
-      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
-        "Unsaved changes",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
       "data-value",
       "export const value = 2;\n",

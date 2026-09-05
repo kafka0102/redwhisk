@@ -1577,7 +1577,7 @@ describe("ProjectSettingsActivity", () => {
         }),
       ),
     );
-  });
+  }, 20_000);
 
   it("preserves an existing prompt template when editing without showing the field", async () => {
     const user = userEvent.setup();

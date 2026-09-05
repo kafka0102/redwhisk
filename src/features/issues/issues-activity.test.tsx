@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
@@ -481,6 +481,15 @@ function completedFlowResult(issue: Partial<IssueRecord> & { id: number }) {
 }
 
 describe("IssuesActivity", () => {
+  beforeAll(async () => {
+    // 详情编辑 / 只读页是 React.lazy 动态 chunk（看板首屏性能优化）。全量并行
+    // 时首个打开页面的用例会赶上 chunk 冷解析，Suspense fallback 停留超过
+    // findBy* 默认 1s 等待而偶发失败；这里预热模块缓存，让懒加载页面在用例中
+    // 立即命中。
+    await import("./issue-detail/issue-editable-page");
+    await import("./issue-detail/issue-read-only-page");
+  });
+
   beforeEach(() => {
     advanceIssueStatusMock.mockReset();
     completeIssueFlowMock.mockReset();

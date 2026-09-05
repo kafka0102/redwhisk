@@ -511,7 +511,13 @@ async function addSessionTool(
   name: string,
 ) {
   await user.click(screen.getByRole("button", { name: "Add session tool" }));
-  await user.click(await screen.findByRole("menuitem", { name }));
+  const menuItem = await screen.findByRole("menuitem", { name });
+  // base-ui popup 在 jsdom 里定位/动画异步就绪，全量并行下点击会撞上
+  // pointer-events:none 内联样式（user-event 报错）。等菜单项可交互再点击。
+  await waitFor(() => {
+    expect(window.getComputedStyle(menuItem).pointerEvents).not.toBe("none");
+  });
+  await user.click(menuItem);
 }
 
 describe("AgentsActivity", () => {
@@ -6994,7 +7000,7 @@ describe("AgentsActivity", () => {
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Up to 10 terminals are supported.",
     );
-  });
+  }, 20_000);
 
   it("adds a browser tab and navigates from the address bar", async () => {
     const user = userEvent.setup();
@@ -7041,15 +7047,17 @@ describe("AgentsActivity", () => {
     await screen.findByRole("heading", { name: "#20 Existing issue" });
     await addSessionTool(user, "Browser");
 
-    const addressInput = await screen.findByRole("textbox", {
-      name: "Browser address",
-    });
+    const addressInput = await screen.findByRole(
+      "textbox",
+      { name: "Browser address" },
+      { timeout: 5_000 },
+    );
     await user.type(addressInput, "example.com{Enter}");
 
     expect(
       screen.getByTitle("Browser page https://example.com"),
     ).toHaveAttribute("src", "https://example.com");
-  });
+  }, 20_000);
 
   it("omits completed issue summary actions from the session header", async () => {
     listAgentSessionsMock.mockResolvedValue({
