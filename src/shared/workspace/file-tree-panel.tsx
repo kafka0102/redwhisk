@@ -17,6 +17,10 @@ import type { CSSProperties } from "react";
 import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 
+import {
+  fileTreeChildrenAccessor,
+  fileTreeDirectoryAncestors,
+} from "./file-tree-listings";
 import type {
   WorkspaceChangeKind,
   WorkspaceFileTreeNode,
@@ -46,6 +50,8 @@ export interface FileTreePanelProps {
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   /** 目录展开/折叠变化时回调，便于上层缓存切页后的结构。 */
   onOpenStateChange?: (openState: FileTreeOpenState) => void;
+  /** 展开目录时按层拉取子节点。已加载的目录由调用方去重。 */
+  onDirectoryOpen?: (directoryPath: string) => void;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
   /** 文件路径 → 变更类型（git status），用于文件名着色与行末 A/M/D 徽标。 */
@@ -67,6 +73,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   isLoading,
   onOpenFile,
   onOpenStateChange,
+  onDirectoryOpen,
   workspacePath,
   changedFileKinds,
   directoryKinds,
@@ -85,15 +92,32 @@ export const FileTreePanel = memo(function FileTreePanel({
   const hasFileTree = fileTree.length > 0 && !errorMessage;
 
   const handleToggle = useCallback(
-    (_id: string) => {
+    (id: string) => {
+      onDirectoryOpen?.(id);
       if (!onOpenStateChange) return;
       const openState = treeApiRef.current?.openState;
       if (openState) {
         onOpenStateChange({ ...openState });
       }
     },
-    [onOpenStateChange],
+    [onDirectoryOpen, onOpenStateChange],
   );
+
+  useLayoutEffect(() => {
+    if (!onDirectoryOpen || initialOpenState == null) {
+      return;
+    }
+    const paths = new Set<string>();
+    for (const [id, isOpen] of Object.entries(initialOpenState)) {
+      if (!isOpen) continue;
+      for (const ancestor of fileTreeDirectoryAncestors(id)) {
+        paths.add(ancestor);
+      }
+    }
+    for (const path of paths) {
+      onDirectoryOpen(path);
+    }
+  }, [initialOpenState, onDirectoryOpen]);
 
   // react-arborist 的 Tree 需要数值高度做虚拟化，无法直接用 `height: 100%`。
   // 这里测量视口容器的实际高度并随容器尺寸变化更新，让文件树填满侧栏可用高度，
@@ -169,7 +193,7 @@ export const FileTreePanel = memo(function FileTreePanel({
           <Tree<WorkspaceFileTreeNode>
             ref={treeApiRef}
             aria-label={messages.agentsFeature.fileTree}
-            childrenAccessor="children"
+            childrenAccessor={fileTreeChildrenAccessor}
             className="session-file-tree__arborist"
             data={fileTree}
             disableDrag

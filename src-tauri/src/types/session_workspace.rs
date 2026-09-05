@@ -27,6 +27,10 @@ pub struct ProjectWorkspaceInput {
     /// 缺省等价 0。
     #[serde(default)]
     pub offset: Option<usize>,
+    /// 文件树按层读取：相对工作区根的目录路径。仅 `get_project_worktree_file_tree`
+    /// 使用；缺省 / 空 / `.` 表示工作区根。
+    #[serde(default)]
+    pub directory_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

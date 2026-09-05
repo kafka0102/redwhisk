@@ -61,6 +61,7 @@ impl SessionWorkspaceService<'_> {
             workspace_path: input.workspace_path.clone(),
             limit: None,
             offset: None,
+            directory_path: None,
         })?;
         let kind = match input.kind {
             CheckoutBranchKind::Local => crate::git::checkout_branch::CheckoutTargetKind::Local,
@@ -82,6 +83,7 @@ impl SessionWorkspaceService<'_> {
             workspace_path: input.workspace_path.clone(),
             limit: None,
             offset: None,
+            directory_path: None,
         })?;
         let branch = crate::git::create_branch::create_and_checkout_branch(&root, &input.name)
             .map_err(map_git_command_error)?;
@@ -176,6 +178,7 @@ mod tests {
                 workspace_path: Some(worktree_canonical),
                 limit: None,
                 offset: None,
+                directory_path: None,
             })
             .expect_err("list should reject worktree");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -223,6 +226,7 @@ mod tests {
                 workspace_path: Some(repo_canonical.clone()),
                 limit: None,
                 offset: None,
+                directory_path: None,
             })
             .expect("list on project root");
         assert_eq!(response.current_branch, "main");

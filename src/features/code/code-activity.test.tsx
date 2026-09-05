@@ -624,35 +624,35 @@ describe("CodeActivity", () => {
 
   it("opens a 500px nested tree menu from a breadcrumb folder", async () => {
     const user = userEvent.setup();
-    vi.mocked(getProjectWorktreeFileTree).mockResolvedValue({
-      nodes: [
-        {
-          id: "src",
-          name: "src",
-          path: "src",
-          kind: "directory",
-          isIgnored: false,
-          children: [
-            {
-              id: "src/sub",
-              name: "sub",
-              path: "src/sub",
-              kind: "directory",
-              isIgnored: false,
-              children: [
-                {
-                  id: "src/sub/deep.ts",
-                  name: "deep.ts",
-                  path: "src/sub/deep.ts",
-                  kind: "file",
-                  isIgnored: false,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      signature: "sig-tree",
+    const srcNode = {
+      id: "src",
+      name: "src",
+      path: "src",
+      kind: "directory" as const,
+      isIgnored: false,
+    };
+    const subNode = {
+      id: "src/sub",
+      name: "sub",
+      path: "src/sub",
+      kind: "directory" as const,
+      isIgnored: false,
+    };
+    const deepNode = {
+      id: "src/sub/deep.ts",
+      name: "deep.ts",
+      path: "src/sub/deep.ts",
+      kind: "file" as const,
+      isIgnored: false,
+    };
+    vi.mocked(getProjectWorktreeFileTree).mockImplementation(async (input) => {
+      if (input.directoryPath === "src/sub") {
+        return { nodes: [deepNode], signature: "sub" };
+      }
+      if (input.directoryPath === "src") {
+        return { nodes: [subNode], signature: "src" };
+      }
+      return { nodes: [srcNode], signature: "root" };
     });
 
     render(
@@ -673,9 +673,16 @@ describe("CodeActivity", () => {
     const popup = document.querySelector('[data-slot="dropdown-menu-content"]');
     expect(popup?.className).toContain("w-[500px]");
 
-    // 子目录默认收起；点击展开后出现孙级文件，支持多级展开。
+    // 按层加载：展开 src 后出现 sub，再展开 sub 后出现孙级文件。
+    await waitFor(() => {
+      expect(
+        within(tree).getByRole("button", { name: "sub" }),
+      ).toBeInTheDocument();
+    });
     await user.click(within(tree).getByRole("button", { name: "sub" }));
-    expect(within(tree).getByText("deep.ts")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(tree).getByText("deep.ts")).toBeInTheDocument();
+    });
 
     // 点击文件打开并关闭弹层。
     vi.mocked(readProjectWorktreeFile).mockClear();

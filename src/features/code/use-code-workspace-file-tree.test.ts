@@ -470,4 +470,63 @@ describe("useCodeWorkspaceFileTree", () => {
     });
     expect(second.result.current.tree).toEqual(treeNodes);
   });
+
+  it("loads a directory layer on demand and attaches children", async () => {
+    const rootNodes: WorkspaceFileTreeNode[] = [
+      {
+        id: "src",
+        name: "src",
+        path: "src",
+        kind: "directory",
+        isIgnored: false,
+      },
+    ];
+    treeMock.mockResolvedValue({ nodes: rootNodes, signature: "t1" });
+    changesMock.mockResolvedValue({ files: [], signature: "c1" });
+
+    const { result } = renderHook(() =>
+      useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true),
+    );
+    await settle();
+    expect(result.current.tree[0]?.children).toBeUndefined();
+
+    const srcChildren: WorkspaceFileTreeNode[] = [
+      {
+        id: "src/main.ts",
+        name: "main.ts",
+        path: "src/main.ts",
+        kind: "file",
+        isIgnored: false,
+      },
+    ];
+    treeMock.mockResolvedValue({ nodes: srcChildren, signature: "src1" });
+    act(() => {
+      result.current.loadDirectory("src");
+    });
+    await settle();
+
+    expect(treeMock).toHaveBeenCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+      directoryPath: "src",
+    });
+    expect(result.current.tree[0]?.children).toEqual(srcChildren);
+  });
+
+  it("does not refetch an already loaded directory until the next poll", async () => {
+    treeMock.mockResolvedValue({ nodes: treeNodes, signature: "t1" });
+    changesMock.mockResolvedValue({ files: [], signature: "c1" });
+
+    const { result } = renderHook(() =>
+      useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true),
+    );
+    await settle();
+    expect(treeMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.loadDirectory("");
+    });
+    await settle();
+    expect(treeMock).toHaveBeenCalledTimes(1);
+  });
 });

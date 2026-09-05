@@ -239,13 +239,7 @@ mod tests {
             AgentSessionRepository::new(&connection),
         );
         service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(worktree_canonical.clone()),
-                limit: None,
-                offset: None,
-            })
+            .delete_worktree(workspace_input(1, worktree_canonical.clone()))
             .expect("delete worktree");
 
         assert!(!Path::new(&worktree_canonical).exists());
@@ -291,13 +285,7 @@ mod tests {
             AgentSessionRepository::new(&connection),
         );
         let error = service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(repo_canonical.clone()),
-                limit: None,
-                offset: None,
-            })
+            .delete_worktree(workspace_input(1, repo_canonical.clone()))
             .expect_err("should reject project root");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
         assert_eq!(error.reason.as_deref(), Some("cannotDeleteProjectRoot"));
@@ -382,13 +370,7 @@ mod tests {
             AgentSessionRepository::new(&connection),
         );
         let error = service
-            .delete_worktree(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(worktree_canonical.clone()),
-                limit: None,
-                offset: None,
-            })
+            .delete_worktree(workspace_input(1, worktree_canonical.clone()))
             .expect_err("should reject running turn");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
         assert_eq!(error.reason.as_deref(), Some("worktreeHasRunningTurn"));
@@ -470,13 +452,7 @@ mod tests {
             AgentSessionRepository::new(&connection),
         );
         let error = service
-            .pull(ProjectWorkspaceInput {
-                project_id: 1,
-                session_id: None,
-                workspace_path: Some(worktree_canonical),
-                limit: None,
-                offset: None,
-            })
+            .pull(workspace_input(1, worktree_canonical))
             .expect_err("pull should reject worktree");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
         assert_eq!(error.reason.as_deref(), Some("remoteOpsRequireProjectRoot"));
@@ -486,6 +462,17 @@ mod tests {
         git(root, &["init"]);
         git(root, &["config", "user.email", "test@example.com"]);
         git(root, &["config", "user.name", "Test User"]);
+    }
+
+    fn workspace_input(project_id: i64, workspace_path: String) -> ProjectWorkspaceInput {
+        ProjectWorkspaceInput {
+            project_id,
+            session_id: None,
+            workspace_path: Some(workspace_path),
+            limit: None,
+            offset: None,
+            directory_path: None,
+        }
     }
 
     fn git(root: &Path, args: &[&str]) {

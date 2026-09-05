@@ -36,12 +36,14 @@ export function CodeBreadcrumb({
   filePath,
   tree,
   onOpenFile,
+  onDirectoryOpen,
   editToggle = null,
   markdownPreviewToggle = null,
 }: {
   filePath: string;
   tree: WorkspaceFileTreeNode[];
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onDirectoryOpen?: (directoryPath: string) => void;
   editToggle?: CodeEditToggle | null;
   markdownPreviewToggle?: CodeMarkdownPreviewToggle | null;
 }) {
@@ -63,7 +65,12 @@ export function CodeBreadcrumb({
               ) : (
                 <DropdownMenu
                   open={openCrumb === path}
-                  onOpenChange={(open) => setOpenCrumb(open ? path : null)}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      onDirectoryOpen?.(path);
+                    }
+                    setOpenCrumb(open ? path : null);
+                  }}
                 >
                   <DropdownMenuTrigger className="code-workspace__crumb">
                     {segment}
@@ -71,6 +78,7 @@ export function CodeBreadcrumb({
                   <DropdownMenuContent align="start" className="w-[500px]">
                     <CodeBreadcrumbMenuTree
                       nodes={node.children ?? []}
+                      onDirectoryOpen={onDirectoryOpen}
                       onOpenFile={(file) => {
                         onOpenFile(file);
                         setOpenCrumb(null);
@@ -126,22 +134,28 @@ export function CodeBreadcrumb({
 function CodeBreadcrumbMenuTree({
   nodes,
   onOpenFile,
+  onDirectoryOpen,
 }: {
   nodes: WorkspaceFileTreeNode[];
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onDirectoryOpen?: (directoryPath: string) => void;
 }) {
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
-  const toggleDir = useCallback((path: string) => {
-    setOpenDirs((current) => {
-      const next = new Set(current);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  }, []);
+  const toggleDir = useCallback(
+    (path: string) => {
+      onDirectoryOpen?.(path);
+      setOpenDirs((current) => {
+        const next = new Set(current);
+        if (next.has(path)) {
+          next.delete(path);
+        } else {
+          next.add(path);
+        }
+        return next;
+      });
+    },
+    [onDirectoryOpen],
+  );
   return (
     <div className="code-workspace__crumb-tree" role="tree">
       {nodes.map((node) => (

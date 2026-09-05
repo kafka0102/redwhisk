@@ -50,6 +50,7 @@ import { useCodeActiveFileRefreshBinding } from "./use-code-active-file-refresh-
 import { useCodeLanguageDefinition } from "./use-code-language-definition";
 import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
+import { visitFileTreeAncestorDirectories } from "../../shared/workspace/file-tree-listings";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 
 const MAX_FILE_TABS = 10;
@@ -152,8 +153,14 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     tabs,
   ]);
 
-  const { tree, treeError, isTreeLoading, changedFileKinds, directoryKinds } =
-    useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
+  const {
+    tree,
+    treeError,
+    isTreeLoading,
+    changedFileKinds,
+    directoryKinds,
+    loadDirectory,
+  } = useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.filePath === activePath) ?? null,
@@ -323,6 +330,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const openFile = useCallback(
     async (file: WorkspaceFileTreeNode) => {
       if (!selectedRoot || file.kind !== "file") return;
+      visitFileTreeAncestorDirectories(file.path, loadDirectory);
       const now = Date.now();
       const previousActivePath = activePathRef.current;
       const isAlreadyOpen = openFilePathsRef.current.has(file.path);
@@ -433,6 +441,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       activateFilePath,
       confirmBulkUnsaved,
       fileNotFoundMessage,
+      loadDirectory,
       projectId,
       saveAllDirtyTabs,
       selectedRoot,
@@ -687,6 +696,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
               initialOpenState={openFolders}
               isLoading={isTreeLoading}
               workspacePath={selectedRoot?.path}
+              onDirectoryOpen={loadDirectory}
               onOpenFile={openFile}
               onOpenStateChange={setOpenFolders}
             />
@@ -736,6 +746,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                 <CodeBreadcrumb
                   filePath={activeTab.filePath}
                   tree={tree}
+                  onDirectoryOpen={loadDirectory}
                   onOpenFile={openFile}
                   editToggle={{
                     disabled: !canEditCodeFileTab(activeTab),

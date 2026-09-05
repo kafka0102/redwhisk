@@ -275,6 +275,7 @@ mod service_tests {
                 workspace_path: Some(repo_canonical),
                 limit: None,
                 offset: None,
+                directory_path: None,
             })
             .expect("list");
         let names: Vec<&str> = response

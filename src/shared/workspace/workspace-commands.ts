@@ -8,6 +8,8 @@ export interface ProjectWorkspaceInput {
   limit?: number | null;
   /** 已提交历史分页：跳过条数；仅 commit history 使用，缺省等价 0。 */
   offset?: number | null;
+  /** 文件树按层读取：相对工作区根的目录。缺省表示工作区根。 */
+  directoryPath?: string | null;
 }
 
 /** 已提交历史默认页大小（与后端 DEFAULT_COMMIT_HISTORY_LIMIT 对齐）。 */

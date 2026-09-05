@@ -1040,6 +1040,7 @@
     },
     "ProjectWorkspaceInput": {
       "fields": {
+        "directoryPath": "optional",
         "limit": "optional",
         "offset": "optional",
         "projectId": "required",

@@ -31,6 +31,8 @@
 新增 command 必须同时更新 Rust DTO、adapter、`generate_handler!`、前端 wrapper、类型和成功/失败路径测试；并同步更新本注册表对应行 + 错误码到前端 locale 的映射（见错误码边界表）。不要只在本表新增名称。
 
 > `get_project_worktree_commit_history`：`ProjectWorkspaceInput` 可选 `limit` / `offset`（缺省 50 / 0）；`ProjectWorktreeCommitHistoryResponse.hasMore` 为本页条数 `>= limit`。允许 `limit > 50` 支撑整窗刷新；`signature` 仍对**本次响应** commits 计算。
+>
+> `get_project_worktree_file_tree`：`ProjectWorkspaceInput` 可选 `directoryPath`（缺省 / 空 / `.` 表示工作区根）。每次只返回该目录的**一层**子节点；子目录在前端展开时再请求。`signature` 对本次 listing 计算。
 
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。

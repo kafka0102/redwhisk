@@ -4,6 +4,15 @@ import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { buildFileTreeDecorations } from "../../shared/workspace/file-tree-git-decorations";
 import {
+  ROOT_FILE_TREE_DIRECTORY,
+  assembleFileTree,
+  fileTreeDirectoryPathsToLoad,
+  isFileTreeDirectoryLoaded,
+  normalizeFileTreeDirectoryPath,
+  upsertFileTreeListing,
+  type FileTreeDirectoryListing,
+} from "../../shared/workspace/file-tree-listings";
+import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
   type WorkspaceChangeKind,
@@ -17,8 +26,8 @@ const EMPTY_DIRECTORY_KINDS = EMPTY_DECORATIONS.directoryKinds;
 
 /** 按 projectId + workspacePath 键控的文件树 SWR 缓存条目。 */
 interface CodeFileTreeCacheEntry {
+  listings: Record<string, FileTreeDirectoryListing>;
   tree: WorkspaceFileTreeNode[];
-  treeSignature: string;
   treeLoaded: boolean;
   changedFileKinds: ReadonlyMap<string, WorkspaceChangeKind>;
   directoryKinds: ReadonlyMap<string, WorkspaceChangeKind>;
@@ -37,8 +46,8 @@ function buildCodeFileTreeCacheKey(
 
 function emptyCacheEntry(): CodeFileTreeCacheEntry {
   return {
+    listings: {},
     tree: [],
-    treeSignature: "",
     treeLoaded: false,
     changedFileKinds: EMPTY_CHANGE_KINDS,
     directoryKinds: EMPTY_DIRECTORY_KINDS,
@@ -67,18 +76,18 @@ function readHydratableCache(
   return entry;
 }
 
-function writeTreeCache(
+function writeListingCache(
   projectId: number,
   workspacePath: string,
+  listings: Record<string, FileTreeDirectoryListing>,
   tree: WorkspaceFileTreeNode[],
-  treeSignature: string,
 ): void {
   const key = buildCodeFileTreeCacheKey(projectId, workspacePath);
   const previous = ensureCacheEntry(key);
   codeFileTreeCache.set(key, {
     ...previous,
+    listings,
     tree,
-    treeSignature,
     treeLoaded: true,
   });
 }
@@ -114,15 +123,16 @@ export interface UseCodeWorkspaceFileTreeResult {
   changedFileKinds: ReadonlyMap<string, WorkspaceChangeKind>;
   /** 目录路径 → 聚合变更类型，驱动目录名着色。无变更时为稳定空 Map。 */
   directoryKinds: ReadonlyMap<string, WorkspaceChangeKind>;
+  loadDirectory: (directoryPath: string) => void;
 }
 
 interface LiveFileTreeState {
   tree: WorkspaceFileTreeNode[];
+  listings: Record<string, FileTreeDirectoryListing>;
   treeError: string | null;
   isTreeLoading: boolean;
   changedFileKinds: ReadonlyMap<string, WorkspaceChangeKind>;
   directoryKinds: ReadonlyMap<string, WorkspaceChangeKind>;
-  treeSignature: string | null;
   changesSignature: string | null;
   hasTreeData: boolean;
   cacheKey: string | null;
@@ -136,11 +146,11 @@ function buildLiveStateFromCache(
   if (!enabled || workspacePath == null) {
     return {
       tree: [],
+      listings: {},
       treeError: null,
       isTreeLoading: false,
       changedFileKinds: EMPTY_CHANGE_KINDS,
       directoryKinds: EMPTY_DIRECTORY_KINDS,
-      treeSignature: null,
       changesSignature: null,
       hasTreeData: false,
       cacheKey: null,
@@ -151,11 +161,11 @@ function buildLiveStateFromCache(
   if (cached) {
     return {
       tree: cached.tree,
+      listings: cached.listings,
       treeError: null,
       isTreeLoading: false,
       changedFileKinds: cached.changedFileKinds,
       directoryKinds: cached.directoryKinds,
-      treeSignature: cached.treeSignature,
       changesSignature: cached.changesSignature,
       hasTreeData: true,
       cacheKey,
@@ -163,11 +173,11 @@ function buildLiveStateFromCache(
   }
   return {
     tree: [],
+    listings: {},
     treeError: null,
     isTreeLoading: true,
     changedFileKinds: EMPTY_CHANGE_KINDS,
     directoryKinds: EMPTY_DIRECTORY_KINDS,
-    treeSignature: null,
     changesSignature: null,
     hasTreeData: false,
     cacheKey,
@@ -175,15 +185,6 @@ function buildLiveStateFromCache(
 }
 
 /**
- * 「代码」视图左侧文件树的数据源：SWR 缓存 + 静默重校验。
- *
- * - 按 projectId + workspacePath 模块级内存缓存树节点、变更徽标与 signature。
- * - 缓存命中：立即展示且 isTreeLoading=false，后台 soft revalidate（不清空树）。
- * - signature 相同不更新展示；不同则静默替换并写回缓存。
- * - 无缓存才显示加载态；切根按根独立缓存，无缓存不展示他根。
- * - 进入 / 切根 / 恢复可见立即 soft revalidate；可见时 5s 轮询。
- * - 重校验失败且已有展示数据时保留旧树。
- *
  * setState 全部放进 Promise 微任务，避免 react-hooks/set-state-in-effect。
  */
 export function useCodeWorkspaceFileTree(
@@ -196,7 +197,6 @@ export function useCodeWorkspaceFileTree(
     buildLiveStateFromCache(projectId, workspacePath, enabled),
   );
 
-  // 切根 / 切换 enabled：渲染期同步水合，避免短暂展示他根树。
   const nextKey =
     enabled && workspacePath != null
       ? buildCodeFileTreeCacheKey(projectId, workspacePath)
@@ -212,12 +212,12 @@ export function useCodeWorkspaceFileTree(
     }
   }
 
+  const listingSeqRef = useRef(new Map<string, number>());
+  const changesSeqRef = useRef(0);
   const [isVisible, setIsVisible] = useState(
-    typeof document === "undefined" || document.visibilityState === "visible",
+    () => document.visibilityState === "visible",
   );
   const wasVisibleRef = useRef(isVisible);
-  const treeSeqRef = useRef(0);
-  const changesSeqRef = useRef(0);
   const translateRef = useRef(t);
   const liveRef = useRef(live);
 
@@ -229,73 +229,107 @@ export function useCodeWorkspaceFileTree(
     liveRef.current = live;
   }, [live]);
 
+  const fetchDirectory = useCallback(
+    (directoryPath: string, force: boolean) => {
+      if (!workspacePath || !enabled) return;
+      const pathKey = normalizeFileTreeDirectoryPath(directoryPath);
+      const requestKey = buildCodeFileTreeCacheKey(projectId, workspacePath);
+      if (
+        !force &&
+        isFileTreeDirectoryLoaded(
+          liveRef.current.listings,
+          liveRef.current.tree,
+          pathKey,
+        )
+      ) {
+        return;
+      }
+      const seqKey = `${requestKey}::${pathKey}`;
+      const seq = (listingSeqRef.current.get(seqKey) ?? 0) + 1;
+      listingSeqRef.current.set(seqKey, seq);
+      const input =
+        pathKey === ROOT_FILE_TREE_DIRECTORY
+          ? { projectId, workspacePath }
+          : { projectId, workspacePath, directoryPath: pathKey };
+      void Promise.resolve()
+        .then(() => getProjectWorktreeFileTree(input))
+        .then((response) => {
+          if (!response || listingSeqRef.current.get(seqKey) !== seq) return;
+          if (liveRef.current.cacheKey !== requestKey) return;
+          const nextListings = upsertFileTreeListing(
+            liveRef.current.listings,
+            pathKey,
+            { nodes: response.nodes, signature: response.signature },
+          );
+          if (
+            nextListings === liveRef.current.listings &&
+            liveRef.current.hasTreeData &&
+            !liveRef.current.isTreeLoading
+          ) {
+            return;
+          }
+          const nextTree = assembleFileTree(nextListings);
+          writeListingCache(projectId, workspacePath, nextListings, nextTree);
+          setLive((current) => {
+            if (current.cacheKey !== requestKey) return current;
+            const listings = upsertFileTreeListing(current.listings, pathKey, {
+              nodes: response.nodes,
+              signature: response.signature,
+            });
+            if (
+              listings === current.listings &&
+              current.hasTreeData &&
+              !current.isTreeLoading &&
+              current.treeError == null
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              listings,
+              tree: assembleFileTree(listings),
+              hasTreeData: true,
+              treeError: null,
+              isTreeLoading: false,
+            };
+          });
+        })
+        .catch((error) => {
+          if (listingSeqRef.current.get(seqKey) !== seq) return;
+          if (liveRef.current.cacheKey !== requestKey) return;
+          setLive((current) => {
+            if (current.cacheKey !== requestKey) return current;
+            if (pathKey !== ROOT_FILE_TREE_DIRECTORY || current.hasTreeData) {
+              return { ...current, isTreeLoading: false };
+            }
+            return {
+              ...current,
+              isTreeLoading: false,
+              treeError: getCommandErrorMessage(error, translateRef.current),
+            };
+          });
+        });
+    },
+    [enabled, projectId, workspacePath],
+  );
+
   const loadTree = useCallback(() => {
     if (!workspacePath || !enabled) return;
-    const seq = (treeSeqRef.current += 1);
     const requestKey = buildCodeFileTreeCacheKey(projectId, workspacePath);
-    void Promise.resolve()
-      .then(() => {
-        if (liveRef.current.cacheKey !== requestKey) return null;
-        // soft revalidate：有展示数据时不进 loading。
-        if (!liveRef.current.hasTreeData) {
-          setLive((current) =>
-            current.cacheKey === requestKey
-              ? { ...current, isTreeLoading: true, treeError: null }
-              : current,
-          );
-        }
-        return getProjectWorktreeFileTree({ projectId, workspacePath });
-      })
-      .then((response) => {
-        if (!response || treeSeqRef.current !== seq) return;
-        if (liveRef.current.cacheKey !== requestKey) return;
-        const unchanged = liveRef.current.treeSignature === response.signature;
-        const nextTree = unchanged ? liveRef.current.tree : response.nodes;
-        writeTreeCache(projectId, workspacePath, nextTree, response.signature);
-        if (
-          unchanged &&
-          liveRef.current.hasTreeData &&
-          !liveRef.current.isTreeLoading
-        ) {
-          // signature 相同且已有展示：不 setState，避免无意义重渲染。
-          return;
-        }
-        setLive((current) => {
-          if (current.cacheKey !== requestKey) return current;
-          if (
-            unchanged &&
-            current.hasTreeData &&
-            !current.isTreeLoading &&
-            current.treeError == null
-          ) {
-            return current;
-          }
-          return {
-            ...current,
-            tree: nextTree,
-            treeSignature: response.signature,
-            hasTreeData: true,
-            treeError: null,
-            isTreeLoading: false,
-          };
-        });
-      })
-      .catch((error) => {
-        if (treeSeqRef.current !== seq) return;
-        if (liveRef.current.cacheKey !== requestKey) return;
-        setLive((current) => {
-          if (current.cacheKey !== requestKey) return current;
-          if (current.hasTreeData) {
-            return { ...current, isTreeLoading: false };
-          }
-          return {
-            ...current,
-            isTreeLoading: false,
-            treeError: getCommandErrorMessage(error, translateRef.current),
-          };
-        });
-      });
-  }, [enabled, projectId, workspacePath]);
+    const listingKeys = fileTreeDirectoryPathsToLoad(
+      ensureCacheEntry(requestKey).listings,
+    );
+    for (const directoryPath of listingKeys) {
+      fetchDirectory(directoryPath, true);
+    }
+  }, [enabled, fetchDirectory, projectId, workspacePath]);
+
+  const loadDirectory = useCallback(
+    (directoryPath: string) => {
+      fetchDirectory(directoryPath, false);
+    },
+    [fetchDirectory],
+  );
 
   const loadChanges = useCallback(() => {
     if (!workspacePath || !enabled) return;
@@ -337,7 +371,6 @@ export function useCodeWorkspaceFileTree(
     loadChanges();
   }, [loadChanges, loadTree]);
 
-  // 进入 / 切根 / enabled：soft revalidate（水合已在渲染期完成）。
   useEffect(() => {
     if (!enabled || !workspacePath) {
       return;
@@ -346,7 +379,6 @@ export function useCodeWorkspaceFileTree(
     loadChanges();
   }, [enabled, workspacePath, projectId, loadTree, loadChanges]);
 
-  // 可见性监听：enabled 期间同步真实可见性，visibilitychange 时更新。
   useEffect(() => {
     if (!enabled) return;
     void Promise.resolve().then(() => {
@@ -361,7 +393,6 @@ export function useCodeWorkspaceFileTree(
     };
   }, [enabled]);
 
-  // 由隐藏恢复可见 → 立即 soft revalidate（挂载时 wasVisibleRef 已为初始可见，跳过）。
   useEffect(() => {
     if (!enabled || !workspacePath) {
       wasVisibleRef.current = isVisible;
@@ -373,7 +404,6 @@ export function useCodeWorkspaceFileTree(
     wasVisibleRef.current = isVisible;
   }, [isVisible, enabled, workspacePath, refresh]);
 
-  // 可见 + enabled + 有 workspacePath 时按间隔 soft revalidate。
   useEffect(() => {
     if (!enabled || !isVisible || !workspacePath) return;
     const timerId = window.setInterval(refresh, FILE_TREE_REFRESH_INTERVAL_MS);
@@ -388,5 +418,6 @@ export function useCodeWorkspaceFileTree(
     isTreeLoading: live.isTreeLoading,
     changedFileKinds: live.changedFileKinds,
     directoryKinds: live.directoryKinds,
+    loadDirectory,
   };
 }

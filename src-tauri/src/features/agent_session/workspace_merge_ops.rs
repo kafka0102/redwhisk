@@ -48,6 +48,7 @@ impl SessionWorkspaceService<'_> {
             workspace_path: input.workspace_path.clone(),
             limit: None,
             offset: None,
+            directory_path: None,
         })?;
         let result = crate::git::merge_branch::merge_ref_into_current_branch(&root, &input.name)
             .map_err(map_merge_error)?;
@@ -117,6 +118,7 @@ mod tests {
                 workspace_path: Some(env.worktree_canonical.clone()),
                 limit: None,
                 offset: None,
+                directory_path: None,
             })
             .expect_err("list should reject worktree");
         assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
@@ -135,6 +137,7 @@ mod tests {
                 workspace_path: Some(env.repo_canonical.clone()),
                 limit: None,
                 offset: None,
+                directory_path: None,
             })
             .expect("list");
         let names: Vec<&str> = response

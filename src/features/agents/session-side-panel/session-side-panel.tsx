@@ -45,6 +45,7 @@ interface SessionSidePanelProps {
   onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
   onOpenIssue: (issueId: number) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
+  onDirectoryOpen?: (directoryPath: string) => void;
   onToggleCommittedChangesExpanded: () => void;
   onToggleUncommittedChangesExpanded: () => void;
   hasMoreCommitHistory?: boolean;
@@ -80,6 +81,7 @@ export function SessionSidePanel({
   onOpenCommitChanges,
   onOpenIssue,
   onOpenFile,
+  onDirectoryOpen,
   onToggleCommittedChangesExpanded,
   onToggleUncommittedChangesExpanded,
   hasMoreCommitHistory,
@@ -171,6 +173,7 @@ export function SessionSidePanel({
             errorMessage={fileTreeErrorMessage}
             fileTree={fileTree}
             isLoading={isFileTreeLoading}
+            onDirectoryOpen={onDirectoryOpen}
             onOpenFile={onOpenFile}
             workspacePath={workspacePath}
           />

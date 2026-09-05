@@ -11,6 +11,15 @@ import {
   commitHistoryRefreshLimit,
 } from "../../../shared/workspace/commit-history-pagination";
 import { buildFileTreeDecorations } from "../../../shared/workspace/file-tree-git-decorations";
+import {
+  ROOT_FILE_TREE_DIRECTORY,
+  assembleFileTree,
+  fileTreeDirectoryPathsToLoad,
+  isFileTreeDirectoryLoaded,
+  normalizeFileTreeDirectoryPath,
+  upsertFileTreeListing,
+  type FileTreeDirectoryListing,
+} from "../../../shared/workspace/file-tree-listings";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import {
   COMMIT_HISTORY_PAGE_SIZE,
@@ -82,6 +91,7 @@ interface SessionWorkspaceCache {
   commitHistoryRequestSequence: number;
   fileTab: SessionWorkspaceFileTab | null;
   fileTree: WorkspaceFileTreeNode[];
+  fileTreeListings: Record<string, FileTreeDirectoryListing>;
   fileTreeErrorMessage: string | null;
   isChangesLoading: boolean;
   isChangesUnavailable: boolean;
@@ -97,7 +107,36 @@ const sessionWorkspaceCacheBySessionId = new Map<
   number,
   SessionWorkspaceCache
 >();
-const fileTreeRequestSequenceBySessionId = new Map<number, number>();
+const fileTreeListingSequenceByKey = new Map<string, number>();
+
+function fileTreeListingSeqKey(
+  sessionId: number,
+  directoryPath: string,
+): string {
+  return `${sessionId}::${directoryPath}`;
+}
+
+function bumpFileTreeListingSequence(
+  sessionId: number,
+  directoryPath: string,
+): number {
+  const key = fileTreeListingSeqKey(sessionId, directoryPath);
+  const next = (fileTreeListingSequenceByKey.get(key) ?? 0) + 1;
+  fileTreeListingSequenceByKey.set(key, next);
+  return next;
+}
+
+function isCurrentFileTreeListingSequence(
+  sessionId: number,
+  directoryPath: string,
+  requestSequence: number,
+): boolean {
+  return (
+    fileTreeListingSequenceByKey.get(
+      fileTreeListingSeqKey(sessionId, directoryPath),
+    ) === requestSequence
+  );
+}
 
 /**
  * 清除指定 sessionId 的 workspace tab 缓存。
@@ -107,7 +146,6 @@ const fileTreeRequestSequenceBySessionId = new Map<number, number>();
  */
 export function clearSessionWorkspaceCache(sessionId: number): void {
   sessionWorkspaceCacheBySessionId.delete(sessionId);
-  fileTreeRequestSequenceBySessionId.delete(sessionId);
 }
 
 /**
@@ -115,7 +153,7 @@ export function clearSessionWorkspaceCache(sessionId: number): void {
  */
 export function clearSessionWorkspaceCacheForTest(): void {
   sessionWorkspaceCacheBySessionId.clear();
-  fileTreeRequestSequenceBySessionId.clear();
+  fileTreeListingSequenceByKey.clear();
 }
 
 const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
@@ -139,6 +177,7 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   commitHistoryRequestSequence: 0,
   fileTab: null,
   fileTree: [],
+  fileTreeListings: {},
   fileTreeErrorMessage: null,
   isChangesLoading: false,
   isChangesUnavailable: false,
@@ -159,10 +198,6 @@ export function useSessionWorkspaceCache({
   // 跨 Activity 卸载复用同一份 module-level Map：切走 Issues/Code 再回来时
   // 保留已打开的 file / change tab，而不是随着 hook 实例销毁丢失。
   const cacheBySessionRef = useRef(sessionWorkspaceCacheBySessionId);
-  // 请求序号放 ref，避免轮询仅 bump sequence 就触发整树 re-render。
-  const fileTreeRequestSequenceBySessionRef = useRef(
-    fileTreeRequestSequenceBySessionId,
-  );
   const [, setCacheVersion] = useState(0);
 
   const currentCache =
@@ -281,14 +316,111 @@ export function useSessionWorkspaceCache({
     }
   }, [projectId, sessionId, updateCurrentCache, t]);
 
+  const fetchFileTreeDirectory = useCallback(
+    async (targetSessionId: number, directoryPath: string, force: boolean) => {
+      const pathKey = normalizeFileTreeDirectoryPath(directoryPath);
+      const cache = sessionWorkspaceCacheBySessionId.get(targetSessionId);
+      if (
+        !force &&
+        cache != null &&
+        isFileTreeDirectoryLoaded(
+          cache.fileTreeListings,
+          cache.fileTree,
+          pathKey,
+        )
+      ) {
+        return;
+      }
+      const requestSequence = bumpFileTreeListingSequence(
+        targetSessionId,
+        pathKey,
+      );
+      try {
+        const response = await getProjectWorktreeFileTree({
+          projectId,
+          sessionId: targetSessionId,
+          directoryPath:
+            pathKey === ROOT_FILE_TREE_DIRECTORY ? undefined : pathKey,
+        });
+        if (
+          !isCurrentFileTreeListingSequence(
+            targetSessionId,
+            pathKey,
+            requestSequence,
+          )
+        ) {
+          return;
+        }
+        updateSessionCache(targetSessionId, (current) => {
+          const listings = upsertFileTreeListing(
+            current.fileTreeListings,
+            pathKey,
+            { nodes: response.nodes, signature: response.signature },
+          );
+          if (
+            listings === current.fileTreeListings &&
+            !current.isFileTreeLoading &&
+            current.fileTreeErrorMessage == null
+          ) {
+            return current;
+          }
+          const fileTree = assembleFileTree(listings);
+          const rootSignature =
+            listings[ROOT_FILE_TREE_DIRECTORY]?.signature ??
+            current.lastFileTreeSignature;
+          return {
+            ...current,
+            fileTree,
+            fileTreeListings: listings,
+            isFileTreeLoading: false,
+            fileTreeErrorMessage: null,
+            lastFileTreeSignature: rootSignature,
+          };
+        });
+      } catch (error) {
+        if (
+          !isCurrentFileTreeListingSequence(
+            targetSessionId,
+            pathKey,
+            requestSequence,
+          )
+        ) {
+          return;
+        }
+        if (pathKey !== ROOT_FILE_TREE_DIRECTORY) {
+          return;
+        }
+        updateSessionCache(targetSessionId, (current) => ({
+          ...current,
+          isFileTreeLoading: false,
+          fileTreeErrorMessage: getCommandErrorMessage(error, t),
+        }));
+      }
+    },
+    [projectId, t, updateSessionCache],
+  );
+
+  const loadDirectory = useCallback(
+    (directoryPath: string) => {
+      if (sessionId == null) {
+        return;
+      }
+      void fetchFileTreeDirectory(sessionId, directoryPath, false);
+    },
+    [fetchFileTreeDirectory, sessionId],
+  );
+
   const refreshFileTree = useCallback(async () => {
     if (sessionId == null) {
       return;
     }
 
-    const requestSequence =
-      (fileTreeRequestSequenceBySessionRef.current.get(sessionId) ?? 0) + 1;
-    fileTreeRequestSequenceBySessionRef.current.set(sessionId, requestSequence);
+    const currentCache =
+      sessionWorkspaceCacheBySessionId.get(sessionId) ??
+      defaultWorkspaceCache();
+    const directoryPaths = fileTreeDirectoryPathsToLoad(
+      currentCache.fileTreeListings,
+    );
 
     // 仅在尚无树数据时进入 loading；后台轮询不写 cache，避免侧栏无意义重渲染。
     updateCurrentCache((cache) => {
@@ -302,51 +434,12 @@ export function useSessionWorkspaceCache({
       };
     });
 
-    try {
-      const response = await getProjectWorktreeFileTree({
-        projectId,
-        sessionId,
-      });
-
-      if (
-        fileTreeRequestSequenceBySessionRef.current.get(sessionId) !==
-        requestSequence
-      ) {
-        return;
-      }
-
-      updateCurrentCache((cache) => {
-        const signatureUnchanged =
-          cache.lastFileTreeSignature === response.signature;
-        if (
-          signatureUnchanged &&
-          !cache.isFileTreeLoading &&
-          cache.fileTreeErrorMessage == null
-        ) {
-          return cache;
-        }
-        return {
-          ...cache,
-          fileTree: signatureUnchanged ? cache.fileTree : response.nodes,
-          isFileTreeLoading: false,
-          fileTreeErrorMessage: null,
-          lastFileTreeSignature: response.signature,
-        };
-      });
-    } catch (error) {
-      if (
-        fileTreeRequestSequenceBySessionRef.current.get(sessionId) !==
-        requestSequence
-      ) {
-        return;
-      }
-      updateCurrentCache((cache) => ({
-        ...cache,
-        isFileTreeLoading: false,
-        fileTreeErrorMessage: getCommandErrorMessage(error, t),
-      }));
-    }
-  }, [projectId, sessionId, updateCurrentCache, t]);
+    await Promise.all(
+      directoryPaths.map((directoryPath) =>
+        fetchFileTreeDirectory(sessionId, directoryPath, true),
+      ),
+    );
+  }, [fetchFileTreeDirectory, sessionId, updateCurrentCache]);
 
   const refreshCommitHistory = useCallback(async () => {
     if (sessionId == null) {
@@ -956,6 +1049,7 @@ export function useSessionWorkspaceCache({
     fileTab: currentCache.fileTab,
     fileTree: currentCache.fileTree,
     fileTreeErrorMessage: currentCache.fileTreeErrorMessage,
+    loadDirectory,
     getWorkspaceTabState,
     isChangesLoading: currentCache.isChangesLoading,
     isCommitHistoryLoading: currentCache.isCommitHistoryLoading,
