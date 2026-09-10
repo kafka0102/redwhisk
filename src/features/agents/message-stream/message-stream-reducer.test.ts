@@ -1153,6 +1153,106 @@ describe("messageStreamReducer", () => {
       expect(next.turnInterrupted).toBe(true);
       expect(next.turnStatus).toBe("idle");
     });
+
+    it("已完成 tool_call 不在 turn_completed 后恢复 running", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_sleep",
+          name: "shell",
+          detail: { type: "shell", command: "sleep 90" },
+          status: "completed",
+        }),
+      });
+      expect(next.turnStatus).toBe("idle");
+      expect(next.turnInterrupted).toBe(true);
+    });
+
+    it("失败或取消的 tool_call 不恢复 running", () => {
+      const failed = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_fail",
+          name: "shell",
+          detail: { type: "shell", command: "false" },
+          status: "failed",
+        }),
+      });
+      expect(failed.turnStatus).toBe("idle");
+
+      const canceled = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_cancel",
+          name: "shell",
+          detail: { type: "shell", command: "sleep 1" },
+          status: "canceled",
+        }),
+      });
+      expect(canceled.turnStatus).toBe("idle");
+    });
+
+    it("running 的 tool_call 仍可在异常中断后恢复 running", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_run",
+          name: "shell",
+          detail: { type: "shell", command: "ls" },
+          status: "running",
+        }),
+      });
+      expect(next.turnStatus).toBe("running");
+      expect(next.turnInterrupted).toBe(false);
+    });
+  });
+
+  describe("turn_completed 后残留 running 工具", () => {
+    it("父 Turn 结束后残留 running 工具卡片不保持 turnStatus running", () => {
+      let state = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t_parent" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "结论已给出",
+          messageId: "a1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_collab",
+          name: "collabAgentToolCall",
+          detail: { type: "unknown" },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t_parent",
+          usage: null,
+        },
+      });
+      expect(state.turnStatus).toBe("idle");
+      expect(
+        state.entries.some(
+          (entry) =>
+            entry.kind === "tool_call" &&
+            entry.item.type === "tool_call" &&
+            entry.item.status === "running",
+        ),
+      ).toBe(true);
+    });
   });
 
   describe("timeline 子代理中断", () => {

@@ -26,6 +26,7 @@ use crate::types::agent_session::{
     SetAgentThinkingInput, StartAgentSessionInput, StartAgentSessionResult,
     UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
 };
+use crate::types::agent_session_stream::AgentStreamEvent;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
@@ -505,12 +506,23 @@ pub async fn cancel_agent_turn(
     input: CancelAgentTurnInput,
 ) -> Result<(), CommandError> {
     let agent_sessions = state.agent_sessions.clone();
+    let broadcaster = state.agent_event_broadcaster.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let database = open_agent_session_database(&app)?;
         let service = build_agent_session_service(&database.connection);
         service.find_project_session_record(input.project_id, input.session_id)?;
         let Some(handle) = agent_sessions.get(input.session_id) else {
-            return Ok(());
+            broadcaster.emit_stream_event(
+                input.project_id,
+                input.session_id,
+                AgentStreamEvent::TurnCanceled {
+                    turn_id: None,
+                    reason: "no_interruptible_turn".into(),
+                },
+            );
+            return Err(super::service::agent_session_error_to_command_error(
+                AgentSessionError::NoInterruptibleTurn,
+            ));
         };
 
         match handle.cancel_turn() {

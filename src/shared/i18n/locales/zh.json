@@ -794,6 +794,7 @@
       "mergeRequiresCurrentBranch": "当前不在任何分支上，无法合并。",
       "mustBeRunningToUpdateFollow": "只有运行中的 Agent Session 可以更新关注状态。",
       "tuiResumeNotSupported": "当前 Agent 不支持 TUI 会话续接。",
+      "noInterruptibleTurn": "没有可中断的 Turn。",
       "noActiveTerminal": "当前 Session 没有活跃终端。",
       "onlyBacklogCanStart": "只有 backlog Issue 可以启动 Agent Session。",
       "pathCannotBeSymlink": "路径不能是符号链接。",

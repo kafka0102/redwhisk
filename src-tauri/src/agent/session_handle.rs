@@ -32,6 +32,9 @@ pub enum AgentSessionError {
     /// 其他 agent 实现特定的错误。
     #[error("agent 会话调用失败：{0}")]
     Other(String),
+    /// 当前没有可中断的用户 Turn。
+    #[error("没有可中断的 Turn")]
+    NoInterruptibleTurn,
 }
 
 impl From<crate::agent::codex_app_server::transport::CodexAppServerError> for AgentSessionError {
@@ -67,7 +70,9 @@ pub trait AgentSessionHandle: Send + Sync {
         attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), AgentSessionError>;
 
-    /// 中断当前 turn；无 turn 运行时返回 `Ok(())`。
+    /// 中断当前用户 Turn。
+    ///
+    /// 没有可中断的 Turn 时不得 `Ok(())` 空成功并让 UI 继续思考。
     fn cancel_turn(&self) -> Result<(), AgentSessionError>;
 
     /// 回复一个挂起的权限请求。

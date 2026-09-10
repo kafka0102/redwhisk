@@ -275,6 +275,29 @@ describe("useAgentComposer", () => {
     });
   });
 
+  it("handleCancel 在没有可中断 Turn 时显示提示且不写入提交错误", async () => {
+    vi.useFakeTimers();
+    cancelAgentTurnMock.mockRejectedValueOnce({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "没有可中断的 Turn。",
+      reason: "noInterruptibleTurn",
+    });
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      turnStatus: "running",
+    });
+
+    await act(async () => {
+      await getState()!.handleCancel();
+    });
+
+    expect(getState()!.submitError).toBeNull();
+    expect(getState()!.cancelToastMessage).toBe(
+      "There is no interruptible Turn.",
+    );
+  });
+
   it("handleCancel 失败时显示短时 toast 且不写入提交错误", async () => {
     vi.useFakeTimers();
     cancelAgentTurnMock.mockRejectedValueOnce(new Error("后端不可达"));

@@ -74,15 +74,15 @@ function lastEntryIsCompletedToolCall(entries: MessageStreamEntry[]): boolean {
 /**
  * timeline item 是否代表 agent 正在产出（即 turn 实际仍在跑）。
  *
- * reasoning / assistant_message / tool_call 视为产出；user_message 是用户输入，
- * error / todo / compaction 是辅助态，不计。用于在 spurious turn_completed 之后
- * 收到产出事件时恢复 running 并清掉误挂的「异常中断」红条。
+ * reasoning / assistant_message / 仍 running 的 tool_call 视为产出；已完成、
+ * 失败或取消的 tool_call 以及 user_message / error / todo / compaction 不计。
+ * 用于在 spurious turn_completed 之后收到产出事件时恢复 running。
  */
 function timelineItemIndicatesActiveWork(item: AgentTimelineItem): boolean {
   return (
     item.type === "assistant_message" ||
     item.type === "reasoning" ||
-    item.type === "tool_call"
+    (item.type === "tool_call" && item.status === "running")
   );
 }
 

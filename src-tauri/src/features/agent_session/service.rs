@@ -2374,19 +2374,26 @@ pub(super) fn strip_terminal_control_sequences(snapshot: &str) -> String {
 /// 模式 / 其他 → `AgentSessionStreamFailed`。各 provider 的内部错误
 /// 经 `From` 归一化到 `AgentSessionError` 后统一走本函数。
 pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> CommandError {
-    let message = error.to_string();
-    let code = match &error {
-        AgentSessionError::NotRunning(_) => CommandErrorCode::AgentSessionNotRunning,
+    match error {
+        AgentSessionError::NoInterruptibleTurn => CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "没有可中断的 Turn。",
+        )
+        .with_reason("noInterruptibleTurn"),
+        AgentSessionError::NotRunning(_) => CommandError::new(
+            CommandErrorCode::AgentSessionNotRunning,
+            "Agent 会话调用失败。",
+        )
+        .with_reason("sessionNotRunning")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string())),
         AgentSessionError::Protocol(_)
         | AgentSessionError::UnsupportedMode(_)
-        | AgentSessionError::Other(_) => CommandErrorCode::AgentSessionStreamFailed,
-    };
-    let mut command_error = CommandError::new(code, "Agent 会话调用失败。")
-        .with_detail(ErrorDetail::new("Cause").with_value("message", message));
-    if matches!(error, AgentSessionError::NotRunning(_)) {
-        command_error = command_error.with_reason("sessionNotRunning");
+        | AgentSessionError::Other(_) => CommandError::new(
+            CommandErrorCode::AgentSessionStreamFailed,
+            "Agent 会话调用失败。",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string())),
     }
-    command_error
 }
 
 pub(super) fn resolve_target_branch(
@@ -2796,6 +2803,16 @@ mod tests {
         fn thread_id(&self) -> Option<String> {
             Some("thread-test".to_string())
         }
+    }
+
+    #[test]
+    fn no_interruptible_turn_maps_to_visible_validation_error() {
+        let error =
+            super::agent_session_error_to_command_error(AgentSessionError::NoInterruptibleTurn);
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("noInterruptibleTurn"));
+        assert_eq!(error.message, "没有可中断的 Turn。");
+        assert!(error.details.is_none());
     }
 
     #[test]

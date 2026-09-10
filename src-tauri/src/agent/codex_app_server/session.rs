@@ -35,6 +35,7 @@ use crate::types::agent_session_stream::{
 };
 
 const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
+const NO_INTERRUPTIBLE_TURN: &str = "没有可中断的 Turn";
 const COMMON_GPT_REASONING_EFFORTS: [&str; 4] = ["low", "medium", "high", "xhigh"];
 const COMMON_GPT_MODELS: [(&str, &str); 4] = [
     ("gpt-5.5", "GPT-5.5"),
@@ -304,10 +305,11 @@ impl CodexSessionHandle {
         Ok(())
     }
 
-    /// 中断当前 turn。无 turn 运行时直接返回 `Ok(())`。
+    /// 中断当前用户 Turn。
     ///
     /// 通过 codex `turn/interrupt` 请求实现；codex 随后会广播
     /// `turn/completed`（status 通常为 `canceled`）。
+    /// 没有父 Turn id 时收口本地运行态并返回错误，避免 `Ok(())` 空成功。
     pub fn cancel_turn(&self) -> Result<(), CodexAppServerError> {
         let (thread_id, turn_id) = {
             let state = self
@@ -316,13 +318,25 @@ impl CodexSessionHandle {
                 .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
             (state.thread_id.clone(), state.current_turn_id.clone())
         };
-        let Some(turn_id) = turn_id else {
-            return Ok(());
-        };
-        let thread_id = thread_id
-            .ok_or_else(|| CodexAppServerError::Protocol("session 尚未拿到 threadId".into()))?;
-        self.client.turn_interrupt(&thread_id, &turn_id)?;
-        Ok(())
+        match resolve_turn_interrupt(thread_id.as_deref(), turn_id.as_deref()) {
+            Ok((thread_id, turn_id)) => self.client.turn_interrupt(&thread_id, &turn_id),
+            Err(error) => {
+                if matches!(
+                    error,
+                    CodexAppServerError::Protocol(ref message) if message == NO_INTERRUPTIBLE_TURN
+                ) {
+                    self.config.broadcaster.emit_stream_event(
+                        self.config.project_id,
+                        self.config.session_id,
+                        AgentStreamEvent::TurnCanceled {
+                            turn_id: None,
+                            reason: "no_interruptible_turn".into(),
+                        },
+                    );
+                }
+                Err(error)
+            }
+        }
     }
 
     /// 回复一个挂起的权限请求。
@@ -628,7 +642,12 @@ impl AgentSessionHandle for CodexSessionHandle {
     }
 
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {
-        CodexSessionHandle::cancel_turn(self).map_err(AgentSessionError::from)
+        CodexSessionHandle::cancel_turn(self).map_err(|error| match error {
+            CodexAppServerError::Protocol(message) if message == NO_INTERRUPTIBLE_TURN => {
+                AgentSessionError::NoInterruptibleTurn
+            }
+            other => AgentSessionError::from(other),
+        })
     }
 
     fn respond_permission(
@@ -693,6 +712,32 @@ impl CodexMode {
     }
 }
 
+fn resolve_turn_interrupt(
+    thread_id: Option<&str>,
+    current_turn_id: Option<&str>,
+) -> Result<(String, String), CodexAppServerError> {
+    let turn_id = current_turn_id
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CodexAppServerError::Protocol(NO_INTERRUPTIBLE_TURN.into()))?;
+    let thread_id = thread_id
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CodexAppServerError::Protocol("session 尚未拿到 threadId".into()))?;
+    Ok((thread_id.to_string(), turn_id.to_string()))
+}
+
+fn is_session_user_thread(
+    session_thread_id: Option<&str>,
+    notification_thread_id: Option<&str>,
+) -> bool {
+    match (session_thread_id, notification_thread_id) {
+        (_, None) => true,
+        (None, _) => true,
+        (Some(session_thread_id), Some(notification_thread_id)) => {
+            session_thread_id == notification_thread_id
+        }
+    }
+}
+
 fn handle_notification(
     state: &Arc<Mutex<SessionState>>,
     config: &CodexSessionConfig,
@@ -715,28 +760,58 @@ fn build_events(
 ) -> Vec<AgentStreamEvent> {
     match notification {
         CodexNotification::ThreadStarted { thread_id } => {
-            if let Ok(mut state) = state.lock() {
-                state.thread_id = Some(thread_id.clone());
+            let applied = if let Ok(mut session) = state.lock() {
+                match session.thread_id.as_deref() {
+                    Some(existing) if !existing.is_empty() && existing != thread_id => false,
+                    _ => {
+                        session.thread_id = Some(thread_id.clone());
+                        true
+                    }
+                }
+            } else {
+                false
+            };
+            if applied {
+                vec![AgentStreamEvent::ThreadStarted { thread_id }]
+            } else {
+                Vec::new()
             }
-            vec![AgentStreamEvent::ThreadStarted { thread_id }]
         }
-        CodexNotification::TurnStarted {
-            turn_id,
-            thread_id: _,
-        } => {
-            if let Ok(mut state) = state.lock() {
-                state.current_turn_id = Some(turn_id.clone());
+        CodexNotification::TurnStarted { turn_id, thread_id } => {
+            let applied = if let Ok(mut session) = state.lock() {
+                if is_session_user_thread(session.thread_id.as_deref(), thread_id.as_deref()) {
+                    session.current_turn_id = Some(turn_id.clone());
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if applied {
+                vec![AgentStreamEvent::TurnStarted {
+                    turn_id: Some(turn_id),
+                }]
+            } else {
+                Vec::new()
             }
-            vec![AgentStreamEvent::TurnStarted {
-                turn_id: Some(turn_id),
-            }]
         }
         CodexNotification::TurnCompleted {
             turn_id,
-            thread_id: _,
+            thread_id,
             status,
             error_message,
         } => {
+            let is_user_turn = state
+                .lock()
+                .ok()
+                .map(|session| {
+                    is_session_user_thread(session.thread_id.as_deref(), thread_id.as_deref())
+                })
+                .unwrap_or(true);
+            if !is_user_turn {
+                return Vec::new();
+            }
             let mut events = flush_all_pending_deltas(state);
             let usage = state.lock().ok().and_then(|mut state| {
                 state.current_turn_id = None;
@@ -1362,6 +1437,133 @@ mod tests {
         let usage = state.lock().unwrap().latest_usage.clone().unwrap();
         assert_eq!(usage.context_window_max_tokens, Some(200_000));
         assert_eq!(usage.context_window_used_tokens, Some(500));
+    }
+
+    #[test]
+    fn build_events_ignores_thread_started_from_other_thread() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        state.lock().unwrap().thread_id = Some("thr_parent".into());
+
+        let events = build_events(
+            &state,
+            CodexNotification::ThreadStarted {
+                thread_id: "thr_child".into(),
+            },
+        );
+
+        assert!(events.is_empty());
+        assert_eq!(
+            state.lock().unwrap().thread_id.as_deref(),
+            Some("thr_parent")
+        );
+    }
+
+    #[test]
+    fn build_events_subagent_item_still_writes_timeline() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        {
+            let mut guard = state.lock().unwrap();
+            guard.thread_id = Some("thr_parent".into());
+            guard.current_turn_id = Some("turn_parent".into());
+        }
+
+        let events = build_events(
+            &state,
+            CodexNotification::ItemStarted {
+                item: json!({
+                    "id": "c1",
+                    "type": "commandExecution",
+                    "command": "ls",
+                }),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+
+        assert!(matches!(
+            events.as_slice(),
+            [AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::ToolCall { .. },
+                ..
+            }]
+        ));
+        assert_eq!(
+            state.lock().unwrap().current_turn_id.as_deref(),
+            Some("turn_parent")
+        );
+    }
+
+    #[test]
+    fn build_events_subagent_turn_started_does_not_replace_parent_turn() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        {
+            let mut guard = state.lock().unwrap();
+            guard.thread_id = Some("thr_parent".into());
+            guard.current_turn_id = Some("turn_parent".into());
+        }
+
+        let events = build_events(
+            &state,
+            CodexNotification::TurnStarted {
+                turn_id: "turn_child".into(),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+
+        assert!(
+            events.is_empty(),
+            "子代理 turn/started 不得让前端以为新开用户 Turn"
+        );
+        assert_eq!(
+            state.lock().unwrap().current_turn_id.as_deref(),
+            Some("turn_parent")
+        );
+    }
+
+    #[test]
+    fn build_events_subagent_turn_completed_does_not_end_parent_turn() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        {
+            let mut guard = state.lock().unwrap();
+            guard.thread_id = Some("thr_parent".into());
+            guard.current_turn_id = Some("turn_parent".into());
+        }
+
+        let events = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("turn_child".into()),
+                thread_id: Some("thr_child".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+
+        assert!(
+            events
+                .iter()
+                .all(|event| !matches!(event, AgentStreamEvent::TurnCompleted { .. })),
+            "子代理 turn/completed 不得把父 Turn 置结束"
+        );
+        assert_eq!(
+            state.lock().unwrap().current_turn_id.as_deref(),
+            Some("turn_parent")
+        );
+    }
+
+    #[test]
+    fn resolve_turn_interrupt_uses_parent_thread_and_turn() {
+        let target = resolve_turn_interrupt(Some("thr_parent"), Some("turn_parent"))
+            .expect("应解析出可中断的父 Turn");
+        assert_eq!(target, ("thr_parent".into(), "turn_parent".into()));
+    }
+
+    #[test]
+    fn resolve_turn_interrupt_without_turn_id_is_not_silent_success() {
+        let error = resolve_turn_interrupt(Some("thr_parent"), None)
+            .expect_err("没有父 Turn id 时不得空成功");
+        assert!(
+            matches!(error, CodexAppServerError::Protocol(message) if message == NO_INTERRUPTIBLE_TURN)
+        );
     }
 
     #[test]

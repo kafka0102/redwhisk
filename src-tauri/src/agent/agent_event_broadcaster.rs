@@ -17,7 +17,7 @@ use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallStatus,
 };
 
 /// 结构化 Agent 事件流的 Tauri event 名。
@@ -420,7 +420,7 @@ fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> boo
 /// - `EndedImmediately`：turn 真失败或被取消，立即置 `is_turn_running=0` 并清
 ///   `turn_ended_at`。
 /// - `ContinueRunning`：收到「有产出」的 timeline 事件（reasoning /
-///   assistant_message / tool_call）。某些 provider（如经代理桥接的 claude
+///   assistant_message / status=running 的 tool_call）。某些 provider（如经代理桥接的 claude
 ///   流）会发 spurious `turn_completed`，但随后继续产出 reasoning/tool_call
 ///   却不再发 `turn_started`；若不处理，grace 收尾会把 `is_turn_running` 置 0，
 ///   导致「明明还在跑」却显示空闲（蓝点）。此时按需恢复运行态。
@@ -436,14 +436,18 @@ enum TurnRunningDecision {
 
 /// 判断 timeline item 是否代表 agent 正在产出（即 turn 实际仍在跑）。
 ///
-/// reasoning / assistant_message / tool_call 视为产出；user_message 是用户输入、
-/// error / todo / compaction 是辅助态，不计。
+/// reasoning / assistant_message / 仍 running 的 tool_call 视为产出；
+/// 已完成、失败或取消的 tool_call 以及 user_message / error / todo /
+/// compaction 不计。
 fn timeline_item_indicates_active_work(item: &AgentTimelineItem) -> bool {
     matches!(
         item,
         AgentTimelineItem::AssistantMessage { .. }
             | AgentTimelineItem::Reasoning { .. }
-            | AgentTimelineItem::ToolCall { .. }
+            | AgentTimelineItem::ToolCall {
+                status: ToolCallStatus::Running,
+                ..
+            }
     )
 }
 
@@ -526,6 +530,7 @@ fn current_epoch_millis() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::agent_session_stream::ToolCallDetail;
 
     #[test]
     fn advance_cursor_increments_seq_per_session() {
@@ -715,6 +720,40 @@ mod tests {
             }),
             D::None
         );
+        assert_eq!(
+            turn_running_from_stream_event(&tool_call_timeline(ToolCallStatus::Running)),
+            D::ContinueRunning
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&tool_call_timeline(ToolCallStatus::Completed)),
+            D::None
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&tool_call_timeline(ToolCallStatus::Failed)),
+            D::None
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&tool_call_timeline(ToolCallStatus::Canceled)),
+            D::None
+        );
+    }
+
+    fn tool_call_timeline(status: ToolCallStatus) -> AgentStreamEvent {
+        AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::ToolCall {
+                call_id: "call-1".into(),
+                name: "shell".into(),
+                detail: ToolCallDetail::Unknown {
+                    raw_input: None,
+                    raw_output: None,
+                },
+                status,
+                error: None,
+            },
+            turn_id: None,
+            seq: 0,
+            timestamp: 0,
+        }
     }
 
     #[test]

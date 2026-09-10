@@ -794,6 +794,7 @@
       "mergeRequiresCurrentBranch": "You are not on a branch, so merge is unavailable.",
       "mustBeRunningToUpdateFollow": "Only running Agent Sessions can update follow status.",
       "tuiResumeNotSupported": "This Agent does not support TUI session resume.",
+      "noInterruptibleTurn": "There is no interruptible Turn.",
       "noActiveTerminal": "The current Session has no active terminal.",
       "onlyBacklogCanStart": "Only backlog Issues can start an Agent Session.",
       "pathCannotBeSymlink": "Path cannot be a symbolic link.",
