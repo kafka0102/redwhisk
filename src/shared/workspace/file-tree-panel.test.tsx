@@ -1,4 +1,9 @@
-import type { ReactElement, ReactNode } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   act,
   fireEvent,
@@ -17,6 +22,10 @@ import type {
   WorkspaceFileTreeNode,
 } from "./workspace-commands";
 import { FileTreePanel, FileTreeStatusBadge } from "./file-tree-panel";
+import {
+  resetFileTreeScrollOffsetCacheForTests,
+  writeFileTreeScrollOffset,
+} from "./file-tree-scroll-offset";
 
 type FileTreeRowRenderer = (
   props: NodeRendererProps<WorkspaceFileTreeNode>,
@@ -24,6 +33,10 @@ type FileTreeRowRenderer = (
 
 const treeHeights: number[] = [];
 const treeRowRenderers: FileTreeRowRenderer[] = [];
+const treeScrollTo = vi.fn();
+const treeOnScrollHandlers: Array<
+  (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => void
+> = [];
 
 vi.mock("../toast", () => ({
   toast: {
@@ -41,19 +54,34 @@ vi.mock("../toast", () => ({
 const toastSuccessMock = vi.mocked(toast.success);
 
 vi.mock("react-arborist", () => ({
-  Tree: ({
-    children,
-    height,
-    "aria-label": ariaLabel,
-  }: {
-    children?: FileTreeRowRenderer;
-    height: number;
-    "aria-label"?: string;
-  }) => {
+  Tree: forwardRef(function MockTree(
+    {
+      children,
+      height,
+      "aria-label": ariaLabel,
+      onScroll,
+    }: {
+      children?: FileTreeRowRenderer;
+      height: number;
+      "aria-label"?: string;
+      onScroll?: (props: {
+        scrollOffset: number;
+        scrollUpdateWasRequested: boolean;
+      }) => void;
+    },
+    ref,
+  ) {
     treeHeights.push(height);
     if (children) {
       treeRowRenderers.push(children);
     }
+    if (onScroll) {
+      treeOnScrollHandlers.push(onScroll);
+    }
+    useImperativeHandle(ref, () => ({
+      list: { current: { scrollTo: treeScrollTo } },
+      listEl: { current: null },
+    }));
     return (
       <div
         aria-label={ariaLabel}
@@ -61,7 +89,7 @@ vi.mock("react-arborist", () => ({
         data-height={height}
       />
     );
-  },
+  }),
 }));
 
 const sampleTree: WorkspaceFileTreeNode[] = [
@@ -90,6 +118,9 @@ describe("FileTreePanel", () => {
   beforeEach(() => {
     treeHeights.length = 0;
     treeRowRenderers.length = 0;
+    treeOnScrollHandlers.length = 0;
+    treeScrollTo.mockReset();
+    resetFileTreeScrollOffsetCacheForTests();
     resizeObserverCallback = null;
     observedElements = [];
 
@@ -228,6 +259,67 @@ describe("FileTreePanel", () => {
     );
 
     expect(treeRowRenderers[treeRowRenderers.length - 1]).toBe(firstRenderer);
+  });
+
+  it("restores cached scroll offset after remounting the same workspace", () => {
+    writeFileTreeScrollOffset("/tmp/redwhisk", 420);
+    renderWithI18n(
+      <FileTreePanel
+        errorMessage={null}
+        fileTree={sampleTree}
+        isLoading={false}
+        onOpenFile={() => {}}
+        workspacePath="/tmp/redwhisk"
+      />,
+    );
+    expect(treeScrollTo).toHaveBeenCalledWith(420);
+  });
+
+  it("keeps scroll offset when the tree unmounts and mounts again", () => {
+    const { unmount } = renderWithI18n(
+      <FileTreePanel
+        errorMessage={null}
+        fileTree={sampleTree}
+        isLoading={false}
+        onOpenFile={() => {}}
+        workspacePath="/tmp/redwhisk"
+      />,
+    );
+    expect(treeOnScrollHandlers.length).toBeGreaterThan(0);
+    act(() => {
+      treeOnScrollHandlers[treeOnScrollHandlers.length - 1]({
+        scrollOffset: 288,
+        scrollUpdateWasRequested: false,
+      });
+    });
+    unmount();
+    treeScrollTo.mockReset();
+    treeOnScrollHandlers.length = 0;
+
+    renderWithI18n(
+      <FileTreePanel
+        errorMessage={null}
+        fileTree={sampleTree}
+        isLoading={false}
+        onOpenFile={() => {}}
+        workspacePath="/tmp/redwhisk"
+      />,
+    );
+    expect(treeScrollTo).toHaveBeenCalledWith(288);
+  });
+
+  it("does not restore another workspace's scroll offset", () => {
+    writeFileTreeScrollOffset("/tmp/redwhisk", 420);
+    renderWithI18n(
+      <FileTreePanel
+        errorMessage={null}
+        fileTree={sampleTree}
+        isLoading={false}
+        onOpenFile={() => {}}
+        workspacePath="/tmp/other"
+      />,
+    );
+    expect(treeScrollTo).not.toHaveBeenCalled();
   });
 
   it("colors file name and shows letter badge for changed files", () => {

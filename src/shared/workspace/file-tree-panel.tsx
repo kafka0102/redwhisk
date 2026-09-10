@@ -31,6 +31,11 @@ import {
 } from "./workspace-change-status";
 import { useI18n } from "../i18n/i18n";
 import {
+  readFileTreeScrollOffset,
+  restoreFileTreeScrollOffset,
+  writeFileTreeScrollOffset,
+} from "./file-tree-scroll-offset";
+import {
   WorkspacePathContextMenu,
   type WorkspacePathContextMenuTarget,
 } from "./workspace-path-context-menu";
@@ -87,6 +92,8 @@ export const FileTreePanel = memo(function FileTreePanel({
     FILE_TREE_FALLBACK_HEIGHT,
   );
   const [menu, setMenu] = useState<WorkspacePathContextMenuTarget | null>(null);
+  const restoreKeyRef = useRef<string>("");
+  const didRestoreScrollRef = useRef(false);
   // 文件树数据异步到达前 viewport 不挂载；必须在 hasFileTree 变为 true 后
   // 再测量，否则首次 useLayoutEffect 会在 ref 仍为 null 时空跑并卡住 fallback 高度。
   const hasFileTree = fileTree.length > 0 && !errorMessage;
@@ -102,6 +109,36 @@ export const FileTreePanel = memo(function FileTreePanel({
     },
     [onDirectoryOpen, onOpenStateChange],
   );
+
+  const handleScroll = useCallback(
+    (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => {
+      if (!props.scrollUpdateWasRequested) {
+        didRestoreScrollRef.current = true;
+      }
+      if (workspacePath) {
+        writeFileTreeScrollOffset(workspacePath, props.scrollOffset);
+      }
+    },
+    [workspacePath],
+  );
+
+  useLayoutEffect(() => {
+    if (!hasFileTree) {
+      return;
+    }
+    const cacheKey = workspacePath ?? "";
+    if (restoreKeyRef.current !== cacheKey) {
+      restoreKeyRef.current = cacheKey;
+      didRestoreScrollRef.current = false;
+    }
+    if (didRestoreScrollRef.current) {
+      return;
+    }
+    const offset = cacheKey === "" ? 0 : readFileTreeScrollOffset(cacheKey);
+    if (restoreFileTreeScrollOffset(treeApiRef.current, offset)) {
+      didRestoreScrollRef.current = true;
+    }
+  }, [fileTree, hasFileTree, viewportHeight, workspacePath]);
 
   useLayoutEffect(() => {
     if (!onDirectoryOpen || initialOpenState == null) {
@@ -207,6 +244,7 @@ export const FileTreePanel = memo(function FileTreePanel({
             overscanCount={8}
             rowHeight={28}
             width="100%"
+            onScroll={handleScroll}
             onToggle={handleToggle}
           >
             {renderFileTreeRow}
