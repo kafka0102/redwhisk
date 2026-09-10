@@ -535,4 +535,47 @@ describe("AgentComposer", () => {
       screen.getByRole("button", { name: "Send message" }),
     ).toBeInTheDocument();
   });
+
+  it("running 且有可提交文本时停止与发送同时存在", async () => {
+    const user = userEvent.setup();
+    await renderComposer({ turnStatus: "running" });
+    expect(
+      screen.getByRole("button", { name: "Cancel current task" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Send message" }),
+    ).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Message input" }),
+      "追问一句",
+    );
+    expect(
+      screen.getByRole("button", { name: "Cancel current task" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
+  it("running 时发送入队，已排队提示可取消且不停止当前 Turn", async () => {
+    const user = userEvent.setup();
+    await renderComposer({ turnStatus: "running" });
+    await user.type(
+      screen.getByRole("textbox", { name: "Message input" }),
+      "先排队",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Message input" })).toHaveValue(
+      "",
+    );
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.getByText("先排队")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Cancel queued follow-up" }),
+    );
+    expect(screen.queryByText("Queued")).not.toBeInTheDocument();
+    expect(cancelAgentTurnMock).not.toHaveBeenCalled();
+  });
 });

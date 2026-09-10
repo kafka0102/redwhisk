@@ -5,6 +5,9 @@
 // 避免与 message-stream 形成双数据源；同时补一个本地 `isSubmitting` 锁住
 // “点击发送 → running 事件回流”之间的空窗，防止重复点击重复发送。
 //
+// 排队追问：running 且非只读时提交写入按 sessionId 隔离的一条内存槽位，不调用
+// sendAgentMessage；turnStatus 离开 running 后自动发出。点停止先同步丢队。
+//
 // 附件流程：
 //   open({ directory:false, multiple:false }) → sourcePath
 //   → saveAgentAttachment({ sourcePath, displayName=basename }) → savedPath
@@ -62,6 +65,16 @@ export interface UseAgentComposerResult {
   handleRemoveAttachment: (id: string) => void;
   /** 切换 Think effort。 */
   handleSetEffort: (effort: ComposerEffort) => Promise<void>;
+  /** 当前 Session 未发出的排队追问；无排队时为 null。 */
+  queuedFollowUp: QueuedFollowUp | null;
+  /** 取消已排队追问，不停止当前 Turn。 */
+  handleCancelQueuedFollowUp: () => void;
+}
+
+/** 排队追问 payload：文本 + 已保存附件。同一 Session 只保留一条。 */
+export interface QueuedFollowUp {
+  message: string;
+  attachments: ComposerAttachment[];
 }
 
 /** 生成简单的本地唯一 id（避免引入 uuid 依赖）。 */
@@ -101,6 +114,16 @@ function inferKind(displayName: string): AgentAttachmentKindLiteral {
   return "generic";
 }
 
+function toPayloadAttachments(
+  attachments: ComposerAttachment[],
+): AgentMessageAttachment[] {
+  return attachments.map((attachment) => ({
+    path: attachment.savedPath,
+    displayName: attachment.displayName,
+    kind: attachment.kind,
+  }));
+}
+
 /**
  * Session 输入草稿缓存：按 sessionId 隔离的纯内存 Map。
  *
@@ -111,14 +134,16 @@ function inferKind(displayName: string): AgentAttachmentKindLiteral {
  * 流程必须调用 {@link clearComposerDraft} 清除该项，否则旧草稿会串入复用该 id 的新 Session。
  */
 const composerDraftCache = new Map<number, string>();
+const queuedFollowUpCache = new Map<number, QueuedFollowUp>();
 
 /**
- * 清除指定 sessionId 的输入草稿缓存项。
+ * 清除指定 sessionId 的输入草稿与排队追问。
  *
  * 供 Session 删除流程在 deleteAgentSession 成功后调用（见 ADR 0006：id 复用必须清理）。
  */
 export function clearComposerDraft(sessionId: number): void {
   composerDraftCache.delete(sessionId);
+  queuedFollowUpCache.delete(sessionId);
 }
 
 /**
@@ -127,6 +152,7 @@ export function clearComposerDraft(sessionId: number): void {
  */
 export function clearComposerDraftCacheForTest(): void {
   composerDraftCache.clear();
+  queuedFollowUpCache.clear();
 }
 
 export function useAgentComposer({
@@ -153,6 +179,9 @@ export function useAgentComposer({
     [sessionId],
   );
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [queuedFollowUp, setQueuedFollowUp] = useState<QueuedFollowUp | null>(
+    () => queuedFollowUpCache.get(sessionId) ?? null,
+  );
   const [effort, setEffort] = useState<ComposerEffort>(currentEffort ?? null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,6 +191,7 @@ export function useAgentComposer({
   );
   const cancelToastTimeoutRef = useRef<number | null>(null);
   const submitLockRef = useRef(false);
+  const previousTurnStatusRef = useRef(turnStatus);
 
   const isSending = turnStatus === "running";
 
@@ -190,7 +220,7 @@ export function useAgentComposer({
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (isReadOnly || isSending || submitLockRef.current) {
+    if (isReadOnly || submitLockRef.current) {
       return;
     }
     const message = text.trim();
@@ -202,13 +232,23 @@ export function useAgentComposer({
       setSubmitError(t("agentsFeature.attachmentsUploading"));
       return;
     }
-    const payloadAttachments: AgentMessageAttachment[] = attachments
-      .filter((attachment) => attachment.status === "saved")
-      .map((attachment) => ({
-        path: attachment.savedPath,
-        displayName: attachment.displayName,
-        kind: attachment.kind,
-      }));
+    const savedAttachments = attachments.filter(
+      (attachment) => attachment.status === "saved",
+    );
+    const payloadAttachments = toPayloadAttachments(savedAttachments);
+    if (isSending) {
+      const queued: QueuedFollowUp = {
+        message,
+        attachments: savedAttachments,
+      };
+      queuedFollowUpCache.set(sessionId, queued);
+      setQueuedFollowUp(queued);
+      setSubmitError(null);
+      setText("");
+      composerDraftCache.delete(sessionId);
+      setAttachments([]);
+      return;
+    }
     setSubmitError(null);
     submitLockRef.current = true;
     setIsSubmitting(true);
@@ -244,10 +284,66 @@ export function useAgentComposer({
     t,
   ]);
 
+  const sendQueuedFollowUp = useCallback(async () => {
+    if (isReadOnly || submitLockRef.current) {
+      return;
+    }
+    const queued = queuedFollowUpCache.get(sessionId);
+    if (queued === undefined) {
+      return;
+    }
+    queuedFollowUpCache.delete(sessionId);
+    setQueuedFollowUp(null);
+    const payloadAttachments = toPayloadAttachments(queued.attachments);
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onBeforeSend?.();
+      await sendAgentMessage({
+        projectId,
+        sessionId,
+        message: queued.message,
+        attachments: payloadAttachments,
+      });
+      onMessageSent?.(queued.message);
+    } catch (error) {
+      setText(queued.message);
+      setAttachments(queued.attachments);
+      setSubmitError(getCommandErrorMessage(error, t));
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
+  }, [
+    isReadOnly,
+    onBeforeSend,
+    onMessageSent,
+    projectId,
+    sessionId,
+    setText,
+    t,
+  ]);
+
+  useEffect(() => {
+    const previousTurnStatus = previousTurnStatusRef.current;
+    previousTurnStatusRef.current = turnStatus;
+    if (previousTurnStatus !== "running" || turnStatus === "running") {
+      return;
+    }
+    void sendQueuedFollowUp();
+  }, [sendQueuedFollowUp, turnStatus]);
+
+  const dropQueuedFollowUp = useCallback(() => {
+    queuedFollowUpCache.delete(sessionId);
+    setQueuedFollowUp(null);
+  }, [sessionId]);
+
   const handleCancel = useCallback(async () => {
     if (isCancelling) {
       return;
     }
+    dropQueuedFollowUp();
     setSubmitError(null);
     setIsCancelling(true);
     try {
@@ -257,7 +353,14 @@ export function useAgentComposer({
     } finally {
       setIsCancelling(false);
     }
-  }, [isCancelling, projectId, sessionId, showCancelToast, t]);
+  }, [
+    dropQueuedFollowUp,
+    isCancelling,
+    projectId,
+    sessionId,
+    showCancelToast,
+    t,
+  ]);
 
   const handleAddAttachment = useCallback(async () => {
     if (isReadOnly) {
@@ -357,5 +460,7 @@ export function useAgentComposer({
     handleAddAttachment,
     handleRemoveAttachment,
     handleSetEffort,
+    queuedFollowUp,
+    handleCancelQueuedFollowUp: dropQueuedFollowUp,
   };
 }

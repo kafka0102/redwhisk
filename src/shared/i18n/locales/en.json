@@ -472,6 +472,8 @@
     "attachmentsSavedHint": "Attachments are saved but will not be sent with messages yet.",
     "selectModel": "Select model",
     "thinkMode": "Think mode",
+    "queuedFollowUp": "Queued",
+    "cancelQueuedFollowUp": "Cancel queued follow-up",
     "cancelCurrentTurn": "Cancel current task",
     "sendMessage": "Send message",
     "messageInput": "Message input",

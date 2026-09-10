@@ -9,6 +9,7 @@
 // - L214：上下文窗口用量来自 usage_updated 事件 → props.usage
 
 import { useMemo } from "react";
+import { X } from "lucide-react";
 
 import { Textarea } from "@/components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
@@ -52,7 +53,7 @@ export function AgentComposer({
   onBeforeSetEffort,
   onMessageSent,
 }: AgentComposerProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const {
     models,
     selectedModelId,
@@ -86,6 +87,8 @@ export function AgentComposer({
     handleAddAttachment,
     handleRemoveAttachment,
     handleSetEffort,
+    queuedFollowUp,
+    handleCancelQueuedFollowUp,
   } = useAgentComposer({
     projectId,
     sessionId,
@@ -121,6 +124,24 @@ export function AgentComposer({
         event.preventDefault();
       }}
     >
+      {queuedFollowUp ? (
+        <div className="agents-composer__queued" role="status">
+          <span className="agents-composer__chip">
+            <span>{t("agentsFeature.queuedFollowUp")}</span>
+            <span className="agents-composer__chip-name">
+              {queuedFollowUp.message}
+            </span>
+            <button
+              type="button"
+              className="agents-composer__chip-remove"
+              aria-label={t("agentsFeature.cancelQueuedFollowUp")}
+              onClick={handleCancelQueuedFollowUp}
+            >
+              <X aria-hidden="true" size={12} strokeWidth={2} />
+            </button>
+          </span>
+        </div>
+      ) : null}
       <ComposerAttachments
         attachments={attachments}
         onRemove={handleRemoveAttachment}

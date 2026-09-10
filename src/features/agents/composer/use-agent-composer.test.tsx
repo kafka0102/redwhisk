@@ -46,6 +46,8 @@ interface ProbeProps {
   sessionId: number;
   turnStatus: TurnStatus;
   currentEffort?: string | null;
+  isReadOnly?: boolean;
+  onBeforeSend?: () => Promise<void>;
   onBeforeSetEffort?: () => Promise<void>;
   onMessageSent?: (message: string) => void;
   onState: (state: UseAgentComposerResult) => void;
@@ -56,6 +58,8 @@ function Probe({
   sessionId,
   turnStatus,
   currentEffort,
+  isReadOnly,
+  onBeforeSend,
   onBeforeSetEffort,
   onMessageSent,
   onState,
@@ -65,6 +69,8 @@ function Probe({
     sessionId,
     turnStatus,
     currentEffort,
+    isReadOnly,
+    onBeforeSend,
     onBeforeSetEffort,
     onMessageSent,
   });
@@ -76,7 +82,9 @@ type ProbeInput = Omit<ProbeProps, "onState">;
 
 async function renderProbe(props: ProbeInput): Promise<{
   getState: () => UseAgentComposerResult | null;
-  rerenderWith: (next: Partial<Pick<ProbeProps, "turnStatus">>) => void;
+  rerenderWith: (
+    next: Partial<Pick<ProbeProps, "turnStatus" | "sessionId">>,
+  ) => void;
   unmount: () => void;
 }> {
   let latest: UseAgentComposerResult | null = null;
@@ -89,6 +97,8 @@ async function renderProbe(props: ProbeInput): Promise<{
       sessionId={props.sessionId}
       turnStatus={props.turnStatus}
       currentEffort={props.currentEffort}
+      isReadOnly={props.isReadOnly}
+      onBeforeSend={props.onBeforeSend}
       onBeforeSetEffort={props.onBeforeSetEffort}
       onMessageSent={props.onMessageSent}
       onState={captureState}
@@ -99,13 +109,17 @@ async function renderProbe(props: ProbeInput): Promise<{
   });
   return {
     getState: () => latest,
-    rerenderWith: (next: Partial<Pick<ProbeProps, "turnStatus">>) => {
+    rerenderWith: (
+      next: Partial<Pick<ProbeProps, "turnStatus" | "sessionId">>,
+    ) => {
       result.rerender(
         <Probe
           projectId={props.projectId}
-          sessionId={props.sessionId}
+          sessionId={next.sessionId ?? props.sessionId}
           turnStatus={next.turnStatus ?? props.turnStatus}
           currentEffort={props.currentEffort}
+          isReadOnly={props.isReadOnly}
+          onBeforeSend={props.onBeforeSend}
           onBeforeSetEffort={props.onBeforeSetEffort}
           onMessageSent={props.onMessageSent}
           onState={captureState}
@@ -612,6 +626,286 @@ describe("useAgentComposer", () => {
         turnStatus: "idle",
       });
       expect(second.getState()!.text).toBe("");
+    });
+  });
+
+  describe("排队追问", () => {
+    it("running 时提交入队且不调用 sendAgentMessage，并清空输入", async () => {
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        getState()!.setText("下一句");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.text).toBe("");
+      expect(getState()!.queuedFollowUp).toEqual({
+        message: "下一句",
+        attachments: [],
+      });
+    });
+
+    it("同一 Session 再提交覆盖未发出的排队追问", async () => {
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        getState()!.setText("第一句");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      await act(async () => {
+        getState()!.setText("改成第二句");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.queuedFollowUp).toEqual({
+        message: "改成第二句",
+        attachments: [],
+      });
+    });
+
+    it("点停止先丢掉排队再 cancelAgentTurn，Turn 结束后也不发出", async () => {
+      let resolveCancel: (() => void) | null = null;
+      cancelAgentTurnMock.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveCancel = resolve;
+        }),
+      );
+      const { getState, rerenderWith } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        getState()!.setText("不要发出");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(getState()!.queuedFollowUp?.message).toBe("不要发出");
+
+      let cancelPromise: Promise<void> | undefined;
+      act(() => {
+        cancelPromise = getState()!.handleCancel();
+      });
+      expect(getState()!.queuedFollowUp).toBeNull();
+      expect(cancelAgentTurnMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+      });
+
+      await act(async () => {
+        resolveCancel?.();
+        await cancelPromise;
+      });
+      rerenderWith({ turnStatus: "canceled" });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    });
+
+    it("turnStatus 离开 running 后自动以 follow_up 发出排队追问", async () => {
+      const onMessageSent = vi.fn();
+      const { getState, rerenderWith } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        onMessageSent,
+      });
+      await act(async () => {
+        getState()!.setText("自动发出");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+
+      rerenderWith({ turnStatus: "idle" });
+      await waitFor(() => {
+        expect(sendAgentMessageMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 10,
+          message: "自动发出",
+          attachments: [],
+        });
+      });
+      expect(onMessageSent).toHaveBeenCalledWith("自动发出");
+      expect(getState()!.queuedFollowUp).toBeNull();
+    });
+
+    it("排队发出失败时可见错误，文本和附件回到 composer", async () => {
+      sendAgentMessageMock.mockRejectedValueOnce(new Error("发出失败"));
+      dialogMocks.open.mockResolvedValue("/tmp/note.txt");
+      const { getState, rerenderWith } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        await getState()!.handleAddAttachment();
+      });
+      await act(async () => {
+        getState()!.setText("失败要回来");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(getState()!.text).toBe("");
+      expect(getState()!.attachments).toEqual([]);
+
+      rerenderWith({ turnStatus: "failed" });
+      await waitFor(() => {
+        expect(getState()!.submitError).toBe("发出失败");
+      });
+      expect(getState()!.text).toBe("失败要回来");
+      expect(getState()!.attachments).toEqual([
+        expect.objectContaining({
+          displayName: "note.txt",
+          savedPath: "/data/agent-attachments/1/note.txt",
+          status: "saved",
+        }),
+      ]);
+      expect(getState()!.queuedFollowUp).toBeNull();
+    });
+
+    it("已保存附件随文本入队，Turn 结束后一并发出", async () => {
+      dialogMocks.open.mockResolvedValue("/tmp/shot.png");
+      saveAgentAttachmentMock.mockResolvedValueOnce({
+        path: "/data/agent-attachments/1/shot.png",
+        displayName: "shot.png",
+        kind: "image",
+      });
+      const { getState, rerenderWith } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        await getState()!.handleAddAttachment();
+      });
+      await act(async () => {
+        getState()!.setText("带图追问");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.attachments).toEqual([]);
+      expect(getState()!.queuedFollowUp?.attachments).toEqual([
+        expect.objectContaining({
+          displayName: "shot.png",
+          savedPath: "/data/agent-attachments/1/shot.png",
+          kind: "image",
+          status: "saved",
+        }),
+      ]);
+
+      rerenderWith({ turnStatus: "idle" });
+      await waitFor(() => {
+        expect(sendAgentMessageMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 10,
+          message: "带图追问",
+          attachments: [
+            {
+              path: "/data/agent-attachments/1/shot.png",
+              displayName: "shot.png",
+              kind: "image",
+            },
+          ],
+        });
+      });
+    });
+
+    it("排队按 sessionId 隔离，不串到另一个 Session", async () => {
+      const first = await renderProbe({
+        projectId: 1,
+        sessionId: 21,
+        turnStatus: "running",
+      });
+      const second = await renderProbe({
+        projectId: 1,
+        sessionId: 22,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        first.getState()!.setText("给 21");
+      });
+      await act(async () => {
+        await first.getState()!.handleSubmit();
+      });
+      await act(async () => {
+        second.getState()!.setText("给 22");
+      });
+      await act(async () => {
+        await second.getState()!.handleSubmit();
+      });
+      expect(first.getState()!.queuedFollowUp?.message).toBe("给 21");
+      expect(second.getState()!.queuedFollowUp?.message).toBe("给 22");
+
+      first.rerenderWith({ turnStatus: "idle" });
+      await waitFor(() => {
+        expect(sendAgentMessageMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 21,
+          message: "给 21",
+          attachments: [],
+        });
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: 22 }),
+      );
+      expect(second.getState()!.queuedFollowUp?.message).toBe("给 22");
+    });
+
+    it("只读 Session 运行中提交不入队也不发送", async () => {
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        isReadOnly: true,
+      });
+      await act(async () => {
+        getState()!.setText("不该入队");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.queuedFollowUp).toBeNull();
+      expect(getState()!.text).toBe("不该入队");
+    });
+
+    it("取消已排队提示只丢排队，不停止当前 Turn", async () => {
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
+      await act(async () => {
+        getState()!.setText("先排队");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      await act(async () => {
+        getState()!.handleCancelQueuedFollowUp();
+      });
+      expect(getState()!.queuedFollowUp).toBeNull();
+      expect(cancelAgentTurnMock).not.toHaveBeenCalled();
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
     });
   });
 });

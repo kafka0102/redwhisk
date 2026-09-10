@@ -203,7 +203,8 @@ export function ComposerControls({
               />
             )}
           </button>
-        ) : (
+        ) : null}
+        {!isSending || canSend ? (
           <button
             type="button"
             className="agents-composer__send"
@@ -213,7 +214,7 @@ export function ComposerControls({
           >
             <ArrowUp aria-hidden="true" size={13} strokeWidth={2} />
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

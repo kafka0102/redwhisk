@@ -472,6 +472,8 @@
     "attachmentsSavedHint": "附件已保存，暂不随消息发送",
     "selectModel": "选择模型",
     "thinkMode": "思考模式",
+    "queuedFollowUp": "已排队",
+    "cancelQueuedFollowUp": "取消排队",
     "cancelCurrentTurn": "终止当前任务",
     "sendMessage": "发送消息",
     "messageInput": "消息输入",
