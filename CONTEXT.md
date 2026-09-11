@@ -256,3 +256,15 @@ _Avoid_: 当前技能路径列、Tooltip 罗列该 Agent 全部路径、单一 A
 **技能刷新同步**：
 对本地 skill 目录重扫并更新内存索引后，按 `name + scope` 重算已添加技能的 `skill_paths` 写回数据库的过程。项目 scope 对账源为项目扫描 ∪ 全局扫描（同 `name + agentType` 项目优先）；全局 scope 仅用全局扫描。手动「刷新技能」覆盖全局 + 当前项目并提示结果；启动静默只处理全局；进入项目技能页静默处理当前项目。对账源中找不到同名 skill 时保留配置并将 `skill_paths` 置空，不软删。
 _Avoid_: 仅刷新内存索引不对账 DB、项目对账只看项目目录、刷新即删除配置、把扫描 loading 当成列表行内骨架
+
+**模型目录**（Model Catalog）：
+某一 Agent 在本机配置中声明的可选模型集合，是 RedWhisk 展示模型选项的唯一来源；Codex 取自模型目录文件或 CLI 模型缓存，Grok 取自配置中的模型别名表，Claude 取自官方别名或第三方网关下的单条真实模型。不经 Agent 的模型接口获取。
+_Avoid_: 在线模型接口、Agent 内置默认模型、会话内已选模型
+
+**内置模型回退列表**：
+仅当某 Agent 本机不存在任何模型目录时，RedWhisk 自带的候选模型集合；当前只有 Codex 有，其余 Agent 无模型目录时不提供任何默认模型。
+_Avoid_: 默认模型、硬编码模型列表、所有 Agent 通用的兜底列表
+
+**启动期模型选择**：
+在 Issue Run Dialog 选定 Agent Profile 后为本次启动挑选的模型；只对该次启动生效，不写回 Agent 全局配置，也不持久化为 Profile 字段。
+_Avoid_: 会话内切换模型、Profile 默认模型、全局配置改写
