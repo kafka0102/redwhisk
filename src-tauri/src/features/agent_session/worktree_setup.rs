@@ -30,6 +30,7 @@ pub(super) fn run_worktree_setup_command(
     }
 
     if let Err(failure) = run_setup_command(workspace, setup_command) {
+        let cause_message = failure.cause_message();
         return Err(CommandError::new(
             CommandErrorCode::AgentSessionStartFailed,
             "Worktree 初始化命令执行失败。",
@@ -39,6 +40,8 @@ pub(super) fn run_worktree_setup_command(
         .with_detail(ErrorDetail::new("Command").with_value("command", setup_command))
         .with_detail(ErrorDetail::new("Shell").with_value("shell", failure.shell))
         .with_detail(ErrorDetail::new("ExitStatus").with_value("code", failure.exit_code))
+        // 前端只把 Cause.message 拼到本地化文案后面，缺少这条时用户看不到 stderr。
+        .with_detail(ErrorDetail::new("Cause").with_value("message", cause_message))
         .with_detail(ErrorDetail::new("Output").with_value("stderr", failure.stderr)));
     }
 
@@ -50,6 +53,15 @@ struct SetupCommandFailure {
     shell: String,
     exit_code: i32,
     stderr: String,
+}
+
+impl SetupCommandFailure {
+    fn cause_message(&self) -> String {
+        if !self.stderr.is_empty() {
+            return self.stderr.clone();
+        }
+        format!("exit status {}", self.exit_code)
+    }
 }
 
 #[cfg(unix)]
@@ -225,5 +237,47 @@ mod worktree_setup_command_tests {
             fs::read_to_string(workspace_dir.join("setup-marker.txt")).expect("setup marker"),
             "shell-setup"
         );
+    }
+
+    #[test]
+    fn run_worktree_setup_command_reports_stderr_as_cause() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let error = run_worktree_setup_command(
+            &temp_dir.path().to_string_lossy(),
+            Some("printf 'cp: missing file\n' >&2; exit 3"),
+        )
+        .expect_err("setup command must fail");
+
+        assert_eq!(error.reason.as_deref(), Some("worktreeInitCommandFailed"));
+        let serialized = serde_json::to_value(&error).expect("serialize error");
+        let details = serialized
+            .get("details")
+            .and_then(|value| value.as_array())
+            .expect("details array");
+        let cause = details
+            .iter()
+            .find(|detail| detail.get("@type").and_then(|value| value.as_str()) == Some("Cause"))
+            .and_then(|detail| detail.get("message"))
+            .and_then(|value| value.as_str());
+        assert_eq!(cause, Some("cp: missing file"));
+    }
+
+    #[test]
+    fn run_worktree_setup_command_reports_exit_status_without_stderr() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let error = run_worktree_setup_command(&temp_dir.path().to_string_lossy(), Some("exit 4"))
+            .expect_err("setup command must fail");
+
+        let serialized = serde_json::to_value(&error).expect("serialize error");
+        let details = serialized
+            .get("details")
+            .and_then(|value| value.as_array())
+            .expect("details array");
+        let cause = details
+            .iter()
+            .find(|detail| detail.get("@type").and_then(|value| value.as_str()) == Some("Cause"))
+            .and_then(|detail| detail.get("message"))
+            .and_then(|value| value.as_str());
+        assert_eq!(cause, Some("exit status 4"));
     }
 }
