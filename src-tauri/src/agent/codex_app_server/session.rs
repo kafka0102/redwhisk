@@ -873,7 +873,10 @@ fn build_events(
                     .or_default();
                 buffer.push_str(&delta);
             }
-            flush_agent_message_delta(state, &item_id, false)
+            // 先冲出其他 item 的节流尾巴，避免拖到 turn_completed 出现在最终揭露后。
+            let mut events = flush_pending_deltas_except(state, Some(&item_id));
+            events.extend(flush_agent_message_delta(state, &item_id, false));
+            events
         }
         CodexNotification::ReasoningDelta {
             item_id,
@@ -888,7 +891,9 @@ fn build_events(
                 let buffer = state.reasoning_buffer.entry(item_id.clone()).or_default();
                 buffer.push_str(&delta);
             }
-            flush_reasoning_delta(state, &item_id, false)
+            let mut events = flush_pending_deltas_except(state, Some(&item_id));
+            events.extend(flush_reasoning_delta(state, &item_id, false));
+            events
         }
         CodexNotification::ItemStarted { item, thread_id: _ } => {
             build_item_event(state, &item, true)
@@ -940,12 +945,32 @@ fn build_item_event(
     // commandExecution item 下发 cwd：捕获为「最近已知 cwd」，供完成流程解析
     // session 实际执行路径。best-effort，纯文件编辑轮次无 cwd 则不改写。
     update_last_known_cwd(state, item);
+    let item_id = item.get("id").and_then(Value::as_str);
+    // 新 item 开始或完成时，先冲出其他 item 未刷完的节流尾巴。
+    let mut events = flush_pending_deltas_except(state, item_id);
+
+    if !is_started {
+        // item/completed 后清掉对应增量缓冲；映射失败也要清，避免残留拖到 turn 结束。
+        if let Some(item_id) = item_id {
+            events.extend(flush_agent_message_delta(state, item_id, true));
+            events.extend(flush_reasoning_delta(state, item_id, true));
+            if let Ok(mut session) = state.lock() {
+                session.agent_message_buffer.remove(item_id);
+                session.agent_message_last_flush_at.remove(item_id);
+                session.agent_message_flushed_len.remove(item_id);
+                session.reasoning_buffer.remove(item_id);
+                session.reasoning_last_flush_at.remove(item_id);
+                session.reasoning_flushed_len.remove(item_id);
+            }
+        }
+    }
+
     // item/started 与 item/completed 都映射为同一条 timeline 项；status 由
     // map_thread_item 根据 item 自身字段决定。对于 started 且无 status 的
     // commandExecution，强制标记 running。
     let mut timeline_item = match map_thread_item(item, true) {
         Some(item) => item,
-        None => return Vec::new(),
+        None => return events,
     };
 
     if is_started {
@@ -955,45 +980,19 @@ fn build_item_event(
                 *status = ToolCallStatus::Running;
             }
         }
-    } else {
-        let mut events = Vec::new();
-        // item/completed 后清掉对应增量缓冲（如果存在）。
-        if let Some(item_id) = item.get("id").and_then(Value::as_str) {
-            events.extend(flush_agent_message_delta(state, item_id, true));
-            events.extend(flush_reasoning_delta(state, item_id, true));
-            if let Ok(mut state) = state.lock() {
-                state.agent_message_buffer.remove(item_id);
-                state.agent_message_last_flush_at.remove(item_id);
-                state.agent_message_flushed_len.remove(item_id);
-                state.reasoning_buffer.remove(item_id);
-                state.reasoning_last_flush_at.remove(item_id);
-                state.reasoning_flushed_len.remove(item_id);
-            }
-        }
-        let turn_id = state
-            .lock()
-            .ok()
-            .and_then(|state| state.current_turn_id.clone());
-        events.push(AgentStreamEvent::Timeline {
-            item: timeline_item,
-            turn_id,
-            seq: next_seq(),
-            timestamp: now_ms(),
-        });
-        return events;
     }
 
     let turn_id = state
         .lock()
         .ok()
         .and_then(|state| state.current_turn_id.clone());
-
-    vec![AgentStreamEvent::Timeline {
+    events.push(AgentStreamEvent::Timeline {
         item: timeline_item,
         turn_id,
         seq: next_seq(),
         timestamp: now_ms(),
-    }]
+    });
+    events
 }
 
 fn flush_agent_message_delta(
@@ -1102,6 +1101,13 @@ fn flush_reasoning_delta(
 }
 
 fn flush_all_pending_deltas(state: &Arc<Mutex<SessionState>>) -> Vec<AgentStreamEvent> {
+    flush_pending_deltas_except(state, None)
+}
+
+fn flush_pending_deltas_except(
+    state: &Arc<Mutex<SessionState>>,
+    except_item_id: Option<&str>,
+) -> Vec<AgentStreamEvent> {
     let (agent_message_ids, reasoning_ids) = match state.lock() {
         Ok(state) => (
             state
@@ -1115,9 +1121,15 @@ fn flush_all_pending_deltas(state: &Arc<Mutex<SessionState>>) -> Vec<AgentStream
     };
     let mut events = Vec::new();
     for item_id in agent_message_ids {
+        if except_item_id == Some(item_id.as_str()) {
+            continue;
+        }
         events.extend(flush_agent_message_delta(state, &item_id, true));
     }
     for item_id in reasoning_ids {
+        if except_item_id == Some(item_id.as_str()) {
+            continue;
+        }
         events.extend(flush_reasoning_delta(state, &item_id, true));
     }
     events
@@ -1668,6 +1680,198 @@ mod tests {
                 turn_id: Some(_),
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn build_events_new_agent_message_flushes_stale_reasoning_before_turn_completed() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        let first = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "Let me look at more files".into(),
+                thread_id: None,
+            },
+        );
+        let throttled = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: ": poetry ranking".into(),
+                thread_id: None,
+            },
+        );
+        assert_eq!(first.len(), 1);
+        assert_eq!(throttled.len(), 0);
+
+        let switched = build_events(
+            &state,
+            CodexNotification::AgentMessageDelta {
+                item_id: "m-final".into(),
+                delta: "全部 3 张票已 green".into(),
+                thread_id: None,
+            },
+        );
+        assert_eq!(switched.len(), 2);
+        match &switched[0] {
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::Reasoning { text, .. },
+                ..
+            } => {
+                assert_eq!(text, "Let me look at more files: poetry ranking");
+            }
+            other => panic!("期望先冲出旧 reasoning，实际 {other:?}"),
+        }
+        match &switched[1] {
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage { text, .. },
+                ..
+            } => {
+                assert_eq!(text, "全部 3 张票已 green");
+            }
+            other => panic!("期望随后输出新 assistant_message，实际 {other:?}"),
+        }
+
+        let completed = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("t1".into()),
+                thread_id: Some("thr_1".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+        assert_eq!(completed.len(), 1);
+        assert!(matches!(
+            completed[0],
+            AgentStreamEvent::TurnCompleted { .. }
+        ));
+    }
+
+    #[test]
+    fn build_events_item_started_flushes_pending_agent_message() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        let first = build_events(
+            &state,
+            CodexNotification::AgentMessageDelta {
+                item_id: "m1".into(),
+                delta: "接下来".into(),
+                thread_id: None,
+            },
+        );
+        let throttled = build_events(
+            &state,
+            CodexNotification::AgentMessageDelta {
+                item_id: "m1".into(),
+                delta: "读算法、ADR 和现有排行计算器实现。".into(),
+                thread_id: None,
+            },
+        );
+        assert_eq!(first.len(), 1);
+        assert_eq!(throttled.len(), 0);
+
+        let started = build_events(
+            &state,
+            CodexNotification::ItemStarted {
+                item: json!({
+                    "id": "c1",
+                    "type": "commandExecution",
+                    "command": "ls",
+                }),
+                thread_id: None,
+            },
+        );
+        assert_eq!(started.len(), 2);
+        match &started[0] {
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage { text, .. },
+                ..
+            } => {
+                assert_eq!(text, "接下来读算法、ADR 和现有排行计算器实现。");
+            }
+            other => panic!("期望 tool 开始前冲出 assistant 尾巴，实际 {other:?}"),
+        }
+        assert!(matches!(
+            started[1],
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::ToolCall { .. },
+                ..
+            }
+        ));
+
+        let completed = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("t1".into()),
+                thread_id: Some("thr_1".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+        assert_eq!(completed.len(), 1);
+        assert!(matches!(
+            completed[0],
+            AgentStreamEvent::TurnCompleted { .. }
+        ));
+    }
+
+    #[test]
+    fn build_events_unmapped_item_completed_clears_reasoning_buffer() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        let first = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "先分析".into(),
+                thread_id: None,
+            },
+        );
+        let throttled = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "再总结".into(),
+                thread_id: None,
+            },
+        );
+        assert_eq!(first.len(), 1);
+        assert_eq!(throttled.len(), 0);
+
+        let completed_item = build_events(
+            &state,
+            CodexNotification::ItemCompleted {
+                item: json!({
+                    "id": "r1",
+                    "type": "notAMappedItem",
+                }),
+                thread_id: None,
+            },
+        );
+        assert_eq!(completed_item.len(), 1);
+        match &completed_item[0] {
+            AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::Reasoning { text, .. },
+                ..
+            } => {
+                assert_eq!(text, "先分析再总结");
+            }
+            other => panic!("期望映射失败时仍冲出 reasoning，实际 {other:?}"),
+        }
+
+        let completed = build_events(
+            &state,
+            CodexNotification::TurnCompleted {
+                turn_id: Some("t1".into()),
+                thread_id: Some("thr_1".into()),
+                status: "completed".into(),
+                error_message: None,
+            },
+        );
+        assert_eq!(completed.len(), 1);
+        assert!(matches!(
+            completed[0],
+            AgentStreamEvent::TurnCompleted { .. }
         ));
     }
 
