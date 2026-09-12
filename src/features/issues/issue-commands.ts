@@ -398,6 +398,8 @@ export interface StartAgentSessionInput {
   workspaceMode?: WorkspaceMode;
   targetBranch?: string | null;
   worktreeSetupCommand?: string | null;
+  /** 启动期模型选择：仅作用本次启动，不写回 Agent 全局配置。 */
+  model?: string | null;
 }
 
 export interface StartAgentSessionResult {

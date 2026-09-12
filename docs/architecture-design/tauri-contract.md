@@ -34,6 +34,8 @@
 >
 > `get_project_worktree_file_tree`：`ProjectWorkspaceInput` 可选 `directoryPath`（缺省 / 空 / `.` 表示工作区根）。每次只返回该目录的**一层**子节点；子目录在前端展开时再请求。`signature` 对本次 listing 计算。
 
+> `start_agent_session`：入参 `StartAgentSessionInput` 新增可选 `model`（启动期模型选择，ADR-0036 第 8 条）。结构化（json）路径以它为请求模型，优先于 Agent 本机配置当前模型；交互式（tui）路径本票不注入模型参数，未传 `model`（`None` / 缺字段）时两条路径行为与历史一致。该选择不写回 Agent 全局配置、不落库、不记忆。
+
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
 

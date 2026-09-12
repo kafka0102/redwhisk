@@ -45,6 +45,9 @@ pub struct StartAgentSessionInput {
     pub workspace_mode: Option<WorkspaceMode>,
     pub target_branch: Option<String>,
     pub worktree_setup_command: Option<String>,
+    /// 启动期模型选择：仅作用于本次启动，优先于 Agent 本机配置的当前模型；
+    /// 不写回全局配置、不落库、不记忆（ADR-0036 第 8 条）。
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

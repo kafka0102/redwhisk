@@ -810,7 +810,7 @@ impl<'connection> AgentSessionService<'connection> {
         let runtime = descriptor_for(&launch.profile.agent_type).resolve_runtime_config(
             data_dir,
             &launch.command_snapshot,
-            None,
+            input.model.as_deref(),
             None,
         );
         self.finish_structured_issue_provider_start(
@@ -5021,6 +5021,7 @@ mod tests {
         let result = service.prepare_issue_session_launch(
             temp_dir.path(),
             &StartAgentSessionInput {
+                model: None,
                 project_id: 1,
                 issue_id: 16,
                 agent_profile_id: 101,
@@ -5188,6 +5189,135 @@ mod tests {
                 .take()
                 .expect("factory result already consumed")
         }
+    }
+
+    /// 记录 provider 收到的启动请求，供 Seam 3（service 启动编排）断言模型透传。
+    struct RecordingProviderFactory {
+        captured: std::sync::Mutex<
+            Option<crate::agent::provider_factory::AgentSessionStartRequest>,
+        >,
+    }
+
+    impl crate::agent::provider_factory::AgentSessionProviderFactory for RecordingProviderFactory {
+        fn start(
+            &self,
+            request: crate::agent::provider_factory::AgentSessionStartRequest,
+        ) -> Result<crate::agent::provider_factory::StartedSession, AgentSessionError> {
+            *self.captured.lock().expect("lock") = Some(request);
+            Ok(crate::agent::provider_factory::StartedSession {
+                handle: std::sync::Arc::new(ControllableHandle {
+                    thread_id: None,
+                    send_error: None,
+                    shutdown_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
+                }),
+                thread_id: None,
+                backfill: crate::agent::provider_factory::ThreadIdBackfill::WhenPresent,
+            })
+        }
+    }
+
+    fn insert_backlog_issue(connection: &Connection, issue_id: i64) {
+        connection
+            .execute(
+                "INSERT INTO issues (id, project_id, number, title, description, status, created_at, updated_at, del)
+                 VALUES (?1, 1, 1, '启动期模型', '', 'backlog', 1, 1, 0)",
+                params![issue_id],
+            )
+            .expect("insert backlog issue");
+    }
+
+    fn structured_start_input(model: Option<&str>) -> StartAgentSessionInput {
+        StartAgentSessionInput {
+            project_id: 1,
+            issue_id: 60,
+            agent_profile_id: 101,
+            prompt_snapshot: "do work".to_string(),
+            workflow_skill_name: None,
+            workspace_mode: None,
+            target_branch: None,
+            worktree_setup_command: None,
+            model: model.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn structured_issue_start_forwards_requested_model_to_provider() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+
+        let result = service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(Some("gpt-5.5")),
+                issue_launch_context(),
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        assert!(result.session_id > 0);
+        let captured = factory
+            .captured
+            .lock()
+            .expect("lock")
+            .take()
+            .expect("provider 应收到启动请求");
+        assert_eq!(captured.model.as_deref(), Some("gpt-5.5"));
+        assert!(registry.contains(result.session_id));
+    }
+
+    #[test]
+    fn structured_issue_start_without_model_reads_local_config_and_does_not_write_back() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let codex_dir = temp.path().join(".codex");
+        fs::create_dir_all(&codex_dir).expect("codex dir");
+        let config_path = codex_dir.join("config.toml");
+        let original_config = "model = \"gpt-5.2\"\n";
+        fs::write(&config_path, original_config).expect("write config");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+
+        service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(None),
+                issue_launch_context(),
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        let captured = factory
+            .captured
+            .lock()
+            .expect("lock")
+            .take()
+            .expect("provider 应收到启动请求");
+        assert_eq!(captured.model.as_deref(), Some("gpt-5.2"));
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("read config"),
+            original_config,
+            "启动期模型选择不得写回 Agent 全局配置"
+        );
     }
 
     fn issue_launch_context() -> super::SessionLaunchContext {

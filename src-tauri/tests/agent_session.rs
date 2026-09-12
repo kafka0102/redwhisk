@@ -292,6 +292,7 @@ fn start_agent_session_rejects_blank_prompt_snapshot() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -327,6 +328,7 @@ fn start_agent_session_rejects_non_backlog_issue() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -366,6 +368,7 @@ fn start_agent_session_rejects_project_profile_from_another_project() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -404,6 +407,7 @@ fn start_agent_session_rejects_deleted_agent_profile() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -443,6 +447,7 @@ fn start_agent_session_creates_session_updates_issue_and_records_events() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -612,6 +617,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -628,6 +634,7 @@ fn start_agent_session_rejects_second_session_for_same_issue() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -695,6 +702,7 @@ fn start_agent_session_returns_start_failed_and_rolls_back_when_command_cannot_s
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -804,6 +812,7 @@ fn start_structured_claude_issue_session_log_path_uses_number_segments() {
         .start_agent_session_with_runtime(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -920,6 +929,7 @@ fn start_agent_session_maps_insert_time_unique_violation_to_existing_session_err
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -1007,6 +1017,7 @@ fn start_agent_session_ignores_soft_deleted_session_for_same_issue() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -1070,6 +1081,7 @@ fn start_agent_session_with_pty_submits_initial_prompt_to_terminal() {
         .start_agent_session_with_pty(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,
@@ -1233,6 +1245,7 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1351,6 +1364,7 @@ fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1445,6 +1459,7 @@ fn start_agent_session_in_worktree_mode_allows_orphan_legacy_issue_dir() {
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1517,6 +1532,7 @@ fn start_agent_session_in_worktree_mode_runs_setup_command_before_agent_start() 
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1583,6 +1599,7 @@ fn start_agent_session_in_worktree_mode_rejects_failed_setup_command_without_ses
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1663,6 +1680,7 @@ fn start_agent_session_uses_project_worktree_location_when_input_omits_setup_ove
         .start_agent_session(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile.id,
@@ -1726,6 +1744,7 @@ fn complete_issue_manual_with_pty_terminates_tracked_session() {
         .start_agent_session_with_pty(
             temp_dir.path(),
             StartAgentSessionInput {
+                model: None,
                 project_id,
                 issue_id,
                 agent_profile_id: profile_id,

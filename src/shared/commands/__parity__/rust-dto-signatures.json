@@ -1398,6 +1398,7 @@
       "fields": {
         "agentProfileId": "required",
         "issueId": "required",
+        "model": "optional",
         "projectId": "required",
         "promptSnapshot": "required",
         "targetBranch": "optional",
