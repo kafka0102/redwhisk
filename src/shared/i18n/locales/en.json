@@ -637,6 +637,8 @@
     "effortMedium": "Medium",
     "effortHigh": "High",
     "effortXhigh": "X-High",
+    "effortMax": "Max",
+    "effortUltra": "Ultra",
     "permissionKindTool": "Tool call",
     "permissionKindPlan": "Plan approval",
     "permissionKindQuestion": "User input",

@@ -27,7 +27,7 @@ use super::notification::{parse_notification, CodexNotification};
 use super::thread_item::{extract_usage, map_thread_item};
 use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
-use crate::agent::codex_model_catalog::default_codex_models_with_selected;
+use crate::agent::codex_model_catalog;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
@@ -433,13 +433,15 @@ impl CodexSessionHandle {
         Ok(())
     }
 
-    /// 列出可用模型。
+    /// 列出可用模型：候选取自本 session `CODEX_HOME` 的三级本机来源（见 `codex_model_catalog`）。
+    ///
+    /// 会话内已切换过模型时以 `config.model` 为当前模型，否则由该模块回退读 `config.toml`。
     pub fn list_models(&self) -> Result<Vec<AgentModel>, CodexAppServerError> {
-        let selected = self.config.model.clone().or_else(|| {
-            resolve_config_home(self.config.config_home.as_deref())
-                .and_then(|home| crate::agent::codex_config::read_model_from_codex_home(&home))
-        });
-        Ok(default_codex_models_with_selected(selected.as_deref()))
+        let config_home = resolve_config_home(self.config.config_home.as_deref());
+        Ok(codex_model_catalog::resolve_models(
+            config_home.as_deref(),
+            self.config.model.as_deref(),
+        ))
     }
 
     /// 列出可用模式。

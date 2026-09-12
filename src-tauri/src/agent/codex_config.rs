@@ -10,6 +10,7 @@ const CODEX_PROFILE_COMMAND: &str = "codex-profile";
 const CODEX_COMMAND_PREFIX: &str = "codex-";
 const MODEL_KEY: &str = "model";
 const REASONING_EFFORT_KEY: &str = "model_reasoning_effort";
+const MODEL_CATALOG_JSON_KEY: &str = "model_catalog_json";
 const WRAPPER_SCRIPT_READ_LIMIT: usize = 8192;
 
 pub fn read_model_from_home(home_dir: &Path) -> Option<String> {
@@ -36,6 +37,17 @@ pub fn read_model_from_codex_home(codex_home: &Path) -> Option<String> {
 pub fn read_reasoning_effort_from_codex_home(codex_home: &Path) -> Option<String> {
     let content = fs::read_to_string(codex_home_config_path(codex_home)).ok()?;
     content.lines().find_map(read_reasoning_effort_line)
+}
+
+/// 读取 `config.toml` 的 `model_catalog_json`：用户显式指向的模型目录文件路径。
+///
+/// 未配置该键、文件不可读或值不是带引号字符串时返回 `None`（best-effort，
+/// 由调用方落到下一级模型来源，见 ADR-0036 第 2 条）。
+pub fn read_model_catalog_path_from_codex_home(codex_home: &Path) -> Option<String> {
+    let content = fs::read_to_string(codex_home_config_path(codex_home)).ok()?;
+    content
+        .lines()
+        .find_map(|line| read_string_assignment(line, MODEL_CATALOG_JSON_KEY))
 }
 
 pub fn write_model_to_codex_home(codex_home: &Path, model: &str) -> io::Result<()> {
@@ -299,6 +311,41 @@ mod tests {
         let model = read_model_from_home(temp_dir.path());
 
         assert_eq!(model.as_deref(), Some("gpt-5.5"));
+    }
+
+    #[test]
+    fn reads_model_catalog_path_without_confusing_model_key() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_dir = temp_dir.path().join(".codex");
+        std::fs::create_dir_all(&codex_dir).expect("codex dir");
+        // `model_catalog_json` 在前：两个键互为前缀，确认各自只读到自己的值。
+        std::fs::write(
+            codex_dir.join("config.toml"),
+            "model_catalog_json = \"/tmp/redwhisk-models.json\"\nmodel = \"gpt-5.2\"\n",
+        )
+        .expect("config");
+
+        assert_eq!(
+            read_model_catalog_path_from_codex_home(&codex_dir).as_deref(),
+            Some("/tmp/redwhisk-models.json")
+        );
+        assert_eq!(
+            read_model_from_codex_home(&codex_dir).as_deref(),
+            Some("gpt-5.2")
+        );
+    }
+
+    #[test]
+    fn missing_model_catalog_path_reads_none() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_dir = temp_dir.path().join(".codex");
+        std::fs::create_dir_all(&codex_dir).expect("codex dir");
+        std::fs::write(codex_dir.join("config.toml"), "model = \"gpt-5.2\"\n").expect("config");
+
+        assert!(read_model_catalog_path_from_codex_home(&codex_dir).is_none());
+        assert!(
+            read_model_catalog_path_from_codex_home(&temp_dir.path().join("missing")).is_none()
+        );
     }
 
     #[test]

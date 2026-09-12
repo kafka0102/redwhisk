@@ -637,6 +637,8 @@
     "effortMedium": "中",
     "effortHigh": "高",
     "effortXhigh": "超高",
+    "effortMax": "最大",
+    "effortUltra": "极致",
     "permissionKindTool": "工具调用",
     "permissionKindPlan": "计划确认",
     "permissionKindQuestion": "用户输入",

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::agent::claude_config;
 use crate::agent::codex_config;
-use crate::agent::codex_model_catalog::default_codex_models_with_selected;
+use crate::agent::codex_model_catalog;
 use crate::types::agent_session_stream::AgentModel;
 
 use super::RuntimeConfig;
@@ -319,7 +319,7 @@ pub(super) fn resolve_codex_runtime_config(
 
 pub(super) fn codex_models_from_command(home_dir: &Path, command: &str) -> Vec<AgentModel> {
     let codex_home = codex_config::resolve_codex_home(home_dir, command);
-    default_codex_models_with_selected(
-        codex_config::read_model_from_codex_home(&codex_home).as_deref(),
-    )
+    // 三级本机来源（模型目录文件 → CLI 模型缓存 → 内置回退列表）由 catalog 模块解析；
+    // 当前模型为 None 时该模块自行回退读本 CODEX_HOME 的 config.toml。
+    codex_model_catalog::resolve_models(Some(&codex_home), None)
 }

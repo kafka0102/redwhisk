@@ -457,6 +457,44 @@ describe("AgentComposer", () => {
     expect(screen.queryByText("关闭")).not.toBeInTheDocument();
   });
 
+  it("Think 模式为 max / ultra 档位展示本地化标签", async () => {
+    const user = userEvent.setup();
+    listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+        supportsTuiResume: false,
+      },
+      models: [
+        {
+          modelId: "gpt-6-astra",
+          displayName: "GPT-6-Astra",
+          isDefault: true,
+          defaultReasoningEffort: "low",
+          supportedReasoningEfforts: [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra",
+          ],
+        },
+      ],
+    });
+
+    await renderComposer();
+    await user.click(screen.getByRole("combobox", { name: "Think mode" }));
+
+    expect(await screen.findByText("Max")).toBeInTheDocument();
+    expect(screen.getByText("Ultra")).toBeInTheDocument();
+    expect(screen.queryByText("max")).not.toBeInTheDocument();
+    expect(screen.queryByText("ultra")).not.toBeInTheDocument();
+  });
+
   it("模型选中值使用统一展示大小写", async () => {
     await renderComposer({ currentModelId: "gpt-5" });
     expect(

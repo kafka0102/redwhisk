@@ -42,6 +42,8 @@ const EFFORT_KEY: Record<string, string> = {
   medium: "agentsFeature.effortMedium",
   high: "agentsFeature.effortHigh",
   xhigh: "agentsFeature.effortXhigh",
+  max: "agentsFeature.effortMax",
+  ultra: "agentsFeature.effortUltra",
 };
 
 export function ComposerControls({

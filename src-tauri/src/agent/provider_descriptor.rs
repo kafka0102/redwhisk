@@ -482,6 +482,10 @@ mod grok_tests;
 mod codex_home_tests;
 
 #[cfg(test)]
+#[path = "provider_descriptor_codex_model_tests.rs"]
+mod codex_model_tests;
+
+#[cfg(test)]
 #[path = "provider_descriptor_resume_tests.rs"]
 mod resume_tests;
 
