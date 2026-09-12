@@ -9,6 +9,13 @@
 //! ```
 //!
 //! 来源：xAI 官方文档 https://docs.x.ai/build/settings 。
+//!
+//! 模型候选还包含配置里的模型别名表（每个 `[model.<别名>]` 表名即一个候选）：
+//!
+//! ```toml
+//! [model.grok-4]
+//! [model.grok-4-fast]
+//! ```
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,6 +24,7 @@ const GROK_CONFIG_DIR_NAME: &str = ".grok";
 const GROK_CONFIG_FILE_NAME: &str = "config.toml";
 const MODELS_TABLE: &str = "models";
 const DEFAULT_KEY: &str = "default";
+const MODEL_ALIAS_TABLE_PREFIX: &str = "model.";
 
 /// 从 home 目录读取 `~/.grok/config.toml` 的 `[models].default`。
 ///
@@ -24,6 +32,16 @@ const DEFAULT_KEY: &str = "default";
 pub fn read_default_model_from_home(home_dir: &Path) -> Option<String> {
     let content = fs::read_to_string(grok_config_path(home_dir)).ok()?;
     parse_default_model(&content)
+}
+
+/// 从 home 目录读取 `~/.grok/config.toml` 的全部模型别名表名。
+///
+/// 文件不可读时返回空列表（best-effort，不阻断列表加载）。
+pub fn read_model_aliases_from_home(home_dir: &Path) -> Vec<String> {
+    let Ok(content) = fs::read_to_string(grok_config_path(home_dir)) else {
+        return Vec::new();
+    };
+    parse_model_aliases(&content)
 }
 
 fn grok_config_path(home_dir: &Path) -> PathBuf {
@@ -54,6 +72,32 @@ pub(crate) fn parse_default_model(content: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// 解析 config.toml 文本中的 `[model.<别名>]` 表名（纯函数，便于单测）。
+///
+/// 按文件出现顺序返回、重复别名只保留首次；`[models]` 与缺别名的 `[model.]`
+/// 不计入；表头空白与注释行沿用 `parse_table_header` 的容错。
+pub(crate) fn parse_model_aliases(content: &str) -> Vec<String> {
+    let mut aliases: Vec<String> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some(table_name) = parse_table_header(trimmed) else {
+            continue;
+        };
+        let Some(alias) = table_name.strip_prefix(MODEL_ALIAS_TABLE_PREFIX) else {
+            continue;
+        };
+        let alias = alias.trim();
+        if alias.is_empty() || aliases.iter().any(|existing| existing == alias) {
+            continue;
+        }
+        aliases.push(alias.to_string());
+    }
+    aliases
 }
 
 /// 解析 `[ name ]` 表头为 `name`（去空白、去方括号）。

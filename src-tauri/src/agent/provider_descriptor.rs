@@ -8,21 +8,23 @@
 use std::path::{Path, PathBuf};
 
 use crate::agent::claude_config;
-use crate::agent::grok_config;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session_stream::AgentModel;
+
+#[path = "provider_descriptor_grok.rs"]
+mod grok_descriptor;
+pub use grok_descriptor::GrokDescriptor;
 
 #[path = "provider_descriptor_command.rs"]
 mod command;
 use command::{
     append_missing_args, build_claude_tui_command_snapshot, build_claude_tui_resume_command,
     build_codex_tui_command_snapshot, build_codex_tui_resume_command,
-    build_grok_tui_command_snapshot, build_grok_tui_resume_command,
     build_opencode_structured_command_snapshot, build_opencode_tui_command_snapshot,
     build_opencode_tui_resume_command, claude_models_from_home, codex_models_from_command,
     ensure_claude_bypass_permission_args, resolve_codex_runtime_config, CLAUDE_FALLBACK_BINARY,
-    CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY, GROK_ALWAYS_APPROVE_ARG,
-    GROK_FALLBACK_BINARY, OPENCODE_AUTO_ARG, OPENCODE_FALLBACK_BINARY,
+    CODEX_BYPASS_APPROVALS_AND_SANDBOX_ARG, CODEX_FALLBACK_BINARY, OPENCODE_AUTO_ARG,
+    OPENCODE_FALLBACK_BINARY,
 };
 
 /// 启动期 runtime 配置（model / effort），由 descriptor 按 provider 规则解析后填入
@@ -371,95 +373,6 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
     fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
         crate::types::agent_session::AgentUiCapabilities {
             model_type_label: "OpenCode".to_string(),
-            can_show_model: true,
-            supports_model_switching: false,
-            supports_reasoning_effort: false,
-            supports_modes: false,
-            supports_tui_resume: true,
-        }
-    }
-}
-
-// ===== Grok =====
-
-/// Grok provider 描述符。
-///
-/// TUI-only：经交互式 PTY 启动（ADR-0022）；displayMode 锁定 tui，不接结构化 json
-/// 路径（`provider_factory` 对 Grok 保留防御性拒绝）。模型只读展示，读 `~/.grok/config.toml`
-/// 的 `[models].default`。
-#[derive(Debug, Clone, Copy)]
-pub struct GrokDescriptor;
-
-impl AgentProviderDescriptor for GrokDescriptor {
-    fn agent_type(&self) -> AgentType {
-        AgentType::Grok
-    }
-
-    fn resolve_runtime_config(
-        &self,
-        data_dir: &Path,
-        _command: &str,
-        requested_model: Option<&str>,
-        _requested_effort: Option<&str>,
-    ) -> RuntimeConfig {
-        RuntimeConfig {
-            model: requested_model.map(str::to_string),
-            effort: None,
-            config_home: data_dir.parent().map(Path::to_path_buf),
-        }
-    }
-
-    fn build_command_snapshot_with_bypass(&self, raw_command: &str) -> String {
-        // dangerous 预览 / bypass 路径：与 TUI 启动一致地补 --always-approve（见 ADR-0020 #6）。
-        append_missing_args(raw_command.trim(), &[GROK_ALWAYS_APPROVE_ARG])
-    }
-
-    fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
-        // Grok 仅 TUI 启动；structured launch 路径不可达，保持 trim 不注入结构化参数。
-        raw_command.trim().to_string()
-    }
-
-    fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
-        build_grok_tui_command_snapshot(raw_command, mode, dangerous)
-    }
-
-    fn build_tui_resume_command(
-        &self,
-        command_snapshot: &str,
-        provider_session_id: &str,
-    ) -> String {
-        build_grok_tui_resume_command(command_snapshot, provider_session_id)
-    }
-
-    fn tui_initial_prompt_delivery(&self) -> TuiInitialPromptDelivery {
-        TuiInitialPromptDelivery::TrailingArgument
-    }
-
-    fn fallback_command_when_snapshot_empty(&self) -> String {
-        GROK_FALLBACK_BINARY.to_string()
-    }
-
-    fn list_models(&self, home_dir: &Path, _command: &str) -> Vec<AgentModel> {
-        // 只读展示 `[models].default`；读不到则空（前端不展示模型）。
-        grok_config::read_default_model_from_home(home_dir)
-            .map(|model| AgentModel {
-                model_id: model.clone(),
-                display_name: Some(model),
-                is_default: Some(true),
-                default_reasoning_effort: None,
-                supported_reasoning_efforts: Vec::new(),
-            })
-            .into_iter()
-            .collect()
-    }
-
-    fn is_model_list_read_only(&self, _home_dir: &Path) -> bool {
-        true
-    }
-
-    fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities {
-        crate::types::agent_session::AgentUiCapabilities {
-            model_type_label: "Grok".to_string(),
             can_show_model: true,
             supports_model_switching: false,
             supports_reasoning_effort: false,
