@@ -27,6 +27,7 @@ use super::notification::{parse_notification, CodexNotification};
 use super::thread_item::{extract_usage, map_thread_item};
 use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
+use crate::agent::codex_model_catalog::default_codex_models_with_selected;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
@@ -36,13 +37,6 @@ use crate::types::agent_session_stream::{
 
 const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
 const NO_INTERRUPTIBLE_TURN: &str = "没有可中断的 Turn";
-const COMMON_GPT_REASONING_EFFORTS: [&str; 4] = ["low", "medium", "high", "xhigh"];
-const COMMON_GPT_MODELS: [(&str, &str); 4] = [
-    ("gpt-5.5", "GPT-5.5"),
-    ("gpt-5", "GPT-5"),
-    ("gpt-5-mini", "GPT-5 mini"),
-    ("gpt-5-nano", "GPT-5 nano"),
-];
 
 /// codex mode 预设（approvalPolicy + sandbox）。
 ///
@@ -516,55 +510,6 @@ impl CodexSessionHandle {
             .ok()
             .and_then(|state| state.last_known_cwd.clone())
     }
-}
-
-pub fn default_codex_models() -> Vec<AgentModel> {
-    default_codex_models_with_selected(None)
-}
-
-pub fn default_codex_models_with_selected(selected_model_id: Option<&str>) -> Vec<AgentModel> {
-    let selected_model_id = selected_model_id
-        .map(str::trim)
-        .filter(|model_id| !model_id.is_empty());
-    let mut models = COMMON_GPT_MODELS
-        .iter()
-        .map(|(model_id, display_name)| AgentModel {
-            model_id: (*model_id).into(),
-            display_name: Some((*display_name).into()),
-            is_default: Some(selected_model_id.is_none() && *model_id == "gpt-5"),
-            default_reasoning_effort: Some("medium".into()),
-            supported_reasoning_efforts: COMMON_GPT_REASONING_EFFORTS
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
-        })
-        .collect::<Vec<_>>();
-
-    if let Some(selected_model_id) = selected_model_id {
-        let mut did_match = false;
-        for model in &mut models {
-            let is_selected = model.model_id == selected_model_id;
-            model.is_default = Some(is_selected);
-            did_match |= is_selected;
-        }
-        if !did_match {
-            models.insert(
-                0,
-                AgentModel {
-                    model_id: selected_model_id.to_string(),
-                    display_name: Some(selected_model_id.to_string()),
-                    is_default: Some(true),
-                    default_reasoning_effort: Some("medium".into()),
-                    supported_reasoning_efforts: COMMON_GPT_REASONING_EFFORTS
-                        .into_iter()
-                        .map(str::to_string)
-                        .collect(),
-                },
-            );
-        }
-    }
-
-    models
 }
 
 pub fn list_models_with_command(
@@ -1941,90 +1886,6 @@ mod tests {
             json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf", "text_elements": [] })
         );
         assert_eq!(input.to_json(), Value::Array(blocks.to_vec()));
-    }
-
-    #[test]
-    fn default_codex_models_returns_common_gpt_capabilities() {
-        assert_eq!(
-            default_codex_models(),
-            vec![
-                AgentModel {
-                    model_id: "gpt-5.5".into(),
-                    display_name: Some("GPT-5.5".into()),
-                    is_default: Some(false),
-                    default_reasoning_effort: Some("medium".into()),
-                    supported_reasoning_efforts: vec![
-                        "low".into(),
-                        "medium".into(),
-                        "high".into(),
-                        "xhigh".into(),
-                    ],
-                },
-                AgentModel {
-                    model_id: "gpt-5".into(),
-                    display_name: Some("GPT-5".into()),
-                    is_default: Some(true),
-                    default_reasoning_effort: Some("medium".into()),
-                    supported_reasoning_efforts: vec![
-                        "low".into(),
-                        "medium".into(),
-                        "high".into(),
-                        "xhigh".into(),
-                    ],
-                },
-                AgentModel {
-                    model_id: "gpt-5-mini".into(),
-                    display_name: Some("GPT-5 mini".into()),
-                    is_default: Some(false),
-                    default_reasoning_effort: Some("medium".into()),
-                    supported_reasoning_efforts: vec![
-                        "low".into(),
-                        "medium".into(),
-                        "high".into(),
-                        "xhigh".into(),
-                    ],
-                },
-                AgentModel {
-                    model_id: "gpt-5-nano".into(),
-                    display_name: Some("GPT-5 nano".into()),
-                    is_default: Some(false),
-                    default_reasoning_effort: Some("medium".into()),
-                    supported_reasoning_efforts: vec![
-                        "low".into(),
-                        "medium".into(),
-                        "high".into(),
-                        "xhigh".into(),
-                    ],
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn default_codex_models_marks_selected_config_model() {
-        let models = default_codex_models_with_selected(Some("gpt-5.5"));
-
-        assert_eq!(
-            models
-                .iter()
-                .filter(|model| model.is_default == Some(true))
-                .count(),
-            1
-        );
-        assert_eq!(models[0].model_id, "gpt-5.5");
-        assert_eq!(models[0].is_default, Some(true));
-    }
-
-    #[test]
-    fn default_codex_models_keeps_unknown_configured_model_visible() {
-        let models = default_codex_models_with_selected(Some("gpt-custom-preview"));
-
-        assert_eq!(models[0].model_id, "gpt-custom-preview");
-        assert_eq!(
-            models[0].display_name.as_deref(),
-            Some("gpt-custom-preview")
-        );
-        assert_eq!(models[0].is_default, Some(true));
     }
 
     #[test]

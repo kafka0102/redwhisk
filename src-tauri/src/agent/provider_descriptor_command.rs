@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use crate::agent::claude_config;
-use crate::agent::codex_app_server::session::default_codex_models_with_selected;
 use crate::agent::codex_config;
+use crate::agent::codex_model_catalog::default_codex_models_with_selected;
 use crate::types::agent_session_stream::AgentModel;
 
 use super::RuntimeConfig;

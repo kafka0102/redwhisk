@@ -3,6 +3,7 @@ pub mod claude_config;
 pub mod claude_streaming;
 pub mod codex_app_server;
 pub mod codex_config;
+pub mod codex_model_catalog;
 pub mod command_detector;
 pub mod grok_config;
 pub mod latest_output_writer;
