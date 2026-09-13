@@ -55,6 +55,10 @@ impl AgentProviderDescriptor for GrokDescriptor {
         build_grok_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn tui_model_flag(&self) -> &str {
+        "-m"
+    }
+
     fn build_tui_resume_command(
         &self,
         command_snapshot: &str,

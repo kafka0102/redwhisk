@@ -118,6 +118,11 @@ pub trait AgentProviderDescriptor: Send + Sync {
     /// 实现须按 provider 的交互式 CLI 语义映射审批/沙箱参数，且不得注入结构化协议参数。
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String;
 
+    /// TUI CLI 的模型参数名（Codex / Grok / OpenCode 为 `-m`，Claude 为 `--model`）。
+    ///
+    /// 供启动期模型选择在 TUI 快照上注入（ADR-0036 第 8 条：能作 CLI 参数则注入）。
+    fn tui_model_flag(&self) -> &str;
+
     /// 构造交互式 TUI resume 启动命令（基于已持久化的 `command_snapshot` + Provider 会话标识）。
     ///
     /// **不**改写 DB 中的 `command_snapshot`；**不**注入额外 prompt。
@@ -158,6 +163,22 @@ pub fn descriptor_for(agent_type: &AgentType) -> &'static dyn AgentProviderDescr
     }
 }
 
+/// 若命令尚未包含 `arg`（含 `arg=value` 同型参数）则追加 `arg <value>`，
+/// 否则原样 trim 返回。
+///
+/// 与 `append_missing_args`（只处理无值 flag）互补；用于 TUI 启动期模型参数注入，
+/// 已含同类参数时不重复注入、保留用户写法（ADR-0036 第 8 条）。
+pub fn append_model_arg_if_missing(command: &str, arg: &str, model: &str) -> String {
+    let trimmed = command.trim();
+    let has_arg = trimmed.split_whitespace().any(|part| {
+        part == arg || part.strip_prefix(arg).is_some_and(|suffix| suffix.starts_with('='))
+    });
+    if has_arg {
+        return trimmed.to_string();
+    }
+    format!("{trimmed} {arg} {model}")
+}
+
 // ===== Codex =====
 
 /// Codex provider 描述符。
@@ -190,6 +211,10 @@ impl AgentProviderDescriptor for CodexDescriptor {
 
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
         build_codex_tui_command_snapshot(raw_command, mode, dangerous)
+    }
+
+    fn tui_model_flag(&self) -> &str {
+        "-m"
     }
 
     fn build_tui_resume_command(
@@ -269,6 +294,10 @@ impl AgentProviderDescriptor for ClaudeDescriptor {
         build_claude_tui_command_snapshot(raw_command, mode, dangerous)
     }
 
+    fn tui_model_flag(&self) -> &str {
+        "--model"
+    }
+
     fn build_tui_resume_command(
         &self,
         command_snapshot: &str,
@@ -344,6 +373,10 @@ impl AgentProviderDescriptor for OpenCodeDescriptor {
 
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
         build_opencode_tui_command_snapshot(raw_command, mode, dangerous)
+    }
+
+    fn tui_model_flag(&self) -> &str {
+        "-m"
     }
 
     fn build_tui_resume_command(

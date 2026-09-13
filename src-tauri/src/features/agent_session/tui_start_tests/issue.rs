@@ -339,3 +339,65 @@ fn start_tui_with_stdin_prompt_returns_after_register() {
         "PTY must be registered before start returns"
     );
 }
+
+#[test]
+fn start_runtime_tui_with_model_injects_model_arg_without_touching_profile() {
+    let temp_dir = tempdir().expect("temp");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let script = temp_dir.path().join("fake-codex.sh");
+    write_sleep_script(&script);
+
+    let database = open_db(temp_dir.path());
+    seed_project_issue_profile(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        &script.to_string_lossy(),
+        "tui",
+    );
+
+    let service = service(&database.connection);
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let result = service
+        .start_agent_session_with_runtime(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: Some("gpt-5.5".to_string()),
+                project_id: 1,
+                issue_id: 11,
+                agent_profile_id: 101,
+                prompt_snapshot: "hello from model".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::CurrentBranch),
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+            &pty,
+            &registry,
+            &broadcaster,
+        )
+        .expect("start tui session with model");
+
+    assert!(result.session_id > 0);
+    let record = AgentSessionRepository::new(&database.connection)
+        .find_by_id(result.session_id)
+        .expect("find")
+        .expect("session");
+    assert_eq!(record.status, AgentSessionStatus::Running);
+    assert!(
+        record.command_snapshot.ends_with("-m gpt-5.5"),
+        "tui command must carry startup model: {}",
+        record.command_snapshot
+    );
+    // 注入只作用于本次启动：Profile 命令不被改写。
+    let profile = AgentProfileRepository::new(&database.connection)
+        .find_profile_by_id(101)
+        .expect("query")
+        .expect("profile");
+    assert_eq!(profile.command, script.to_string_lossy().as_ref());
+
+    let _ = pty.kill(result.session_id);
+}

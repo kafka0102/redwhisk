@@ -150,7 +150,8 @@ impl<'connection> AgentSessionService<'connection> {
         let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
         match super::lifecycle::runtime_transport_from_raw(&launch.profile.display_mode)? {
             super::lifecycle::RuntimeTransport::InteractiveTui => {
-                launch.command_snapshot = build_tui_command_snapshot_for_profile(&launch.profile);
+                launch.command_snapshot =
+                    build_tui_command_snapshot_for_profile(&launch.profile, input.model.as_deref());
                 self.start_agent_session_internal_with_launch(
                     data_dir,
                     input,
