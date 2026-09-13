@@ -56,7 +56,8 @@ use super::log_path::{
 };
 use super::timeline::latest_output_from_session_log;
 use super::validation::{
-    validate_injected_prompt, validate_prompt_snapshot, validate_session_title,
+    validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope,
+    validate_prompt_snapshot, validate_session_title,
 };
 use super::worktree_setup::run_worktree_setup_command;
 use crate::agent::descriptor_for;
@@ -1270,6 +1271,36 @@ impl<'connection> AgentSessionService<'connection> {
             session.command_snapshot
         };
         Ok((profile.agent_type, command))
+    }
+
+    /// 按「项目 + Agent Profile」查模型目录用的 Profile 校验与取数。
+    ///
+    /// 供 `list_agent_profile_models`（Run Dialog 启动前查模型）与
+    /// `list_agent_models`（会话内查询）共用同一份 Profile 校验语义；
+    /// 与 `prepare_issue_session_launch` 的 Profile 校验一致。
+    pub fn find_profile_for_models_query(
+        &self,
+        project_id: i64,
+        agent_profile_id: i64,
+    ) -> Result<crate::db::agent_profile_repository::AgentProfileRow, CommandError> {
+        let profile = self
+            .agent_profile_repository
+            .find_profile_by_id(agent_profile_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "Agent Profile 不存在。",
+                )
+                .with_reason("profileNotFound")
+                .with_detail(
+                    ErrorDetail::new("AgentProfile")
+                        .with_value("agentProfileId", agent_profile_id),
+                )
+            })?;
+        validate_profile_not_deleted(&profile)?;
+        validate_profile_scope(&profile, project_id)?;
+        Ok(profile)
     }
 
     pub fn delete_standalone_session(
@@ -5318,6 +5349,153 @@ mod tests {
             original_config,
             "启动期模型选择不得写回 Agent 全局配置"
         );
+    }
+
+    #[test]
+    fn profile_models_query_rejects_missing_profile() {
+        let connection = setup_session_list_database();
+        let service = test_agent_session_service(&connection);
+
+        let error = service
+            .find_profile_for_models_query(1, 999)
+            .expect_err("profile 不存在应返回命令错误");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("profileNotFound"));
+    }
+
+    #[test]
+    fn profile_models_query_rejects_deleted_profile() {
+        let connection = setup_session_list_database();
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (202, 'Deleted', 'codex', 'codex', 'project', 1, 'auto', 0, '', '', 1)",
+                [],
+            )
+            .expect("insert deleted profile");
+        let service = test_agent_session_service(&connection);
+
+        let error = service
+            .find_profile_for_models_query(1, 202)
+            .expect_err("已删除 profile 应返回命令错误");
+
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("profileDeleted"));
+    }
+
+    #[test]
+    fn profile_models_query_rejects_profile_outside_project() {
+        let connection = setup_session_list_database();
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (203, 'Other Project', 'codex', 'codex', 'project', 2, 'auto', 0, '', '', 0)",
+                [],
+            )
+            .expect("insert other-project profile");
+        let service = test_agent_session_service(&connection);
+
+        let error = service
+            .find_profile_for_models_query(1, 203)
+            .expect_err("其他项目 profile 应返回命令错误");
+
+        assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("profileNotInProject"));
+    }
+
+    #[test]
+    fn profile_models_query_resolves_codex_catalog_candidates() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let codex_dir = temp.path().join(".codex");
+        fs::create_dir_all(&codex_dir).expect("codex dir");
+        fs::write(
+            codex_dir.join("models.json"),
+            r#"{"models":[
+              {"slug":"deepseek-flash","display_name":"DeepSeek-Flash","visibility":"list","priority":2},
+              {"slug":"qwen3.8-max-aliyun","display_name":"Qwen3.8-Max","visibility":"list","priority":5},
+              {"slug":"codex-auto-review","visibility":"hide","priority":1}
+            ]}"#,
+        )
+        .expect("write catalog");
+        fs::write(
+            codex_dir.join("config.toml"),
+            format!(
+                "model_catalog_json = \"{}\"\n",
+                codex_dir.join("models.json").display()
+            ),
+        )
+        .expect("write config");
+        let connection = setup_session_list_database();
+        let service = test_agent_session_service(&connection);
+
+        let profile = service
+            .find_profile_for_models_query(1, 101)
+            .expect("profile");
+        let models = crate::agent::descriptor_for(&profile.agent_type)
+            .list_models(temp.path(), &profile.command);
+        let ids: Vec<&str> = models.iter().map(|model| model.model_id.as_str()).collect();
+        assert_eq!(ids, vec!["deepseek-flash", "qwen3.8-max-aliyun"]);
+    }
+
+    #[test]
+    fn profile_models_query_resolves_grok_aliases() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let grok_dir = temp.path().join(".grok");
+        fs::create_dir_all(&grok_dir).expect("grok dir");
+        fs::write(
+            grok_dir.join("config.toml"),
+            "[model.grok-4]\n[model.grok-4-fast]\n[models]\ndefault = \"grok-4\"\n",
+        )
+        .expect("write config");
+        let connection = setup_session_list_database();
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (204, 'Grok', 'grok', 'grok', 'global', NULL, 'auto', 0, '', '', 0)",
+                [],
+            )
+            .expect("insert grok profile");
+        let service = test_agent_session_service(&connection);
+
+        let profile = service
+            .find_profile_for_models_query(1, 204)
+            .expect("profile");
+        let models = crate::agent::descriptor_for(&profile.agent_type)
+            .list_models(temp.path(), &profile.command);
+        let ids: Vec<&str> = models.iter().map(|model| model.model_id.as_str()).collect();
+        assert_eq!(ids, vec!["grok-4", "grok-4-fast"]);
+        assert_eq!(models[0].is_default, Some(true));
+    }
+
+    #[test]
+    fn profile_models_query_marks_claude_third_party_read_only() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let claude_dir = temp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).expect("claude dir");
+        fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"model":"gateway-model","env":{"ANTHROPIC_BASE_URL":"https://gateway.example.test"}}"#,
+        )
+        .expect("write settings");
+        let connection = setup_session_list_database();
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del)
+                 VALUES (205, 'Claude Gateway', 'claude', 'claude', 'global', NULL, 'auto', 0, '', '', 0)",
+                [],
+            )
+            .expect("insert claude profile");
+        let service = test_agent_session_service(&connection);
+
+        let profile = service
+            .find_profile_for_models_query(1, 205)
+            .expect("profile");
+        let descriptor = crate::agent::descriptor_for(&profile.agent_type);
+        let models = descriptor.list_models(temp.path(), &profile.command);
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].model_id, "gateway-model");
+        assert!(descriptor.is_model_list_read_only(temp.path()));
     }
 
     fn issue_launch_context() -> super::SessionLaunchContext {

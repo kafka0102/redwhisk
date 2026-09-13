@@ -800,6 +800,12 @@
         "modes": "required"
       }
     },
+    "ListAgentProfileModelsInput": {
+      "fields": {
+        "agentProfileId": "required",
+        "projectId": "required"
+      }
+    },
     "ListAgentProfilesInput": {
       "fields": {
         "projectId": "optional",

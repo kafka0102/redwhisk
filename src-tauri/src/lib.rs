@@ -148,6 +148,7 @@ pub fn run() {
             features::agent_session::commands::set_agent_thinking,
             features::agent_session::commands::set_agent_mode,
             features::agent_session::commands::list_agent_models,
+            features::agent_session::commands::list_agent_profile_models,
             features::agent_session::commands::list_agent_modes,
             features::agent_session::commands::save_agent_attachment,
             features::agent_session::commands::read_agent_timeline,

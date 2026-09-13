@@ -351,6 +351,14 @@ pub struct ListAgentModelsInput {
     pub session_id: i64,
 }
 
+/// 按「项目 + Agent Profile」查模型目录的入参（Run Dialog 启动前查询，不依赖 session）。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentProfileModelsInput {
+    pub project_id: i64,
+    pub agent_profile_id: i64,
+}
+
 /// Agent UI 能力投影：由 provider descriptor 提供，经 list_agent_models 下发。
 ///
 /// 前端不得再维护静态双表；composer 控件显隐以本结构为准。

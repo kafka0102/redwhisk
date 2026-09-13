@@ -233,6 +233,12 @@ export interface ListAgentModelsInput {
   sessionId: number;
 }
 
+/** 按「项目 + Agent Profile」查模型目录的入参（Run Dialog 启动前使用，不依赖 session）。 */
+export interface ListAgentProfileModelsInput {
+  projectId: number;
+  agentProfileId: number;
+}
+
 export interface ListAgentModesInput {
   projectId: number;
   sessionId: number;
@@ -289,6 +295,14 @@ export function listAgentModels(
   input: ListAgentModelsInput,
 ): Promise<ListAgentModelsResult> {
   return invokeCommand<ListAgentModelsResult>("list_agent_models", { input });
+}
+
+export function listAgentProfileModels(
+  input: ListAgentProfileModelsInput,
+): Promise<ListAgentModelsResult> {
+  return invokeCommand<ListAgentModelsResult>("list_agent_profile_models", {
+    input,
+  });
 }
 
 export function listAgentModes(
