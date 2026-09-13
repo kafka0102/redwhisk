@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { listAgentModels, setAgentModel } from "../agent-session-commands";
+import { deriveDefaultModelId } from "../agent-model-utils";
 import type { AgentModel, AgentUiCapabilities } from "../agent-stream-types";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
@@ -51,15 +52,6 @@ export interface UseAgentModelsResult {
   capabilities: AgentUiCapabilities;
   /** 切换模型：调 setAgentModel；后端经事件回传后 Select 自动跟随。 */
   selectModel: (modelId: string) => Promise<void>;
-}
-
-/**
- * 从模型列表派生默认 modelId（isDefault 优先，否则首个）。
- * 列表为空返回 null。
- */
-function deriveDefaultModelId(models: AgentModel[]): string | null {
-  const defaultModel = models.find((model) => model.isDefault);
-  return defaultModel?.modelId ?? models[0]?.modelId ?? null;
 }
 
 export function useAgentModels({

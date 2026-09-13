@@ -41,6 +41,7 @@ import {
 } from "./issue-commands";
 import {
   injectAgentSessionPrompt,
+  listAgentProfileModels,
   listAgentSessions,
   resumeAgentSession,
 } from "../agents/agent-session-commands";
@@ -78,6 +79,7 @@ vi.mock("./issue-commands", () => ({
 
 vi.mock("../agents/agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
+  listAgentProfileModels: vi.fn(),
   listAgentSessions: vi.fn(),
   resumeAgentSession: vi.fn(),
 }));
@@ -227,6 +229,7 @@ const getProjectGitBranchesMock = vi.mocked(getProjectGitBranches);
 const injectAgentSessionPromptMock = vi.mocked(injectAgentSessionPrompt);
 const resumeAgentSessionMock = vi.mocked(resumeAgentSession);
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const listAgentProfileModelsMock = vi.mocked(listAgentProfileModels);
 const listIssuesMock = vi.mocked(listIssues);
 const markIssueReviewMock = vi.mocked(markIssueReview);
 const prepareAgentCommitCompletionMock = vi.mocked(
@@ -515,6 +518,7 @@ describe("IssuesActivity", () => {
     startAgentSessionMock.mockReset();
     updateIssueMock.mockReset();
     listAgentProfilesMock.mockReset();
+    listAgentProfileModelsMock.mockReset();
     listProjectLabelsMock.mockReset();
     listSavedAgentSkillsMock.mockReset();
     openDialogMock.mockReset();
@@ -546,6 +550,18 @@ describe("IssuesActivity", () => {
     }));
     resetIssuePageStateCacheForTests();
     listAgentProfilesMock.mockResolvedValue({ profiles: [] });
+    listAgentProfileModelsMock.mockResolvedValue({
+      models: [],
+      isReadOnly: false,
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: false,
+        supportsModes: true,
+        supportsTuiResume: false,
+      },
+    });
     listProjectLabelsMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
         return { labels: [] };
@@ -4771,3 +4787,235 @@ async function openIssueMoreMenu(
 function formatTestTimestamp(epochMilliseconds: number): string {
   return new Date(epochMilliseconds).toLocaleString();
 }
+
+describe("Run Dialog 启动期模型选择", () => {
+  const codexCapabilities = {
+    modelTypeLabel: "Codex",
+    canShowModel: true,
+    supportsModelSwitching: true,
+    supportsReasoningEffort: false,
+    supportsModes: true,
+    supportsTuiResume: false,
+  };
+  const twoCodexModels = [
+    {
+      modelId: "gpt-5.5",
+      displayName: "GPT-5.5",
+      isDefault: true,
+      supportedReasoningEfforts: [],
+    },
+    {
+      modelId: "gpt-5.2",
+      displayName: "GPT-5.2",
+      isDefault: false,
+      supportedReasoningEfforts: [],
+    },
+  ];
+
+  beforeEach(() => {
+    listAgentProfileModelsMock.mockReset();
+    startAgentSessionMock.mockReset();
+    listIssuesMock.mockReset();
+    listAgentProfilesMock.mockReset();
+    listAgentSessionsMock.mockReset();
+    getProjectGitBranchesMock.mockReset();
+    getIssueWorktreeStatusMock.mockReset();
+    listSavedAgentSkillsMock.mockReset();
+    listAgentSessionsMock.mockResolvedValue({ sessions: [] });
+    getProjectGitBranchesMock.mockResolvedValue({
+      currentBranch: "main",
+      localBranches: ["main"],
+    });
+    listSavedAgentSkillsMock.mockResolvedValue({ skills: [] });
+    getIssueWorktreeStatusMock.mockResolvedValue({
+      exists: false,
+      canDelete: false,
+      workspacePath: null,
+      workspaceBranch: null,
+    });
+    listAgentProfileModelsMock.mockResolvedValue({
+      models: [],
+      isReadOnly: false,
+      capabilities: codexCapabilities,
+    });
+  });
+
+  function seedRunDialog() {
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockResolvedValue({
+      sessionId: 401,
+      issueId: existingIssue.id,
+    });
+  }
+
+  it("shows model select with >=2 candidates, defaults to backend default, and submits the chosen model", async () => {
+    const user = userEvent.setup();
+    seedRunDialog();
+    listAgentProfileModelsMock.mockResolvedValue({
+      models: twoCodexModels,
+      isReadOnly: false,
+      capabilities: codexCapabilities,
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    const modelSelect = await within(dialog).findByRole("combobox", {
+      name: "Select model",
+    });
+    expect(modelSelect).toHaveTextContent("GPT-5.5");
+
+    await selectShadcnOption(user, within(dialog), "Select model", "GPT-5.2");
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.2",
+      }),
+    );
+  });
+
+  it("hides model select for a single candidate and omits model on start", async () => {
+    const user = userEvent.setup();
+    seedRunDialog();
+    listAgentProfileModelsMock.mockResolvedValue({
+      models: [twoCodexModels[0]],
+      isReadOnly: false,
+      capabilities: codexCapabilities,
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(
+      within(dialog).queryByRole("combobox", { name: "Select model" }),
+    ).not.toBeInTheDocument();
+
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+
+    const payload = startAgentSessionMock.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("model");
+  });
+
+  it("hides model select when the list is read-only", async () => {
+    const user = userEvent.setup();
+    seedRunDialog();
+    listAgentProfileModelsMock.mockResolvedValue({
+      models: twoCodexModels,
+      isReadOnly: true,
+      capabilities: codexCapabilities,
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(
+      within(dialog).queryByRole("combobox", { name: "Select model" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows load failure but still starts without a model", async () => {
+    const user = userEvent.setup();
+    seedRunDialog();
+    listAgentProfileModelsMock.mockRejectedValue({
+      code: "AGENT_SESSION_MODEL_UNAVAILABLE",
+      message: "读取模型失败。",
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(await within(dialog).findByText(/读取模型失败/)).toBeInTheDocument();
+
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    const payload = startAgentSessionMock.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("model");
+  });
+
+  it("reloads and resets selection when switching agent profile", async () => {
+    const user = userEvent.setup();
+    seedRunDialog();
+    listAgentProfileModelsMock
+      .mockResolvedValueOnce({
+        models: twoCodexModels,
+        isReadOnly: false,
+        capabilities: codexCapabilities,
+      })
+      .mockResolvedValueOnce({
+        models: [
+          {
+            modelId: "gpt-6-astra",
+            displayName: "GPT-6-Astra",
+            isDefault: true,
+            supportedReasoningEfforts: [],
+          },
+          {
+            modelId: "gpt-5.6-sol",
+            displayName: "GPT-5.6-Sol",
+            isDefault: false,
+            supportedReasoningEfforts: [],
+          },
+        ],
+        isReadOnly: false,
+        capabilities: codexCapabilities,
+      });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    const modelSelect = await within(dialog).findByRole("combobox", {
+      name: "Select model",
+    });
+    expect(modelSelect).toHaveTextContent("GPT-5.5");
+    await selectShadcnOption(user, within(dialog), "Select model", "GPT-5.2");
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("combobox", { name: "Select model" }),
+      ).toHaveTextContent("GPT-5.2"),
+    );
+
+    await selectShadcnOption(
+      user,
+      within(dialog),
+      "Agent profile",
+      "Global Codex (Global)",
+    );
+
+    expect(listAgentProfileModelsMock).toHaveBeenCalledTimes(2);
+    expect(listAgentProfileModelsMock).toHaveBeenNthCalledWith(1, {
+      projectId: 1,
+      agentProfileId: 100,
+    });
+    expect(listAgentProfileModelsMock).toHaveBeenNthCalledWith(2, {
+      projectId: 1,
+      agentProfileId: 200,
+    });
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("combobox", { name: "Select model" }),
+      ).toHaveTextContent("GPT-6-Astra"),
+    );
+
+    // 切换后未再改动：启动请求不带模型。
+    const startButton = within(dialog).getByRole("button", { name: "Start" });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(startAgentSessionMock.mock.calls[0][0]).not.toHaveProperty("model");
+  });
+});

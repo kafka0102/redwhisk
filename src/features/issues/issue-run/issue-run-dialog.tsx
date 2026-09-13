@@ -41,6 +41,8 @@ import {
 } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
+import { RunModelSelect } from "./run-model-select";
+import { useRunAgentModel } from "./use-run-agent-model";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
 
@@ -223,6 +225,10 @@ export function IssueRunDialog({
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
+  const runAgentModel = useRunAgentModel({
+    projectId,
+    agentProfileId: selectedProfile?.id ?? null,
+  });
   const workflowSkillOptions = useMemo(() => {
     if (!selectedProfile) {
       return [];
@@ -348,6 +354,10 @@ export function IssueRunDialog({
         workspaceMode,
         targetBranch: effectiveTargetBranch,
         worktreeSetupCommand: effectiveSetupCommand,
+        // 未主动改过模型时不携带该字段，后端继续按 Agent 配置解析（ADR-0036 第 9 条）。
+        ...(runAgentModel.isTouched && runAgentModel.selectedModelId
+          ? { model: runAgentModel.selectedModelId }
+          : {}),
       });
       await onStarted(result);
     } catch (error) {
@@ -462,6 +472,16 @@ export function IssueRunDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            <RunModelSelect
+              models={runAgentModel.models}
+              isReadOnly={runAgentModel.isReadOnly}
+              selectedModelId={runAgentModel.selectedModelId}
+              isLoading={runAgentModel.isLoading}
+              error={runAgentModel.error}
+              disabled={isStarting}
+              onSelectModel={runAgentModel.selectModel}
+            />
 
             <div className="grid gap-1.5">
               <Label
