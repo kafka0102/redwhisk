@@ -436,6 +436,35 @@ describe("CodeContent edit interactions", () => {
     });
   });
 
+  it("keeps a revealed line instead of the cached position on a zero-height mount", async () => {
+    monacoEditorApi.layoutHeight = 0;
+    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+        revealRequest={{ filePath: "src/file.ts", lineNumber: 120, token: 1 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidLayoutChange).toHaveBeenCalled();
+    });
+    expect(monacoEditorApi.revealLineInCenter).toHaveBeenCalledWith(120);
+
+    act(() => {
+      monacoEditorApi.setLayoutHeight(600);
+    });
+
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
+  });
+
   it("restores the top position when the user left the file at the top", async () => {
     const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
 

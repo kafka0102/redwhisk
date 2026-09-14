@@ -234,15 +234,16 @@ export function CodeContent({
       restoreReadingPosition();
     }
 
-    // 编辑器首次创建时容器仍是 display:none（布局高度 0），恢复阅读位置必须等布局就绪；
-    // 布局由 0 变为真实高度时补做一次待恢复，覆盖「容器首次显示」与「隐藏后重新可见」。
+    // 编辑器首次创建时容器仍是 display:none（布局高度 0），恢复阅读位置必须等布局就绪。
+    // 布局塌陷归 0 时挂起一次待恢复，重新可见后再恢复；不在「变为就绪」时重新挂起，
+    // 否则会覆盖 reveal 定位（搜索结果 / 跳转定义打开已读过并滚动过的文件）。
     const layoutDisposable = editor.onDidLayoutChange(() => {
       const previousHeight = layoutHeightRef.current;
       const nextHeight = editor.getLayoutInfo().height;
       layoutHeightRef.current = nextHeight;
       if (
-        !isEditorLayoutReady(previousHeight) &&
-        isEditorLayoutReady(nextHeight)
+        isEditorLayoutReady(previousHeight) &&
+        !isEditorLayoutReady(nextHeight)
       ) {
         pendingRestoreRef.current = true;
       }

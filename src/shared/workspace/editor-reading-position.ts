@@ -21,6 +21,9 @@ export interface EditorReadingPositionIdentity {
  * - `restore`：已布局就绪且有缓存位置，执行恢复；
  * - `wait`：仍处于零高度（编辑器容器尚未显示），保持待恢复，等布局就绪后再补做；
  * - `none`：不需要恢复（非待恢复态，或没有缓存位置）。
+ *
+ * 缓存始终跟随用户滚动更新（用户滚到顶部时缓存也是顶部），所以这里无需比较新旧位置；
+ * 只有换文件、磁盘重载、重新挂载、布局塌陷后重新可见才会进入待恢复态。
  */
 export type EditorReadingPositionRestoreDecision = "restore" | "wait" | "none";
 

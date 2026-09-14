@@ -13,14 +13,21 @@ export function useCodeReadingPositionCleanup(
   projectId: number,
   tabs: CodeFileTab[],
 ): void {
-  const openPathsRef = useRef(tabs.map((tab) => tab.filePath));
+  const previousRef = useRef({
+    projectId,
+    openPaths: tabs.map((tab) => tab.filePath),
+  });
   useEffect(() => {
+    const previous = previousRef.current;
     const openPaths = new Set(tabs.map((tab) => tab.filePath));
-    for (const filePath of openPathsRef.current) {
-      if (!openPaths.has(filePath)) {
-        clearCodeEditorReadingPosition(projectId, filePath);
+    // 换项目时两侧路径集合不可比，交给项目级清理，避免误删新项目同名文件的阅读位置。
+    if (previous.projectId === projectId) {
+      for (const filePath of previous.openPaths) {
+        if (!openPaths.has(filePath)) {
+          clearCodeEditorReadingPosition(projectId, filePath);
+        }
       }
     }
-    openPathsRef.current = [...openPaths];
+    previousRef.current = { projectId, openPaths: [...openPaths] };
   }, [projectId, tabs]);
 }
