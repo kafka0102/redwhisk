@@ -4,6 +4,7 @@ import type { AgentSessionListItem } from "./agent-session-commands";
 import {
   formatDuration,
   formatProcessingDuration,
+  getSessionEndedAt,
   getSessionStatusTone,
   isAgentTurnActivelyRunning,
   shouldShowRunningSpinner,
@@ -31,6 +32,32 @@ describe("formatDuration", () => {
   });
 });
 
+describe("getSessionEndedAt", () => {
+  const base = makeSession();
+
+  it("returns null while the session is still running", () => {
+    expect(
+      getSessionEndedAt({
+        ...base,
+        status: "running",
+        closedAt: null,
+        lastOutputAt: 1_780_365_826_523,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns closedAt after the session has ended", () => {
+    expect(
+      getSessionEndedAt({
+        ...base,
+        status: "closed",
+        closedAt: 1_780_377_000_000,
+        lastOutputAt: 1_780_365_826_523,
+      }),
+    ).toBe(1_780_377_000_000);
+  });
+});
+
 describe("formatProcessingDuration", () => {
   const base = makeSession();
 
@@ -38,35 +65,84 @@ describe("formatProcessingDuration", () => {
     expect(formatProcessingDuration(null, "zh")).toBe("-");
   });
 
-  it("returns dash when processingMs is missing or non-positive", () => {
+  it("returns dash when elapsed time is missing or non-positive", () => {
     expect(formatProcessingDuration({ ...base }, "zh")).toBe("-");
-    expect(formatProcessingDuration({ ...base, processingMs: 0 }, "en")).toBe(
-      "-",
-    );
-  });
-
-  it("returns dash for crashed and stopped sessions", () => {
     expect(
       formatProcessingDuration(
-        { ...base, status: "crashed", processingMs: 60_000 },
-        "en",
-      ),
-    ).toBe("-");
-    expect(
-      formatProcessingDuration(
-        { ...base, status: "stopped", processingMs: 60_000 },
+        { ...base, startedAt: 1_000, closedAt: 1_000 },
         "en",
       ),
     ).toBe("-");
   });
 
-  it("formats duration for a normally closed session", () => {
+  it("formats wall-clock duration for crashed and stopped sessions", () => {
     expect(
-      formatProcessingDuration({ ...base, processingMs: 184_000 }, "en"),
+      formatProcessingDuration(
+        {
+          ...base,
+          status: "crashed",
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 60_000,
+        },
+        "en",
+      ),
     ).toBe("3m 4s");
     expect(
-      formatProcessingDuration({ ...base, processingMs: 184_000 }, "zh"),
+      formatProcessingDuration(
+        {
+          ...base,
+          status: "stopped",
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 60_000,
+        },
+        "zh",
+      ),
     ).toBe("3分4秒");
+  });
+
+  it("formats wall-clock duration for a normally closed session", () => {
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 5_000,
+        },
+        "en",
+      ),
+    ).toBe("3m 4s");
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 5_000,
+        },
+        "zh",
+      ),
+    ).toBe("3分4秒");
+  });
+
+  it("uses live elapsed time for a running session instead of lastOutputAt or processingMs", () => {
+    const startedAt = 1_789_352_695_333;
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          status: "running",
+          startedAt,
+          closedAt: null,
+          lastOutputAt: startedAt + 13_191_190,
+          processingMs: 1_502_399,
+        },
+        "zh",
+        startedAt + 24_797_314,
+      ),
+    ).toBe("6小时53分17秒");
   });
 });
 

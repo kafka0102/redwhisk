@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { formatProcessingDuration } from "../agent-session-formatters";
+import {
+  formatProcessingDuration,
+  getSessionEndedAt,
+} from "../agent-session-formatters";
 import { ExpandableText } from "./expandable-text";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { listIssues, type IssueRecord } from "../../issues/issue-commands";
@@ -98,7 +101,7 @@ export function SessionIssuePanel({
       },
       {
         label: messages.agentsFeature.endedAt,
-        value: formatTimestamp(session?.lastOutputAt ?? null, locale),
+        value: formatTimestamp(getSessionEndedAt(session), locale),
       },
       {
         label: messages.agentsFeature.totalDuration,

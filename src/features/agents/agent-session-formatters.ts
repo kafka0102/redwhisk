@@ -169,19 +169,43 @@ export function formatDuration(ms: number, locale: string): string {
   return isZh ? `${seconds}秒` : `${seconds}s`;
 }
 
-// 详情区总耗时展示：crashed/stopped 或无有效处理时长时返回 "-"。
+/** 结束时间：仅 session 真正结束后返回 closedAt；运行中忽略 lastOutputAt。 */
+export function getSessionEndedAt(
+  session: AgentSessionListItem | null,
+): number | null {
+  if (!session || session.status === "running") {
+    return null;
+  }
+  return session.closedAt;
+}
+
+function getSessionElapsedMs(
+  session: AgentSessionListItem,
+  now: number,
+): number | null {
+  const endedAt = session.status === "running" ? now : session.closedAt;
+  if (endedAt == null) {
+    return null;
+  }
+  const elapsedMs = endedAt - session.startedAt;
+  if (elapsedMs <= 0) {
+    return null;
+  }
+  return elapsedMs;
+}
+
+// 详情区执行时长：按墙钟时间（开始到结束/当前）展示，运行中不含 lastOutputAt / processingMs。
 export function formatProcessingDuration(
   session: AgentSessionListItem | null,
   locale: string,
+  now: number = Date.now(),
 ): string {
-  if (
-    !session ||
-    session.processingMs == null ||
-    session.processingMs <= 0 ||
-    session.status === "crashed" ||
-    session.status === "stopped"
-  ) {
+  if (!session) {
     return "-";
   }
-  return formatDuration(session.processingMs, locale);
+  const elapsedMs = getSessionElapsedMs(session, now);
+  if (elapsedMs == null) {
+    return "-";
+  }
+  return formatDuration(elapsedMs, locale);
 }

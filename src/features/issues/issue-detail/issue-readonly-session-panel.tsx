@@ -5,7 +5,10 @@ import {
   listAgentSessions,
   type AgentSessionListItem,
 } from "../../agents/agent-session-commands";
-import { formatProcessingDuration } from "../../agents/agent-session-formatters";
+import {
+  formatProcessingDuration,
+  getSessionEndedAt,
+} from "../../agents/agent-session-formatters";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
 
@@ -103,7 +106,7 @@ export function IssueReadonlySessionPanel({
       },
       {
         label: messages.agentsFeature.endedAt,
-        value: formatTimestamp(session?.lastOutputAt ?? null, locale),
+        value: formatTimestamp(getSessionEndedAt(session), locale),
       },
       {
         label: messages.agentsFeature.totalDuration,
