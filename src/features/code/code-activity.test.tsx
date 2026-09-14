@@ -13,6 +13,13 @@ import {
   writeProjectWorktreeFile,
 } from "../../shared/workspace/workspace-commands";
 import {
+  readEditorReadingPosition,
+  resetEditorReadingPositionsForTests,
+  writeEditorReadingPosition,
+  type EditorReadingPosition,
+} from "../../shared/workspace/editor-reading-position";
+import {
+  codeEditorReadingPositionKey,
   codeWorkspaceCache,
   resetCodeWorkspaceCacheForTests,
 } from "./code-workspace-cache";
@@ -25,6 +32,8 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
     editorThemeProp: { current: undefined as string | undefined },
     monacoEditorApi: {
       lastRestoredViewState: null as unknown,
+      layoutHeight: 600,
+      layoutListeners: [] as Array<() => void>,
       saveViewState: vi.fn(() => viewState),
       restoreViewState: vi.fn((_state: unknown) => {
         monacoEditorApi.lastRestoredViewState = _state;
@@ -34,19 +43,39 @@ const { editorThemeProp, monacoEditorApi } = vi.hoisted(() => {
         (_pos: { lineNumber: number; column: number }) => undefined,
       ),
       focus: vi.fn(() => undefined),
+      getLayoutInfo: vi.fn(() => ({ height: monacoEditorApi.layoutHeight })),
+      onDidLayoutChange: vi.fn((listener: () => void) => {
+        monacoEditorApi.layoutListeners.push(listener);
+        return { dispose: vi.fn() };
+      }),
       onDidScrollChange: vi.fn((_listener: () => void) => ({
         dispose: vi.fn(),
       })),
       onDidDispose: vi.fn((_listener: () => void) => undefined),
       addAction: vi.fn((_descriptor: unknown) => ({ dispose: vi.fn() })),
       getAction: vi.fn((_id: string) => ({ run: vi.fn() })),
+      /** 模拟容器由 display:none（高度 0）变为真实高度时 Monaco 的布局事件。 */
+      setLayoutHeight(height: number) {
+        monacoEditorApi.layoutHeight = height;
+        for (const listener of [...monacoEditorApi.layoutListeners]) {
+          listener();
+        }
+      },
+      lastScrollListener() {
+        const calls = monacoEditorApi.onDidScrollChange.mock.calls;
+        return calls[calls.length - 1]?.[0];
+      },
       reset() {
         this.lastRestoredViewState = null;
+        this.layoutHeight = 600;
+        this.layoutListeners = [];
         this.saveViewState.mockClear();
         this.restoreViewState.mockClear();
         this.revealLineInCenter.mockClear();
         this.setPosition.mockClear();
         this.focus.mockClear();
+        this.getLayoutInfo.mockClear();
+        this.onDidLayoutChange.mockClear();
         this.onDidScrollChange.mockClear();
         this.onDidDispose.mockClear();
         this.addAction.mockClear();
@@ -113,6 +142,8 @@ vi.mock("@monaco-editor/react", () => ({
       focus: () => void;
       saveViewState: () => unknown;
       restoreViewState: (state: unknown) => void;
+      getLayoutInfo: () => { height: number };
+      onDidLayoutChange: (listener: () => void) => { dispose: () => void };
       onDidScrollChange: (listener: () => void) => { dispose: () => void };
       onDidDispose: (listener: () => void) => void;
       addAction: (descriptor: unknown) => { dispose: () => void };
@@ -127,6 +158,9 @@ vi.mock("@monaco-editor/react", () => ({
       focus: (...args) => monacoEditorApi.focus(...args),
       saveViewState: () => monacoEditorApi.saveViewState(),
       restoreViewState: (state) => monacoEditorApi.restoreViewState(state),
+      getLayoutInfo: () => monacoEditorApi.getLayoutInfo(),
+      onDidLayoutChange: (listener) =>
+        monacoEditorApi.onDidLayoutChange(listener),
       onDidScrollChange: (listener) =>
         monacoEditorApi.onDidScrollChange(listener),
       onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
@@ -308,6 +342,7 @@ describe("CodeActivity", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     setDocumentVisibility(true);
     resetCodeWorkspaceCacheForTests();
+    resetEditorReadingPositionsForTests();
     editorThemeProp.current = undefined;
     monacoEditorApi.reset();
     window.localStorage.clear();
@@ -493,6 +528,55 @@ describe("CodeActivity", () => {
         <CodeActivity projectId={1} roots={roots} />
       </I18nProvider>,
     );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
+      });
+    });
+  });
+
+  it("restores the reading position when the remounted container starts at zero height", async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    const scrollListener = monacoEditorApi.lastScrollListener();
+    act(() => {
+      scrollListener?.();
+    });
+
+    view.unmount();
+    monacoEditorApi.reset();
+    // 复现 @monaco-editor/react 首次创建容器时仍是 display:none（布局高度 0）。
+    monacoEditorApi.layoutHeight = 0;
+    vi.mocked(readProjectWorktreeFile).mockClear();
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(fileContent);
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
+
+    act(() => {
+      monacoEditorApi.setLayoutHeight(600);
+    });
 
     await waitFor(() => {
       expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
@@ -2364,5 +2448,77 @@ describe("CodeActivity", () => {
         }),
       );
     });
+  });
+
+  it("clears the cached reading position when the file tab is closed", async () => {
+    const user = userEvent.setup();
+    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+    writeEditorReadingPosition(readingKey, {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    await user.click(screen.getByLabelText("Close file.ts"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(readEditorReadingPosition(readingKey)).toBeNull();
+    });
+  });
+
+  it("clears cached reading positions when switching the code root", async () => {
+    const user = userEvent.setup();
+    const multiRoots = [
+      { branch: "main", path: "/tmp/redwhisk", isProjectRoot: true },
+      {
+        branch: "feature",
+        path: "/tmp/redwhisk-feature",
+        isProjectRoot: false,
+      },
+    ];
+    vi.mocked(listCodeWorkspaceRoots).mockResolvedValue({ roots: multiRoots });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={multiRoots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file.ts/ })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    const scrollListener = monacoEditorApi.lastScrollListener();
+    act(() => {
+      scrollListener?.();
+    });
+    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 420 });
+
+    await user.click(screen.getByText("main"));
+    await user.click(await screen.findByRole("menuitem", { name: "feature" }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    expect(readEditorReadingPosition(readingKey)).toBeNull();
   });
 });

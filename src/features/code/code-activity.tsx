@@ -31,9 +31,8 @@ import { isContentSearchShortcut } from "./is-content-search-shortcut";
 import { isFileSaveShortcut } from "./is-file-save-shortcut";
 import {
   type CodeFileTab,
-  clearCodeEditorViewStates,
+  clearCodeEditorReadingPositions,
   codeWorkspaceCache,
-  deleteCodeEditorViewState,
 } from "./code-workspace-cache";
 import {
   canEditCodeFileTab,
@@ -52,6 +51,7 @@ import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { visitFileTreeAncestorDirectories } from "../../shared/workspace/file-tree-listings";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
+import { useCodeReadingPositionCleanup } from "./use-code-reading-position-cleanup";
 
 const MAX_FILE_TABS = 10;
 
@@ -114,7 +114,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setActivePath(null);
     setOpenFolders({});
     setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
-    clearCodeEditorViewStates(projectId);
+    clearCodeEditorReadingPositions(projectId);
     setRevealRequest(null);
     setMarkdownViewMode("source");
   }, [projectId]);
@@ -152,6 +152,8 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     shell.sidebarWidth,
     tabs,
   ]);
+
+  useCodeReadingPositionCleanup(projectId, tabs);
 
   const {
     tree,
@@ -394,7 +396,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
             : latestTabs.filter((tab) => tab.filePath !== nextVictimPath);
         if (nextVictimPath !== null) {
           openFilePathsRef.current.delete(nextVictimPath);
-          deleteCodeEditorViewState(projectId, nextVictimPath);
         }
         return [...retained, nextTab];
       });
@@ -618,7 +619,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       }
     }
     openFilePathsRef.current.delete(filePath);
-    deleteCodeEditorViewState(projectId, filePath);
     setTabs((currentTabs) => {
       const remaining = currentTabs.filter(
         (item) => item.filePath !== filePath,

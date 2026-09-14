@@ -1,34 +1,71 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
-import type { CodeFileTab } from "./code-workspace-cache";
+import {
+  readEditorReadingPosition,
+  resetEditorReadingPositionsForTests,
+  writeEditorReadingPosition,
+  type EditorReadingPosition,
+} from "../../shared/workspace/editor-reading-position";
+import {
+  codeEditorReadingPositionKey,
+  type CodeFileTab,
+} from "./code-workspace-cache";
 import { CodeContent } from "./code-content";
 
 const monacoEditorApi = vi.hoisted(() => ({
+  layoutHeight: 600,
+  layoutListeners: [] as Array<() => void>,
   restoreViewState: vi.fn(),
   saveViewState: vi.fn(() => ({ scrollTop: 120 })),
   revealLineInCenter: vi.fn(),
   setPosition: vi.fn(),
   focus: vi.fn(),
+  getLayoutInfo: vi.fn(() => ({ height: monacoEditorApi.layoutHeight })),
+  onDidLayoutChange: vi.fn((listener: () => void) => {
+    monacoEditorApi.layoutListeners.push(listener);
+    return {
+      dispose: vi.fn(() => {
+        monacoEditorApi.layoutListeners =
+          monacoEditorApi.layoutListeners.filter((item) => item !== listener);
+      }),
+    };
+  }),
   onDidScrollChange: vi.fn((_listener: () => void) => ({
     dispose: vi.fn(),
   })),
   onDidDispose: vi.fn((_listener: () => void) => undefined),
   addAction: vi.fn((_descriptor: unknown) => ({ dispose: vi.fn() })),
   getAction: vi.fn((_id: string) => ({ run: vi.fn() })),
+  /** 模拟容器由 display:none（高度 0）变为真实高度时 Monaco 的布局事件。 */
+  setLayoutHeight(height: number) {
+    monacoEditorApi.layoutHeight = height;
+    for (const listener of [...monacoEditorApi.layoutListeners]) {
+      listener();
+    }
+  },
+  lastScrollListener() {
+    const calls = monacoEditorApi.onDidScrollChange.mock.calls;
+    return calls[calls.length - 1]?.[0];
+  },
   reset() {
     this.restoreViewState.mockClear();
     this.saveViewState.mockClear();
+    this.saveViewState.mockReturnValue({ scrollTop: 120 });
     this.revealLineInCenter.mockClear();
     this.setPosition.mockClear();
     this.focus.mockClear();
+    this.getLayoutInfo.mockClear();
+    this.onDidLayoutChange.mockClear();
     this.onDidScrollChange.mockClear();
     this.onDidDispose.mockClear();
     this.addAction.mockClear();
     this.getAction.mockClear();
+    this.layoutHeight = 600;
+    this.layoutListeners = [];
   },
 }));
 
@@ -77,6 +114,8 @@ vi.mock("@monaco-editor/react", () => ({
       focus: () => void;
       saveViewState: () => unknown;
       restoreViewState: (state: unknown) => void;
+      getLayoutInfo: () => { height: number };
+      onDidLayoutChange: (listener: () => void) => { dispose: () => void };
       onDidScrollChange: (listener: () => void) => { dispose: () => void };
       onDidDispose: (listener: () => void) => void;
       addAction: (descriptor: unknown) => { dispose: () => void };
@@ -97,6 +136,9 @@ vi.mock("@monaco-editor/react", () => ({
         focus: (...args) => monacoEditorApi.focus(...args),
         saveViewState: () => monacoEditorApi.saveViewState(),
         restoreViewState: (state) => monacoEditorApi.restoreViewState(state),
+        getLayoutInfo: () => monacoEditorApi.getLayoutInfo(),
+        onDidLayoutChange: (listener) =>
+          monacoEditorApi.onDidLayoutChange(listener),
         onDidScrollChange: (listener) =>
           monacoEditorApi.onDidScrollChange(listener),
         onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
@@ -155,12 +197,16 @@ const messages = {
 
 describe("CodeContent edit interactions", () => {
   beforeEach(() => {
+    resetEditorReadingPositionsForTests();
     monacoEditorApi.reset();
     lastEditorOptions.current = null;
   });
 
   it("does not restore view state when only the local buffer content changes", async () => {
     const user = userEvent.setup();
+    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
     let tab = buildTab();
     const onContentChange = vi.fn((value: string) => {
       tab = {
@@ -208,6 +254,9 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("restores view state after an external disk reload of the same file", async () => {
+    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
     let tab = buildTab();
     const { rerender } = render(
       <CodeContent
@@ -246,8 +295,209 @@ describe("CodeContent edit interactions", () => {
     );
 
     await waitFor(() => {
-      expect(monacoEditorApi.restoreViewState).toHaveBeenCalled();
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
+      });
     });
+  });
+
+  it("waits for a non-zero layout height before restoring the reading position", async () => {
+    monacoEditorApi.layoutHeight = 0;
+    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidLayoutChange).toHaveBeenCalled();
+    });
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
+
+    act(() => {
+      monacoEditorApi.setLayoutHeight(600);
+    });
+
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(1);
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+      scrollTop: 420,
+    });
+  });
+
+  it("keeps the saved reading position when a zero-height container reports a scroll", async () => {
+    monacoEditorApi.layoutHeight = 0;
+    monacoEditorApi.saveViewState.mockReturnValue({ scrollTop: 0 });
+    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+    writeEditorReadingPosition(readingKey, {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    act(() => {
+      monacoEditorApi.lastScrollListener()?.();
+    });
+    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 420 });
+
+    act(() => {
+      monacoEditorApi.setLayoutHeight(600);
+    });
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+      scrollTop: 420,
+    });
+  });
+
+  it("restores the reading position once per load identity", async () => {
+    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(1);
+    });
+    act(() => {
+      monacoEditorApi.setLayoutHeight(700);
+      monacoEditorApi.setLayoutHeight(800);
+    });
+
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the reading position when the layout collapses and becomes visible again", async () => {
+    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+    writeEditorReadingPosition(readingKey, {
+      scrollTop: 420,
+    } as unknown as EditorReadingPosition);
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(1);
+    });
+
+    // 容器塌陷：布局尺寸先变 0，Monaco 把滚动位置裁剪到顶部并触发一次滚动事件，
+    // 此时布局变更事件可能尚未送达，缓存不得被这次噪声覆盖。
+    monacoEditorApi.saveViewState.mockReturnValue({ scrollTop: 0 });
+    monacoEditorApi.layoutHeight = 0;
+    act(() => {
+      monacoEditorApi.lastScrollListener()?.();
+    });
+    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 420 });
+
+    act(() => {
+      monacoEditorApi.setLayoutHeight(0);
+    });
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(1);
+
+    // 重新可见：布局高度恢复后补做一次恢复。
+    act(() => {
+      monacoEditorApi.setLayoutHeight(600);
+    });
+    expect(monacoEditorApi.restoreViewState).toHaveBeenCalledTimes(2);
+    expect(monacoEditorApi.restoreViewState).toHaveBeenLastCalledWith({
+      scrollTop: 420,
+    });
+  });
+
+  it("restores the top position when the user left the file at the top", async () => {
+    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+
+    const view = render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    // 用户滚到顶部：滚动事件把顶部位置写回缓存。
+    monacoEditorApi.saveViewState.mockReturnValue({ scrollTop: 0 });
+    act(() => {
+      monacoEditorApi.lastScrollListener()?.();
+    });
+    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 0 });
+
+    view.unmount();
+    monacoEditorApi.restoreViewState.mockClear();
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 0,
+      });
+    });
+  });
+
+  it("does not restore a reading position for another file", async () => {
+    writeEditorReadingPosition(
+      codeEditorReadingPositionKey(1, "src/other.ts"),
+      { scrollTop: 420 } as unknown as EditorReadingPosition,
+    );
+
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab()}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
   });
 
   it("keeps occurrence highlighting off and enables validation decorations for typescript", async () => {
