@@ -42,7 +42,7 @@ export interface AgentComposerProps {
   usage: AgentUsage | null;
   /**
    * 当前模型 id（来自 message-stream state.model），用于初始化与同步模型 Select。
-   * 父组件在 message-stream 收到 `model_changed` 事件时下传新值。
+   * 父组件在 timeline hydrate 或收到 `model_changed` 事件时下传本 session 模型。
    */
   currentModelId?: string | null;
   /**

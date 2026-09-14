@@ -116,6 +116,7 @@ describe("useAgentMessageStream", () => {
         { type: "assistant_message", text: "你好！", messageId: "a1" },
       ],
       effort: null,
+      model: null,
     });
     mocks.listeners.length = 0;
 
@@ -135,6 +136,7 @@ describe("useAgentMessageStream", () => {
     readAgentTimelineMock.mockResolvedValue({
       items: [],
       effort: "high",
+      model: null,
     });
     mocks.listeners.length = 0;
 
@@ -147,6 +149,26 @@ describe("useAgentMessageStream", () => {
     expect(state.isInitialized).toBe(true);
     expect(state.entries).toEqual([]);
     expect(state.effort).toBe("high");
+  });
+
+  it("readAgentTimeline 完成后用历史 model 初始化 state", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: "gpt-5.2",
+    });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 10,
+      onState: () => {},
+    });
+    const state = getState()!;
+    expect(state.isInitialized).toBe(true);
+    expect(state.entries).toEqual([]);
+    expect(state.model).toBe("gpt-5.2");
   });
 
   it("readAgentTimeline 失败时设置 error 并标记 initialized", async () => {
@@ -167,7 +189,11 @@ describe("useAgentMessageStream", () => {
   it("事件流到达后 dispatch 到 state", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mocks.listeners.length = 0;
 
     const { getState } = await renderProbe({
@@ -196,7 +222,11 @@ describe("useAgentMessageStream", () => {
   it("同一帧内的事件流批量 dispatch 到 state", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mocks.listeners.length = 0;
 
     const { getState, result } = await renderProbe({
@@ -257,7 +287,11 @@ describe("useAgentMessageStream", () => {
   it("同一帧内 turn_completed 不越过未 flush 的 timeline，避免误恢复 running", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mocks.listeners.length = 0;
 
     const { getState, result } = await renderProbe({
@@ -352,7 +386,11 @@ describe("useAgentMessageStream", () => {
 
   it("忽略其它 projectId/sessionId 的事件", async () => {
     readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mocks.listeners.length = 0;
 
     const { getState } = await renderProbe({
@@ -378,7 +416,11 @@ describe("useAgentMessageStream", () => {
 
   it("unmount 时调用 unlisten", async () => {
     readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mocks.listeners.length = 0;
     mocks.unlisten.mockClear();
 
@@ -396,6 +438,7 @@ describe("useAgentMessageStream", () => {
     readAgentTimelineMock.mockResolvedValue({
       items: [{ type: "user_message", text: "旧", messageId: "u1" }],
       effort: null,
+      model: null,
     });
     mocks.listeners.length = 0;
 
@@ -410,6 +453,7 @@ describe("useAgentMessageStream", () => {
     readAgentTimelineMock.mockResolvedValue({
       items: [{ type: "user_message", text: "新", messageId: "u2" }],
       effort: null,
+      model: null,
     });
 
     rerenderWith({ projectId: 1, sessionId: 16 });
@@ -435,10 +479,12 @@ describe("useAgentMessageStream", () => {
     readAgentTimelineMock.mockResolvedValueOnce({
       items: [{ type: "user_message", text: "旧", messageId: "u1" }],
       effort: null,
+      model: null,
     });
     readAgentTimelineMock.mockResolvedValueOnce({
       items: [{ type: "user_message", text: "新", messageId: "u2" }],
       effort: null,
+      model: null,
     });
     mocks.listeners.length = 0;
 
@@ -460,6 +506,7 @@ describe("useAgentMessageStream", () => {
     readAgentTimelineMock.mockResolvedValueOnce({
       items: [{ type: "user_message", text: "最新", messageId: "u3" }],
       effort: null,
+      model: null,
     });
     rerenderWith({ projectId: 1, sessionId: 17 });
 

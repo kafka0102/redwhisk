@@ -81,6 +81,18 @@ describe("messageStreamReducer", () => {
       expect(state.effort).toBe("high");
     });
 
+    it("用历史 model 初始化 composer 模型", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [],
+        model: "gpt-5.2",
+      });
+
+      expect(state.isInitialized).toBe(true);
+      expect(state.entries).toEqual([]);
+      expect(state.model).toBe("gpt-5.2");
+    });
+
     it("用实时合并规则折叠历史 assistant delta 与工具状态", () => {
       const items: AgentTimelineItem[] = [
         { type: "assistant_message", text: "我", messageId: "a1" },

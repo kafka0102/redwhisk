@@ -1295,8 +1295,7 @@ impl<'connection> AgentSessionService<'connection> {
                 )
                 .with_reason("profileNotFound")
                 .with_detail(
-                    ErrorDetail::new("AgentProfile")
-                        .with_value("agentProfileId", agent_profile_id),
+                    ErrorDetail::new("AgentProfile").with_value("agentProfileId", agent_profile_id),
                 )
             })?;
         validate_profile_not_deleted(&profile)?;
@@ -2927,6 +2926,7 @@ mod tests {
             }]
         );
         assert_eq!(history.effort, None);
+        assert_eq!(history.model, None);
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("历史回答")
@@ -3330,6 +3330,7 @@ mod tests {
             ]
         );
         assert_eq!(history.effort, None);
+        assert_eq!(history.model, None);
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             Some("我会查询北京天气。")
@@ -3356,10 +3357,49 @@ mod tests {
 
         assert!(history.items.is_empty());
         assert_eq!(history.effort.as_deref(), Some("high"));
+        assert_eq!(history.model, None);
         assert_eq!(
             latest_output_from_session_log(log_path.to_string_lossy().as_ref()).as_deref(),
             None
         );
+    }
+
+    #[test]
+    fn read_timeline_from_structured_log_replays_latest_model() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured-model.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 2,
+                session_id: 26,
+                seq: 1,
+                epoch: "epoch-unknown".to_string(),
+                event: AgentStreamEvent::ModelChanged {
+                    model_id: "gpt-5.2".to_string(),
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 2,
+                session_id: 26,
+                seq: 2,
+                epoch: "epoch-unknown".to_string(),
+                event: AgentStreamEvent::ModelChanged {
+                    model_id: "gpt-5.5".to_string(),
+                },
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log_path, format!("{lines}\n")).expect("write structured log");
+
+        let session = test_session_record(log_path.to_string_lossy().as_ref());
+        let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
+
+        assert!(history.items.is_empty());
+        assert_eq!(history.model.as_deref(), Some("gpt-5.5"));
     }
 
     #[test]
@@ -3483,6 +3523,7 @@ mod tests {
 
         assert!(result.items.is_empty());
         assert_eq!(result.effort, None);
+        assert_eq!(result.model, None);
     }
 
     #[test]
@@ -5225,9 +5266,8 @@ mod tests {
 
     /// 记录 provider 收到的启动请求，供 Seam 3（service 启动编排）断言模型透传。
     struct RecordingProviderFactory {
-        captured: std::sync::Mutex<
-            Option<crate::agent::provider_factory::AgentSessionStartRequest>,
-        >,
+        captured:
+            std::sync::Mutex<Option<crate::agent::provider_factory::AgentSessionStartRequest>>,
     }
 
     impl crate::agent::provider_factory::AgentSessionProviderFactory for RecordingProviderFactory {

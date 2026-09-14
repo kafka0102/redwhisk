@@ -66,6 +66,8 @@ function setupTimeline(items: AgentStreamEventEnvelope["event"][]) {
   readAgentTimelineMock.mockReset();
   readAgentTimelineMock.mockResolvedValue({
     items: items as never,
+    effort: null,
+    model: null,
   });
   resumeAgentSessionMock.mockReset();
   resumeAgentSessionMock.mockResolvedValue({
@@ -199,6 +201,7 @@ describe("AgentSessionView", () => {
     readAgentTimelineMock.mockResolvedValueOnce({
       items: [],
       effort: "high",
+      model: null,
     });
     listAgentModelsMock.mockResolvedValueOnce({
       capabilities: {
@@ -226,6 +229,48 @@ describe("AgentSessionView", () => {
       expect(
         screen.getByRole("combobox", { name: "Think mode" }),
       ).toHaveTextContent("High");
+    });
+  });
+
+  it("进入历史 session 时用 timeline 返回的 model 初始化显示，不跟列表 default", async () => {
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [],
+      effort: null,
+      model: "gpt-5.2",
+    });
+    listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Codex",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: true,
+        supportsModes: true,
+        supportsTuiResume: false,
+      },
+      models: [
+        {
+          modelId: "gpt-5.5",
+          displayName: "GPT-5.5",
+          isDefault: true,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          modelId: "gpt-5.2",
+          displayName: "GPT-5.2",
+          isDefault: false,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        },
+      ],
+    });
+
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Select model" }),
+      ).toHaveTextContent("GPT-5.2");
     });
   });
 

@@ -101,7 +101,11 @@ describe("useAgentSessionNotifications", () => {
     listAgentSessionsMock.mockReset();
     readAgentTimelineMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
-    readAgentTimelineMock.mockResolvedValue({ items: [], effort: null });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [],
+      effort: null,
+      model: null,
+    });
     mockedPlayNotificationSound.mockReset();
     window.localStorage.removeItem(NOTIFICATION_REMINDER_STORAGE_KEY);
   });
@@ -217,6 +221,7 @@ describe("useAgentSessionNotifications", () => {
       });
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
+      model: null,
       items: [
         { type: "user_message", text: "Add monitor" },
         { type: "assistant_message", text: "Monitor implementation finished." },
@@ -254,6 +259,7 @@ describe("useAgentSessionNotifications", () => {
       });
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
+      model: null,
       items: [
         { type: "user_message", text: "Mark the issue done." },
         {
@@ -289,6 +295,7 @@ describe("useAgentSessionNotifications", () => {
       });
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
+      model: null,
       items: [{ type: "error", message: "Process exited with code 1." }],
     });
 
@@ -318,7 +325,11 @@ describe("useAgentSessionNotifications", () => {
       .mockResolvedValue({
         sessions: [session({ sessionId: 8, status: "closed" })],
       });
-    readAgentTimelineMock.mockResolvedValue({ effort: null, items: [] });
+    readAgentTimelineMock.mockResolvedValue({
+      effort: null,
+      model: null,
+      items: [],
+    });
 
     await renderProbe({ pollIntervalMs: 10, transport });
 

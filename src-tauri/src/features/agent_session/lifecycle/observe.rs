@@ -9,7 +9,7 @@ use crate::features::agent_session::lifecycle::display_mode::{
 use crate::features::agent_session::service::agent_session_error_to_command_error;
 use crate::features::agent_session::timeline::{
     is_empty_standalone_thread_timeline_error, latest_effort_from_session_log,
-    read_timeline_from_log_path,
+    latest_model_from_session_log, read_timeline_from_log_path,
 };
 use crate::types::agent_session::{AgentSessionRecord, ReadAgentTimelineResult};
 use crate::types::errors::CommandError;
@@ -22,6 +22,7 @@ pub(crate) fn read_timeline_for_session(
         RuntimeTransport::InteractiveTui => Ok(ReadAgentTimelineResult {
             items: Vec::new(),
             effort: None,
+            model: None,
         }),
         RuntimeTransport::StructuredJson => read_json_timeline(session, handle),
     }
@@ -32,11 +33,8 @@ fn read_json_timeline(
     handle: Option<Arc<dyn AgentSessionHandle>>,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
     let history = read_timeline_from_log_path(&session.log_path)?;
-    if !history.items.is_empty() || history.effort.is_some() {
-        return Ok(ReadAgentTimelineResult {
-            items: history.items,
-            effort: history.effort,
-        });
+    if !history.items.is_empty() || history.effort.is_some() || history.model.is_some() {
+        return Ok(timeline_result(history));
     }
 
     if let Some(handle) = handle {
@@ -45,6 +43,7 @@ fn read_json_timeline(
                 return Ok(ReadAgentTimelineResult {
                     items,
                     effort: latest_effort_from_session_log(session),
+                    model: latest_model_from_session_log(session),
                 });
             }
             Err(AgentSessionError::NotRunning(_)) => {}
@@ -55,16 +54,24 @@ fn read_json_timeline(
                 return Ok(ReadAgentTimelineResult {
                     items: Vec::new(),
                     effort: latest_effort_from_session_log(session),
+                    model: latest_model_from_session_log(session),
                 });
             }
             Err(error) => return Err(agent_session_error_to_command_error(error)),
         }
     }
 
-    Ok(ReadAgentTimelineResult {
+    Ok(timeline_result(history))
+}
+
+fn timeline_result(
+    history: crate::features::agent_session::timeline::StructuredTimelineHistory,
+) -> ReadAgentTimelineResult {
+    ReadAgentTimelineResult {
         items: history.items,
         effort: history.effort,
-    })
+        model: history.model,
+    }
 }
 
 #[cfg(test)]
@@ -119,6 +126,7 @@ mod tests {
         let result = read_timeline_for_session(&session, None).unwrap();
         assert!(result.items.is_empty());
         assert!(result.effort.is_none());
+        assert!(result.model.is_none());
     }
 
     #[test]
@@ -159,6 +167,44 @@ mod tests {
             }]
         );
         assert!(result.effort.is_none());
+        assert!(result.model.is_none());
+    }
+
+    #[test]
+    fn json_snapshot_reads_session_model_from_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("structured.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::ModelChanged {
+                    model_id: "gpt-5.2".to_string(),
+                },
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::ModelChanged {
+                    model_id: "gpt-5.5".to_string(),
+                },
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log, format!("{lines}\n")).expect("write structured log");
+
+        let session = sample_session("json", log.to_string_lossy().as_ref());
+        let result = read_timeline_for_session(&session, None).unwrap();
+        assert!(result.items.is_empty());
+        assert_eq!(result.model.as_deref(), Some("gpt-5.5"));
     }
 
     #[test]

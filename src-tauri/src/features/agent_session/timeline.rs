@@ -18,6 +18,7 @@ const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 pub(crate) struct StructuredTimelineHistory {
     pub(crate) items: Vec<AgentTimelineItem>,
     pub(crate) effort: Option<String>,
+    pub(crate) model: Option<String>,
 }
 
 pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
@@ -74,6 +75,7 @@ pub(crate) fn read_timeline_from_log_path(
     Ok(StructuredTimelineHistory {
         items,
         effort: None,
+        model: None,
     })
 }
 
@@ -146,6 +148,7 @@ fn read_structured_timeline_log(
                     }
                 }
                 AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
+                AgentStreamEvent::ModelChanged { model_id } => history.model = Some(model_id),
                 _ => {}
             }
         }
@@ -476,6 +479,9 @@ fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
                 .and_then(Value::as_str)
                 .map(String::from),
         }),
+        "model_changed" => Some(AgentStreamEvent::ModelChanged {
+            model_id: event.get("modelId").and_then(Value::as_str)?.to_string(),
+        }),
         _ => None,
     }
 }
@@ -483,11 +489,20 @@ fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
 pub(crate) fn latest_effort_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
 ) -> Option<String> {
+    latest_history_from_session_log(session).and_then(|history| history.effort)
+}
+
+pub(crate) fn latest_model_from_session_log(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> Option<String> {
+    latest_history_from_session_log(session).and_then(|history| history.model)
+}
+
+fn latest_history_from_session_log(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> Option<StructuredTimelineHistory> {
     let path = Path::new(&session.log_path);
-    read_structured_timeline_log(path)
-        .ok()
-        .flatten()
-        .and_then(|history| history.effort)
+    read_structured_timeline_log(path).ok().flatten()
 }
 
 pub(crate) fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {

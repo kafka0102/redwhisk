@@ -1,14 +1,14 @@
 // 加载并管理当前 session 可用模型列表的 hook。
 //
 // 选中模型的数据源是父组件下传的 `currentModelId`（来自 message-stream
-// state.model，由 `model_changed` 事件驱动）。本地不维护乐观覆盖：用户点选
-// 新模型后只发 `setAgentModel` 命令，后端经 `model_changed` 事件回传新
-// modelId，父组件更新 `currentModelId` 下传，Select 跟随刷新。这与
-// agent-development-rules.md L213「前端只发 command」一致，避免本地状态与
-// 数据源双写。
+// state.model）。进入 session 时由 timeline hydrate 恢复本 session 最后一次
+// `model_changed`；之后用户点选只发 `setAgentModel`，后端再经事件回传。
+// 不把 `list_agent_models` 的 isDefault（本机 config.toml 当前值）当成
+// 已启动 session 的选中模型，避免被终端 Codex 改写全局配置带跑。
+// 这与 agent-development-rules.md L213「前端只发 command」一致。
 //
-// 当 `currentModelId` 为 null（尚未收到事件）时，从模型列表派生默认值
-// （isDefault 优先，否则首个）作为回退，纯渲染期计算无 setState。
+// 当 `currentModelId` 为 null（日志里没有 session 模型）时，才从模型列表
+// 派生默认值（isDefault 优先，否则首个），纯渲染期计算无 setState。
 //
 // UI 能力（canShowModel / Think / modes 等）由 list_agent_models 一并返回，
 // 前端不再维护 agent-capabilities 静态双表。

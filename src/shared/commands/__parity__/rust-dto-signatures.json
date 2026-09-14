@@ -1117,7 +1117,8 @@
     "ReadAgentTimelineResult": {
       "fields": {
         "effort": "required",
-        "items": "required"
+        "items": "required",
+        "model": "required"
       }
     },
     "ReadProjectTerminalCwdInput": {

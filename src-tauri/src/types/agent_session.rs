@@ -460,4 +460,5 @@ pub struct ReadAgentTimelineInput {
 pub struct ReadAgentTimelineResult {
     pub items: Vec<AgentTimelineItem>,
     pub effort: Option<String>,
+    pub model: Option<String>,
 }

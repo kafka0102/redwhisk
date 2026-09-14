@@ -50,7 +50,12 @@ export interface MessageStreamState {
 export type MessageStreamAction =
   | { type: "RESET" }
   | { type: "RESTORE"; state: MessageStreamState }
-  | { type: "HYDRATE"; items: AgentTimelineItem[]; effort?: string | null }
+  | {
+      type: "HYDRATE";
+      items: AgentTimelineItem[];
+      effort?: string | null;
+      model?: string | null;
+    }
   | { type: "HYDRATE_FAILED"; error: string }
   | { type: "EVENT"; event: AgentStreamEvent }
   | { type: "EVENT_BATCH"; events: AgentStreamEvent[] }

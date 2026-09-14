@@ -268,7 +268,7 @@ export function useAgentMessageStream({
         }
 
         try {
-          const { items, effort } = await readAgentTimeline({
+          const { items, effort, model } = await readAgentTimeline({
             projectId,
             sessionId,
           });
@@ -277,7 +277,7 @@ export function useAgentMessageStream({
           }
           cancelCacheRestoreSchedule();
           isWaitingForTimeline = false;
-          dispatch({ type: "HYDRATE", items, effort });
+          dispatch({ type: "HYDRATE", items, effort, model });
           flushDeferredEvents();
         } catch {
           if (isDisposed) {
@@ -293,14 +293,14 @@ export function useAgentMessageStream({
 
       // 没有缓存的情况下，正常初始化
       try {
-        const { items, effort } = await readAgentTimeline({
+        const { items, effort, model } = await readAgentTimeline({
           projectId,
           sessionId,
         });
         if (isDisposed) {
           return;
         }
-        dispatch({ type: "HYDRATE", items, effort });
+        dispatch({ type: "HYDRATE", items, effort, model });
       } catch (error) {
         if (isDisposed) {
           return;

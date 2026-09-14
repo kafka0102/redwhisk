@@ -107,6 +107,7 @@ export function messageStreamReducer(
         ...createInitialState(),
         entries,
         effort: action.effort ?? null,
+        model: action.model ?? null,
         isInitialized: true,
       };
     }
