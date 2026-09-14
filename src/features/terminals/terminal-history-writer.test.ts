@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   normalizeTerminalHistoryNewlines,
+  persistTerminalViewPosition,
   writeTerminalHistory,
   writeTerminalHistoryPreservingView,
 } from "./terminal-history-writer";
 import {
   clearTerminalViewStatesForTests,
+  peekTerminalViewState,
   saveTerminalViewState,
 } from "./terminal-view-state";
 
@@ -329,5 +331,93 @@ describe("writeTerminalHistoryPreservingView", () => {
 
     expect(scrollToBottom).toHaveBeenCalledTimes(1);
     expect(scrollToLine).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 回归护栏：Session 内嵌终端切走 Activity / 切 Tab 后保持滚动位置。
+ * 覆盖「隐藏或卸载时记录 viewportY + 输出序号」→「重新挂载回放历史」这条装配链路，
+ * 端点函数即终端表面在 hidden / unmount 时调用的 persistTerminalViewPosition。
+ */
+describe("session terminal view position round trip", () => {
+  afterEach(() => {
+    clearTerminalViewStatesForTests();
+  });
+
+  function createReplayTarget(baseY: number) {
+    return {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom: vi.fn(),
+      scrollToLine: vi.fn(),
+      buffer: { active: { baseY, viewportY: baseY } },
+    };
+  }
+
+  it("restores the recorded viewport when no output arrived while hidden", async () => {
+    persistTerminalViewPosition("session:7:terminal:1", 42, 17);
+    const terminal = createReplayTarget(60);
+
+    await writeTerminalHistoryPreservingView(
+      terminal,
+      "history",
+      () => undefined,
+      "session:7:terminal:1",
+      42,
+    );
+
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(17);
+    expect(terminal.scrollToBottom).not.toHaveBeenCalled();
+    expect(peekTerminalViewState("session:7:terminal:1")).toEqual({
+      sequence: 42,
+      viewportY: 17,
+    });
+  });
+
+  it("scrolls to the latest output when the sequence advanced while hidden", async () => {
+    persistTerminalViewPosition("session:7:terminal:1", 42, 17);
+    const terminal = createReplayTarget(60);
+
+    await writeTerminalHistoryPreservingView(
+      terminal,
+      "history",
+      () => undefined,
+      "session:7:terminal:1",
+      44,
+    );
+
+    expect(terminal.scrollToBottom).toHaveBeenCalledTimes(1);
+    expect(terminal.scrollToLine).not.toHaveBeenCalled();
+    // 回放后刷新缓存，下一次隐藏再回来仍以最新位置为准。
+    expect(peekTerminalViewState("session:7:terminal:1")).toEqual({
+      sequence: 44,
+      viewportY: 60,
+    });
+  });
+
+  it("keeps the newest reading position across a second hide and replay", async () => {
+    persistTerminalViewPosition("session:7:terminal:1", 42, 17);
+    await writeTerminalHistoryPreservingView(
+      createReplayTarget(60),
+      "history",
+      () => undefined,
+      "session:7:terminal:1",
+      42,
+    );
+
+    // 用户重新滚到想看的输出后再切走。
+    persistTerminalViewPosition("session:7:terminal:1", 42, 9);
+    const terminal = createReplayTarget(60);
+    await writeTerminalHistoryPreservingView(
+      terminal,
+      "history",
+      () => undefined,
+      "session:7:terminal:1",
+      42,
+    );
+
+    expect(terminal.scrollToLine).toHaveBeenCalledWith(9);
   });
 });
