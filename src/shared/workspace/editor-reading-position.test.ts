@@ -4,6 +4,7 @@ import {
   clearEditorReadingPosition,
   clearEditorReadingPositionsByProject,
   clearEditorReadingPositionsBySession,
+  createEditorReadingLoadKey,
   createEditorReadingPositionKey,
   decideEditorReadingPositionRestore,
   isEditorLayoutReady,
@@ -177,5 +178,69 @@ describe("editor-reading-position", () => {
         savedPosition: null,
       }),
     ).toBe("none");
+  });
+
+  it("builds the load identity from file path, size and mtime", () => {
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: false,
+        content: {
+          isBinary: false,
+          isTooLarge: false,
+          modifiedAt: 1_700_000_000_000,
+          sizeBytes: 42,
+        },
+      }),
+    ).toBe("src/a.ts:42:1700000000000");
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: false,
+        content: {
+          isBinary: false,
+          isTooLarge: false,
+          modifiedAt: null,
+          sizeBytes: 42,
+        },
+      }),
+    ).toBe("src/a.ts:42:na");
+  });
+
+  it("has no load identity while loading or without restorable content", () => {
+    const content = {
+      isBinary: false,
+      isTooLarge: false,
+      modifiedAt: 1,
+      sizeBytes: 42,
+    };
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: true,
+        content,
+      }),
+    ).toBeNull();
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: false,
+        content: null,
+      }),
+    ).toBeNull();
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: false,
+        content: { ...content, isBinary: true },
+      }),
+    ).toBeNull();
+    expect(
+      createEditorReadingLoadKey({
+        filePath: "src/a.ts",
+        isLoading: false,
+        content: { ...content, isTooLarge: true },
+      }),
+    ).toBeNull();
   });
 });

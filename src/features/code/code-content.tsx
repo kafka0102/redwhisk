@@ -10,6 +10,7 @@ import { toCodeLanguageFileUri } from "./code-language-uri";
 import { applyCodeLanguageNavigationActions } from "./code-language-navigation-actions";
 import { isCodeLanguageFile } from "./is-code-language-file";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
+import { createEditorReadingLoadKey } from "../../shared/workspace/editor-reading-position";
 import { useEditorReadingPosition } from "../../shared/workspace/use-editor-reading-position";
 import {
   codeEditorReadingPositionKey,
@@ -59,19 +60,17 @@ export function CodeContent({
   const isMonacoReady = useMonacoEditorReady();
   const { t } = useI18n();
 
-  // 仅在磁盘加载身份变化时恢复阅读位置（静默复检/换文件/加载完成）。
-  // 不可依赖 tab.content 整体：本地编辑每次改 content 字符串会误触发 restore，导致光标跳行。
-  const contentLoadKey =
-    tab.content == null || tab.content.isBinary || tab.content.isTooLarge
-      ? null
-      : `${tab.filePath}:${tab.content.sizeBytes}:${tab.content.modifiedAt ?? "na"}`;
   const isRevealTarget =
     revealRequest != null && revealRequest.filePath === tab.filePath;
 
   const { editorRef, handleEditorMount, persistReadingPosition } =
     useEditorReadingPosition({
       readingKey: codeEditorReadingPositionKey(projectId, tab.filePath),
-      loadKey: tab.isLoading ? null : contentLoadKey,
+      loadKey: createEditorReadingLoadKey({
+        filePath: tab.filePath,
+        isLoading: tab.isLoading,
+        content: tab.content,
+      }),
       shouldDeferRestore: isRevealTarget,
     });
 

@@ -94,6 +94,41 @@ export function resetEditorReadingPositionsForTests(): void {
   readingPositions.clear();
 }
 
+/** 磁盘正文中决定「磁盘加载身份」的字段。 */
+export interface EditorReadingLoadKeyContent {
+  isBinary: boolean;
+  isTooLarge: boolean;
+  modifiedAt: number | null;
+  sizeBytes: number;
+}
+
+export interface EditorReadingLoadKeyInput {
+  filePath: string;
+  /** 内容尚未加载完成时不参与恢复：加载态会先渲染一次空内容。 */
+  isLoading: boolean;
+  content: EditorReadingLoadKeyContent | null;
+}
+
+/**
+ * 「磁盘加载身份」：同一文件在磁盘正文未变（尺寸与 mtime 相同）时身份不变，
+ * 因此同一次阅读只恢复一次；换文件 / 静默重载 / 挂载都会得到新身份。
+ *
+ * 只接受决定身份的字段，不接收整体 content：本地未落盘输入每次改字符串都会
+ * 产生新身份，从而误触发恢复、把光标拽走。
+ */
+export function createEditorReadingLoadKey(
+  input: EditorReadingLoadKeyInput,
+): string | null {
+  const { content, filePath, isLoading } = input;
+  if (isLoading) {
+    return null;
+  }
+  if (content == null || content.isBinary || content.isTooLarge) {
+    return null;
+  }
+  return `${filePath}:${content.sizeBytes}:${content.modifiedAt ?? "na"}`;
+}
+
 /**
  * 布局就绪判据：容器尚未显示时 Monaco 首次创建编辑器的高度为 0，
  * 此时写入或恢复都会被裁剪到顶部，必须等布局高度大于 0 之后再处理。

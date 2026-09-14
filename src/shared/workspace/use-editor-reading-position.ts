@@ -18,8 +18,8 @@ export interface UseEditorReadingPositionOptions {
   /** 阅读身份 key（`createEditorReadingPositionKey`）；null 表示当前编辑器不记忆位置。 */
   readingKey: string | null;
   /**
-   * 磁盘加载身份。变化（换文件 / 静默重载 / 挂载）时只触发一次待恢复；
-   * null 表示当前没有可恢复的内容。不可传整体 content：本地输入会误触发恢复。
+   * 磁盘加载身份（`createEditorReadingLoadKey`）。变化（换文件 / 静默重载 / 挂载）时
+   * 只触发一次待恢复；null 表示当前没有可恢复的内容。
    */
   loadKey: string | null;
   /** 以显式定位（如搜索结果 reveal 到目标行）为准时跳过本次恢复。 */
