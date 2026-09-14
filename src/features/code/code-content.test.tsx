@@ -187,6 +187,15 @@ function buildTab(overrides: Partial<CodeFileTab> = {}): CodeFileTab {
   };
 }
 
+/** 代码页当前文件（project 1 / src/file.ts）的阅读位置缓存身份。 */
+const codeFileReadingKey = codeEditorReadingPositionKey(1, "src/file.ts");
+
+function seedReadingPosition(filePath: string, scrollTop: number): void {
+  writeEditorReadingPosition(codeEditorReadingPositionKey(1, filePath), {
+    scrollTop,
+  } as unknown as EditorReadingPosition);
+}
+
 const messages = {
   agentsFeature: {
     loadingFile: "Loading",
@@ -204,9 +213,7 @@ describe("CodeContent edit interactions", () => {
 
   it("does not restore view state when only the local buffer content changes", async () => {
     const user = userEvent.setup();
-    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
     let tab = buildTab();
     const onContentChange = vi.fn((value: string) => {
       tab = {
@@ -254,9 +261,7 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("restores view state after an external disk reload of the same file", async () => {
-    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
     let tab = buildTab();
     const { rerender } = render(
       <CodeContent
@@ -303,9 +308,7 @@ describe("CodeContent edit interactions", () => {
 
   it("waits for a non-zero layout height before restoring the reading position", async () => {
     monacoEditorApi.layoutHeight = 0;
-    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
 
     render(
       <CodeContent
@@ -335,10 +338,7 @@ describe("CodeContent edit interactions", () => {
   it("keeps the saved reading position when a zero-height container reports a scroll", async () => {
     monacoEditorApi.layoutHeight = 0;
     monacoEditorApi.saveViewState.mockReturnValue({ scrollTop: 0 });
-    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
-    writeEditorReadingPosition(readingKey, {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
 
     render(
       <CodeContent
@@ -356,7 +356,9 @@ describe("CodeContent edit interactions", () => {
     act(() => {
       monacoEditorApi.lastScrollListener()?.();
     });
-    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 420 });
+    expect(readEditorReadingPosition(codeFileReadingKey)).toEqual({
+      scrollTop: 420,
+    });
 
     act(() => {
       monacoEditorApi.setLayoutHeight(600);
@@ -367,9 +369,7 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("restores the reading position once per load identity", async () => {
-    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
 
     render(
       <CodeContent
@@ -393,10 +393,7 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("keeps the reading position when the layout collapses and becomes visible again", async () => {
-    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
-    writeEditorReadingPosition(readingKey, {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
 
     render(
       <CodeContent
@@ -419,7 +416,9 @@ describe("CodeContent edit interactions", () => {
     act(() => {
       monacoEditorApi.lastScrollListener()?.();
     });
-    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 420 });
+    expect(readEditorReadingPosition(codeFileReadingKey)).toEqual({
+      scrollTop: 420,
+    });
 
     act(() => {
       monacoEditorApi.setLayoutHeight(0);
@@ -438,9 +437,7 @@ describe("CodeContent edit interactions", () => {
 
   it("keeps a revealed line instead of the cached position on a zero-height mount", async () => {
     monacoEditorApi.layoutHeight = 0;
-    writeEditorReadingPosition(codeEditorReadingPositionKey(1, "src/file.ts"), {
-      scrollTop: 420,
-    } as unknown as EditorReadingPosition);
+    seedReadingPosition("src/file.ts", 420);
 
     render(
       <CodeContent
@@ -466,8 +463,6 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("restores the top position when the user left the file at the top", async () => {
-    const readingKey = codeEditorReadingPositionKey(1, "src/file.ts");
-
     const view = render(
       <CodeContent
         projectId={1}
@@ -486,7 +481,9 @@ describe("CodeContent edit interactions", () => {
     act(() => {
       monacoEditorApi.lastScrollListener()?.();
     });
-    expect(readEditorReadingPosition(readingKey)).toEqual({ scrollTop: 0 });
+    expect(readEditorReadingPosition(codeFileReadingKey)).toEqual({
+      scrollTop: 0,
+    });
 
     view.unmount();
     monacoEditorApi.restoreViewState.mockClear();
@@ -508,10 +505,7 @@ describe("CodeContent edit interactions", () => {
   });
 
   it("does not restore a reading position for another file", async () => {
-    writeEditorReadingPosition(
-      codeEditorReadingPositionKey(1, "src/other.ts"),
-      { scrollTop: 420 } as unknown as EditorReadingPosition,
-    );
+    seedReadingPosition("src/other.ts", 420);
 
     render(
       <CodeContent
