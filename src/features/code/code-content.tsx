@@ -10,13 +10,7 @@ import { toCodeLanguageFileUri } from "./code-language-uri";
 import { applyCodeLanguageNavigationActions } from "./code-language-navigation-actions";
 import { isCodeLanguageFile } from "./is-code-language-file";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
-import {
-  decideEditorReadingPositionRestore,
-  isEditorLayoutReady,
-  readEditorReadingPosition,
-  shouldPersistEditorReadingPosition,
-  writeEditorReadingPosition,
-} from "../../shared/workspace/editor-reading-position";
+import { useEditorReadingPosition } from "../../shared/workspace/use-editor-reading-position";
 import {
   codeEditorReadingPositionKey,
   type CodeFileTab,
@@ -36,7 +30,7 @@ export interface CodeRevealRequest {
  * - 二进制或过大：占位提示，不进入 Monaco。
  * - 正常：Monaco Editor（按 tab.isEditable 只读/可编辑），字号跟随 `contentFontSize`，主题跟随全局 `theme`。
  * - 可选 revealRequest：打开匹配行时滚动并定位光标。
- * - 按 projectId + filePath 缓存阅读位置，跨 Activity 切换后恢复（时序策略见共享 module）。
+ * - 按 projectId + filePath 缓存阅读位置，跨 Activity 切换后恢复（时序策略见共享 hook）。
  */
 export function CodeContent({
   projectId,
@@ -61,58 +55,25 @@ export function CodeContent({
   viewMode?: "source" | "preview";
   workspacePath?: string | null;
 }) {
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const appliedRevealTokenRef = useRef<number | null>(null);
-  const projectIdRef = useRef(projectId);
-  const filePathRef = useRef(tab.filePath);
-  const pendingRestoreRef = useRef(false);
-  /** 最近一次已知布局高度：用于识别「零高度 → 真实高度」这一需要补做恢复的时刻。 */
-  const layoutHeightRef = useRef(0);
-  /** 已处理过的磁盘加载身份：同一身份只待恢复一次，避免重复 restore。 */
-  const handledLoadKeyRef = useRef<string | null>(null);
   const isMonacoReady = useMonacoEditorReady();
   const { t } = useI18n();
 
-  useEffect(() => {
-    projectIdRef.current = projectId;
-  }, [projectId]);
+  // 仅在磁盘加载身份变化时恢复阅读位置（静默复检/换文件/加载完成）。
+  // 不可依赖 tab.content 整体：本地编辑每次改 content 字符串会误触发 restore，导致光标跳行。
+  const contentLoadKey =
+    tab.content == null || tab.content.isBinary || tab.content.isTooLarge
+      ? null
+      : `${tab.filePath}:${tab.content.sizeBytes}:${tab.content.modifiedAt ?? "na"}`;
+  const isRevealTarget =
+    revealRequest != null && revealRequest.filePath === tab.filePath;
 
-  useEffect(() => {
-    filePathRef.current = tab.filePath;
-  }, [tab.filePath]);
-
-  const readingPositionKey = useCallback(
-    () =>
-      codeEditorReadingPositionKey(projectIdRef.current, filePathRef.current),
-    [],
-  );
-
-  const persistReadingPosition = useCallback(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    // 零高度（容器尚未显示 / 布局塌陷）期间写缓存会把真实阅读位置覆盖成顶部。
-    if (!shouldPersistEditorReadingPosition(editor.getLayoutInfo().height))
-      return;
-    const position = editor.saveViewState();
-    if (!position) return;
-    writeEditorReadingPosition(readingPositionKey(), position);
-  }, [readingPositionKey]);
-
-  const restoreReadingPosition = useCallback(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const savedPosition = readEditorReadingPosition(readingPositionKey());
-    const decision = decideEditorReadingPositionRestore({
-      pending: pendingRestoreRef.current,
-      layoutHeight: editor.getLayoutInfo().height,
-      savedPosition,
+  const { editorRef, handleEditorMount, persistReadingPosition } =
+    useEditorReadingPosition({
+      readingKey: codeEditorReadingPositionKey(projectId, tab.filePath),
+      loadKey: tab.isLoading ? null : contentLoadKey,
+      shouldDeferRestore: isRevealTarget,
     });
-    if (decision === "wait") return;
-    pendingRestoreRef.current = false;
-    if (decision === "restore" && savedPosition) {
-      editor.restoreViewState(savedPosition);
-    }
-  }, [readingPositionKey]);
 
   const applyReveal = useCallback(
     (lineNumber: number) => {
@@ -123,7 +84,7 @@ export function CodeContent({
       editor.focus();
       persistReadingPosition();
     },
-    [persistReadingPosition],
+    [editorRef, persistReadingPosition],
   );
 
   useEffect(() => {
@@ -141,42 +102,6 @@ export function CodeContent({
     appliedRevealTokenRef.current = revealRequest.token;
     applyReveal(revealRequest.lineNumber);
   }, [applyReveal, revealRequest, tab.content, tab.filePath, tab.isLoading]);
-
-  // 仅在磁盘加载身份变化时恢复阅读位置（静默复检/换文件/加载完成）。
-  // 不可依赖 tab.content 整体：本地编辑每次改 content 字符串会误触发 restore，导致光标跳行。
-  const contentLoadKey =
-    tab.content == null || tab.content.isBinary || tab.content.isTooLarge
-      ? null
-      : `${tab.filePath}:${tab.content.sizeBytes}:${tab.content.modifiedAt ?? "na"}`;
-
-  useEffect(() => {
-    if (tab.isLoading || contentLoadKey == null) {
-      return;
-    }
-    if (handledLoadKeyRef.current === contentLoadKey) {
-      return;
-    }
-    handledLoadKeyRef.current = contentLoadKey;
-    if (revealRequest && revealRequest.filePath === tab.filePath) {
-      // 定位到目标行时以 reveal 为准，不做阅读位置恢复。
-      pendingRestoreRef.current = false;
-      return;
-    }
-    pendingRestoreRef.current = true;
-    restoreReadingPosition();
-  }, [
-    contentLoadKey,
-    restoreReadingPosition,
-    revealRequest,
-    tab.filePath,
-    tab.isLoading,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      persistReadingPosition();
-    };
-  }, [persistReadingPosition, tab.filePath]);
 
   if (tab.isLoading) {
     return (
@@ -215,50 +140,19 @@ export function CodeContent({
     : undefined;
 
   const onMount: OnMount = (editor) => {
-    editorRef.current = editor;
-    layoutHeightRef.current = editor.getLayoutInfo().height;
-    handledLoadKeyRef.current = contentLoadKey;
+    handleEditorMount(editor);
     if (fileUri && isLanguageFile) {
       syncCodeLanguageMarkersToModel(fileUri);
     }
-    if (
-      revealRequest &&
-      revealRequest.filePath === tab.filePath &&
-      revealRequest.lineNumber >= 1
-    ) {
+    if (isRevealTarget && revealRequest && revealRequest.lineNumber >= 1) {
       appliedRevealTokenRef.current = revealRequest.token;
-      pendingRestoreRef.current = false;
       applyReveal(revealRequest.lineNumber);
-    } else {
-      pendingRestoreRef.current = true;
-      restoreReadingPosition();
     }
-
-    // 编辑器首次创建时容器仍是 display:none（布局高度 0），恢复阅读位置必须等布局就绪。
-    // 布局塌陷归 0 时挂起一次待恢复，重新可见后再恢复；不在「变为就绪」时重新挂起，
-    // 否则会覆盖 reveal 定位（搜索结果 / 跳转定义打开已读过并滚动过的文件）。
-    const layoutDisposable = editor.onDidLayoutChange(() => {
-      const previousHeight = layoutHeightRef.current;
-      const nextHeight = editor.getLayoutInfo().height;
-      layoutHeightRef.current = nextHeight;
-      if (
-        isEditorLayoutReady(previousHeight) &&
-        !isEditorLayoutReady(nextHeight)
-      ) {
-        pendingRestoreRef.current = true;
-      }
-      restoreReadingPosition();
-    });
-    const scrollDisposable = editor.onDidScrollChange(() => {
-      persistReadingPosition();
-    });
     const navigationDisposable = applyCodeLanguageNavigationActions(editor, {
       goToDefinition: t("codeLanguage.goToDefinition"),
       findReferences: t("codeLanguage.findReferences"),
     });
     editor.onDidDispose(() => {
-      layoutDisposable.dispose();
-      scrollDisposable.dispose();
       navigationDisposable.dispose();
     });
   };

@@ -34,13 +34,17 @@ function projectScope(projectId: number): string {
   return `project:${projectId}\u0000`;
 }
 
+function sessionScope(sessionId: string): string {
+  return `session:${sessionId}`;
+}
+
 export function createEditorReadingPositionKey(
   identity: EditorReadingPositionIdentity,
 ): string {
-  const sessionScope = identity.sessionId
-    ? `session:${identity.sessionId}\u0000`
+  const session = identity.sessionId
+    ? `${sessionScope(identity.sessionId)}\u0000`
     : "";
-  return `${projectScope(identity.projectId)}${sessionScope}file:${identity.filePath}`;
+  return `${projectScope(identity.projectId)}${session}file:${identity.filePath}`;
 }
 
 export function readEditorReadingPosition(
@@ -64,6 +68,23 @@ export function clearEditorReadingPositionsByProject(projectId: number): void {
   const prefix = projectScope(projectId);
   for (const readingKey of [...readingPositions.keys()]) {
     if (readingKey.startsWith(prefix)) {
+      readingPositions.delete(readingKey);
+    }
+  }
+}
+
+/**
+ * 清理某个 session 下全部文件的阅读位置。
+ *
+ * sessionId 全局唯一（跨项目不会复用），可用于 Session 删除流程；
+ * 否则复用同一 id 的新 Session 会继承旧 Session 的阅读位置。
+ */
+export function clearEditorReadingPositionsBySession(sessionId: string): void {
+  const scope = sessionScope(sessionId);
+  for (const readingKey of [...readingPositions.keys()]) {
+    // key 结构为 `project:<id>\0[session:<id>\0]file:<path>`：按段落比对，
+    // 避免文件路径里出现相同文案时被误删。
+    if (readingKey.split("\u0000")[1] === scope) {
       readingPositions.delete(readingKey);
     }
   }

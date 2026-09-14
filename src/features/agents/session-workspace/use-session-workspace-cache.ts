@@ -45,6 +45,7 @@ import {
 } from "./session-workspace-types";
 import { mapPool } from "../../../shared/workspace/map-pool";
 import type { MultiDiffFileState } from "../../../shared/workspace/multi-diff-types";
+import { clearSessionFileReadingPositions } from "./session-file-reading-position";
 
 const CHANGES_POLL_INTERVAL_MS = 2_000;
 const COMMIT_HISTORY_POLL_INTERVAL_MS = 5_000;
@@ -146,6 +147,8 @@ function isCurrentFileTreeListingSequence(
  */
 export function clearSessionWorkspaceCache(sessionId: number): void {
   sessionWorkspaceCacheBySessionId.delete(sessionId);
+  // agent_sessions.id 可能被复用：一并清掉该 session 的文件阅读位置，避免串味。
+  clearSessionFileReadingPositions(sessionId);
 }
 
 /**

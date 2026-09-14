@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui";
 import { SessionFileViewer } from "./session-file-viewer";
+import { useSessionFileReadingPositionCleanup } from "./use-session-file-reading-position-cleanup";
 import { DiffViewer } from "../../../shared/workspace/diff-viewer";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { AgentType } from "../agent-session-commands";
@@ -32,6 +33,8 @@ interface SessionWorkspaceTabsProps {
   activeTab: SessionWorkspaceTabKind;
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
+  projectId: number;
+  sessionId: number;
   sessionAgentType: AgentType;
   sessionContent: ReactNode;
   toolTabs: SessionWorkspaceToolTab[];
@@ -45,6 +48,8 @@ export function SessionWorkspaceTabs({
   activeTab,
   changeTab,
   fileTab,
+  projectId,
+  sessionId,
   sessionAgentType,
   sessionContent,
   toolTabs,
@@ -55,6 +60,11 @@ export function SessionWorkspaceTabs({
 }: SessionWorkspaceTabsProps) {
   const { messages } = useI18n();
   const selectedTab = getSelectedTab(activeTab, fileTab, changeTab, toolTabs);
+  useSessionFileReadingPositionCleanup(
+    projectId,
+    sessionId,
+    fileTab?.filePath ?? null,
+  );
 
   return (
     <div className="session-workspace-tabs">
@@ -164,7 +174,11 @@ export function SessionWorkspaceTabs({
             className="session-workspace-tabs__pane"
             hidden={selectedTab !== "file"}
           >
-            <SessionFileViewer tab={fileTab} />
+            <SessionFileViewer
+              projectId={projectId}
+              sessionId={sessionId}
+              tab={fileTab}
+            />
           </div>
         ) : null}
         {changeTab ? (

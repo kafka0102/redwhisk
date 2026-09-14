@@ -477,6 +477,8 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
         onCreateBrowserTab={() => onCreateBrowserTab(workspace.sessionId)}
         onCreateTerminalTab={() => onCreateTerminalTab(workspace.sessionId)}
         onSelectTab={(tab) => onSelectWorkspaceTab(workspace.sessionId, tab)}
+        projectId={projectId}
+        sessionId={workspace.sessionId}
         toolTabs={workspace.toolTabs}
       />
     </div>

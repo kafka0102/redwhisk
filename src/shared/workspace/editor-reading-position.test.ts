@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearEditorReadingPosition,
   clearEditorReadingPositionsByProject,
+  clearEditorReadingPositionsBySession,
   createEditorReadingPositionKey,
   decideEditorReadingPositionRestore,
   isEditorLayoutReady,
@@ -99,6 +100,41 @@ describe("editor-reading-position", () => {
     expect(readEditorReadingPosition(projectOne)).toBeNull();
     expect(readEditorReadingPosition(projectOneSession)).toBeNull();
     expect(readEditorReadingPosition(projectEleven)).toEqual(buildPosition(3));
+  });
+
+  it("clears every file of one session without touching other scopes", () => {
+    const sessionA = createEditorReadingPositionKey({
+      projectId: 1,
+      sessionId: "s1",
+      filePath: "src/a.ts",
+    });
+    const sessionASecondFile = createEditorReadingPositionKey({
+      projectId: 1,
+      sessionId: "s1",
+      filePath: "src/b.ts",
+    });
+    const sessionB = createEditorReadingPositionKey({
+      projectId: 1,
+      sessionId: "s2",
+      filePath: "src/a.ts",
+    });
+    const codePageSameFile = createEditorReadingPositionKey({
+      projectId: 1,
+      filePath: "src/a.ts",
+    });
+    writeEditorReadingPosition(sessionA, buildPosition(1));
+    writeEditorReadingPosition(sessionASecondFile, buildPosition(2));
+    writeEditorReadingPosition(sessionB, buildPosition(3));
+    writeEditorReadingPosition(codePageSameFile, buildPosition(4));
+
+    clearEditorReadingPositionsBySession("s1");
+
+    expect(readEditorReadingPosition(sessionA)).toBeNull();
+    expect(readEditorReadingPosition(sessionASecondFile)).toBeNull();
+    expect(readEditorReadingPosition(sessionB)).toEqual(buildPosition(3));
+    expect(readEditorReadingPosition(codePageSameFile)).toEqual(
+      buildPosition(4),
+    );
   });
 
   it("treats only a positive layout height as ready", () => {

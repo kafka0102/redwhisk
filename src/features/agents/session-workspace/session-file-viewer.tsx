@@ -3,14 +3,42 @@ import { Editor } from "@monaco-editor/react";
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useMonacoEditorReady } from "../../../shared/use-monaco-editor-ready";
+import { useEditorReadingPosition } from "../../../shared/workspace/use-editor-reading-position";
+import { sessionFileReadingPositionKey } from "./session-file-reading-position";
 
 interface SessionFileViewerProps {
+  projectId: number;
+  sessionId: number;
   tab: SessionWorkspaceFileTab;
 }
 
-export function SessionFileViewer({ tab }: SessionFileViewerProps) {
+/**
+ * 会话工作区的文件查看器（只读 Monaco）。
+ *
+ * 按「项目 + session + 文件路径」缓存阅读位置，跨 Activity 切换、同 Session 内
+ * Tab 遮蔽后重新可见、以及卸载后重新挂载都回到原位置（时序策略见共享 hook）。
+ */
+export function SessionFileViewer({
+  projectId,
+  sessionId,
+  tab,
+}: SessionFileViewerProps) {
   const { messages, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
+  // 仅在磁盘加载身份变化时恢复（换文件 / 静默重载 / 挂载），只读查看不产生额外恢复。
+  const contentLoadKey =
+    tab.content == null || tab.content.isBinary || tab.content.isTooLarge
+      ? null
+      : `${tab.filePath}:${tab.content.sizeBytes}:${tab.content.modifiedAt ?? "na"}`;
+  const { handleEditorMount } = useEditorReadingPosition({
+    readingKey: sessionFileReadingPositionKey(
+      projectId,
+      sessionId,
+      tab.filePath,
+    ),
+    loadKey: tab.isLoading ? null : contentLoadKey,
+  });
+
   if (tab.isLoading) {
     return (
       <p className="session-viewer-state">
@@ -76,6 +104,7 @@ export function SessionFileViewer({ tab }: SessionFileViewerProps) {
           fontSize: contentFontSize,
         }}
         value={tab.content.content}
+        onMount={handleEditorMount}
       />
     </section>
   );
