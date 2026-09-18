@@ -303,6 +303,8 @@
     "start": "Start",
     "starting": "Starting...",
     "sessionStarting": "Starting agent session...",
+    "sessionStartingCreatingWorktree": "Creating worktree...",
+    "sessionStartingSetupCommand": "Running setup command...",
     "updatingStatus": "Updating status...",
     "status": "Status",
     "statusLabel": "Issue status",

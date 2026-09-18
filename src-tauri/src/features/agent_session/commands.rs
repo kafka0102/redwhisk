@@ -8,8 +8,8 @@ use tauri::{Emitter, Manager, State};
 
 use super::service::AgentSessionService;
 use crate::agent::descriptor_for;
-use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::provider_descriptor::AgentProviderDescriptor;
+use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
@@ -19,20 +19,20 @@ use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentPermissionDecision, AgentSessionListResponse, AgentSessionStatus, CancelAgentTurnInput,
     DeleteAgentSessionInput, DeleteAgentSessionResult, InjectAgentSessionPromptInput,
-    InjectAgentSessionPromptResult, ListAgentModelsInput, ListAgentModelsResult,
-    ListAgentModesInput, ListAgentModesResult, ListAgentProfileModelsInput,
-    ProjectGitBranchListInput,
-    ProjectGitBranchListResult, ReadAgentTimelineInput, ReadAgentTimelineResult,
-    RespondAgentPermissionInput, ResumeAgentSessionInput, ResumeAgentSessionResult,
-    SaveAgentAttachmentInput, SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput,
-    SetAgentModelInput, SetAgentSessionAttentionInput, SetAgentSessionAttentionResult,
-    SetAgentThinkingInput, StartAgentSessionInput, StartAgentSessionResult,
-    UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
+    InjectAgentSessionPromptResult, IssueSessionStartProgressEvent, ListAgentModelsInput,
+    ListAgentModelsResult, ListAgentModesInput, ListAgentModesResult, ListAgentProfileModelsInput,
+    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineInput,
+    ReadAgentTimelineResult, RespondAgentPermissionInput, ResumeAgentSessionInput,
+    ResumeAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
+    SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
+    SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
+    StartAgentSessionResult, UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
 };
 use crate::types::agent_session_stream::AgentStreamEvent;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 const AGENT_SESSION_LIST_CHANGED_EVENT: &str = "agent-session-list-changed";
+pub const ISSUE_SESSION_START_PROGRESS_EVENT: &str = "issue-session-start-progress";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,18 +111,23 @@ pub async fn start_agent_session(
                 .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
             })?;
 
+        let app_for_progress = app.clone();
+        let progress = move |event: IssueSessionStartProgressEvent| {
+            emit_issue_session_start_progress(&app_for_progress, &event);
+        };
         let result = AgentSessionService::new(
             crate::db::issue_repository::IssueRepository::new(&database.connection),
             crate::db::project_repository::ProjectRepository::new(&database.connection),
             crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
             crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
         )
-        .start_agent_session_with_runtime(
+        .start_agent_session_with_runtime_progress(
             data_dir,
             input,
             &pty_sessions,
             &agent_sessions,
             &agent_event_broadcaster,
+            Some(&progress),
         )?;
         crate::features::agent_session::workspace_commands::emit_code_workspace_roots_updated(
             &app,
@@ -348,6 +353,13 @@ fn shutdown_runtime_sessions(
             handle.shutdown();
         }
     }
+}
+
+fn emit_issue_session_start_progress(
+    app: &tauri::AppHandle,
+    event: &IssueSessionStartProgressEvent,
+) {
+    let _ = app.emit(ISSUE_SESSION_START_PROGRESS_EVENT, event);
 }
 
 fn emit_agent_session_list_changed(

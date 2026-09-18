@@ -446,6 +446,7 @@ export function IssuesActivity({
 
   const {
     isStartingSession,
+    sessionStartingMessage,
     setIsStartingSession,
     openRunDialog,
     confirmRunIssueFromEditPage,
@@ -474,6 +475,7 @@ export function IssuesActivity({
     t,
     messages,
     onOpenAgentsActivity,
+    startingIssueId: runDialogIssue?.id ?? null,
   });
   const {
     handleSubmit,
@@ -742,7 +744,7 @@ export function IssuesActivity({
         <LoadingDialog
           open
           dismissible={false}
-          message={messages.issues.sessionStarting}
+          message={sessionStartingMessage}
         />
       ) : null}
       {isDeletingIssue ? (

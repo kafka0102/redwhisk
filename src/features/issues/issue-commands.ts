@@ -407,6 +407,24 @@ export interface StartAgentSessionResult {
   issueId: number;
 }
 
+/** 与 Rust `IssueSessionStartProgressPhase` 同步（snake_case）。 */
+export type IssueSessionStartProgressPhase =
+  | "creating_worktree"
+  | "running_setup_command"
+  | "starting_session";
+
+/** 与 Rust `IssueSessionStartProgressEvent` 同步。 */
+export interface IssueSessionStartProgressEvent {
+  projectId: number;
+  issueId: number;
+  phase: IssueSessionStartProgressPhase;
+}
+
+export {
+  ISSUE_SESSION_START_PROGRESS_EVENT,
+  isIssueSessionStartProgressEvent,
+} from "./issue-session-events";
+
 export type WorkspaceMode = "current_branch" | "worktree";
 
 export interface ProjectGitBranchListInput {

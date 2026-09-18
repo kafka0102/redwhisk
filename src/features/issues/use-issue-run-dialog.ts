@@ -28,6 +28,7 @@ import { issuePageStateCache } from "./issues-activity-cache";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { useI18n } from "../../shared/i18n/i18n";
 import type { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
+import { useIssueSessionStartProgressMessage } from "./use-issue-session-start-progress";
 
 type Messages = ReturnType<typeof useI18n>["messages"];
 type Translate = ReturnType<typeof useI18n>["t"];
@@ -70,6 +71,7 @@ interface UseIssueRunDialogOptions {
   t: Translate;
   messages: Messages;
   onOpenAgentsActivity?: (sessionId: number) => void;
+  startingIssueId: number | null;
 }
 
 export function useIssueRunDialog({
@@ -94,8 +96,14 @@ export function useIssueRunDialog({
   t,
   messages,
   onOpenAgentsActivity,
+  startingIssueId,
 }: UseIssueRunDialogOptions) {
   const [isStartingSession, setIsStartingSession] = useState(false);
+  const sessionStartingMessage = useIssueSessionStartProgressMessage({
+    projectId,
+    issueId: startingIssueId,
+    isStartingSession,
+  });
   const runDialogTriggerRef = useRef<HTMLElement | null>(null);
 
   function openRunDialog(issue: RunDialogIssue, trigger: HTMLElement | null) {
@@ -228,6 +236,7 @@ export function useIssueRunDialog({
 
   return {
     isStartingSession,
+    sessionStartingMessage,
     setIsStartingSession,
     openRunDialog,
     confirmRunIssueFromEditPage,

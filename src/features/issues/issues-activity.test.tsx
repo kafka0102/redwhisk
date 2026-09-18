@@ -50,32 +50,37 @@ import {
   listProjectLabels,
   listSavedAgentSkills,
 } from "../settings/settings-commands";
+import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 import { selectShadcnOption } from "../../test/select-helpers";
 
-vi.mock("./issue-commands", () => ({
-  advanceIssueStatus: vi.fn(),
-  completeIssueFlow: vi.fn(),
-  completeIssueManual: vi.fn(),
-  createIssue: vi.fn(),
-  deleteIssue: vi.fn(),
-  deleteIssueWorktree: vi.fn(),
-  detectAgentCommitCompletion: vi.fn(),
-  exportIssueAttachment: vi.fn(),
-  getIssueSummary: vi.fn(),
-  getIssueTimeline: vi.fn(),
-  getIssueWorktreeStatus: vi.fn(),
-  getProjectGitBranches: vi.fn(),
-  listIssues: vi.fn(),
-  markIssueReview: vi.fn(),
-  prepareAgentCommitCompletion: vi.fn(),
-  previewIssueAttachment: vi.fn(),
-  saveIssueAttachmentDraft: vi.fn(),
-  sendAgentCommitPrompt: vi.fn(),
-  startAgentSession: vi.fn(),
-  updateIssue: vi.fn(),
-}));
+vi.mock("./issue-commands", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./issue-commands")>();
+  return {
+    ...actual,
+    advanceIssueStatus: vi.fn(),
+    completeIssueFlow: vi.fn(),
+    completeIssueManual: vi.fn(),
+    createIssue: vi.fn(),
+    deleteIssue: vi.fn(),
+    deleteIssueWorktree: vi.fn(),
+    detectAgentCommitCompletion: vi.fn(),
+    exportIssueAttachment: vi.fn(),
+    getIssueSummary: vi.fn(),
+    getIssueTimeline: vi.fn(),
+    getIssueWorktreeStatus: vi.fn(),
+    getProjectGitBranches: vi.fn(),
+    listIssues: vi.fn(),
+    markIssueReview: vi.fn(),
+    prepareAgentCommitCompletion: vi.fn(),
+    previewIssueAttachment: vi.fn(),
+    saveIssueAttachmentDraft: vi.fn(),
+    sendAgentCommitPrompt: vi.fn(),
+    startAgentSession: vi.fn(),
+    updateIssue: vi.fn(),
+  };
+});
 
 vi.mock("../agents/agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
@@ -247,6 +252,7 @@ const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
 const toastSuccessMock = vi.mocked(toast.success);
+const listenMock = vi.mocked(listen);
 
 const existingIssue: IssueRecord = {
   id: 20,
@@ -525,6 +531,8 @@ describe("IssuesActivity", () => {
     saveDialogMock.mockReset();
     convertFileSrcMock.mockReset();
     toastSuccessMock.mockReset();
+    listenMock.mockReset();
+    listenMock.mockImplementation(async () => () => {});
     completeIssueFlowMock.mockImplementation(async (input) =>
       completedFlowResult({
         id: input.issueId,
@@ -2447,6 +2455,217 @@ describe("IssuesActivity", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
+  });
+
+  it("updates the starting dialog when worktree progress events arrive for the current issue", async () => {
+    const user = userEvent.setup();
+    const pendingStart = createDeferred<StartAgentSessionResult>();
+    const progress = captureIssueSessionStartProgressListener();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(pendingStart.promise);
+
+    renderIssuesActivity();
+
+    await waitFor(() =>
+      expect(listenMock).toHaveBeenCalledWith(
+        "issue-session-start-progress",
+        expect.any(Function),
+      ),
+    );
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Starting agent session...");
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "creating_worktree",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Creating worktree...",
+      ),
+    );
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "starting_session",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Starting agent session...",
+      ),
+    );
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("ignores start progress events for other issues or projects", async () => {
+    const user = userEvent.setup();
+    const pendingStart = createDeferred<StartAgentSessionResult>();
+    const progress = captureIssueSessionStartProgressListener();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(pendingStart.promise);
+
+    renderIssuesActivity();
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Starting agent session...");
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id + 1,
+      phase: "creating_worktree",
+    });
+    progress.emit({
+      projectId: 2,
+      issueId: existingIssue.id,
+      phase: "creating_worktree",
+    });
+    expect(loadingDialog).toHaveTextContent("Starting agent session...");
+    expect(loadingDialog).not.toHaveTextContent("Creating worktree...");
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not let other issue progress events replace the current creating message", async () => {
+    const user = userEvent.setup();
+    const pendingStart = createDeferred<StartAgentSessionResult>();
+    const progress = captureIssueSessionStartProgressListener();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(pendingStart.promise);
+
+    renderIssuesActivity();
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "creating_worktree",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Creating worktree...",
+      ),
+    );
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id + 1,
+      phase: "starting_session",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Creating worktree...",
+      ),
+    );
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("clears start progress after loading closes so a retry starts from the default message", async () => {
+    const user = userEvent.setup();
+    const firstStart = createDeferred<StartAgentSessionResult>();
+    const progress = captureIssueSessionStartProgressListener();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(firstStart.promise);
+
+    renderIssuesActivity();
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "creating_worktree",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Creating worktree...",
+      ),
+    );
+
+    firstStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    const secondStart = createDeferred<StartAgentSessionResult>();
+    startAgentSessionMock.mockReturnValue(secondStart.promise);
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const { dialog: retryDialog } = await openExistingIssueRunDialog(user);
+    await user.click(
+      within(retryDialog).getByRole("button", { name: "Start" }),
+    );
+
+    const retryLoading = await screen.findByRole("dialog");
+    expect(retryLoading).toHaveTextContent("Starting agent session...");
+    expect(retryLoading).not.toHaveTextContent("Creating worktree...");
+
+    secondStart.resolve({ sessionId: 302, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("releases the start progress listener when the issues page unmounts", async () => {
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    const progress = captureIssueSessionStartProgressListener();
+
+    const view = renderIssuesActivity();
+    await waitFor(() => expect(progress.unlisten).not.toHaveBeenCalled());
+    await waitFor(() =>
+      expect(listenMock).toHaveBeenCalledWith(
+        "issue-session-start-progress",
+        expect.any(Function),
+      ),
+    );
+
+    view.unmount();
+    await waitFor(() => expect(progress.unlisten).toHaveBeenCalledTimes(1));
   });
 
   it("closes the run dialog and refreshes issues when start succeeds", async () => {
@@ -4712,6 +4931,39 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 });
+
+type IssueSessionStartProgressPayload = {
+  projectId: number;
+  issueId: number;
+  phase: "creating_worktree" | "running_setup_command" | "starting_session";
+};
+
+function captureIssueSessionStartProgressListener() {
+  const unlistens = new Map<string, ReturnType<typeof vi.fn>>();
+  const handlers = new Map<
+    string,
+    (event: { payload: IssueSessionStartProgressPayload }) => void
+  >();
+  listenMock.mockImplementation(async (name, nextHandler) => {
+    const unlisten = vi.fn();
+    unlistens.set(name, unlisten);
+    handlers.set(
+      name,
+      nextHandler as (event: {
+        payload: IssueSessionStartProgressPayload;
+      }) => void,
+    );
+    return unlisten;
+  });
+  return {
+    get unlisten() {
+      return unlistens.get("issue-session-start-progress") ?? vi.fn();
+    },
+    emit(payload: IssueSessionStartProgressPayload) {
+      handlers.get("issue-session-start-progress")?.({ payload });
+    },
+  };
+}
 
 function renderIssuesActivity(
   props?: Partial<ComponentProps<typeof IssuesActivity>>,

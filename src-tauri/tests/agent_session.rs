@@ -22,9 +22,9 @@ use redwhisk_lib::git::worktree_name::issue_worktree_base_name;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
-    AgentSessionStatus, InjectAgentSessionPromptInput, ProjectGitBranchListInput,
-    ResumeAgentSessionInput, SetAgentSessionAttentionInput, StartAgentSessionInput, WorkspaceMode,
-    WorktreeOwner,
+    AgentSessionStatus, InjectAgentSessionPromptInput, IssueSessionStartProgressEvent,
+    IssueSessionStartProgressPhase, ProjectGitBranchListInput, ResumeAgentSessionInput,
+    SetAgentSessionAttentionInput, StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
 use redwhisk_lib::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 use redwhisk_lib::types::errors::CommandErrorCode;
@@ -1297,6 +1297,113 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
         "workspace path should end with {expected_base}, got: {workspace_path}"
     );
     assert_eq!(session.working_dir, workspace_path);
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_with_empty_setup_emits_creating_then_starting_progress() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-progress-empty-setup");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+            "json",
+            true,
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let recorded = std::sync::Mutex::new(Vec::<IssueSessionStartProgressEvent>::new());
+
+    service
+        .start_agent_session_with_progress(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: Some("   ".to_string()),
+            },
+            &|event| recorded.lock().expect("lock progress").push(event),
+        )
+        .expect("start worktree session");
+
+    let events = recorded.lock().expect("lock progress").clone();
+    assert_eq!(
+        events,
+        vec![
+            IssueSessionStartProgressEvent {
+                project_id,
+                issue_id,
+                phase: IssueSessionStartProgressPhase::CreatingWorktree,
+            },
+            IssueSessionStartProgressEvent {
+                project_id,
+                issue_id,
+                phase: IssueSessionStartProgressPhase::StartingSession,
+            },
+        ]
+    );
+}
+
+#[test]
+fn start_agent_session_in_current_branch_mode_does_not_emit_worktree_progress() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "current-branch-progress");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile_id = insert_agent_profile_with_command(
+        &database.connection,
+        AgentScope::Global,
+        None,
+        success_command(temp_dir.path()).to_string_lossy().as_ref(),
+    );
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let recorded = std::sync::Mutex::new(Vec::<IssueSessionStartProgressPhase>::new());
+
+    service
+        .start_agent_session_with_progress(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile_id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: Some("bmad-dev-story".to_string()),
+                workspace_mode: Some(WorkspaceMode::CurrentBranch),
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+            &|event| recorded.lock().expect("lock progress").push(event.phase),
+        )
+        .expect("start current branch session");
+
+    assert!(recorded.lock().expect("lock progress").is_empty());
 }
 
 #[test]

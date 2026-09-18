@@ -58,6 +58,7 @@
 | `update-prompt-changed`         | `UpdateStatus`                                                                  | `features/app_update/commands.rs` | 应用更新提示状态变更；前端 `app-update/use-update-status.ts` 刷新徽章 |
 | `app-theme-preference-changed`  | `AppThemePreferenceChangedEvent`（`themePreference`）                           | `features/project_terminal/commands.rs`（`emit_app_theme_preference_changed`） | 全局主题偏好跨窗同步；前端 `shared/i18n/i18n-provider.tsx` 更新偏好/localStorage 并本地解析 light/dark |
 | `issue-timeline-changed`        | Issue 时间轴变更                                                                | `features/issue/completion_comment.rs`  | 评论自动发表后广播；前端 `issues/issue-detail/issue-timeline.tsx` 刷新当前 Issue 时间轴 |
+| `issue-session-start-progress`  | `IssueSessionStartProgressEvent`（`projectId`、`issueId`、`phase`：`creating_worktree` \| `running_setup_command` \| `starting_session`） | `features/agent_session/commands.rs`（`emit_issue_session_start_progress`） | Issue 启动准备进度；前端 `issues/use-issue-session-start-progress.ts` 仅在匹配当前启动对象时更新 LoadingDialog 文案 |
 | `code-language-diagnostics`     | `CodeLanguageDiagnosticsEvent`（`projectId`、`workspacePath`、`uri`、`diagnostics`） | `features/code_language/commands.rs`（`emit_code_language_diagnostics`） | 代码页 TS/JS 诊断推送；前端 `code/use-code-language-diagnostics.ts` 应用到当前根 Monaco markers |
 
 新增 event 必须有 kebab-case 名、定位实体 ID、Rust payload 类型、前端 listener 的释放逻辑和至少一条序列/重连行为测试。事件名以 `pub const`（或文件内 `const`）定义；生产者封装为 `emit_*` 函数；跨窗口广播用 `emit_to`；前端 listener 必须在卸载时释放并覆盖序列/重连测试。

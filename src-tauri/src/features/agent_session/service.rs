@@ -32,10 +32,10 @@ use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
     AgentSessionAttention, AgentSessionListItem, AgentSessionListResponse, AgentSessionPromptKind,
     AgentSessionStatus, InjectAgentSessionPromptInput, InjectAgentSessionPromptResult,
-    ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineResult,
-    ResumeAgentSessionInput, ResumeAgentSessionResult, SetAgentSessionAttentionInput,
-    SetAgentSessionAttentionResult, StartAgentSessionInput, StartAgentSessionResult,
-    UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
+    IssueSessionStartProgressEvent, ProjectGitBranchListInput, ProjectGitBranchListResult,
+    ReadAgentTimelineResult, ResumeAgentSessionInput, ResumeAgentSessionResult,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, StartAgentSessionInput,
+    StartAgentSessionResult, UpdateAgentSessionTitleInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::{
@@ -89,6 +89,9 @@ pub struct AgentSessionRuntimeListResult {
     pub pruned_runtime_session_ids: Vec<i64>,
 }
 
+pub type IssueSessionStartProgressSink<'a> =
+    dyn Fn(IssueSessionStartProgressEvent) + Send + Sync + 'a;
+
 pub struct AgentSessionService<'connection> {
     pub(super) issue_repository: IssueRepository<'connection>,
     pub(super) project_repository: ProjectRepository<'connection>,
@@ -116,7 +119,16 @@ impl<'connection> AgentSessionService<'connection> {
         data_dir: impl AsRef<Path>,
         input: StartAgentSessionInput,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        self.start_agent_session_internal(data_dir, input, None)
+        self.start_agent_session_internal(data_dir, input, None, None)
+    }
+
+    pub fn start_agent_session_with_progress(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        progress: &IssueSessionStartProgressSink<'_>,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        self.start_agent_session_internal(data_dir, input, None, Some(progress))
     }
 
     /// 标记当前 turn 来源为 `follow_up`（用户在 session 中追问）。在 send_message
@@ -136,7 +148,7 @@ impl<'connection> AgentSessionService<'connection> {
         input: StartAgentSessionInput,
         pty_sessions: &PtySessionManager,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        self.start_agent_session_internal(data_dir, input, Some(pty_sessions))
+        self.start_agent_session_internal(data_dir, input, Some(pty_sessions), None)
     }
 
     pub fn start_agent_session_with_runtime(
@@ -147,7 +159,26 @@ impl<'connection> AgentSessionService<'connection> {
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
+        self.start_agent_session_with_runtime_progress(
+            data_dir,
+            input,
+            pty_sessions,
+            agent_registry,
+            broadcaster,
+            None,
+        )
+    }
+
+    pub fn start_agent_session_with_runtime_progress(
+        &self,
+        data_dir: impl AsRef<Path>,
+        input: StartAgentSessionInput,
+        pty_sessions: &PtySessionManager,
+        agent_registry: &AgentSessionRegistry,
+        broadcaster: &AgentEventBroadcaster,
+        progress: Option<&IssueSessionStartProgressSink<'_>>,
+    ) -> Result<StartAgentSessionResult, CommandError> {
+        let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input, progress)?;
         match super::lifecycle::runtime_transport_from_raw(&launch.profile.display_mode)? {
             super::lifecycle::RuntimeTransport::InteractiveTui => {
                 launch.command_snapshot =
@@ -336,8 +367,9 @@ impl<'connection> AgentSessionService<'connection> {
         data_dir: impl AsRef<Path>,
         input: StartAgentSessionInput,
         pty_sessions: Option<&PtySessionManager>,
+        progress: Option<&IssueSessionStartProgressSink<'_>>,
     ) -> Result<StartAgentSessionResult, CommandError> {
-        let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input)?;
+        let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input, progress)?;
         self.start_agent_session_internal_with_launch(data_dir, input, launch, pty_sessions)
     }
 
@@ -5104,6 +5136,7 @@ mod tests {
                 target_branch: Some("devlop".to_string()),
                 worktree_setup_command: None,
             },
+            None,
         );
         let error = match result {
             Err(error) => error,

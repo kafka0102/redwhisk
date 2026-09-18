@@ -303,6 +303,8 @@
     "start": "开始",
     "starting": "启动中...",
     "sessionStarting": "正在创建智能体会话...",
+    "sessionStartingCreatingWorktree": "正在创建 worktree",
+    "sessionStartingSetupCommand": "正在初始化命令",
     "updatingStatus": "正在更新状态...",
     "status": "状态",
     "statusLabel": "Issue 状态",

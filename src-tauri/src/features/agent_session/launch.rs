@@ -13,7 +13,8 @@ use crate::db::issue_repository::IssueRepository;
 use crate::git::worktree::{cleanup_worktree, create_worktree_for_issue, list_local_branches};
 use crate::git::worktree_name::issue_worktree_base_name;
 use crate::types::agent_session::{
-    AgentMessageAttachment, StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
+    AgentMessageAttachment, IssueSessionStartProgressEvent, IssueSessionStartProgressPhase,
+    StartAgentSessionInput, WorkspaceMode, WorktreeOwner,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
@@ -145,6 +146,7 @@ impl AgentSessionService<'_> {
         &self,
         data_dir: &Path,
         input: &StartAgentSessionInput,
+        progress: Option<&super::service::IssueSessionStartProgressSink<'_>>,
     ) -> Result<SessionLaunchContext, CommandError> {
         let project = self.project_by_id(input.project_id)?;
         let profile = self
@@ -264,6 +266,12 @@ impl AgentSessionService<'_> {
                             .with_value("workspacePath", primary_worktree_path.to_string_lossy()),
                     ));
                 }
+                notify_issue_session_start_progress(
+                    progress,
+                    input.project_id,
+                    input.issue_id,
+                    IssueSessionStartProgressPhase::CreatingWorktree,
+                );
                 let created = create_worktree_for_issue(
                     &project.repo_path,
                     &worktree_root_path,
@@ -282,6 +290,12 @@ impl AgentSessionService<'_> {
                     );
                     return Err(error);
                 }
+                notify_issue_session_start_progress(
+                    progress,
+                    input.project_id,
+                    input.issue_id,
+                    IssueSessionStartProgressPhase::StartingSession,
+                );
 
                 Ok(SessionLaunchContext {
                     profile,
@@ -300,6 +314,21 @@ impl AgentSessionService<'_> {
                 })
             }
         }
+    }
+}
+
+fn notify_issue_session_start_progress(
+    progress: Option<&super::service::IssueSessionStartProgressSink<'_>>,
+    project_id: i64,
+    issue_id: i64,
+    phase: IssueSessionStartProgressPhase,
+) {
+    if let Some(sink) = progress {
+        sink(IssueSessionStartProgressEvent {
+            project_id,
+            issue_id,
+            phase,
+        });
     }
 }
 

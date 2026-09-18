@@ -57,6 +57,22 @@ pub struct StartAgentSessionResult {
     pub issue_id: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueSessionStartProgressPhase {
+    CreatingWorktree,
+    RunningSetupCommand,
+    StartingSession,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSessionStartProgressEvent {
+    pub project_id: i64,
+    pub issue_id: i64,
+    pub phase: IssueSessionStartProgressPhase,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAgentSessionInput {

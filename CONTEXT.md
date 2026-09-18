@@ -40,6 +40,14 @@ _Avoid_: workspace mode、session 工作目录归属
 为 Issue 创建 RedWhisk 托管 worktree 时使用的工作分支名与目录主名；形态为 `issue-{项目内编号}-{仓库名 slug}`，仓库名取自仓库路径最后一级目录，经小写、中文按字转拼音（无声调）、非 `[a-z0-9]` 剔除后按 `-` 连接，且不超过 20 字符（截断优先保留完整词）；仓库名 slug 为空时退回 `issue-{项目内编号}`。历史 session 已记录的路径与分支不改写。
 _Avoid_: Issue 标题 slug、全局 issue id 命名、在线翻译名
 
+**Worktree 初始化命令**：
+创建托管 Worktree 后、启动 Agent 前在该 Worktree 内执行的项目准备命令；空命令表示无需此步。
+_Avoid_: 初始化脚本、setup 脚本、启动命令、目录树初始化
+
+**Issue 启动准备进度**：
+运行 Issue 时，在创建智能体会话之前可能经历的准备阶段；仅包含实际发生的步骤：创建 Worktree、执行 Worktree 初始化命令。
+_Avoid_: 步骤进度弹窗、假进度、目录树创建
+
 **实际执行路径**：
 Issue 完成时认定的 session 真实工作目录；用于未提交改动检测、Worktree 漂移判定与完成弹框预填。路径来源优先级由完成编排决定，不由 git 层决定。
 _Avoid_: working_dir 快照、codex cwd 裸字段

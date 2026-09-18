@@ -717,6 +717,13 @@
         "updatedAt": "required"
       }
     },
+    "IssueSessionStartProgressEvent": {
+      "fields": {
+        "issueId": "required",
+        "phase": "required",
+        "projectId": "required"
+      }
+    },
     "IssueStatusTotals": {
       "fields": {
         "backlog": "required",
@@ -1933,6 +1940,14 @@
         "completed",
         "cancelled",
         "blocked"
+      ]
+    },
+    "IssueSessionStartProgressPhase": {
+      "rename": "snake_case",
+      "variants": [
+        "creating_worktree",
+        "running_setup_command",
+        "starting_session"
       ]
     },
     "IssueStatus": {
