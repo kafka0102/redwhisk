@@ -1407,6 +1407,78 @@ fn start_agent_session_in_current_branch_mode_does_not_emit_worktree_progress() 
 }
 
 #[test]
+fn start_agent_session_in_worktree_mode_with_setup_command_emits_creating_setup_then_starting_progress(
+) {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-progress-setup");
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+            "json",
+            true,
+        )
+        .expect("save profile");
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let recorded = std::sync::Mutex::new(Vec::<IssueSessionStartProgressEvent>::new());
+
+    service
+        .start_agent_session_with_progress(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "Use this snapshot".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: Some("printf run-setup > run-setup.txt".to_string()),
+            },
+            &|event| recorded.lock().expect("lock progress").push(event),
+        )
+        .expect("start worktree session");
+
+    let events = recorded.lock().expect("lock progress").clone();
+    assert_eq!(
+        events,
+        vec![
+            IssueSessionStartProgressEvent {
+                project_id,
+                issue_id,
+                phase: IssueSessionStartProgressPhase::CreatingWorktree,
+            },
+            IssueSessionStartProgressEvent {
+                project_id,
+                issue_id,
+                phase: IssueSessionStartProgressPhase::RunningSetupCommand,
+            },
+            IssueSessionStartProgressEvent {
+                project_id,
+                issue_id,
+                phase: IssueSessionStartProgressPhase::StartingSession,
+            },
+        ]
+    );
+}
+
+#[test]
 fn start_agent_session_in_worktree_mode_rejects_leftover_worktree_on_disk() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());

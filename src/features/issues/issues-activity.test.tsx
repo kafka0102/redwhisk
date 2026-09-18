@@ -2514,6 +2514,70 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("shows creating, setup command, then default messages in order without the command text", async () => {
+    const user = userEvent.setup();
+    const pendingStart = createDeferred<StartAgentSessionResult>();
+    const progress = captureIssueSessionStartProgressListener();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    startAgentSessionMock.mockReturnValue(pendingStart.promise);
+
+    renderIssuesActivity();
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+
+    const loadingDialog = await screen.findByRole("dialog");
+    expect(loadingDialog).toHaveTextContent("Starting agent session...");
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "creating_worktree",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Creating worktree...",
+      ),
+    );
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "running_setup_command",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Running setup command...",
+      ),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("pnpm install");
+
+    progress.emit({
+      projectId: 1,
+      issueId: existingIssue.id,
+      phase: "starting_session",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Starting agent session...",
+      ),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      "Running setup command...",
+    );
+
+    pendingStart.resolve({ sessionId: 301, issueId: existingIssue.id });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
   it("ignores start progress events for other issues or projects", async () => {
     const user = userEvent.setup();
     const pendingStart = createDeferred<StartAgentSessionResult>();

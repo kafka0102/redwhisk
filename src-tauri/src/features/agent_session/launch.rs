@@ -279,6 +279,17 @@ impl AgentSessionService<'_> {
                     &target_branch,
                 )
                 .map_err(worktree_create_error)?;
+                if worktree_setup_command
+                    .as_deref()
+                    .is_some_and(|command| !command.trim().is_empty())
+                {
+                    notify_issue_session_start_progress(
+                        progress,
+                        input.project_id,
+                        input.issue_id,
+                        IssueSessionStartProgressPhase::RunningSetupCommand,
+                    );
+                }
                 if let Err(error) = run_worktree_setup_command(
                     &created.workspace_path,
                     worktree_setup_command.as_deref(),
