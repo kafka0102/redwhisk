@@ -231,6 +231,21 @@ pub struct AgentUsage {
     /// Session Token 消耗累计缓存读取快照；与 composer 上下文占用无关。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_token_cache: Option<u64>,
+    /// Session Token 落库合并策略；只在进程内使用，不跨边界下发。
+    #[serde(skip)]
+    pub session_token_merge: SessionTokenMerge,
+}
+
+/// Session Token 消耗写入 Session 记录的合并方式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SessionTokenMerge {
+    /// Codex 线程累计：覆盖写入。
+    #[default]
+    Overwrite,
+    /// 当前 turn 最新用量：覆盖本 turn 部分，落盘 committed+current。
+    TurnLatest,
+    /// turn 结束定稿：累进 committed。
+    TurnCommit,
 }
 
 /// 权限请求，对应 app-server 的 server→client request。
@@ -375,6 +390,7 @@ mod tests {
                 session_token_input: None,
                 session_token_output: None,
                 session_token_cache: None,
+                session_token_merge: SessionTokenMerge::Overwrite,
             },
         };
 

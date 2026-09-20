@@ -3,9 +3,8 @@
 use serde_json::Value;
 
 use crate::agent::opencode_streaming::tool_detail::map_tool_detail;
-use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentTimelineItem, AgentUsage, ToolCallStatus,
-};
+use crate::agent::opencode_streaming::usage::usage_from_part;
+use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem, ToolCallStatus};
 
 #[derive(Debug, Clone)]
 pub struct MapContext {
@@ -210,21 +209,6 @@ fn part_text(value: &Value) -> Option<String> {
                 .map(str::to_string)
         })
 }
-fn usage_from_part(value: &Value) -> Option<AgentUsage> {
-    let part = value.get("part")?;
-    let tokens = part.get("tokens").or_else(|| part.get("usage"))?;
-    Some(AgentUsage {
-        input_tokens: tokens
-            .get("input")
-            .or_else(|| tokens.get("input_tokens"))
-            .and_then(Value::as_u64),
-        output_tokens: tokens
-            .get("output")
-            .or_else(|| tokens.get("output_tokens"))
-            .and_then(Value::as_u64),
-        ..Default::default()
-    })
-}
 fn error_message(value: &Value) -> String {
     let error = value.get("error");
     if let Some(err) = error {
@@ -331,6 +315,9 @@ mod tests {
                 let usage = usage.as_ref().expect("usage");
                 assert_eq!(usage.input_tokens, Some(10));
                 assert_eq!(usage.output_tokens, Some(20));
+                assert_eq!(usage.session_token_input, Some(10));
+                assert_eq!(usage.session_token_output, Some(20));
+                assert_eq!(usage.session_token_cache, Some(0));
             }
             other => panic!("unexpected {other:?}"),
         }

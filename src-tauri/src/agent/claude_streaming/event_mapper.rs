@@ -331,14 +331,40 @@ fn extract_subagent_id(content: &str) -> Option<String> {
 
 /// 从用量统计构造 `AgentUsage`。
 pub fn map_usage(stats: &UsageStats) -> AgentUsage {
+    map_usage_with_merge(
+        stats,
+        crate::types::agent_session_stream::SessionTokenMerge::TurnLatest,
+    )
+}
+
+pub fn map_usage_commit(stats: &UsageStats) -> AgentUsage {
+    map_usage_with_merge(
+        stats,
+        crate::types::agent_session_stream::SessionTokenMerge::TurnCommit,
+    )
+}
+
+fn map_usage_with_merge(
+    stats: &UsageStats,
+    session_token_merge: crate::types::agent_session_stream::SessionTokenMerge,
+) -> AgentUsage {
+    let snapshot =
+        crate::agent::session_token_usage::normalize_claude_token_usage(&serde_json::json!({
+            "input_tokens": stats.input_tokens,
+            "output_tokens": stats.output_tokens,
+            "cache_creation_input_tokens": stats.cache_creation_input_tokens,
+            "cache_read_input_tokens": stats.cache_read_input_tokens,
+            "reasoning_output_tokens": stats.reasoning_output_tokens,
+        }));
     AgentUsage {
         input_tokens: stats.input_tokens,
         output_tokens: stats.output_tokens,
         context_window_max_tokens: stats.context_window_max_tokens,
         context_window_used_tokens: stats.input_tokens,
-        session_token_input: None,
-        session_token_output: None,
-        session_token_cache: None,
+        session_token_input: snapshot.map(|usage| usage.input),
+        session_token_output: snapshot.map(|usage| usage.output),
+        session_token_cache: snapshot.map(|usage| usage.cache),
+        session_token_merge,
     }
 }
 
@@ -582,11 +608,49 @@ mod tests {
             input_tokens: Some(100),
             output_tokens: Some(5),
             context_window_max_tokens: Some(200000),
+            ..Default::default()
         };
         let usage = map_usage(&stats);
         assert_eq!(usage.input_tokens, Some(100));
         assert_eq!(usage.output_tokens, Some(5));
         assert_eq!(usage.context_window_max_tokens, Some(200000));
         assert_eq!(usage.context_window_used_tokens, Some(100));
+    }
+
+    #[test]
+    fn maps_claude_cache_write_into_session_input_and_read_into_cache() {
+        let stats = UsageStats {
+            input_tokens: Some(100),
+            output_tokens: Some(5),
+            cache_creation_input_tokens: Some(50),
+            cache_read_input_tokens: Some(200),
+            ..Default::default()
+        };
+        let usage = map_usage(&stats);
+        assert_eq!(usage.session_token_input, Some(150));
+        assert_eq!(usage.session_token_output, Some(5));
+        assert_eq!(usage.session_token_cache, Some(200));
+        assert_eq!(
+            usage.session_token_merge,
+            crate::types::agent_session_stream::SessionTokenMerge::TurnLatest
+        );
+    }
+
+    #[test]
+    fn maps_claude_result_usage_as_turn_commit() {
+        let stats = UsageStats {
+            input_tokens: Some(150),
+            output_tokens: Some(30),
+            cache_read_input_tokens: Some(50),
+            ..Default::default()
+        };
+        let usage = map_usage_commit(&stats);
+        assert_eq!(usage.session_token_input, Some(150));
+        assert_eq!(usage.session_token_output, Some(30));
+        assert_eq!(usage.session_token_cache, Some(50));
+        assert_eq!(
+            usage.session_token_merge,
+            crate::types::agent_session_stream::SessionTokenMerge::TurnCommit
+        );
     }
 }

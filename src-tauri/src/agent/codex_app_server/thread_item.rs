@@ -485,6 +485,7 @@ pub fn extract_usage(token_usage: &Value) -> Option<AgentUsage> {
         session_token_input: None,
         session_token_output: None,
         session_token_cache: None,
+        session_token_merge: crate::types::agent_session_stream::SessionTokenMerge::Overwrite,
     })
 }
 

@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
 use crate::agent::session_token_usage::{
-    persist_session_token_usage, session_token_usage_from_event,
+    persist_session_token_usage_with, session_token_usage_from_event, SessionTokenAccumulator,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -51,6 +51,7 @@ struct SessionCursor {
 struct SessionPersistenceState {
     log_path: Option<String>,
     last_latest_output_write_at: Option<SystemTime>,
+    token_accumulator: SessionTokenAccumulator,
 }
 
 /// TurnCompleted 信号订阅方（Issue 交付摘要等）。
@@ -116,6 +117,7 @@ impl AgentEventBroadcaster {
                 SessionPersistenceState {
                     log_path: None,
                     last_latest_output_write_at: None,
+                    token_accumulator: SessionTokenAccumulator::default(),
                 },
             );
         }
@@ -334,7 +336,22 @@ impl AgentEventBroadcaster {
             let _ = repository.update_provider_session_id(envelope.session_id, session_id);
         }
         if has_session_token_usage {
-            let _ = persist_session_token_usage(&repository, envelope.session_id, &envelope.event);
+            if let Ok(mut persistence) = self.persistence.lock() {
+                let accumulator = &mut persistence
+                    .entry(envelope.session_id)
+                    .or_insert(SessionPersistenceState {
+                        log_path: None,
+                        last_latest_output_write_at: None,
+                        token_accumulator: SessionTokenAccumulator::default(),
+                    })
+                    .token_accumulator;
+                let _ = persist_session_token_usage_with(
+                    &repository,
+                    envelope.session_id,
+                    &envelope.event,
+                    accumulator,
+                );
+            }
         }
         true
     }
@@ -367,6 +384,7 @@ impl AgentEventBroadcaster {
                 .or_insert(SessionPersistenceState {
                     log_path: None,
                     last_latest_output_write_at: None,
+                    token_accumulator: SessionTokenAccumulator::default(),
                 })
                 .log_path = Some(session.log_path.clone());
         }
@@ -384,6 +402,7 @@ impl AgentEventBroadcaster {
             .or_insert(SessionPersistenceState {
                 log_path: None,
                 last_latest_output_write_at: None,
+                token_accumulator: SessionTokenAccumulator::default(),
             });
         let should_update = is_important
             || match state.last_latest_output_write_at {

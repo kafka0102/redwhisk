@@ -18,6 +18,7 @@ pub mod event_mapper;
 pub mod session;
 pub mod tool_detail;
 pub mod transport;
+pub(crate) mod usage;
 
 pub use session::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 pub use transport::OpenCodeStreamingError;

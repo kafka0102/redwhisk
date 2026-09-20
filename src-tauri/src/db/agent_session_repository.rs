@@ -439,6 +439,21 @@ impl<'connection> AgentSessionRepository<'connection> {
         Ok(())
     }
 
+    pub fn read_session_token_usage(
+        &self,
+        session_id: i64,
+    ) -> rusqlite::Result<Option<(Option<i64>, Option<i64>, Option<i64>)>> {
+        self.connection
+            .query_row(
+                "SELECT token_input, token_output, token_cache
+                 FROM agent_sessions
+                 WHERE id = ?1 AND del = 0",
+                params![session_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+    }
+
     /// 覆盖写入 Session Token 消耗三项累计值。Codex 用线程 `total` 快照，不累加 last。
     pub fn overwrite_session_token_usage(
         &self,

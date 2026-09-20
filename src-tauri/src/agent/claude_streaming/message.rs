@@ -159,11 +159,14 @@ pub enum UserBlock {
 }
 
 /// token 用量。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct UsageStats {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub context_window_max_tokens: Option<u64>,
+    pub cache_creation_input_tokens: Option<u64>,
+    pub cache_read_input_tokens: Option<u64>,
+    pub reasoning_output_tokens: Option<u64>,
 }
 
 /// 解析一行 SDKMessage JSON。
@@ -516,13 +519,39 @@ fn parse_usage(value: &Value) -> Option<UsageStats> {
         .get("context_window")
         .and_then(Value::as_u64)
         .or_else(|| value.get("contextWindow").and_then(Value::as_u64));
-    if input_tokens.is_none() && output_tokens.is_none() && context_window_max_tokens.is_none() {
+    let cache_creation_input_tokens = value
+        .get("cache_creation_input_tokens")
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            value
+                .get("cacheCreationInputTokens")
+                .and_then(Value::as_u64)
+        });
+    let cache_read_input_tokens = value
+        .get("cache_read_input_tokens")
+        .and_then(Value::as_u64)
+        .or_else(|| value.get("cacheReadInputTokens").and_then(Value::as_u64));
+    let reasoning_output_tokens = value
+        .get("reasoning_output_tokens")
+        .and_then(Value::as_u64)
+        .or_else(|| value.get("reasoningOutputTokens").and_then(Value::as_u64))
+        .or_else(|| value.get("reasoning_tokens").and_then(Value::as_u64));
+    if input_tokens.is_none()
+        && output_tokens.is_none()
+        && context_window_max_tokens.is_none()
+        && cache_creation_input_tokens.is_none()
+        && cache_read_input_tokens.is_none()
+        && reasoning_output_tokens.is_none()
+    {
         return None;
     }
     Some(UsageStats {
         input_tokens,
         output_tokens,
         context_window_max_tokens,
+        cache_creation_input_tokens,
+        cache_read_input_tokens,
+        reasoning_output_tokens,
     })
 }
 
@@ -822,5 +851,20 @@ mod tests {
         let usage = parse_usage(&value).unwrap();
         assert_eq!(usage.input_tokens, Some(50));
         assert_eq!(usage.context_window_max_tokens, Some(200000));
+    }
+
+    #[test]
+    fn parses_usage_with_cache_write_and_read() {
+        let value = json!({
+            "input_tokens": 100,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 50,
+            "cache_read_input_tokens": 200
+        });
+        let usage = parse_usage(&value).unwrap();
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(5));
+        assert_eq!(usage.cache_creation_input_tokens, Some(50));
+        assert_eq!(usage.cache_read_input_tokens, Some(200));
     }
 }

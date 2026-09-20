@@ -21,7 +21,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use super::event_mapper::{
-    map_assistant_blocks, map_tool_results, map_usage, MappedBlock, ToolResultPatch,
+    map_assistant_blocks, map_tool_results, map_usage, map_usage_commit, MappedBlock,
+    ToolResultPatch,
 };
 use super::message::{
     parse_message, AnthropicStreamEvent, ClaudeStreamMessage, ContentBlock, ContentDelta,
@@ -780,7 +781,7 @@ fn build_events(
             }
             if let Some(usage) = usage {
                 events.push(AgentStreamEvent::UsageUpdated {
-                    usage: map_usage(&usage),
+                    usage: map_usage_commit(&usage),
                 });
             }
             if !is_error {

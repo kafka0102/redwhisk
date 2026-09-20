@@ -802,6 +802,8 @@ fn build_events(
                     session_token_input: Some(snapshot.input),
                     session_token_output: Some(snapshot.output),
                     session_token_cache: Some(snapshot.cache),
+                    session_token_merge:
+                        crate::types::agent_session_stream::SessionTokenMerge::Overwrite,
                 }),
             };
             if let Some(usage) = usage.clone() {
