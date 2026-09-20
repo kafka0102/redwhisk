@@ -274,6 +274,69 @@ describe("writeTerminalHistory", () => {
 
     expect(scrollToLine).toHaveBeenCalledWith(5);
   });
+
+  it("skips reset when preserveBuffer is true", async () => {
+    const fakeTerminal = {
+      reset: vi.fn(),
+      write: vi.fn((_data: string, callback?: () => void) => {
+        callback?.();
+      }),
+      scrollToBottom: vi.fn(),
+      scrollToLine: vi.fn(),
+      buffer: { active: { baseY: 0 } },
+    };
+
+    await writeTerminalHistory(fakeTerminal, "delta", () => undefined, {
+      preserveBuffer: true,
+    });
+
+    expect(fakeTerminal.reset).not.toHaveBeenCalled();
+    expect(fakeTerminal.write).toHaveBeenCalledWith(
+      "delta",
+      expect.any(Function),
+    );
+  });
+
+  it("reset of in-place TUI patch tail leaves only the latest status line", async () => {
+    const term = mountTerminal();
+    const fullScreen = Array.from(
+      { length: 24 },
+      (_, i) => `\x1b[${i + 1};1HTUI-ROW-${String(i).padStart(2, "0")}\x1b[K`,
+    ).join("");
+    const patchTail = "\x1b[20;1H• Waiting for background terminal\x1b[K";
+
+    await writeTerminalHistory(term, fullScreen, () => undefined);
+    expect(bufferLines(term).some((line) => line.includes("TUI-ROW-00"))).toBe(
+      true,
+    );
+
+    await writeTerminalHistory(term, patchTail, () => undefined);
+    const lines = bufferLines(term);
+    expect(lines.some((line) => line.includes("TUI-ROW-00"))).toBe(false);
+    expect(
+      lines.some((line) => line.includes("Waiting for background terminal")),
+    ).toBe(true);
+  });
+
+  it("preserveBuffer keeps the full TUI when catching up in-place patches", async () => {
+    const term = mountTerminal();
+    const fullScreen = Array.from(
+      { length: 24 },
+      (_, i) => `\x1b[${i + 1};1HTUI-ROW-${String(i).padStart(2, "0")}\x1b[K`,
+    ).join("");
+    const patchTail = "\x1b[20;1H• Waiting for background terminal\x1b[K";
+
+    await writeTerminalHistory(term, fullScreen, () => undefined);
+    await writeTerminalHistory(term, patchTail, () => undefined, {
+      preserveBuffer: true,
+    });
+
+    const lines = bufferLines(term);
+    expect(lines.some((line) => line.includes("TUI-ROW-00"))).toBe(true);
+    expect(
+      lines.some((line) => line.includes("Waiting for background terminal")),
+    ).toBe(true);
+  });
 });
 
 describe("writeTerminalHistoryPreservingView", () => {

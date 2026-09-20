@@ -111,7 +111,27 @@ TUI 日志几乎没有“按行文本”，`max_bytes` 经常落在：
 - `healTerminalViewport`：`clearTextureAtlas` + `refresh`；history 写完 / live ready / 累计 live 约 512 KiB / `pointerenter` 时调用。
 - context loss 后仅在仍 active 时有限次重建；耗尽则留在 canvas。
 
-### 4.3 产品层：in-place 刷新本身不产生 scrollback
+### 4.3 catch-up `reset` + in-place tail（整屏空白只剩底下一行）
+
+长 Codex TUI（例如 `Waiting for background terminal` 数小时）稳态后几乎只发
+小 CUP 补丁：实测 `project-8-terminal-6.log` 最后 2MB 有约 9k 个 synchronized
+frame，最大仅 279 字节；最近一次整屏绘制 / `CSI 2J` / `CUP 1;1` 在约 22MB 之前。
+
+keep-alive 终端切走再回来时，若 sequence 已前进，旧逻辑会 `terminal.reset()` 再灌
+这 2MB tail。buffer 被清空后补丁只画状态行，于是出现：
+
+- 整窗空白，底部一行 `• Waiting for background terminal`；
+- 行尾残留数字（截图里的 `13 19`）来自未擦干净的 CUP 覆盖，不是真实 UI；
+- 下一次 Codex 整屏重绘或 SIGWINCH 后又「自己好了」。
+
+这不是 WebGL 花屏，也不是「刷新窗口」。强制 `refresh` / 重建 surface 会打乱
+flex 底对齐与 fit，属于破坏性修复。
+
+正确做法：实例已有 buffer 时 **preserveBuffer 追加**，不要 reset。首次挂载仍
+走 reset+tail（冷启动无法从纯补丁还原整屏，需后续 snapshot / 从上次 `CSI 2J`
+起回放）。
+
+### 4.4 产品层：in-place 刷新本身不产生 scrollback
 
 
 短 shell 后立刻进入 TUI 时，`baseY === 0`，CUP 首页重绘会覆盖当前屏（测试已锁定：`terminal-scrollback-sequences.test.ts`）。  
@@ -122,13 +142,13 @@ TUI 日志几乎没有“按行文本”，`max_bytes` 经常落在：
 
 这不是解析错误，而是 **TUI 协议语义**。要“永远能上滚看过程”，需要 **应用层历史**（见 §6），不能只靠 xterm buffer。
 
-### 4.4 尺寸与可见性
+### 4.5 尺寸与可见性
 
 - 初始 spawn 默认 `rows=32, cols=120`，真实尺寸靠 `FitAddon` + `resize` 纠正。
 - 隐藏 pane（`display:none` / 0×0）时 **禁止 fit**，否则会出现 `cols=2/rows=1` 的 SIGWINCH 风暴（`terminal-surface.tsx` 已处理）。
 - 尺寸长期不一致会导致 DECSTBM 区域与真实 rows 错位 → 边框/输入行错位；下一次正确 resize 重绘后恢复。
 
-### 4.5 历史上限
+### 4.6 历史上限
 
 catch-up 只回放 tail（现 2 MiB）。超长 session 更早的过程在磁盘可能仍在（log 上限 32 MiB），但 UI 不会一次灌入全部。  
 Orca 也明确区分：
@@ -165,7 +185,7 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 ### P1（推荐后续）
 
 1. **resize 稳定化**：spawn 前尽量用上次窗口尺寸；首帧 fit 完成前延迟注入 prompt（降低 DECSTBM 错位窗口）。  
-2. **catch-up 与 live 的“半帧”对齐**：若 tail 起点不是 synchronized update 边界，可向前扩到最近的 `CSI ?2026 h`（进一步减少首帧花屏）。  
+2. **catch-up 与 live 的“半帧”对齐**：若 tail 起点不是 synchronized update 边界，可向前扩到最近的 `CSI ?2026 h`（进一步减少首帧花屏）。keep-alive 重可见且已有 buffer 时 **禁止 reset**，只追加 tail。  
 3. **可见性/订阅**：保持“隐藏不 fit、隐藏不写 xterm”；**sequence 未变时跳过 rewrite**（已实现，见 `TerminalLivePipeline.becomeVisible`），仅在隐藏期间有新输出时整段 catch-up。终端 Activity 与终端卡片均常驻挂载 + `hidden` 切换，避免切 Tab 卸载 xterm。  
 4. **WebGL 仅可见挂载 + 纹理自愈**：hidden 终端卸 WebGL 避免共享 atlas 串扰；history / re-visible / pointerenter / 长会话累计输出 heal；休眠恢复 `recreate`；context loss 有限次重建（已实现）。
 
@@ -179,7 +199,7 @@ Orca **没有魔法让 in-place TUI 自动变成可滚动聊天记录**。它同
 
 1. 取 runtime log：`~/.redwhisk/session-logs/runtime/.../*.log`。  
 2. 统计序列：`CSI H` / `CSI r` / `?1049` / `?2026` 次数；若 `?1049=0` 且 `CUP` 极高 → in-place normal buffer。  
-3. 用 `@xterm/headless` 或 jsdom xterm 整文件回放：若 buffer 正常（复制也正常）而 UI 花屏 → 查 **WebGL atlas / context loss / 休眠后未 heal**；若 buffer 也脏 → 查 **截断 / resize / 双写 / restore suppress**。  
+3. 用 `@xterm/headless` 或 jsdom xterm 整文件回放：若 buffer 正常（复制也正常）而 UI 花屏 → 查 **WebGL atlas / context loss / 休眠后未 heal**；若 buffer 也脏 → 查 **截断 / resize / 双写 / restore suppress**。若 **reset 后再灌 2MB tail 只剩一行 Waiting** → 是 §4.3 catch-up reset，不是 WebGL。  
 4. 查 catch-up `max_bytes` 起点是否落在 `ESC` 参数中（`safe_terminal_log_tail_start` 应保证不会）。  
 5. 查隐藏 tab 是否触发了 0×0 fit（应被 `offsetWidth/Height === 0` 挡住）。  
 6. 区分：  

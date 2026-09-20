@@ -17,6 +17,11 @@ export interface WriteTerminalHistoryOptions {
    * 未给出时滚到底部。
    */
   restoreViewportY?: number | null;
+  /**
+   * 为 true 时不 reset，只把文本追加写入现有 buffer。
+   * keep-alive 终端在隐藏期间有新输出时使用，避免 in-place TUI tail 把整屏抹成一行。
+   */
+  preserveBuffer?: boolean;
 }
 
 export interface TerminalHistoryTarget {
@@ -52,7 +57,9 @@ export async function writeTerminalHistory(
 ): Promise<void> {
   setInputSuppressed(true);
   try {
-    terminal.reset();
+    if (options?.preserveBuffer !== true) {
+      terminal.reset();
+    }
     const payload = normalizeTerminalHistoryNewlines(text);
     await new Promise<void>((resolve) => {
       terminal.write(payload, () => {
@@ -84,6 +91,7 @@ export async function writeTerminalHistoryPreservingView(
   setInputSuppressed: (suppressed: boolean) => void,
   viewKey: string,
   restoreSequence: number,
+  options?: { preserveBuffer?: boolean },
 ): Promise<void> {
   const restoreViewportY = resolveHistoryScrollViewportY(
     peekTerminalViewState(viewKey),
@@ -91,6 +99,7 @@ export async function writeTerminalHistoryPreservingView(
   );
   await writeTerminalHistory(terminal, text, setInputSuppressed, {
     restoreViewportY,
+    preserveBuffer: options?.preserveBuffer,
   });
   saveTerminalViewState(viewKey, {
     sequence: restoreSequence,

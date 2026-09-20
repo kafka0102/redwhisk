@@ -270,7 +270,8 @@ describe("TerminalLivePipeline", () => {
   });
 
   it("passes restoreSequence to writeHistory", async () => {
-    const metas: Array<{ restoreSequence: number }> = [];
+    const metas: Array<{ restoreSequence: number; preserveBuffer?: boolean }> =
+      [];
     const transport = createTransport({
       restore: vi.fn(async () => ({
         sequence: 42,
@@ -292,7 +293,7 @@ describe("TerminalLivePipeline", () => {
 
     await pipeline.becomeVisible();
 
-    expect(metas).toEqual([{ restoreSequence: 42 }]);
+    expect(metas).toEqual([{ restoreSequence: 42, preserveBuffer: false }]);
     expect(pipeline.getLatestSequence()).toBe(42);
   });
 });
@@ -336,7 +337,7 @@ it("skips history rewrite when re-visible with unchanged sequence", async () => 
   expect(pipeline.getLatestSequence()).toBe(10);
 });
 
-it("rewrites history when sequence advanced while hidden", async () => {
+it("appends history without reset when sequence advanced while hidden", async () => {
   const writeHistory = vi.fn();
   let restoreSequence = 10;
   const transport = createTransport({
@@ -366,8 +367,13 @@ it("rewrites history when sequence advanced while hidden", async () => {
   await pipeline.becomeVisible();
 
   expect(writeHistory).toHaveBeenCalledTimes(2);
+  expect(writeHistory).toHaveBeenNthCalledWith(1, "history-10", {
+    restoreSequence: 10,
+    preserveBuffer: false,
+  });
   expect(writeHistory).toHaveBeenLastCalledWith("history-12", {
     restoreSequence: 12,
+    preserveBuffer: true,
   });
   expect(pipeline.getLatestSequence()).toBe(12);
 });

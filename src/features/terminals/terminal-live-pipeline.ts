@@ -10,6 +10,12 @@ const TERMINAL_PENDING_OUTPUT_MAX_BYTES = 64 * 1024;
 export interface WriteTerminalHistoryMeta {
   /** restore 对齐后的 live sequence 头。用于判断隐藏期间是否有新输出。 */
   restoreSequence: number;
+  /**
+   * 终端实例已有有效 buffer 时为 true。
+   * catch-up 不得 reset：Codex 等 in-place TUI 的 log tail 往往只剩 CUP 补丁，
+   * reset 后再灌会留下近乎空白的一屏。
+   */
+  preserveBuffer?: boolean;
 }
 
 export interface TerminalLivePipelineCallbacks {
@@ -80,8 +86,9 @@ export class TerminalLivePipeline {
 
     this.phase = "catchingUp";
     const generation = ++this.generation;
-    // 隐藏期间若 sequence 未前进，xterm 缓冲区仍有效；跳过整段 log 回放，
-    // 避免 Codex 等 in-place TUI 切 tab 时 reset+重放导致花屏/空白。
+    // 隐藏期间若 sequence 未前进，xterm 缓冲区仍有效；跳过整段 log 回放。
+    // sequence 前进时若实例还在（keep-alive），也不得 reset 再灌 tail：
+    // 长 Codex TUI 的 2MB 日志尾往往只是 CUP 补丁，reset 后只剩底下一行。
     const previousSequence = this.latestSequence;
 
     try {
@@ -95,8 +102,9 @@ export class TerminalLivePipeline {
         return;
       }
 
+      const hasExistingBuffer = previousSequence > 0;
       const viewUnchanged =
-        previousSequence > 0 && restoreResult.sequence === previousSequence;
+        hasExistingBuffer && restoreResult.sequence === previousSequence;
 
       if (!viewUnchanged) {
         const snapshotResult = await this.transport.readSnapshot(
@@ -109,6 +117,7 @@ export class TerminalLivePipeline {
         if (snapshotResult.snapshot) {
           await this.callbacks.writeHistory(snapshotResult.snapshot, {
             restoreSequence: restoreResult.sequence,
+            preserveBuffer: hasExistingBuffer,
           });
           if (!this.isCurrentGeneration(generation)) {
             return;

@@ -62,6 +62,7 @@ export function createTerminalSurfaceLiveHandlers(
         deps.setInputSuppressed,
         String(deps.transportKey),
         meta.restoreSequence,
+        { preserveBuffer: meta.preserveBuffer },
       );
       liveBytesSinceHeal = 0;
       healTerminalViewport(deps.terminal);
