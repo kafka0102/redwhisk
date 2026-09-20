@@ -42,6 +42,9 @@ pub struct AgentSessionListRow {
     pub processing_ms: i64,
     pub last_output_at: Option<i64>,
     pub startup_model: Option<String>,
+    pub token_input: Option<i64>,
+    pub token_output: Option<i64>,
+    pub token_cache: Option<i64>,
 }
 
 pub struct AgentSessionRepository<'connection> {
@@ -208,7 +211,10 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.processing_ms,
                 agent_sessions.last_output_at,
                 agent_sessions.display_mode,
-                agent_sessions.startup_model
+                agent_sessions.startup_model,
+                agent_sessions.token_input,
+                agent_sessions.token_output,
+                agent_sessions.token_cache
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -431,6 +437,22 @@ impl<'connection> AgentSessionRepository<'connection> {
             params![startup_model, session_id],
         )?;
         Ok(())
+    }
+
+    /// 覆盖写入 Session Token 消耗三项累计值。Codex 用线程 `total` 快照，不累加 last。
+    pub fn overwrite_session_token_usage(
+        &self,
+        session_id: i64,
+        input: i64,
+        output: i64,
+        cache: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET token_input = ?1, token_output = ?2, token_cache = ?3
+             WHERE id = ?4 AND del = 0",
+            params![input, output, cache, session_id],
+        )
     }
 
     pub fn insert_standalone_in_transaction(
@@ -946,6 +968,9 @@ fn agent_session_list_row_from_row(
         processing_ms: row.get(29)?,
         last_output_at: row.get::<_, Option<i64>>(30)?,
         startup_model: row.get(32)?,
+        token_input: row.get(33)?,
+        token_output: row.get(34)?,
+        token_cache: row.get(35)?,
     })
 }
 

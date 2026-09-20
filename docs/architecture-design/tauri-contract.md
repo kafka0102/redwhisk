@@ -35,6 +35,8 @@
 > `get_project_worktree_file_tree`：`ProjectWorkspaceInput` 可选 `directoryPath`（缺省 / 空 / `.` 表示工作区根）。每次只返回该目录的**一层**子节点；子目录在前端展开时再请求。`signature` 对本次 listing 计算。
 
 > `start_agent_session`：入参 `StartAgentSessionInput` 可选 `model`（启动期模型选择，ADR-0036 第 8 条）。json 与 tui 启动都按「启动期模型选择 → 该 Agent 启动时刻的当前模型（与模型目录默认项同一套解析）→ 空」认定运行参数模型，写入 Session 记录，并由 `list_agent_sessions` 的 `startupModel` 下发（ADR-0038）。不写回 Agent 全局配置、不记入 Profile；会话内切换模型不改写该快照。
+>
+> `list_agent_sessions`：出参 `AgentSessionListItem` 含 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
 
 > `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
 
@@ -53,7 +55,7 @@
 | `agent-session-terminal-output` | PTY 输出事件                                                                    | `lib.rs` 的 PTY output sink   | 项目终端与 **tui** Agent Session 的实时字节输出；json 结构化会话不使用 |
 | `agent-skills-updated`          | `AgentSkillsUpdatedEvent`                                                       | `agent_skill_commands.rs`     | 全局或项目 skill 索引刷新完成                                |
 | `open-agent-session`            | `OpenAgentSessionEventPayload`                                                  | `session_monitor_commands.rs` | 通知目标窗口定位指定项目与会话                               |
-| `agent-session-list-changed`    | 会话列表变更（`projectId`、`sessionId`、`reason`）                              | `agent_event_broadcaster.rs`、`features/agent_session/commands.rs`（`emit_agent_session_list_changed`） | 会话增删/标题/attention 变更；前端 `agents/agent-session-events.ts`（常量）、`agents/use-agent-session-list.ts`（`agents-activity.tsx` 间接消费）、`changes/use-changes-auto-refresh.ts` 据此去抖刷新 |
+| `agent-session-list-changed`    | 会话列表变更（`projectId`、`sessionId`、`reason`）                              | `agent_event_broadcaster.rs`、`features/agent_session/commands.rs`（`emit_agent_session_list_changed`） | 会话增删/标题/attention 变更与用量落库后刷新；前端 `agents/agent-session-events.ts`（常量）、`agents/use-agent-session-list.ts`（`agents-activity.tsx` 间接消费）、`issues/issue-detail/issue-readonly-session-panel.tsx`、`changes/use-changes-auto-refresh.ts` 据此刷新 |
 | `code-workspace-roots-updated`  | Code workspace 根目录变更                                                       | `features/agent_session/workspace_commands.rs`（`emit_code_workspace_roots_updated`） | worktree/code 根目录刷新；前端 `code/use-code-workspace-roots.ts` 重新拉取 |
 | `update-prompt-changed`         | `UpdateStatus`                                                                  | `features/app_update/commands.rs` | 应用更新提示状态变更；前端 `app-update/use-update-status.ts` 刷新徽章 |
 | `app-theme-preference-changed`  | `AppThemePreferenceChangedEvent`（`themePreference`）                           | `features/project_terminal/commands.rs`（`emit_app_theme_preference_changed`） | 全局主题偏好跨窗同步；前端 `shared/i18n/i18n-provider.tsx` 更新偏好/localStorage 并本地解析 light/dark |

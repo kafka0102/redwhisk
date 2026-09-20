@@ -6,11 +6,17 @@ import {
   type AgentSessionListItem,
 } from "../../agents/agent-session-commands";
 import {
+  buildSessionTokenInfoItems,
   formatProcessingDuration,
   getSessionEndedAt,
 } from "../../agents/agent-session-formatters";
+import {
+  AGENT_SESSION_LIST_CHANGED_EVENT,
+  type AgentSessionListChangedEvent,
+} from "../../agents/agent-session-events";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { subscribeTauriEvent } from "../../../shared/tauri-event/use-tauri-event";
 
 interface IssueReadonlySessionPanelProps {
   linkedSessionId: number | null;
@@ -33,7 +39,7 @@ export function IssueReadonlySessionPanel({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadSession() {
+    async function loadSession(showLoading: boolean) {
       if (linkedSessionId == null) {
         setSession(null);
         setErrorMessage(null);
@@ -41,7 +47,9 @@ export function IssueReadonlySessionPanel({
         return;
       }
 
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setErrorMessage(null);
 
       try {
@@ -72,10 +80,20 @@ export function IssueReadonlySessionPanel({
       }
     }
 
-    void loadSession();
+    void loadSession(true);
+    const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
+      AGENT_SESSION_LIST_CHANGED_EVENT,
+      (event) => {
+        if (event.projectId !== projectId) {
+          return;
+        }
+        void loadSession(false);
+      },
+    );
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, [linkedSessionId, messages.agentsFeature.issueNotFound, projectId, t]);
 
@@ -120,6 +138,7 @@ export function IssueReadonlySessionPanel({
         label: messages.issueSummary.sessionStatus,
         value: formatSessionStatus(session?.status, messages),
       },
+      ...buildSessionTokenInfoItems(session, messages),
     ],
     [locale, messages, session],
   );

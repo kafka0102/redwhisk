@@ -209,3 +209,73 @@ export function formatProcessingDuration(
   }
   return formatDuration(elapsedMs, locale);
 }
+
+const SESSION_TOKEN_MILLION = 1_000_000;
+const SESSION_TOKEN_THOUSAND = 1_000;
+
+export function formatSessionTokenCount(
+  value: number | null | undefined,
+): string {
+  if (value == null) {
+    return "-";
+  }
+  if (value <= 0) {
+    return "0K";
+  }
+  if (value >= SESSION_TOKEN_MILLION) {
+    const millionths = Math.floor(value / 10_000) / 100;
+    return `${millionths.toFixed(2)}M`;
+  }
+  if (value < SESSION_TOKEN_THOUSAND) {
+    return "1K";
+  }
+  return `${Math.floor(value / SESSION_TOKEN_THOUSAND)}K`;
+}
+
+export function formatSessionTokenHitRate(
+  input: number | null | undefined,
+  cache: number | null | undefined,
+): string {
+  if (input == null || cache == null) {
+    return "-";
+  }
+  const denominator = input + cache;
+  if (denominator === 0) {
+    return "0%";
+  }
+  return `${Math.round((cache / denominator) * 100)}%`;
+}
+
+export function buildSessionTokenInfoItems(
+  session: AgentSessionListItem | null,
+  messages: I18nMessages,
+): Array<{ label: string; value: string }> {
+  const dash = messages.agentsFeature.dash;
+  const labels = [
+    messages.agentsFeature.tokenTotal,
+    messages.agentsFeature.tokenInput,
+    messages.agentsFeature.tokenOutput,
+    messages.agentsFeature.tokenCache,
+    messages.agentsFeature.tokenCacheHitRate,
+  ];
+  if (
+    session?.tokenInput == null ||
+    session.tokenOutput == null ||
+    session.tokenCache == null
+  ) {
+    return labels.map((label) => ({ label, value: dash }));
+  }
+  const input = session.tokenInput;
+  const output = session.tokenOutput;
+  const cache = session.tokenCache;
+  return [
+    {
+      label: labels[0],
+      value: formatSessionTokenCount(input + output + cache),
+    },
+    { label: labels[1], value: formatSessionTokenCount(input) },
+    { label: labels[2], value: formatSessionTokenCount(output) },
+    { label: labels[3], value: formatSessionTokenCount(cache) },
+    { label: labels[4], value: formatSessionTokenHitRate(input, cache) },
+  ];
+}

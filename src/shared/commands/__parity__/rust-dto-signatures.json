@@ -119,6 +119,9 @@
         "startupModel": "required",
         "status": "required",
         "title": "required",
+        "tokenCache": "required",
+        "tokenInput": "required",
+        "tokenOutput": "required",
         "workflowSkillName": "required",
         "workingDir": "required",
         "workspaceBranch": "required",
@@ -211,7 +214,10 @@
         "contextWindowMaxTokens": "optional",
         "contextWindowUsedTokens": "optional",
         "inputTokens": "optional",
-        "outputTokens": "optional"
+        "outputTokens": "optional",
+        "sessionTokenCache": "optional",
+        "sessionTokenInput": "optional",
+        "sessionTokenOutput": "optional"
       }
     },
     "AppThemePreferenceChangedEvent": {

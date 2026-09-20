@@ -222,8 +222,7 @@ fn usage_from_part(value: &Value) -> Option<AgentUsage> {
             .get("output")
             .or_else(|| tokens.get("output_tokens"))
             .and_then(Value::as_u64),
-        context_window_max_tokens: None,
-        context_window_used_tokens: None,
+        ..Default::default()
     })
 }
 fn error_message(value: &Value) -> String {

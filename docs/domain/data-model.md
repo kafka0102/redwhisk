@@ -25,7 +25,7 @@ completion_attempts 保留历史完成尝试审计。
 | --------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
 | `projects`                              | 项目仓库与 worktree 配置 | `repo_path` 唯一；worktree root 策略与 setup command 属于项目                                |
 | `issues`                                | 项目内任务               | `project_id` 外键；状态受 CHECK；`number` 在项目内唯一；`del` 为软删除                       |
-| `agent_sessions`                        | Agent 业务会话快照       | 可关联 Issue；活动关联有 partial unique index；记录 workspace、provider、turn 与处理耗时事实 |
+| `agent_sessions`                        | Agent 业务会话快照       | 可关联 Issue；活动关联有 partial unique index；记录 workspace、provider、turn、处理耗时与 Session Token 消耗三项累计（`token_input` / `token_output` / `token_cache`，尚未收到用量为 NULL） |
 | `issue_actions` / `session_events`      | 审计                     | payload 为 JSON 字符串，按实体与时间索引                                                     |
 | `issue_completion_flows`                | 完成流程状态             | 每 Issue 最多一条；phase 见状态机                                                            |
 | `agent_profiles`                        | provider 配置            | `agent_type` 为 `codex` 或 `claude`；scope 为 `project` 或 `global`；软删除                  |

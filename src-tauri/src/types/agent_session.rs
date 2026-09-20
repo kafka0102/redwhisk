@@ -174,6 +174,12 @@ pub struct AgentSessionListItem {
     pub last_output_at: Option<i64>,
     /// 运行参数模型：启动时认定并冻结的快照；历史 Session 为 None。
     pub startup_model: Option<String>,
+    /// Session Token 消耗累计输入；尚未收到用量为 None，已收到 0 为 Some(0)。
+    pub token_input: Option<i64>,
+    /// Session Token 消耗累计输出；尚未收到用量为 None，已收到 0 为 Some(0)。
+    pub token_output: Option<i64>,
+    /// Session Token 消耗累计缓存读取；尚未收到用量为 None，已收到 0 为 Some(0)。
+    pub token_cache: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -2266,6 +2266,9 @@ describe("IssuesActivity", () => {
           processingMs: 0,
           lastOutputAt: null,
           startupModel: null,
+          tokenInput: null,
+          tokenOutput: null,
+          tokenCache: null,
         },
       ],
     });
@@ -3004,6 +3007,9 @@ describe("IssuesActivity", () => {
           processingMs: 0,
           lastOutputAt: null,
           startupModel: null,
+          tokenInput: null,
+          tokenOutput: null,
+          tokenCache: null,
         },
       ],
     });
@@ -3495,6 +3501,9 @@ describe("IssuesActivity", () => {
           processingMs: 0,
           lastOutputAt: null,
           startupModel: null,
+          tokenInput: null,
+          tokenOutput: null,
+          tokenCache: null,
         },
       ],
     });
@@ -4784,6 +4793,9 @@ describe("IssuesActivity", () => {
           processingMs: 0,
           lastOutputAt: null,
           startupModel: null,
+          tokenInput: null,
+          tokenOutput: null,
+          tokenCache: null,
         },
       ],
     });

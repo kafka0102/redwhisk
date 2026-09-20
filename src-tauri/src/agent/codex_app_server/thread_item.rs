@@ -482,6 +482,9 @@ pub fn extract_usage(token_usage: &Value) -> Option<AgentUsage> {
         output_tokens,
         context_window_max_tokens,
         context_window_used_tokens,
+        session_token_input: None,
+        session_token_output: None,
+        session_token_cache: None,
     })
 }
 

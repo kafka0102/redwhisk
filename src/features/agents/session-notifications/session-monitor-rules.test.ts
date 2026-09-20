@@ -124,6 +124,9 @@ function session(
     processingMs: 0,
     lastOutputAt: null,
     startupModel: null,
+    tokenInput: null,
+    tokenOutput: null,
+    tokenCache: null,
     ...overrides,
   };
 }

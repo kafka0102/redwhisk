@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  buildSessionTokenInfoItems,
   formatProcessingDuration,
   getSessionEndedAt,
 } from "../agent-session-formatters";
@@ -115,6 +116,7 @@ export function SessionIssuePanel({
         label: messages.issueSummary.sessionStatus,
         value: formatSessionStatus(session?.status, messages),
       },
+      ...buildSessionTokenInfoItems(session, messages),
     ],
     [locale, messages, session],
   );

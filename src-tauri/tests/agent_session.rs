@@ -141,6 +141,9 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "current_turn_id",
             "display_mode",
             "startup_model",
+            "token_input",
+            "token_output",
+            "token_cache",
         ]
     );
 

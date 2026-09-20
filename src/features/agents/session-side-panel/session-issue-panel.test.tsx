@@ -48,6 +48,9 @@ function makeSession(
     processingMs: 0,
     lastOutputAt: null,
     startupModel: "gpt-5.5",
+    tokenInput: null,
+    tokenOutput: null,
+    tokenCache: null,
     ...overrides,
   };
 }
@@ -99,6 +102,29 @@ function runParameterLabels(): string[] {
   );
 }
 
+function sessionInfoLabels(): string[] {
+  const heading = screen.getByRole("heading", { name: "会话信息" });
+  const card = heading.closest("section");
+  if (!card) {
+    throw new Error("会话信息卡片不存在");
+  }
+  return Array.from(card.querySelectorAll("dt")).map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+function sessionInfoValue(label: string): string {
+  const heading = screen.getByRole("heading", { name: "会话信息" });
+  const card = heading.closest("section");
+  if (!card) {
+    throw new Error("会话信息卡片不存在");
+  }
+  const row = Array.from(card.querySelectorAll("div")).find(
+    (item) => item.querySelector("dt")?.textContent === label,
+  );
+  return row?.querySelector("dd")?.textContent ?? "";
+}
+
 function runParameterValue(label: string): string {
   const heading = screen.getByRole("heading", { name: "运行参数" });
   const card = heading.closest("section");
@@ -128,5 +154,46 @@ describe("SessionIssuePanel 运行参数模型", () => {
       expect(screen.getByText("Demo")).toBeInTheDocument();
     });
     expect(runParameterValue("模型")).toBe("-");
+  });
+});
+
+describe("SessionIssuePanel Session Token 消耗", () => {
+  it("shows five token rows under session status as dashes when usage is missing", async () => {
+    renderPanel(makeSession());
+    await waitFor(() => {
+      expect(screen.getByText("Demo")).toBeInTheDocument();
+    });
+    const labels = sessionInfoLabels();
+    const statusIndex = labels.indexOf("会话状态");
+    expect(labels.slice(statusIndex + 1, statusIndex + 6)).toEqual([
+      "总计",
+      "输入",
+      "输出",
+      "缓存",
+      "缓存命中率",
+    ]);
+    expect(sessionInfoValue("总计")).toBe("-");
+    expect(sessionInfoValue("输入")).toBe("-");
+    expect(sessionInfoValue("输出")).toBe("-");
+    expect(sessionInfoValue("缓存")).toBe("-");
+    expect(sessionInfoValue("缓存命中率")).toBe("-");
+  });
+
+  it("formats received usage including zero", async () => {
+    renderPanel(
+      makeSession({
+        tokenInput: 3000,
+        tokenOutput: 0,
+        tokenCache: 1000,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Demo")).toBeInTheDocument();
+    });
+    expect(sessionInfoValue("总计")).toBe("4K");
+    expect(sessionInfoValue("输入")).toBe("3K");
+    expect(sessionInfoValue("输出")).toBe("0K");
+    expect(sessionInfoValue("缓存")).toBe("1K");
+    expect(sessionInfoValue("缓存命中率")).toBe("25%");
   });
 });

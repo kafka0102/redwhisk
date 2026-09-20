@@ -127,6 +127,9 @@ export interface AgentUsage {
   outputTokens?: number;
   contextWindowMaxTokens?: number;
   contextWindowUsedTokens?: number;
+  sessionTokenInput?: number;
+  sessionTokenOutput?: number;
+  sessionTokenCache?: number;
 }
 
 // ---------------------------------------------------------------------------

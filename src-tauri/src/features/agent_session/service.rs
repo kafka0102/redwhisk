@@ -987,6 +987,9 @@ impl<'connection> AgentSessionService<'connection> {
                     processing_ms: row.processing_ms,
                     last_output_at: row.last_output_at,
                     startup_model: row.startup_model,
+                    token_input: row.token_input,
+                    token_output: row.token_output,
+                    token_cache: row.token_cache,
                 }
             })
             .collect();

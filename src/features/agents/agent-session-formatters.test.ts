@@ -4,6 +4,8 @@ import type { AgentSessionListItem } from "./agent-session-commands";
 import {
   formatDuration,
   formatProcessingDuration,
+  formatSessionTokenCount,
+  formatSessionTokenHitRate,
   getSessionEndedAt,
   getSessionStatusTone,
   isAgentTurnActivelyRunning,
@@ -43,6 +45,9 @@ describe("getSessionEndedAt", () => {
         closedAt: null,
         lastOutputAt: 1_780_365_826_523,
         startupModel: null,
+        tokenInput: null,
+        tokenOutput: null,
+        tokenCache: null,
       }),
     ).toBeNull();
   });
@@ -55,6 +60,9 @@ describe("getSessionEndedAt", () => {
         closedAt: 1_780_377_000_000,
         lastOutputAt: 1_780_365_826_523,
         startupModel: null,
+        tokenInput: null,
+        tokenOutput: null,
+        tokenCache: null,
       }),
     ).toBe(1_780_377_000_000);
   });
@@ -140,6 +148,9 @@ describe("formatProcessingDuration", () => {
           closedAt: null,
           lastOutputAt: startedAt + 13_191_190,
           startupModel: null,
+          tokenInput: null,
+          tokenOutput: null,
+          tokenCache: null,
           processingMs: 1_502_399,
         },
         "zh",
@@ -289,6 +300,51 @@ function makeSession(
     processingMs: 0,
     lastOutputAt: null,
     startupModel: null,
+    tokenInput: null,
+    tokenOutput: null,
+    tokenCache: null,
     ...overrides,
   };
 }
+
+describe("formatSessionTokenCount", () => {
+  it("returns a dash when usage is missing", () => {
+    expect(formatSessionTokenCount(null)).toBe("-");
+  });
+
+  it("formats zero as 0K", () => {
+    expect(formatSessionTokenCount(0)).toBe("0K");
+  });
+
+  it("formats values below 1K as 1K", () => {
+    expect(formatSessionTokenCount(1)).toBe("1K");
+    expect(formatSessionTokenCount(999)).toBe("1K");
+  });
+
+  it("formats thousands as integer K floored", () => {
+    expect(formatSessionTokenCount(1000)).toBe("1K");
+    expect(formatSessionTokenCount(1999)).toBe("1K");
+    expect(formatSessionTokenCount(2000)).toBe("2K");
+  });
+
+  it("formats millions as M with two decimal places floored", () => {
+    expect(formatSessionTokenCount(1_000_000)).toBe("1.00M");
+    expect(formatSessionTokenCount(1_234_567)).toBe("1.23M");
+    expect(formatSessionTokenCount(1_299_999)).toBe("1.29M");
+  });
+});
+
+describe("formatSessionTokenHitRate", () => {
+  it("returns a dash when usage is missing", () => {
+    expect(formatSessionTokenHitRate(null, null)).toBe("-");
+  });
+
+  it("returns 0% when usage exists and the denominator is 0", () => {
+    expect(formatSessionTokenHitRate(0, 0)).toBe("0%");
+  });
+
+  it("returns an integer percentage of cache / (input + cache)", () => {
+    expect(formatSessionTokenHitRate(3000, 1000)).toBe("25%");
+    expect(formatSessionTokenHitRate(100, 0)).toBe("0%");
+  });
+});

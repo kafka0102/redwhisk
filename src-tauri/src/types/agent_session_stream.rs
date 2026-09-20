@@ -211,7 +211,7 @@ pub struct TodoItem {
 ///
 /// 来自 codex `thread/tokenUsage/updated` 通知：`contextWindowMaxTokens`
 /// 取 `model_context_window`，`contextWindowUsedTokens` 取 `last.total_tokens`。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUsage {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -222,6 +222,15 @@ pub struct AgentUsage {
     pub context_window_max_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window_used_tokens: Option<u64>,
+    /// Session Token 消耗累计输入快照；与 composer 上下文占用无关。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token_input: Option<u64>,
+    /// Session Token 消耗累计输出快照；与 composer 上下文占用无关。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token_output: Option<u64>,
+    /// Session Token 消耗累计缓存读取快照；与 composer 上下文占用无关。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token_cache: Option<u64>,
 }
 
 /// 权限请求，对应 app-server 的 server→client request。
@@ -363,6 +372,9 @@ mod tests {
                 output_tokens: None,
                 context_window_max_tokens: Some(200_000),
                 context_window_used_tokens: Some(1_801),
+                session_token_input: None,
+                session_token_output: None,
+                session_token_cache: None,
             },
         };
 

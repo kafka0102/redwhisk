@@ -29,6 +29,7 @@ use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::codex_model_catalog;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
+use crate::features::agent_session::session_token_usage::normalize_codex_token_usage;
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent,
@@ -781,7 +782,27 @@ fn build_events(
             events
         }
         CodexNotification::TokenUsageUpdated { token_usage } => {
-            let usage = extract_usage(&token_usage);
+            let snapshot = normalize_codex_token_usage(&token_usage);
+            let usage = match (extract_usage(&token_usage), snapshot) {
+                (None, None) => None,
+                (Some(mut usage), snapshot) => {
+                    if let Some(snapshot) = snapshot {
+                        usage.session_token_input = Some(snapshot.input);
+                        usage.session_token_output = Some(snapshot.output);
+                        usage.session_token_cache = Some(snapshot.cache);
+                    }
+                    Some(usage)
+                }
+                (None, Some(snapshot)) => Some(AgentUsage {
+                    input_tokens: None,
+                    output_tokens: None,
+                    context_window_max_tokens: None,
+                    context_window_used_tokens: None,
+                    session_token_input: Some(snapshot.input),
+                    session_token_output: Some(snapshot.output),
+                    session_token_cache: Some(snapshot.cache),
+                }),
+            };
             if let Some(usage) = usage.clone() {
                 if let Ok(mut state) = state.lock() {
                     state.latest_usage = Some(usage.clone());

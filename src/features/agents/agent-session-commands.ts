@@ -61,6 +61,12 @@ export interface AgentSessionListItem {
   lastOutputAt: number | null;
   /** 运行参数模型：启动时认定并冻结的快照；历史 Session 为 null。 */
   startupModel: string | null;
+  /** Session Token 消耗累计输入；尚未收到用量为 null，已收到 0 为 0。 */
+  tokenInput: number | null;
+  /** Session Token 消耗累计输出；尚未收到用量为 null，已收到 0 为 0。 */
+  tokenOutput: number | null;
+  /** Session Token 消耗累计缓存读取；尚未收到用量为 null，已收到 0 为 0。 */
+  tokenCache: number | null;
 }
 
 export interface AgentSessionListResponse {

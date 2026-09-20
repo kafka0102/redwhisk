@@ -336,6 +336,9 @@ pub fn map_usage(stats: &UsageStats) -> AgentUsage {
         output_tokens: stats.output_tokens,
         context_window_max_tokens: stats.context_window_max_tokens,
         context_window_used_tokens: stats.input_tokens,
+        session_token_input: None,
+        session_token_output: None,
+        session_token_cache: None,
     }
 }
 
