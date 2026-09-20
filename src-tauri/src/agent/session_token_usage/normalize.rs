@@ -57,12 +57,7 @@ pub fn normalize_claude_token_usage(usage: &Value) -> Option<SessionTokenUsage> 
         .or_else(|| u64_field(object, "output", "output"));
     let reasoning = u64_field(object, "reasoning_output_tokens", "reasoningOutputTokens")
         .or_else(|| u64_field(object, "reasoning_tokens", "reasoningTokens"));
-    if input_tokens.is_none()
-        && cache_write.is_none()
-        && cache.is_none()
-        && output.is_none()
-        && reasoning.is_none()
-    {
+    if input_tokens.is_none() && cache_write.is_none() && cache.is_none() {
         return None;
     }
     Some(SessionTokenUsage {
@@ -218,5 +213,13 @@ mod tests {
                 cache: 0,
             })
         );
+    }
+
+    #[test]
+    fn ignores_claude_output_only_delta_so_it_does_not_wipe_turn_input() {
+        let usage = normalize_claude_token_usage(&json!({
+            "output_tokens": 12,
+        }));
+        assert_eq!(usage, None);
     }
 }

@@ -36,7 +36,7 @@
 
 > `start_agent_session`：入参 `StartAgentSessionInput` 可选 `model`（启动期模型选择，ADR-0036 第 8 条）。json 与 tui 启动都按「启动期模型选择 → 该 Agent 启动时刻的当前模型（与模型目录默认项同一套解析）→ 空」认定运行参数模型，写入 Session 记录，并由 `list_agent_sessions` 的 `startupModel` 下发（ADR-0038）。不写回 Agent 全局配置、不记入 Profile；会话内切换模型不改写该快照。
 >
-> `list_agent_sessions`：出参 `AgentSessionListItem` 含 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
+> `list_agent_sessions`：出参 `AgentSessionListItem` 含 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍；Claude 按 turn 增量累加（同一 turn 的 assistant 分片与 result 总额不双计，cache 写入计入输入、读取计入缓存），能解析同口径字段的其它 Agent 同样累计，否则三项保持 `null`（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
 
 > `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
 
