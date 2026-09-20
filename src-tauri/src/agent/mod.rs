@@ -14,6 +14,7 @@ pub mod pty_osc_color_reply;
 pub mod pty_session_manager;
 pub mod session_handle;
 pub mod session_registry;
+pub(crate) mod session_token_usage;
 pub mod terminal_log_tail;
 
 pub use provider_descriptor::{

@@ -17,21 +17,30 @@ pub struct SessionTokenUsage {
 ///
 /// 优先 `total`，禁止把 `last` 再加一遍。
 pub fn normalize_codex_token_usage(token_usage: &Value) -> Option<SessionTokenUsage> {
-    let total = token_usage
+    let snapshot = token_usage
         .get("total")
         .or_else(|| token_usage.get("totalTokenUsage"))
         .or_else(|| token_usage.get("total_token_usage"))
+        .or_else(|| token_usage.get("last"))
+        .or_else(|| token_usage.get("lastTokenUsage"))
+        .or_else(|| token_usage.get("last_token_usage"))
         .and_then(Value::as_object)?;
-    let input_tokens = u64_field(total, "input_tokens", "inputTokens")?;
-    let cache = u64_field(total, "cached_input_tokens", "cachedInputTokens").unwrap_or(0);
+    let input_tokens = u64_field(snapshot, "input_tokens", "inputTokens")?;
+    let cache = u64_field(snapshot, "cached_input_tokens", "cachedInputTokens").unwrap_or(0);
     let cache_write = u64_field(
-        total,
+        snapshot,
         "cache_creation_input_tokens",
         "cacheCreationInputTokens",
     )
-    .or_else(|| u64_field(total, "cache_write_input_tokens", "cacheWriteInputTokens"))
+    .or_else(|| {
+        u64_field(
+            snapshot,
+            "cache_write_input_tokens",
+            "cacheWriteInputTokens",
+        )
+    })
     .unwrap_or(0);
-    let output = u64_field(total, "output_tokens", "outputTokens")?;
+    let output = u64_field(snapshot, "output_tokens", "outputTokens")?;
     Some(SessionTokenUsage {
         input: input_tokens
             .saturating_sub(cache)
@@ -145,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_codex_last_when_thread_total_is_absent() {
+    fn uses_codex_last_as_overwrite_snapshot_when_total_is_absent() {
         let usage = normalize_codex_token_usage(&json!({
             "last": {
                 "input_tokens": 1_500,
@@ -153,7 +162,14 @@ mod tests {
                 "output_tokens": 300,
             },
         }));
-        assert_eq!(usage, None);
+        assert_eq!(
+            usage,
+            Some(SessionTokenUsage {
+                input: 1_100,
+                output: 300,
+                cache: 400,
+            })
+        );
     }
 }
 
@@ -280,6 +296,49 @@ mod persist_tests {
             },
         )
         .expect("persist usage event");
+        assert!(persisted);
+
+        let listed = service(&connection)
+            .list_agent_sessions(1)
+            .expect("list sessions");
+        assert_eq!(listed.sessions[0].token_input, Some(1_100));
+        assert_eq!(listed.sessions[0].token_output, Some(300));
+        assert_eq!(listed.sessions[0].token_cache, Some(400));
+    }
+
+    #[test]
+    fn codex_total_payload_persists_onto_list_item() {
+        let connection = setup();
+        let snapshot =
+            crate::agent::session_token_usage::normalize_codex_token_usage(&serde_json::json!({
+                "last": {
+                    "input_tokens": 100,
+                    "cached_input_tokens": 20,
+                    "output_tokens": 30,
+                },
+                "total": {
+                    "input_tokens": 1_500,
+                    "cached_input_tokens": 400,
+                    "output_tokens": 300,
+                },
+            }))
+            .expect("normalize total");
+        let persisted = crate::agent::session_token_usage::persist_session_token_usage(
+            &AgentSessionRepository::new(&connection),
+            410,
+            &crate::types::agent_session_stream::AgentStreamEvent::UsageUpdated {
+                usage: crate::types::agent_session_stream::AgentUsage {
+                    input_tokens: Some(100),
+                    output_tokens: Some(30),
+                    context_window_max_tokens: Some(200_000),
+                    context_window_used_tokens: Some(130),
+                    session_token_input: Some(snapshot.input),
+                    session_token_output: Some(snapshot.output),
+                    session_token_cache: Some(snapshot.cache),
+                },
+            },
+        )
+        .expect("persist normalized usage");
         assert!(persisted);
 
         let listed = service(&connection)

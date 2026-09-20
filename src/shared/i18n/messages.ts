@@ -381,11 +381,6 @@ export interface I18nMessages {
     agent: string;
     model: string;
     dash: string;
-    tokenTotal: string;
-    tokenInput: string;
-    tokenOutput: string;
-    tokenCache: string;
-    tokenCacheHitRate: string;
     workflowSkill: string;
     developmentMode: string;
     endedAt: string;

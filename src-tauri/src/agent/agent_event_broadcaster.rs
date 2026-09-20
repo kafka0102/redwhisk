@@ -13,9 +13,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
+use crate::agent::session_token_usage::{
+    persist_session_token_usage, session_token_usage_from_event,
+};
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
-use crate::features::agent_session::session_token_usage::persist_session_token_usage;
 use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallStatus,
@@ -226,7 +228,7 @@ impl AgentEventBroadcaster {
         // 使崩溃后的 resume 续接能拿到标识（update SQL 自带
         // `WHERE provider_session_id IS NULL`，幂等且不覆盖已写入值）。
         let resume_session_id = session_id_from_thread_started(&envelope.event);
-        let has_session_token_usage = persist_session_token_usage_needed(&envelope.event);
+        let has_session_token_usage = session_token_usage_from_event(&envelope.event).is_some();
         let Some(log_path) = self.resolve_log_path(envelope.session_id, app_handle) else {
             return false;
         };
@@ -416,11 +418,6 @@ fn latest_output_from_stream_event(event: &AgentStreamEvent) -> Option<String> {
 
 fn should_refresh_session_list_for_stream_event(event: &AgentStreamEvent) -> bool {
     !matches!(event, AgentStreamEvent::Timeline { .. })
-}
-
-fn persist_session_token_usage_needed(event: &AgentStreamEvent) -> bool {
-    crate::features::agent_session::session_token_usage::session_token_usage_from_event(event)
-        .is_some()
 }
 
 /// turn 运行态决策，供 `persist_stream_event` 决定如何写 DB。

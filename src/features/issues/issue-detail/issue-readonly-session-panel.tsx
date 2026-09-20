@@ -138,9 +138,9 @@ export function IssueReadonlySessionPanel({
         label: messages.issueSummary.sessionStatus,
         value: formatSessionStatus(session?.status, messages),
       },
-      ...buildSessionTokenInfoItems(session, messages),
+      ...buildSessionTokenInfoItems(session, t),
     ],
-    [locale, messages, session],
+    [locale, messages, session, t],
   );
 
   const logPathLabel =

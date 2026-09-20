@@ -248,15 +248,15 @@ export function formatSessionTokenHitRate(
 
 export function buildSessionTokenInfoItems(
   session: AgentSessionListItem | null,
-  messages: I18nMessages,
+  t: (key: string) => string,
 ): Array<{ label: string; value: string }> {
-  const dash = messages.agentsFeature.dash;
+  const dash = t("agentsFeature.dash");
   const labels = [
-    messages.agentsFeature.tokenTotal,
-    messages.agentsFeature.tokenInput,
-    messages.agentsFeature.tokenOutput,
-    messages.agentsFeature.tokenCache,
-    messages.agentsFeature.tokenCacheHitRate,
+    t("agentsFeature.tokenTotal"),
+    t("agentsFeature.tokenInput"),
+    t("agentsFeature.tokenOutput"),
+    t("agentsFeature.tokenCache"),
+    t("agentsFeature.tokenCacheHitRate"),
   ];
   if (
     session?.tokenInput == null ||
