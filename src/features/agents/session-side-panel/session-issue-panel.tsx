@@ -85,7 +85,7 @@ export function SessionIssuePanel({
       },
       {
         label: messages.agentsFeature.model,
-        value: session?.startupModel?.trim() || "-",
+        value: session?.startupModel?.trim() || messages.agentsFeature.dash,
       },
       {
         label: messages.agentsFeature.workflowSkill,

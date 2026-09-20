@@ -380,6 +380,7 @@ export interface I18nMessages {
     sessionLog: string;
     agent: string;
     model: string;
+    dash: string;
     workflowSkill: string;
     developmentMode: string;
     endedAt: string;

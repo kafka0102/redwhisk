@@ -422,6 +422,7 @@
     "sessionLog": "Session log",
     "agent": "Agent",
     "model": "Model",
+    "dash": "-",
     "workflowSkill": "Workflow skill",
     "developmentMode": "Development mode",
     "endedAt": "Ended",
