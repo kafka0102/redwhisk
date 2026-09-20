@@ -2265,6 +2265,7 @@ describe("IssuesActivity", () => {
           closedAt: 1_780_633_000_000,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3002,6 +3003,7 @@ describe("IssuesActivity", () => {
           closedAt: 1_780_639_000_000,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3492,6 +3494,7 @@ describe("IssuesActivity", () => {
           closedAt: 1_780_637_000_000,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -4780,6 +4783,7 @@ describe("IssuesActivity", () => {
           closedAt: 1_780_637_000_000,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });

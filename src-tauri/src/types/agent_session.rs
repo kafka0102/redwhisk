@@ -46,7 +46,7 @@ pub struct StartAgentSessionInput {
     pub target_branch: Option<String>,
     pub worktree_setup_command: Option<String>,
     /// 启动期模型选择：仅作用于本次启动，优先于 Agent 本机配置的当前模型；
-    /// 不写回全局配置、不落库、不记忆（ADR-0036 第 8 条）。
+    /// 不写回全局配置、不记入 Profile。认定后的运行参数模型写入 Session 记录（ADR-0038）。
     pub model: Option<String>,
 }
 
@@ -172,6 +172,8 @@ pub struct AgentSessionListItem {
     pub closed_at: Option<i64>,
     pub processing_ms: i64,
     pub last_output_at: Option<i64>,
+    /// 运行参数模型：启动时认定并冻结的快照；历史 Session 为 None。
+    pub startup_model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

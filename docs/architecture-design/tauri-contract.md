@@ -34,7 +34,7 @@
 >
 > `get_project_worktree_file_tree`：`ProjectWorkspaceInput` 可选 `directoryPath`（缺省 / 空 / `.` 表示工作区根）。每次只返回该目录的**一层**子节点；子目录在前端展开时再请求。`signature` 对本次 listing 计算。
 
-> `start_agent_session`：入参 `StartAgentSessionInput` 新增可选 `model`（启动期模型选择，ADR-0036 第 8 条）。结构化（json）路径以它为请求模型，优先于 Agent 本机配置当前模型；交互式（tui）路径本票不注入模型参数，未传 `model`（`None` / 缺字段）时两条路径行为与历史一致。该选择不写回 Agent 全局配置、不落库、不记忆。
+> `start_agent_session`：入参 `StartAgentSessionInput` 可选 `model`（启动期模型选择，ADR-0036 第 8 条）。json 与 tui 启动都按「启动期模型选择 → 该 Agent 启动时刻的当前模型（与模型目录默认项同一套解析）→ 空」认定运行参数模型，写入 Session 记录，并由 `list_agent_sessions` 的 `startupModel` 下发（ADR-0038）。不写回 Agent 全局配置、不记入 Profile；会话内切换模型不改写该快照。
 
 > `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
 

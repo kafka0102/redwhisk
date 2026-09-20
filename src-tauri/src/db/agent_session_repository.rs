@@ -41,6 +41,7 @@ pub struct AgentSessionListRow {
     pub turn_started_at: Option<i64>,
     pub processing_ms: i64,
     pub last_output_at: Option<i64>,
+    pub startup_model: Option<String>,
 }
 
 pub struct AgentSessionRepository<'connection> {
@@ -206,7 +207,8 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.turn_started_at,
                 agent_sessions.processing_ms,
                 agent_sessions.last_output_at,
-                agent_sessions.display_mode
+                agent_sessions.display_mode,
+                agent_sessions.startup_model
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -417,6 +419,18 @@ impl<'connection> AgentSessionRepository<'connection> {
 
         let id = transaction.last_insert_rowid();
         find_by_id_on_connection(transaction, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn set_startup_model_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        startup_model: Option<&str>,
+    ) -> rusqlite::Result<()> {
+        transaction.execute(
+            "UPDATE agent_sessions SET startup_model = ?1 WHERE id = ?2 AND del = 0",
+            params![startup_model, session_id],
+        )?;
+        Ok(())
     }
 
     pub fn insert_standalone_in_transaction(
@@ -931,6 +945,7 @@ fn agent_session_list_row_from_row(
         turn_started_at: row.get::<_, Option<i64>>(28)?,
         processing_ms: row.get(29)?,
         last_output_at: row.get::<_, Option<i64>>(30)?,
+        startup_model: row.get(32)?,
     })
 }
 

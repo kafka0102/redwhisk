@@ -84,6 +84,10 @@ export function SessionIssuePanel({
         value: session?.agentProfileName?.trim() || messages.agentsFeature.none,
       },
       {
+        label: messages.agentsFeature.model,
+        value: session?.startupModel?.trim() || "-",
+      },
+      {
         label: messages.agentsFeature.workflowSkill,
         value: workflowSkillName,
       },

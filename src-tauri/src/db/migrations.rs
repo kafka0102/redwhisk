@@ -164,6 +164,9 @@ const AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_VERSION: &str =
     "0050_agent_sessions_provider_session_id";
 const AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_SQL: &str =
     include_str!("../../migrations/0050_agent_sessions_provider_session_id.sql");
+const AGENT_SESSIONS_STARTUP_MODEL_MIGRATION_VERSION: &str = "0051_agent_sessions_startup_model";
+const AGENT_SESSIONS_STARTUP_MODEL_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0051_agent_sessions_startup_model.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -441,6 +444,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_VERSION,
             sql: AGENT_SESSIONS_PROVIDER_SESSION_ID_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_STARTUP_MODEL_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_STARTUP_MODEL_MIGRATION_SQL,
         },
     ]
 }

@@ -116,6 +116,7 @@
         "projectId": "required",
         "sessionId": "required",
         "startedAt": "required",
+        "startupModel": "required",
         "status": "required",
         "title": "required",
         "workflowSkillName": "required",

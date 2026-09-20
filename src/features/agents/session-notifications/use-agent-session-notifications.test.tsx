@@ -443,5 +443,6 @@ function session({
     title: `Session ${sessionId}`,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
   };
 }

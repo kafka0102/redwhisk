@@ -42,6 +42,7 @@ describe("getSessionEndedAt", () => {
         status: "running",
         closedAt: null,
         lastOutputAt: 1_780_365_826_523,
+        startupModel: null,
       }),
     ).toBeNull();
   });
@@ -53,6 +54,7 @@ describe("getSessionEndedAt", () => {
         status: "closed",
         closedAt: 1_780_377_000_000,
         lastOutputAt: 1_780_365_826_523,
+        startupModel: null,
       }),
     ).toBe(1_780_377_000_000);
   });
@@ -137,6 +139,7 @@ describe("formatProcessingDuration", () => {
           startedAt,
           closedAt: null,
           lastOutputAt: startedAt + 13_191_190,
+          startupModel: null,
           processingMs: 1_502_399,
         },
         "zh",
@@ -285,6 +288,7 @@ function makeSession(
     closedAt: 0,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
     ...overrides,
   };
 }

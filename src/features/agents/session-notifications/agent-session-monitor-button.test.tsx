@@ -318,6 +318,7 @@ function session(
     title: "Session",
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
     ...overrides,
   };
 }

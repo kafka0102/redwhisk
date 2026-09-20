@@ -123,6 +123,7 @@ function session(
     title: null,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
     ...overrides,
   };
 }

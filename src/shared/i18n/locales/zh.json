@@ -421,6 +421,7 @@
     "sessionInfo": "会话信息",
     "sessionLog": "会话日志",
     "agent": "智能体",
+    "model": "模型",
     "workflowSkill": "工作流技能",
     "developmentMode": "开发模式",
     "endedAt": "结束时间",

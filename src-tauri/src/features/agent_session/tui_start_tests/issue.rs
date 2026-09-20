@@ -399,5 +399,61 @@ fn start_runtime_tui_with_model_injects_model_arg_without_touching_profile() {
         .expect("profile");
     assert_eq!(profile.command, script.to_string_lossy().as_ref());
 
+    let listed = service.list_agent_sessions(1).expect("list sessions");
+    assert_eq!(listed.sessions[0].startup_model.as_deref(), Some("gpt-5.5"));
+
+    let _ = pty.kill(result.session_id);
+}
+
+#[test]
+fn start_runtime_tui_without_model_lists_catalog_default_startup_model() {
+    let temp_dir = tempdir().expect("temp");
+    let data_dir = temp_dir.path().join("redwhisk-data");
+    fs::create_dir_all(&data_dir).expect("data dir");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let script = temp_dir.path().join("fake-codex.sh");
+    write_sleep_script(&script);
+    let codex_dir = temp_dir.path().join(".codex");
+    fs::create_dir_all(&codex_dir).expect("codex dir");
+    fs::write(codex_dir.join("config.toml"), "model = \"gpt-5.2\"\n").expect("write config");
+
+    let database = open_db(&data_dir);
+    seed_project_issue_profile(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        &script.to_string_lossy(),
+        "tui",
+    );
+
+    let service = service(&database.connection);
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let result = service
+        .start_agent_session_with_runtime(
+            &data_dir,
+            StartAgentSessionInput {
+                model: None,
+                project_id: 1,
+                issue_id: 11,
+                agent_profile_id: 101,
+                prompt_snapshot: "hello without model".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::CurrentBranch),
+                target_branch: None,
+                worktree_setup_command: None,
+            },
+            &pty,
+            &registry,
+            &broadcaster,
+        )
+        .expect("start tui session without model");
+
+    let listed = service.list_agent_sessions(1).expect("list sessions");
+    assert_eq!(listed.sessions[0].session_id, result.session_id);
+    assert_eq!(listed.sessions[0].startup_model.as_deref(), Some("gpt-5.2"));
+
     let _ = pty.kill(result.session_id);
 }

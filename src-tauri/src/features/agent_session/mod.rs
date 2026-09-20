@@ -11,6 +11,7 @@ mod lifecycle;
 mod log_path;
 mod service;
 pub mod session_monitor_commands;
+mod startup_model;
 mod terminal_archive_clean;
 mod terminal_archive_render;
 mod timeline;

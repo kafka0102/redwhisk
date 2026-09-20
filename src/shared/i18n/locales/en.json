@@ -421,6 +421,7 @@
     "sessionInfo": "Session info",
     "sessionLog": "Session log",
     "agent": "Agent",
+    "model": "Model",
     "workflowSkill": "Workflow skill",
     "developmentMode": "Development mode",
     "endedAt": "Ended",

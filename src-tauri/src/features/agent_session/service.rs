@@ -487,6 +487,12 @@ impl<'connection> AgentSessionService<'connection> {
         // 仅 StdinSubmit 回退路径会在 register 后写 stdin；若子进程已大量写 stdout
         // 却无人 drain，再写 stdin 会因 PTY 双向缓冲回压死锁。
         let pending_pty = pending_pty;
+        let startup_model = super::startup_model::resolve_startup_model(
+            &launch.profile.agent_type,
+            super::startup_model::user_home_for_startup_model(data_dir.as_ref()),
+            &launch.profile.command,
+            input.model.as_deref(),
+        );
 
         let transaction = self
             .issue_repository
@@ -515,6 +521,11 @@ impl<'connection> AgentSessionService<'connection> {
                 &launch.log_path,
                 launch.profile.display_mode.as_str(),
                 launch.started_at,
+            )?;
+            AgentSessionRepository::set_startup_model_in_transaction(
+                &transaction,
+                session.id,
+                startup_model.as_deref(),
             )?;
 
             let updated_issue = IssueRepository::update_status_in_transaction(
@@ -738,6 +749,12 @@ impl<'connection> AgentSessionService<'connection> {
             self.previous_issue_archive_log_path(data_dir, input.issue_id)?;
         let pending_log_path =
             build_pending_structured_log_path(data_dir, input.project_id, launch.started_at)?;
+        let startup_model = super::startup_model::resolve_startup_model(
+            &launch.profile.agent_type,
+            super::startup_model::user_home_for_startup_model(data_dir),
+            &launch.profile.command,
+            input.model.as_deref(),
+        );
         let transaction = self
             .issue_repository
             .connection()
@@ -765,6 +782,11 @@ impl<'connection> AgentSessionService<'connection> {
                 &pending_log_path,
                 "json",
                 launch.started_at,
+            )?;
+            AgentSessionRepository::set_startup_model_in_transaction(
+                &transaction,
+                session.id,
+                startup_model.as_deref(),
             )?;
             let structured_log_path = build_issue_runtime_structured_log_path(
                 data_dir,
@@ -964,6 +986,7 @@ impl<'connection> AgentSessionService<'connection> {
                     closed_at: row.closed_at,
                     processing_ms: row.processing_ms,
                     last_output_at: row.last_output_at,
+                    startup_model: row.startup_model,
                 }
             })
             .collect();
@@ -5379,6 +5402,113 @@ mod tests {
             .expect("provider 应收到启动请求");
         assert_eq!(captured.model.as_deref(), Some("gpt-5.5"));
         assert!(registry.contains(result.session_id));
+    }
+
+    #[test]
+    fn structured_issue_start_writes_requested_startup_model_onto_list_item() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+
+        let result = service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(Some("gpt-5.5")),
+                issue_launch_context(),
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        let listed = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(listed.sessions.len(), 1);
+        assert_eq!(listed.sessions[0].session_id, result.session_id);
+        assert_eq!(listed.sessions[0].startup_model.as_deref(), Some("gpt-5.5"));
+
+        let listed_again = test_agent_session_service(&connection)
+            .list_agent_sessions(1)
+            .expect("list after restart");
+        assert_eq!(
+            listed_again.sessions[0].startup_model.as_deref(),
+            Some("gpt-5.5")
+        );
+    }
+
+    #[test]
+    fn structured_issue_start_without_requested_model_lists_catalog_default() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let codex_dir = temp.path().join(".codex");
+        fs::create_dir_all(&codex_dir).expect("codex dir");
+        fs::write(codex_dir.join("config.toml"), "model = \"gpt-5.2\"\n").expect("write config");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+
+        service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(None),
+                issue_launch_context(),
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        let listed = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(listed.sessions[0].startup_model.as_deref(), Some("gpt-5.2"));
+        assert_eq!(
+            fs::read_to_string(codex_dir.join("config.toml")).expect("read config"),
+            "model = \"gpt-5.2\"\n",
+            "运行参数模型不得写回 Agent 全局配置"
+        );
+    }
+
+    #[test]
+    fn structured_issue_start_without_model_or_catalog_default_lists_empty_startup_model() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+        let mut launch = issue_launch_context();
+        launch.profile = test_agent_profile(AgentType::OpenCode, "opencode");
+
+        service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(None),
+                launch,
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        let listed = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(listed.sessions[0].startup_model, None);
     }
 
     #[test]

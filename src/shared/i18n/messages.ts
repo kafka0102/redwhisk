@@ -379,6 +379,7 @@ export interface I18nMessages {
     sessionInfo: string;
     sessionLog: string;
     agent: string;
+    model: string;
     workflowSkill: string;
     developmentMode: string;
     endedAt: string;

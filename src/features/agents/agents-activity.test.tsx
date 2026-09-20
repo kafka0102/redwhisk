@@ -272,6 +272,7 @@ function reviewSessionFixture(
     latestOutput: null,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
     ...overrides,
   };
 }
@@ -400,6 +401,7 @@ function runningSession(sessionId: number, issueTitle = "Existing issue") {
     closedAt: null,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
   };
 }
 
@@ -817,6 +819,7 @@ describe("AgentsActivity", () => {
           logPath: "/tmp/session.log",
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 301,
@@ -850,6 +853,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 401,
@@ -883,6 +887,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -1746,6 +1751,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -1821,6 +1827,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
           {
             sessionId: 302,
@@ -1854,6 +1861,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -1891,6 +1899,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
           {
             sessionId: 302,
@@ -1924,6 +1933,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -1983,6 +1993,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 503,
@@ -2016,6 +2027,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2071,6 +2083,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2127,6 +2140,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2183,6 +2197,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2236,6 +2251,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 303,
@@ -2269,6 +2285,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2328,6 +2345,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2378,6 +2396,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2454,6 +2473,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -2539,6 +2559,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -2576,6 +2597,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -2651,6 +2673,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2713,6 +2736,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 303,
@@ -2746,6 +2770,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 401,
@@ -2779,6 +2804,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 402,
@@ -2812,6 +2838,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 403,
@@ -2845,6 +2872,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 404,
@@ -2878,6 +2906,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 405,
@@ -2911,6 +2940,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -2979,6 +3009,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 301,
@@ -3012,6 +3043,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3075,6 +3107,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 303,
@@ -3108,6 +3141,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 304,
@@ -3141,6 +3175,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3215,6 +3250,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3267,6 +3303,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3327,6 +3364,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3389,6 +3427,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
           {
             sessionId: 303,
@@ -3422,6 +3461,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -3459,6 +3499,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
           {
             sessionId: 303,
@@ -3492,6 +3533,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -3554,6 +3596,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 302,
@@ -3587,6 +3630,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -3653,6 +3697,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -3690,6 +3735,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -3760,6 +3806,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -3797,6 +3844,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -3884,6 +3932,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -3921,6 +3970,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -4004,6 +4054,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -4041,6 +4092,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -4124,6 +4176,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -4184,6 +4237,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -4271,6 +4325,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -4353,6 +4408,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -4404,6 +4460,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -4441,6 +4498,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -4501,6 +4559,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 502,
@@ -4534,6 +4593,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 503,
@@ -4567,6 +4627,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -4644,6 +4705,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 503,
@@ -4677,6 +4739,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -4751,6 +4814,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5149,6 +5213,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -5186,6 +5251,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -5250,6 +5316,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -5306,6 +5373,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -5343,6 +5411,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -5441,6 +5510,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5543,6 +5613,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5645,6 +5716,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       })
@@ -5682,6 +5754,7 @@ describe("AgentsActivity", () => {
             latestOutput: null,
             processingMs: 0,
             lastOutputAt: null,
+            startupModel: null,
           },
         ],
       });
@@ -5755,6 +5828,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5808,6 +5882,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5861,6 +5936,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 301,
@@ -5894,6 +5970,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -5946,6 +6023,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
         {
           sessionId: 401,
@@ -5979,6 +6057,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6031,6 +6110,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6088,6 +6168,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6145,6 +6226,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6200,6 +6282,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6251,6 +6334,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6335,6 +6419,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6400,6 +6485,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6463,6 +6549,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6567,6 +6654,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6713,6 +6801,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6768,6 +6857,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6849,6 +6939,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -6979,6 +7070,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -7038,6 +7130,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -7094,6 +7187,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });
@@ -7149,6 +7243,7 @@ describe("AgentsActivity", () => {
           latestOutput: null,
           processingMs: 0,
           lastOutputAt: null,
+          startupModel: null,
         },
       ],
     });

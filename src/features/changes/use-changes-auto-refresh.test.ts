@@ -130,6 +130,7 @@ function makeSession(
     closedAt: null,
     processingMs: 0,
     lastOutputAt: null,
+    startupModel: null,
     ...overrides,
   };
 }

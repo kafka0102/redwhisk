@@ -59,6 +59,8 @@ export interface AgentSessionListItem {
   closedAt: number | null;
   processingMs: number;
   lastOutputAt: number | null;
+  /** 运行参数模型：启动时认定并冻结的快照；历史 Session 为 null。 */
+  startupModel: string | null;
 }
 
 export interface AgentSessionListResponse {
