@@ -25,6 +25,20 @@ vi.mock("../toast", () => ({
   },
 }));
 
+// Base UI 只在非 macOS 平台吞掉「打开手势」的右键释放（useMenuItemCommonProps
+// 按 detectBrowser.isMac 分支）。jsdom 默认平台不是 mac，这里伪装成 macOS，
+// 才覆盖得到本应用真实运行的平台路径。
+vi.hoisted(() => {
+  Object.defineProperty(globalThis.navigator, "platform", {
+    configurable: true,
+    value: "MacIntel",
+  });
+  Object.defineProperty(globalThis.navigator, "maxTouchPoints", {
+    configurable: true,
+    value: 0,
+  });
+});
+
 const toastSuccessMock = vi.mocked(toast.success);
 
 function Harness(): ReactElement {
@@ -138,6 +152,39 @@ describe("WorkspacePathContextMenu", () => {
         setTimeout(resolve, 20);
       });
     });
+
+    fireEvent.click(item);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith("a.ts");
+    });
+  });
+
+  it("ignores the right-button mouseup that belongs to the opening gesture", async () => {
+    render(<Harness />);
+    const row = openFileRowMenu(40, 580);
+    const item = await screen.findByRole("menuitem", {
+      name: "Copy file name",
+    });
+
+    // 菜单压住光标后，打开菜单那次右键的 mouseup 会落在菜单项上。它属于打开
+    // 手势，不能被当成「在菜单项上松开右键」而触发复制并关掉菜单。
+    fireEvent.pointerUp(row, {
+      button: 2,
+      clientX: 40,
+      clientY: 580,
+      pointerType: "mouse",
+    });
+    fireEvent.mouseUp(item, { button: 2, clientX: 40, clientY: 580 });
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
+    });
+
+    expect(writeTextMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("menuitem", { name: "Copy file name" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(item);
     await waitFor(() => {

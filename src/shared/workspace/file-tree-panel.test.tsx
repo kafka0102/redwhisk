@@ -559,8 +559,55 @@ describe("FileTreePanel", () => {
       });
       expect(toastSuccessMock).not.toHaveBeenCalled();
     });
+
+    it("keeps the right-clicked row highlighted while the menu is open", async () => {
+      const row = renderPanelAndOpenableRow(menuTargetFileNode, "/repo");
+      expect(row).not.toHaveClass("session-file-tree__row--menu-target");
+
+      fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+      const item = await screen.findByRole("menuitem", {
+        name: "Copy file name",
+      });
+
+      // 菜单盖住指针后目标行的 :hover 不再成立，需靠菜单目标态保住底色。
+      expect(renderMenuTargetRow()).toHaveClass(
+        "session-file-tree__row--menu-target",
+      );
+
+      fireEvent.click(item);
+      await waitFor(() => {
+        expect(renderMenuTargetRow()).not.toHaveClass(
+          "session-file-tree__row--menu-target",
+        );
+      });
+    });
   });
 });
+
+const menuTargetFileNode: WorkspaceFileTreeNode = {
+  id: "src/a.ts",
+  name: "a.ts",
+  path: "src/a.ts",
+  kind: "file",
+  isIgnored: false,
+};
+
+/** 用面板最近一次的行渲染器渲染目标行，读取菜单打开期间的行状态。 */
+function renderMenuTargetRow(): HTMLElement {
+  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
+  expect(renderer).toBeTypeOf("function");
+  const rowElement = renderer({
+    node: {
+      data: menuTargetFileNode,
+      level: 0,
+      isOpen: false,
+      toggle: () => {},
+    },
+    style: {},
+  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
+  const { container } = render(rowElement);
+  return container.firstElementChild as HTMLElement;
+}
 
 function renderWithI18n(component: ReactNode) {
   return render(<I18nProvider fixedLocale="en">{component}</I18nProvider>);

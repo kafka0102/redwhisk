@@ -661,6 +661,19 @@
   background: #48494f;
 }
 
+/* 右键菜单打开期间为菜单目标行补一态底色：菜单是模态层，指针落在菜单上，
+   目标行的 :hover 不再成立；不显式补这一态，用户会看到目标行底色突然消失。 */
+.session-file-tree__row--menu-target,
+.session-file-tree__folder--menu-target {
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+:root[data-theme="dark"] .session-file-tree__row--menu-target,
+:root[data-theme="dark"] .session-file-tree__folder--menu-target {
+  background: #48494f;
+}
+
 .session-file-tree__folder > svg:not(.session-file-tree__chevron),
 .session-file-tree__row > svg:not(.session-file-tree__chevron) {
   flex: 0 0 auto;

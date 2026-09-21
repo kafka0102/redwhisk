@@ -203,11 +203,18 @@ export const FileTreePanel = memo(function FileTreePanel({
         {...props}
         changedFileKinds={changedFileKinds}
         directoryKinds={directoryKinds}
+        isMenuTarget={menu?.relativePath === props.node.data.path}
         onOpenFile={onOpenFile}
         onContextMenuNode={handleContextMenuNode}
       />
     ),
-    [changedFileKinds, directoryKinds, handleContextMenuNode, onOpenFile],
+    [
+      changedFileKinds,
+      directoryKinds,
+      handleContextMenuNode,
+      menu?.relativePath,
+      onOpenFile,
+    ],
   );
 
   return (
@@ -263,6 +270,8 @@ export const FileTreePanel = memo(function FileTreePanel({
 interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
   changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
   directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
+  /** 是否为当前右键菜单的目标行；为 true 时保持悬停同款底色。 */
+  isMenuTarget: boolean;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onContextMenuNode: (
     node: WorkspaceFileTreeNode,
@@ -275,6 +284,7 @@ function FileTreeRow({
   node,
   changedFileKinds,
   directoryKinds,
+  isMenuTarget,
   onOpenFile,
   onContextMenuNode,
   style,
@@ -289,7 +299,10 @@ function FileTreeRow({
     return (
       <button
         aria-expanded={node.isOpen}
-        className={`session-file-tree__folder${node.data.isIgnored ? " session-file-tree__row--ignored" : ""}`}
+        className={fileTreeRowClassName("session-file-tree__folder", {
+          isIgnored: node.data.isIgnored,
+          isMenuTarget,
+        })}
         style={treeDepthStyle}
         type="button"
         onClick={() => node.toggle()}
@@ -324,7 +337,10 @@ function FileTreeRow({
   const fileKind = changedFileKinds?.get(node.data.path);
   return (
     <button
-      className={`session-file-tree__row${node.data.isIgnored ? " session-file-tree__row--ignored" : ""}`}
+      className={fileTreeRowClassName("session-file-tree__row", {
+        isIgnored: node.data.isIgnored,
+        isMenuTarget,
+      })}
       style={treeDepthStyle}
       type="button"
       onClick={() => onOpenFile(node.data)}
@@ -342,6 +358,20 @@ function FileTreeRow({
       {fileKind !== undefined ? <FileTreeStatusBadge kind={fileKind} /> : null}
     </button>
   );
+}
+
+/** 文件/目录行 class：基类 + 可选忽略态 + 可选右键菜单目标态。 */
+function fileTreeRowClassName(
+  base: "session-file-tree__folder" | "session-file-tree__row",
+  { isIgnored, isMenuTarget }: { isIgnored: boolean; isMenuTarget: boolean },
+): string {
+  return [
+    base,
+    isIgnored ? "session-file-tree__row--ignored" : null,
+    isMenuTarget ? `${base}--menu-target` : null,
+  ]
+    .filter((value): value is string => value !== null)
+    .join(" ");
 }
 
 /** 文件/目录名 class：基类 + 可选变更状态色。 */
