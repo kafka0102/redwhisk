@@ -31,7 +31,10 @@ import {
   FileTreeStatusBadge,
   type FileTreeDraftRowProps,
 } from "./file-tree-row";
-import { FileTreePanel } from "./file-tree-panel";
+import {
+  FileTreePanel,
+  type FileTreeEntryDeleteInput,
+} from "./file-tree-panel";
 import {
   resetFileTreeScrollOffsetCacheForTests,
   writeFileTreeScrollOffset,
@@ -881,6 +884,87 @@ describe("FileTreePanel", () => {
     });
   });
 
+  describe("delete path", () => {
+    const deleteFileNode: WorkspaceFileTreeNode = {
+      id: "src/a.ts",
+      name: "a.ts",
+      path: "src/a.ts",
+      kind: "file",
+      isIgnored: false,
+    };
+
+    it("shows the delete item below the copy items for a file row", async () => {
+      const onDeleteEntry = vi.fn();
+      renderDeletePanel(onDeleteEntry);
+      const row = renderTreeRowElement(deleteFileNode);
+
+      const items = await openRowMenu(row);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "New File",
+        "New Folder",
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+        "Delete",
+      ]);
+
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+      expect(onDeleteEntry).toHaveBeenCalledWith({
+        displayName: "a.ts",
+        kind: "file",
+        relativePath: "src/a.ts",
+      });
+    });
+
+    it("deletes the directory itself from a directory row menu", async () => {
+      const onDeleteEntry = vi.fn();
+      renderDeletePanel(onDeleteEntry);
+      const row = renderTreeRowElement({
+        id: "src",
+        name: "src",
+        path: "src",
+        kind: "directory",
+        isIgnored: false,
+        children: [],
+      });
+
+      const items = await openRowMenu(row);
+      expect(items[items.length - 1].textContent).toBe("Delete");
+
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+      expect(onDeleteEntry).toHaveBeenCalledWith({
+        displayName: "src",
+        kind: "directory",
+        relativePath: "src",
+      });
+    });
+
+    it("hides the delete item when no delete capability is injected", async () => {
+      const onDeleteEntry = vi.fn();
+      renderWithI18n(
+        <FileTreePanel
+          errorMessage={null}
+          fileTree={sampleTree}
+          isLoading={false}
+          onOpenFile={() => {}}
+          workspacePath="/repo"
+          onCreateEntry={vi.fn()}
+        />,
+      );
+      const row = renderTreeRowElement(deleteFileNode);
+
+      const items = await openRowMenu(row);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "New File",
+        "New Folder",
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+      ]);
+      expect(onDeleteEntry).not.toHaveBeenCalled();
+    });
+  });
+
   describe("draft row", () => {
     it("keeps the typed name and re-selects it after a failed creation", () => {
       const onSubmit = vi.fn();
@@ -1028,6 +1112,23 @@ function renderCreatePanel(
       onOpenFile={() => {}}
       workspacePath="/repo"
       onCreateEntry={onCreateEntry}
+    />,
+  );
+}
+
+/** 渲染带新建与删除能力的面板（对齐代码页的真实注入组合）。 */
+function renderDeletePanel(
+  onDeleteEntry: (input: FileTreeEntryDeleteInput) => void,
+): ReturnType<typeof renderWithI18n> {
+  return renderWithI18n(
+    <FileTreePanel
+      errorMessage={null}
+      fileTree={sampleTree}
+      isLoading={false}
+      onOpenFile={() => {}}
+      workspacePath="/repo"
+      onCreateEntry={vi.fn()}
+      onDeleteEntry={onDeleteEntry}
     />,
   );
 }

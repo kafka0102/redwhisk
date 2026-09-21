@@ -33,10 +33,20 @@ const FILE_TREE_FALLBACK_HEIGHT = 600;
 
 export type FileTreeOpenState = Record<string, boolean>;
 
+/** 行右键菜单触发的删除目标：行自身（目录行 → 目录，文件行 → 文件）。 */
+export interface FileTreeEntryDeleteInput {
+  displayName: string;
+  kind: WorkspaceFileTreeNode["kind"];
+  /** 工作区相对路径。 */
+  relativePath: string;
+}
+
 /** 面板自己的菜单目标：在共享菜单目标上补一份「新建落点目录」归因。 */
 interface FileTreeMenuTarget extends WorkspacePathContextMenuTarget {
   /** 目录行 → 自身；文件行 → 其父目录；根级文件 → 代码根（""）。 */
   createDirectoryPath: string;
+  /** 删除目标始终是行自身，故需要行的类型区分文件 / 目录。 */
+  kind: WorkspaceFileTreeNode["kind"];
 }
 
 export interface FileTreePanelProps {
@@ -55,6 +65,11 @@ export interface FileTreePanelProps {
    * 未注入时面板保持只读，菜单与行为与现状逐字一致。
    */
   onCreateEntry?: (input: FileTreeEntryCreateInput) => Promise<void>;
+  /**
+   * 可选的行删除能力：注入后目录行与文件行的右键菜单最下方出现「删除」。
+   * 未注入时面板保持只读，菜单与行为与现状逐字一致。
+   */
+  onDeleteEntry?: (input: FileTreeEntryDeleteInput) => void;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
   /** 文件路径 → 变更类型（git status），用于文件名着色与行末 A/M/D 徽标。 */
@@ -78,6 +93,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onOpenStateChange,
   onDirectoryOpen,
   onCreateEntry,
+  onDeleteEntry,
   workspacePath,
   changedFileKinds,
   directoryKinds,
@@ -224,6 +240,7 @@ export const FileTreePanel = memo(function FileTreePanel({
             ? node.path
             : parentFileTreeDirectory(node.path),
         displayName: node.name,
+        kind: node.kind,
         relativePath: node.path,
         x,
         y,
@@ -281,6 +298,18 @@ export const FileTreePanel = memo(function FileTreePanel({
         }
       : null;
 
+  const deleteAction =
+    onDeleteEntry && menu
+      ? {
+          onDelete: () =>
+            onDeleteEntry({
+              displayName: menu.displayName,
+              kind: menu.kind,
+              relativePath: menu.relativePath,
+            }),
+        }
+      : null;
+
   return (
     <div
       className="session-file-tree"
@@ -326,6 +355,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         target={menu}
         workspacePath={workspacePath}
         createActions={createActions}
+        deleteAction={deleteAction}
         onClose={() => setMenu(null)}
       />
     </div>

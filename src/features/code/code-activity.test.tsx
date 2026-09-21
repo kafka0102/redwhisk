@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,6 +13,7 @@ import { I18nProvider } from "../../shared/i18n/i18n";
 import {
   createProjectWorktreeDirectory,
   createProjectWorktreeFile,
+  deleteProjectWorktreePath,
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
@@ -215,6 +223,7 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
   createProjectWorktreeDirectory: vi.fn(),
   createProjectWorktreeFile: vi.fn(),
+  deleteProjectWorktreePath: vi.fn(),
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
   listCodeWorkspaceRoots: vi.fn(),
@@ -238,6 +247,7 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
     FileTreePanel: ({
       onOpenFile,
       onCreateEntry,
+      onDeleteEntry,
     }: {
       onOpenFile: (file: {
         id: string;
@@ -250,6 +260,11 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
         kind: "file" | "directory";
         name: string;
       }) => Promise<void>;
+      onDeleteEntry?: (input: {
+        displayName: string;
+        kind: "file" | "directory";
+        relativePath: string;
+      }) => void;
     }) => (
       <>
         <button
@@ -321,6 +336,30 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
           }
         >
           Create folder
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onDeleteEntry?.({
+              displayName: "file.ts",
+              kind: "file",
+              relativePath: "src/file.ts",
+            })
+          }
+        >
+          Delete file
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onDeleteEntry?.({
+              displayName: "src",
+              kind: "directory",
+              relativePath: "src",
+            })
+          }
+        >
+          Delete folder
         </button>
       </>
     ),
@@ -406,6 +445,8 @@ describe("CodeActivity", () => {
     vi.mocked(createProjectWorktreeFile).mockResolvedValue(undefined);
     vi.mocked(createProjectWorktreeDirectory).mockReset();
     vi.mocked(createProjectWorktreeDirectory).mockResolvedValue(undefined);
+    vi.mocked(deleteProjectWorktreePath).mockReset();
+    vi.mocked(deleteProjectWorktreePath).mockResolvedValue(undefined);
     ensureCodeLanguageHost.mockReset();
     stopCodeLanguageHost.mockReset();
     notifyCodeLanguageDocument.mockReset();
@@ -759,6 +800,189 @@ describe("CodeActivity", () => {
         workspacePath: "/tmp/redwhisk",
       });
     });
+  });
+
+  it("asks for confirmation before deleting and sends no command when cancelled", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file\.ts/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: 'Delete file "file.ts"?',
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteProjectWorktreePath).not.toHaveBeenCalled();
+    // 取消不改变任何状态：tab 与选中态保持原样。
+    expect(screen.getByRole("tab", { name: /file\.ts/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("deletes the path after confirmation, closes its tab and refreshes the parent directory", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file\.ts/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: 'Delete file "file.ts"?',
+        }),
+      ).getByRole("button", { name: "Confirm" }),
+    );
+
+    await waitFor(() => {
+      expect(deleteProjectWorktreePath).toHaveBeenCalledWith({
+        filePath: "src/file.ts",
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    // 删除后立即强刷父目录 listing，不等后台 5s 轮询。
+    expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+      directoryPath: "src",
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+    });
+  });
+
+  it("closes child tabs of a deleted directory without asking about unsaved changes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    expect(
+      within(screen.getByRole("tab", { name: /file\.ts/ })).getByLabelText(
+        "Unsaved changes",
+      ),
+    ).toBeInTheDocument();
+    const treeCallsBeforeDelete = vi.mocked(getProjectWorktreeFileTree).mock
+      .calls.length;
+
+    await user.click(screen.getByRole("button", { name: "Delete folder" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", { name: 'Delete folder "src"?' }),
+      ).getByRole("button", { name: "Confirm" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("tab", { name: /file\.ts/ }),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Unsaved Changes" }),
+    ).not.toBeInTheDocument();
+    // 目录的父目录是代码根：删除后刷新根 listing。
+    await waitFor(() => {
+      expect(
+        vi.mocked(getProjectWorktreeFileTree).mock.calls.length,
+      ).toBeGreaterThan(treeCallsBeforeDelete);
+    });
+    const treeCalls = vi.mocked(getProjectWorktreeFileTree).mock.calls;
+    expect(treeCalls[treeCalls.length - 1]?.[0]).toEqual({
+      projectId: 1,
+      workspacePath: "/tmp/redwhisk",
+    });
+  });
+
+  it("sends a single delete command when the same path is clicked twice", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(deleteProjectWorktreePath).mockReturnValue(
+      new Promise<void>(() => {}),
+    );
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    // 确认框尚未落定时再点一次同一路径：不得再弹一次确认，也不得双发删除命令。
+    const deleteButton = screen.getByRole("button", { name: "Delete file" });
+    await act(async () => {
+      fireEvent.click(deleteButton);
+      fireEvent.click(deleteButton);
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: 'Delete file "file.ts"?',
+    });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(deleteProjectWorktreePath).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("keeps the file tree and tabs untouched when deletion fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(deleteProjectWorktreePath).mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "delete failed",
+      reason: "pathDeleteFailed",
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /file\.ts/ })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Delete file" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+
+    expect(
+      await screen.findByText("Failed to delete path."),
+    ).toBeInTheDocument();
+    // 错误弹窗打开时背景内容对 a11y 查询不可见，改查 DOM 确认 tab 未被关闭。
+    const tabLabels = Array.from(
+      document.querySelectorAll(".code-workspace__tab span"),
+    ).map((node) => node.textContent);
+    expect(tabLabels).toContain("file.ts");
   });
 
   it("switches to the default branch when the selected worktree disappears", async () => {

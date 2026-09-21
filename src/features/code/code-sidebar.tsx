@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import type { FileTreeEntryCreateInput } from "../../shared/workspace/file-tree-create-draft";
 import {
   FileTreePanel,
+  type FileTreeEntryDeleteInput,
   type FileTreeOpenState,
 } from "../../shared/workspace/file-tree-panel";
 import type {
@@ -26,6 +27,8 @@ export interface CodeSidebarProps {
   onContentSearchChange: (state: CodeContentSearchState) => void;
   /** 代码页才注入的行内新建能力；未注入时文件树保持只读。 */
   onCreateEntry?: (input: FileTreeEntryCreateInput) => Promise<void>;
+  /** 代码页才注入的删除能力；未注入时文件树菜单不出现「删除」。 */
+  onDeleteEntry?: (input: FileTreeEntryDeleteInput) => void;
   onDirectoryOpen: (directoryPath: string) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onOpenMatch: (match: {
@@ -56,6 +59,7 @@ export function CodeSidebar({
   mode,
   onContentSearchChange,
   onCreateEntry,
+  onDeleteEntry,
   onDirectoryOpen,
   onOpenFile,
   onOpenMatch,
@@ -89,6 +93,7 @@ export function CodeSidebar({
       isLoading={isFileTreeLoading}
       workspacePath={workspacePath}
       onCreateEntry={onCreateEntry}
+      onDeleteEntry={onDeleteEntry}
       onDirectoryOpen={onDirectoryOpen}
       onOpenFile={onOpenFile}
       onOpenStateChange={onOpenStateChange}

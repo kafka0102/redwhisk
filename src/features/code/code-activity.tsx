@@ -9,6 +9,7 @@ import {
 } from "../../shared/workspace/use-workspace-shell";
 import { WorkspaceShell } from "../../shared/workspace/workspace-shell";
 import { useAlertDialog } from "../../components/ui/use-alert-dialog";
+import { useConfirmDialog } from "../../components/ui/use-confirm-dialog";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import {
   readProjectWorktreeFile,
@@ -62,6 +63,7 @@ interface CodeActivityProps {
 export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const { contentFontSize, messages, theme, t } = useI18n();
   const { alertDialog, showAlert } = useAlertDialog();
+  const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     confirmBulkUnsaved,
     confirmExternalConflict,
@@ -323,11 +325,12 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     return true;
   }, [saveTabByPath]);
 
-  const { createEntry, openFile, openMatchFromSearch } =
+  const { closeTabs, createEntry, deleteEntry, openFile, openMatchFromSearch } =
     useCodeFileTreePathActions({
       activateFilePath,
       activePathRef,
       confirmBulkUnsaved,
+      confirm,
       loadDirectory,
       openFilePathsRef,
       projectId,
@@ -337,6 +340,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
       selectedRoot,
       setRevealRequest,
       setTabs,
+      showAlert,
       tabsRef,
     });
 
@@ -489,18 +493,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         }
       }
     }
-    openFilePathsRef.current.delete(filePath);
-    setTabs((currentTabs) => {
-      const remaining = currentTabs.filter(
-        (item) => item.filePath !== filePath,
-      );
-      if (activePathRef.current === filePath) {
-        const nextActivePath =
-          remaining[remaining.length - 1]?.filePath ?? null;
-        activateFilePath(nextActivePath);
-      }
-      return remaining;
-    });
+    closeTabs([filePath]);
   };
 
   const handleSelectRoot = async (root: CodeWorkspaceRoot) => {
@@ -558,6 +551,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
             mode={sidebarMode}
             onContentSearchChange={setContentSearch}
             onCreateEntry={selectedRoot ? createEntry : undefined}
+            onDeleteEntry={selectedRoot ? deleteEntry : undefined}
             onDirectoryOpen={loadDirectory}
             onOpenFile={openFile}
             onOpenMatch={openMatchFromSearch}
@@ -660,6 +654,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         }
       />
       {alertDialog}
+      {confirmationDialog}
       {unsavedConfirmDialog}
     </>
   );

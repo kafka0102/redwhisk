@@ -1,13 +1,20 @@
 import {
   useCallback,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from "react";
 
+import type { useAlertDialog } from "../../components/ui/use-alert-dialog";
+import type { useConfirmDialog } from "../../components/ui/use-confirm-dialog";
+import { getCommandErrorMessage } from "../../shared/commands/command-error";
+import { useI18n } from "../../shared/i18n/i18n";
+import type { FileTreeEntryDeleteInput } from "../../shared/workspace/file-tree-panel";
 import {
   createProjectWorktreeDirectory,
   createProjectWorktreeFile,
+  deleteProjectWorktreePath,
   readProjectWorktreeFile,
   type CodeWorkspaceRoot,
   type WorkspaceFileTreeNode,
@@ -16,7 +23,10 @@ import {
   buildFileTreeEntryPath,
   type FileTreeEntryCreateInput,
 } from "../../shared/workspace/file-tree-create-draft";
-import { visitFileTreeAncestorDirectories } from "../../shared/workspace/file-tree-listings";
+import {
+  parentFileTreeDirectory,
+  visitFileTreeAncestorDirectories,
+} from "../../shared/workspace/file-tree-listings";
 import type { CodeRevealRequest } from "./code-content";
 import type { CodeFileTab } from "./code-workspace-cache";
 import {
@@ -26,6 +36,9 @@ import {
 import type { BulkUnsavedChoice } from "./use-code-unsaved-confirm";
 
 const MAX_FILE_TABS = 10;
+
+type Confirm = ReturnType<typeof useConfirmDialog>["confirm"];
+type ShowAlert = ReturnType<typeof useAlertDialog>["showAlert"];
 
 export interface UseCodeFileTreePathActionsOptions {
   projectId: number;
@@ -41,6 +54,10 @@ export interface UseCodeFileTreePathActionsOptions {
   tabsRef: MutableRefObject<CodeFileTab[]>;
   openFilePathsRef: MutableRefObject<Set<string>>;
   confirmBulkUnsaved: () => Promise<BulkUnsavedChoice>;
+  /** 删除路径前的确认弹窗（破坏性样式由本 hook 指定）。 */
+  confirm: Confirm;
+  /** 删除失败等执行类错误的统一提示入口（AlertDialog）。 */
+  showAlert: ShowAlert;
   saveAllDirtyTabs: () => Promise<boolean>;
   resolveErrorMessage: (error: unknown) => string;
 }
@@ -59,13 +76,20 @@ export interface CodeFileTreePathActions {
   }) => void;
   /** 行内新建：创建条目、强刷目标目录 listing，文件打开为可编辑 tab。 */
   createEntry: (input: FileTreeEntryCreateInput) => Promise<void>;
+  /** 删除条目：确认后删除该路径，关闭其自身与子孙路径的 tab 并强刷父目录。 */
+  deleteEntry: (input: FileTreeEntryDeleteInput) => Promise<void>;
+  /**
+   * 静默关闭给定路径的 tab（不追未保存确认）：未保存改动由调用方先行处理。
+   * 删除路径与容器关 tab 共用本实现，避免出现两份关闭状态机。
+   */
+  closeTabs: (filePaths: readonly string[]) => void;
 }
 
 /**
  * 文件树路径动作：树 → tab / 后端命令的编排。
  *
  * 从代码页 Activity 容器里抽出，容器只保留页面编排与状态协调；失败仍由调用方
- * 决定展示方式（新建失败抛回面板，由草稿行就地提示）。
+ * 决定展示方式（新建失败抛回面板由草稿行就地提示，删除失败走 showAlert）。
  */
 export function useCodeFileTreePathActions({
   projectId,
@@ -79,9 +103,15 @@ export function useCodeFileTreePathActions({
   tabsRef,
   openFilePathsRef,
   confirmBulkUnsaved,
+  confirm,
   saveAllDirtyTabs,
   resolveErrorMessage,
+  showAlert,
 }: UseCodeFileTreePathActionsOptions): CodeFileTreePathActions {
+  const { t } = useI18n();
+  // 同一路径的删除进行中标记：确认框未落定或命令未返回时再次点击不再重复发命令。
+  const pendingDeletePathsRef = useRef(new Set<string>());
+
   const openFile = useCallback(
     async (
       file: WorkspaceFileTreeNode,
@@ -227,6 +257,31 @@ export function useCodeFileTreePathActions({
     [openFile, setRevealRequest],
   );
 
+  const closeTabs = useCallback(
+    (filePaths: readonly string[]) => {
+      const shouldClose = (filePath: string) =>
+        filePaths.some((targetPath) =>
+          isFileTreePathOrDescendant(filePath, targetPath),
+        );
+      for (const filePath of openFilePathsRef.current) {
+        if (shouldClose(filePath)) {
+          openFilePathsRef.current.delete(filePath);
+        }
+      }
+      setTabs((currentTabs) => {
+        const remaining = currentTabs.filter(
+          (tab) => !shouldClose(tab.filePath),
+        );
+        const activeFilePath = activePathRef.current;
+        if (activeFilePath !== null && shouldClose(activeFilePath)) {
+          activateFilePath(remaining[remaining.length - 1]?.filePath ?? null);
+        }
+        return remaining;
+      });
+    },
+    [activateFilePath, activePathRef, openFilePathsRef, setTabs],
+  );
+
   const createEntry = useCallback(
     async (input: FileTreeEntryCreateInput) => {
       const rootPath = selectedRoot?.path;
@@ -256,5 +311,58 @@ export function useCodeFileTreePathActions({
     [openFile, projectId, refreshDirectory, selectedRoot?.path],
   );
 
-  return { createEntry, openFile, openMatchFromSearch };
+  const deleteEntry = useCallback(
+    async (input: FileTreeEntryDeleteInput) => {
+      const rootPath = selectedRoot?.path;
+      if (!rootPath) return;
+      const targetPath = input.relativePath;
+      if (pendingDeletePathsRef.current.has(targetPath)) return;
+      pendingDeletePathsRef.current.add(targetPath);
+      try {
+        const confirmed = await confirm({
+          confirmVariant: "destructive",
+          message:
+            input.kind === "directory"
+              ? t("agentsFeature.deleteFolderConfirm", {
+                  fileName: input.displayName,
+                })
+              : t("agentsFeature.deleteFileConfirm", {
+                  fileName: input.displayName,
+                }),
+        });
+        if (!confirmed) return;
+        await deleteProjectWorktreePath({
+          filePath: targetPath,
+          projectId,
+          workspacePath: rootPath,
+        });
+        // 用户已显式确认删除该路径：其自身与子孙路径的 tab 直接关闭，不再追未保存确认。
+        closeTabs([targetPath]);
+        refreshDirectory(parentFileTreeDirectory(targetPath));
+      } catch (error) {
+        showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
+      } finally {
+        pendingDeletePathsRef.current.delete(targetPath);
+      }
+    },
+    [
+      closeTabs,
+      confirm,
+      projectId,
+      refreshDirectory,
+      selectedRoot?.path,
+      showAlert,
+      t,
+    ],
+  );
+
+  return { closeTabs, createEntry, deleteEntry, openFile, openMatchFromSearch };
+}
+
+/** 目标路径自身或其子孙路径（删除目录时要一并关闭子孙路径的 tab）。 */
+function isFileTreePathOrDescendant(
+  filePath: string,
+  targetPath: string,
+): boolean {
+  return filePath === targetPath || filePath.startsWith(`${targetPath}/`);
 }

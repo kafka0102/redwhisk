@@ -23,6 +23,11 @@ export interface WorkspacePathContextMenuProps {
    * 未注入的调用方（会话侧栏文件树、代码搜索分组头、变更文件行）菜单保持现状。
    */
   createActions?: WorkspacePathContextMenuCreateActions | null;
+  /**
+   * 可选的删除能力：注入后在复制三项**之下**多出「删除」。
+   * 未注入的调用方菜单保持现状。
+   */
+  deleteAction?: WorkspacePathContextMenuDeleteAction | null;
   onClose: () => void;
 }
 
@@ -31,10 +36,15 @@ export interface WorkspacePathContextMenuCreateActions {
   onCreateFile: () => void;
 }
 
+export interface WorkspacePathContextMenuDeleteAction {
+  onDelete: () => void;
+}
+
 export function WorkspacePathContextMenu({
   target,
   workspacePath,
   createActions,
+  deleteAction,
   onClose,
 }: WorkspacePathContextMenuProps): ReactElement {
   const { messages, t } = useI18n();
@@ -112,6 +122,17 @@ export function WorkspacePathContextMenu({
             }}
           >
             {messages.agentsFeature.copyAbsolutePath}
+          </ContextMenuItem>
+        ) : null}
+        {deleteAction ? (
+          <ContextMenuItem
+            onClick={() => {
+              if (target) {
+                deleteAction.onDelete();
+              }
+            }}
+          >
+            {t("agentsFeature.deleteEntry")}
           </ContextMenuItem>
         ) : null}
       </ContextMenuContent>
