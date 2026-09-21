@@ -217,6 +217,10 @@ _Avoid_: 运行中 live log、完整审计仓、完整过程 transcript、SQLite
 Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区：交互式 xterm 终端 surface，输入直达 PTY，不使用结构化消息流与底部 composer。
 _Avoid_: Project Terminal 配置实体、旁路只读 TUI 面板、双轨同显
 
+**消息流选择端点**：
+结构化消息流（json Session）拖拽选择时，指针落到命中不到文本的位置——滚动容器自己的 padding、或容器之外的相邻区域——浏览器内核对选区端点的命中测试会退化成「滚动容器内容起点」，长会话表现为整段被选中、复制到远超高亮范围的内容。前端在指针离开内容盒或命中不到文本时接管端点：把指针夹回内容盒边缘、按其可见文本位置重建选区，mouseup 后再连拍修正若干帧防止内核写回被夹端点；指针始终落在文本内容上时不介入，保持原生选择行为。
+_Avoid_: 复制前裁剪文本、全选兜底降级、以 content-visibility 估算条目高度（估算值会让滚动高度与选区端点漂移）
+
 **Provider 会话标识**（providerSessionId）：
 各 Agent provider 用于跨进程续接同一对话上下文的外部会话 id（Codex thread、Claude session、OpenCode session 等），持久化在 Agent Session 上；json 与 tui 路径共用。字段名中立，不绑定某一厂商。
 _Avoid_: 仅 Codex 语义的 id、前端伪造 id、与 RedWhisk session 主键混用

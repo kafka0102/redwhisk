@@ -243,6 +243,11 @@
   grid-template-rows: 40px minmax(0, 1fr);
   height: 100vh;
   min-height: 100vh;
+  /* 窗口级外壳永不滚动：`overflow: hidden` 的盒子仍可被内核程序化滚动，
+     一旦某个子元素溢出外壳，滚动就会把顶栏（项目切换器）推出视野且用户无法滚回，
+     只能重启窗口。`clip` 彻底不可滚动，`hidden` 作为老内核的兜底。 */
+  overflow: hidden;
+  overflow: clip;
   background: var(--color-app);
 }
 

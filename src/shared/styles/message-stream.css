@@ -162,13 +162,17 @@
   }
 }
 
-/* 消息条目通用 */
+/* 消息条目通用。
+
+   这里曾用 `content-visibility: auto` + `contain-intrinsic-size: auto 96px` 省渲染，
+   但会话条目高度差异极大（几十像素到上万像素），估算值偏差导致滚动高度严重失真
+   （实测 808 条会话：估算 86466px，真实内容 32818px），且条目被真正布局时整段
+   内容会突然位移——滚动条位置、选区端点都跟着跳，拖拽选择还会把整段会话选进去。
+   稳定布局优先，不再使用 content-visibility。 */
 .agents-message__entry {
   min-width: 0;
   width: 100%;
   margin: 0 auto;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 96px;
 }
 
 .agents-message__entry--user {

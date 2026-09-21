@@ -25,6 +25,7 @@ import type { AgentType } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { AgentMessageCards } from "./agent-message-cards";
+import { installSelectionDragClamp } from "./selection-drag-clamp";
 import type {
   MessageStreamEntry,
   MessageStreamState,
@@ -144,6 +145,16 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     node.scrollTop = node.scrollHeight;
     isPinnedRef.current = true;
   }, [isActive, autoScrollOnActivate]);
+  // 拖拽选择修正：指针落到命中不到文本的位置（滚动容器 padding、容器外相邻区域）时，
+  // 内核会把选区端点夹到容器内容起点（长会话表现为整段被选中），这里把端点贴回内容盒
+  // 边缘的可见文本。详见 selection-drag-clamp.ts。
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) {
+      return;
+    }
+    return installSelectionDragClamp({ element: node });
+  }, []);
   // 计算长内容跳转按钮方向：内容超过两屏时始终显示；
   // 未贴底显示向下（初始顶/中段均可快速到底），贴底显示向上。
   const measureNav = useCallback(() => {
