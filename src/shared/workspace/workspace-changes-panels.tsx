@@ -222,9 +222,7 @@ export function WorkspaceChangesPanels({
                 </button>
               ) : (
                 <p className="code-workspace__panel-empty">
-                  {isChangesLoading
-                    ? messages.agentsFeature.loadingChanges
-                    : messages.agentsFeature.noUncommittedChanges}
+                  {messages.agentsFeature.noUncommittedChanges}
                 </p>
               )
             ) : null}

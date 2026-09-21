@@ -537,7 +537,7 @@
     "committed": "Committed",
     "committedChanges": "Committed changes",
     "loadingChanges": "Loading changes...",
-    "noUncommittedChanges": "No uncommitted changes.",
+    "noUncommittedChanges": "No uncommitted changes",
     "noCommittedChanges": "This branch has no new commits.",
     "committedTimeline": "Committed changes timeline",
     "committedChangesNotImplemented": "Committed changes are not implemented yet.",

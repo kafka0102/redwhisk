@@ -203,7 +203,7 @@ describe("WorkspaceChangesPanels uncommitted empty sync button", () => {
     );
 
     expect(
-      screen.queryByText("No uncommitted changes."),
+      screen.queryByText("No uncommitted changes"),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Sync Changes 2↓" }),
@@ -241,7 +241,37 @@ describe("WorkspaceChangesPanels uncommitted empty sync button", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps empty copy for worktree, dirty tree, loading, or missing handler", () => {
+  it("keeps the empty copy while the list is reloading instead of switching to a loading copy", () => {
+    const { rerender } = render(
+      <WorkspaceChangesPanels
+        {...baseProps}
+        isUncommittedExpanded={true}
+        changes={[]}
+        isChangesLoading={true}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("No uncommitted changes")).toBeInTheDocument();
+    expect(screen.queryByText("Loading changes...")).not.toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <WorkspaceChangesPanels
+          {...baseProps}
+          isUncommittedExpanded={true}
+          changes={[]}
+          isChangesLoading={false}
+        />
+      </I18nProvider>,
+    );
+
+    // 轮询周期里 loading 标志翻转，文案保持不变（不再切到加载态）。
+    expect(screen.getByText("No uncommitted changes")).toBeInTheDocument();
+    expect(screen.queryByText("Loading changes...")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty copy for worktree, dirty tree, reloading, or missing handler", () => {
     const cases = [
       {
         isProjectRoot: false,
@@ -302,8 +332,8 @@ describe("WorkspaceChangesPanels uncommitted empty sync button", () => {
       expect(
         screen.queryByRole("button", { name: /Sync Changes/ }),
       ).not.toBeInTheDocument();
-      if (props.changes.length === 0 && !props.isChangesLoading) {
-        expect(screen.getByText("No uncommitted changes.")).toBeInTheDocument();
+      if (props.changes.length === 0) {
+        expect(screen.getByText("No uncommitted changes")).toBeInTheDocument();
       }
       unmount();
     }

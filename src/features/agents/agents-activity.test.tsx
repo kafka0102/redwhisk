@@ -1139,10 +1139,10 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
 
-    // 已提交面板默认收起：点击面板头展开后才触发首次拉取与轮询。
-    await user.click(
+    // 已提交面板默认展开：进入「变更」Tab 即触发首次拉取与轮询。
+    expect(
       within(panel).getByRole("button", { name: "Committed changes" }),
-    );
+    ).toHaveAttribute("aria-expanded", "true");
 
     const commitButton = await within(panel).findByRole("button", {
       name: /fix\(web\): 补齐列表标题宽度限制/,
@@ -6827,14 +6827,14 @@ describe("AgentsActivity", () => {
     });
     await user.click(within(panel).getByRole("tab", { name: "Changes" }));
     expect(within(panel).queryByRole("combobox")).not.toBeInTheDocument();
-    // Session 变更页改为两折叠面板：未提交默认展开、已提交默认收起，无 Tabs、无刷新按钮。
+    // Session 变更页改为两折叠面板：未提交与已提交均默认展开，无 Tabs、无刷新按钮。
     const uncommittedHeader = within(panel).getByRole("button", {
       name: "Uncommitted changes (6)",
     });
     expect(uncommittedHeader).toHaveAttribute("aria-expanded", "true");
     expect(
       within(panel).getByRole("button", { name: "Committed changes" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       within(panel).queryByRole("button", { name: "Refresh changes" }),
     ).not.toBeInTheDocument();

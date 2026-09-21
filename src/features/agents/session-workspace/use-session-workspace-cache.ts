@@ -165,10 +165,11 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   changes: [],
   changesErrorMessage: null,
   changesRequestSequence: 0,
-  // Session 侧默认：未提交面板展开、已提交面板收起。与 code-workspace 侧（两个均默认
-  // 展开、持久化于 codeWorkspaceStateCache）刻意不同；展开已提交面板才会触发首次拉取
-  // 与后续 5s 轮询（见 committed 轮询 effect）。
-  committedChangesExpanded: false,
+  // Session 侧默认两个面板均展开（进程内默认值，不落盘，与 code-workspace 侧持久化于
+  // codeWorkspaceStateCache 的两个默认展开值观感一致）：进入「变更」Tab 即看到提交历史，
+  // 并触发已提交历史首次拉取与后续 5s 轮询（见 committed 轮询 effect）；收起面板 / 切走
+  // Tab / 关闭侧栏即停止轮询。
+  committedChangesExpanded: true,
   uncommittedChangesExpanded: true,
   commitHistory: [],
   isCommitFromWorktree: false,

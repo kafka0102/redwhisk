@@ -73,7 +73,7 @@ describe("useSessionWorkspaceCache committed history polling", () => {
     vi.useRealTimers();
   });
 
-  it("does not poll committed history when the committed panel is collapsed on mount", async () => {
+  it("polls committed history immediately and every 5s by default when the side panel opens on the changes tab", async () => {
     renderHook(
       () =>
         useSessionWorkspaceCache({
@@ -83,13 +83,25 @@ describe("useSessionWorkspaceCache committed history polling", () => {
         }),
       { wrapper },
     );
-    await vi.advanceTimersByTimeAsync(10_000);
+    await settle();
 
-    // 默认 committedChangesExpanded=false，即便侧栏开 + changes tab 也不应拉取。
-    expect(getProjectWorktreeCommitHistoryMock).not.toHaveBeenCalled();
+    // 默认 committedChangesExpanded=true：侧栏开 + changes tab 时进入即补拉一次。
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      limit: 50,
+      offset: 0,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(3);
   });
 
-  it("polls committed history immediately and every 5s when expanded on the changes tab with the side panel open", async () => {
+  it("resumes committed history polling when the panel is expanded again after being collapsed", async () => {
     const { result } = renderHook(
       () =>
         useSessionWorkspaceCache({
@@ -100,21 +112,19 @@ describe("useSessionWorkspaceCache committed history polling", () => {
       { wrapper },
     );
     await settle();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
 
     act(() => {
       result.current.toggleCommittedChangesExpanded();
     });
-    // 展开后进入即补拉一次。
-    await settle();
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
-    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 1,
-      limit: 50,
-      offset: 0,
-    });
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    act(() => {
+      result.current.toggleCommittedChangesExpanded();
+    });
+    // 重新展开后进入即补拉一次。
+    await settle();
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(5_000);
@@ -131,11 +141,6 @@ describe("useSessionWorkspaceCache committed history polling", () => {
         }),
       { wrapper },
     );
-    await settle();
-
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
     await settle();
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
 
@@ -159,11 +164,6 @@ describe("useSessionWorkspaceCache committed history polling", () => {
       { wrapper },
     );
     await settle();
-
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
-    await settle();
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
 
     // 切到 files tab：committed 轮询门控失活。
@@ -176,7 +176,7 @@ describe("useSessionWorkspaceCache committed history polling", () => {
   });
 
   it("stops polling committed history after the side panel is closed", async () => {
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ isSidePanelOpen }: { isSidePanelOpen: boolean }) =>
         useSessionWorkspaceCache({
           projectId: 1,
@@ -185,11 +185,6 @@ describe("useSessionWorkspaceCache committed history polling", () => {
         }),
       { initialProps: { isSidePanelOpen: true }, wrapper },
     );
-    await settle();
-
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
     await settle();
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
 
@@ -200,7 +195,7 @@ describe("useSessionWorkspaceCache committed history polling", () => {
     expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not poll committed history when the workspace root is inaccessible", async () => {
+  it("stops committed history polling once the workspace root is found inaccessible", async () => {
     // changes 轮询命中不可恢复错误会把 isChangesUnavailable 置 true，committed 轮询门控
     // 同样失活（与 changes 轮询语义一致）。
     getProjectWorktreeChangesMock.mockRejectedValue({
@@ -208,7 +203,7 @@ describe("useSessionWorkspaceCache committed history polling", () => {
       message: "workspace root inaccessible",
       details: [{ "@type": "WorkspaceRoot" }],
     });
-    const { result } = renderHook(
+    renderHook(
       () =>
         useSessionWorkspaceCache({
           projectId: 1,
@@ -221,14 +216,13 @@ describe("useSessionWorkspaceCache committed history polling", () => {
     await settle();
     await settle();
     expect(getProjectWorktreeChangesMock).toHaveBeenCalled();
+    // 默认展开：挂载时已补拉一次；此时仓库尚被判定为可访问。
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
     await vi.advanceTimersByTimeAsync(15_000);
 
-    // 仓库不可访问时 committed 轮询不应启动。
-    expect(getProjectWorktreeCommitHistoryMock).not.toHaveBeenCalled();
+    // 仓库判定不可访问后 committed 轮询不再继续。
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -308,11 +302,6 @@ describe("useSessionWorkspaceCache commit history pagination", () => {
       { wrapper },
     );
     await settle();
-
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
-    await settle();
     expect(result.current.commitHistory).toHaveLength(50);
     expect(result.current.hasMoreCommitHistory).toBe(true);
 
@@ -361,10 +350,6 @@ describe("useSessionWorkspaceCache commit history pagination", () => {
         }),
       { wrapper },
     );
-    await settle();
-    act(() => {
-      result.current.toggleCommittedChangesExpanded();
-    });
     await settle();
 
     await act(async () => {
