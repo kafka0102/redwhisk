@@ -14,7 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "../../components/ui";
-import { FileTypeIcon } from "../../shared/workspace/file-tree-panel";
+import { FileTypeIcon } from "../../shared/workspace/file-tree-row";
 import { type WorkspaceFileTreeNode } from "../../shared/workspace/workspace-commands";
 
 export interface CodeMarkdownPreviewToggle {

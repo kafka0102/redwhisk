@@ -124,6 +124,8 @@ export interface UseCodeWorkspaceFileTreeResult {
   /** 目录路径 → 聚合变更类型，驱动目录名着色。无变更时为稳定空 Map。 */
   directoryKinds: ReadonlyMap<string, WorkspaceChangeKind>;
   loadDirectory: (directoryPath: string) => void;
+  /** 立即强刷单个目录的 listing 与变更徽标（新建/删除后不等 5s 轮询）。 */
+  refreshDirectory: (directoryPath: string) => void;
 }
 
 interface LiveFileTreeState {
@@ -366,6 +368,14 @@ export function useCodeWorkspaceFileTree(
       });
   }, [enabled, projectId, workspacePath]);
 
+  const refreshDirectory = useCallback(
+    (directoryPath: string) => {
+      fetchDirectory(directoryPath, true);
+      loadChanges();
+    },
+    [fetchDirectory, loadChanges],
+  );
+
   const refresh = useCallback(() => {
     loadTree();
     loadChanges();
@@ -419,5 +429,6 @@ export function useCodeWorkspaceFileTree(
     changedFileKinds: live.changedFileKinds,
     directoryKinds: live.directoryKinds,
     loadDirectory,
+    refreshDirectory,
   };
 }

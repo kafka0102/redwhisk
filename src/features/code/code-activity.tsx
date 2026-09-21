@@ -2,10 +2,7 @@ import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import {
-  FileTreePanel,
-  type FileTreeOpenState,
-} from "../../shared/workspace/file-tree-panel";
+import type { FileTreeOpenState } from "../../shared/workspace/file-tree-panel";
 import {
   DEFAULT_SIDEBAR_WIDTH,
   useWorkspaceShell,
@@ -17,11 +14,10 @@ import {
   readProjectWorktreeFile,
   writeProjectWorktreeFile,
   type CodeWorkspaceRoot,
-  type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
 import { CodeBreadcrumb } from "./code-breadcrumb";
 import { CodeContent, type CodeRevealRequest } from "./code-content";
-import { CodeSearchPanel } from "./code-search-panel";
+import { CodeSidebar } from "./code-sidebar";
 import {
   DEFAULT_CODE_CONTENT_SEARCH_STATE,
   type CodeContentSearchState,
@@ -39,7 +35,6 @@ import {
   getCodeFileEditBlockReason,
   isMarkdownPreviewable,
   normalizeCodeFileTab,
-  pickLruVictimPath,
   resolveEditDisabledTitle,
   resolveFileLoadErrorMessage,
 } from "./code-workspace-helpers";
@@ -49,11 +44,9 @@ import { useCodeActiveFileRefreshBinding } from "./use-code-active-file-refresh-
 import { useCodeLanguageDefinition } from "./use-code-language-definition";
 import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
-import { visitFileTreeAncestorDirectories } from "../../shared/workspace/file-tree-listings";
+import { useCodeFileTreePathActions } from "./use-code-file-tree-path-actions";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 import { useCodeReadingPositionCleanup } from "./use-code-reading-position-cleanup";
-
-const MAX_FILE_TABS = 10;
 
 interface CodeActivityProps {
   projectId: number;
@@ -162,6 +155,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     changedFileKinds,
     directoryKinds,
     loadDirectory,
+    refreshDirectory,
   } = useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
 
   const activeTab = useMemo(
@@ -329,145 +323,22 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     return true;
   }, [saveTabByPath]);
 
-  const openFile = useCallback(
-    async (file: WorkspaceFileTreeNode) => {
-      if (!selectedRoot || file.kind !== "file") return;
-      visitFileTreeAncestorDirectories(file.path, loadDirectory);
-      const now = Date.now();
-      const previousActivePath = activePathRef.current;
-      const isAlreadyOpen = openFilePathsRef.current.has(file.path);
-      if (isAlreadyOpen) {
-        activateFilePath(file.path);
-        setTabs((currentTabs) =>
-          currentTabs.map((tab) =>
-            tab.filePath === file.path ? { ...tab, lastActiveAt: now } : tab,
-          ),
-        );
-        return;
-      }
-
-      const currentTabs = tabsRef.current;
-      const victimPath = pickLruVictimPath(
-        currentTabs,
-        previousActivePath,
-        MAX_FILE_TABS,
-      );
-      if (victimPath !== null && currentTabs.some((tab) => tab.isDirty)) {
-        const choice = await confirmBulkUnsaved();
-        if (choice === "cancel") {
-          return;
-        }
-        if (choice === "saveAll") {
-          const saved = await saveAllDirtyTabs();
-          if (!saved) {
-            return;
-          }
-        }
-      }
-
-      openFilePathsRef.current.add(file.path);
-      activateFilePath(file.path);
-      setTabs((latestTabs) => {
-        const existing = latestTabs.find((tab) => tab.filePath === file.path);
-        if (existing) {
-          return latestTabs.map((tab) =>
-            tab.filePath === file.path ? { ...tab, lastActiveAt: now } : tab,
-          );
-        }
-        const nextTab: CodeFileTab = {
-          content: null,
-          errorMessage: null,
-          fileName: file.name,
-          filePath: file.path,
-          isDirty: false,
-          isEditable: false,
-          isLoading: true,
-          lastActiveAt: now,
-          savedContent: null,
-        };
-        const nextVictimPath = pickLruVictimPath(
-          latestTabs,
-          previousActivePath,
-          MAX_FILE_TABS,
-        );
-        const retained =
-          nextVictimPath === null
-            ? latestTabs
-            : latestTabs.filter((tab) => tab.filePath !== nextVictimPath);
-        if (nextVictimPath !== null) {
-          openFilePathsRef.current.delete(nextVictimPath);
-        }
-        return [...retained, nextTab];
-      });
-      void readProjectWorktreeFile({
-        projectId,
-        workspacePath: selectedRoot.path,
-        filePath: file.path,
-      })
-        .then((content) => {
-          setTabs((currentTabs) =>
-            currentTabs.map((tab) =>
-              tab.filePath === file.path
-                ? {
-                    ...tab,
-                    content,
-                    errorMessage: null,
-                    isDirty: false,
-                    isLoading: false,
-                    savedContent: content.content,
-                  }
-                : tab,
-            ),
-          );
-        })
-        .catch((error) => {
-          setTabs((currentTabs) =>
-            currentTabs.map((tab) =>
-              tab.filePath === file.path
-                ? {
-                    ...tab,
-                    errorMessage: resolveFileLoadErrorMessage(
-                      error,
-                      fileNotFoundMessage,
-                      t,
-                    ),
-                    isLoading: false,
-                  }
-                : tab,
-            ),
-          );
-        });
-    },
-    [
+  const { createEntry, openFile, openMatchFromSearch } =
+    useCodeFileTreePathActions({
       activateFilePath,
+      activePathRef,
       confirmBulkUnsaved,
-      fileNotFoundMessage,
       loadDirectory,
+      openFilePathsRef,
       projectId,
+      refreshDirectory,
+      resolveErrorMessage: resolveActiveFileErrorMessage,
       saveAllDirtyTabs,
       selectedRoot,
-      t,
-    ],
-  );
-
-  const openMatchFromSearch = useCallback(
-    (match: { fileName: string; filePath: string; lineNumber: number }) => {
-      openFile({
-        id: match.filePath,
-        kind: "file",
-        name: match.fileName,
-        path: match.filePath,
-        isIgnored: false,
-        children: [],
-      });
-      setRevealRequest({
-        filePath: match.filePath,
-        lineNumber: match.lineNumber,
-        token: Date.now(),
-      });
-    },
-    [openFile],
-  );
+      setRevealRequest,
+      setTabs,
+      tabsRef,
+    });
 
   useCodeLanguageDefinition({
     onOpenMatch: openMatchFromSearch,
@@ -677,30 +548,25 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
           </button>
         }
         sidebar={
-          sidebarMode === "search" ? (
-            <CodeSearchPanel
-              state={contentSearch}
-              onChange={setContentSearch}
-              projectId={projectId}
-              workspacePath={selectedRootWorkspacePath}
-              fileTree={tree}
-              onOpenMatch={openMatchFromSearch}
-              queryFocusRequest={queryFocusRequest}
-            />
-          ) : (
-            <FileTreePanel
-              changedFileKinds={changedFileKinds}
-              directoryKinds={directoryKinds}
-              errorMessage={treeError}
-              fileTree={tree}
-              initialOpenState={openFolders}
-              isLoading={isTreeLoading}
-              workspacePath={selectedRoot?.path}
-              onDirectoryOpen={loadDirectory}
-              onOpenFile={openFile}
-              onOpenStateChange={setOpenFolders}
-            />
-          )
+          <CodeSidebar
+            changedFileKinds={changedFileKinds}
+            contentSearch={contentSearch}
+            directoryKinds={directoryKinds}
+            fileTree={tree}
+            fileTreeError={treeError}
+            isFileTreeLoading={isTreeLoading}
+            mode={sidebarMode}
+            onContentSearchChange={setContentSearch}
+            onCreateEntry={selectedRoot ? createEntry : undefined}
+            onDirectoryOpen={loadDirectory}
+            onOpenFile={openFile}
+            onOpenMatch={openMatchFromSearch}
+            onOpenStateChange={setOpenFolders}
+            openFolders={openFolders}
+            projectId={projectId}
+            queryFocusRequest={queryFocusRequest}
+            workspacePath={selectedRootWorkspacePath}
+          />
         }
         main={
           <>

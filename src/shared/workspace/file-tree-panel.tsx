@@ -1,40 +1,27 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  FileArchive,
-  FileBraces,
-  FileCode2,
-  FileCog,
-  FileImage,
-  FileJson2,
-  FileTerminal,
-  FileText,
-  FileType,
-  Folder,
-  SquareCode,
-} from "lucide-react";
-import type { CSSProperties } from "react";
 import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 
 import {
   fileTreeChildrenAccessor,
   fileTreeDirectoryAncestors,
+  parentFileTreeDirectory,
 } from "./file-tree-listings";
 import type {
   WorkspaceChangeKind,
   WorkspaceFileTreeNode,
 } from "./workspace-commands";
-import {
-  getChangeKindStatusClassName,
-  getChangeKindStatusLabel,
-} from "./workspace-change-status";
 import { useI18n } from "../i18n/i18n";
 import {
   readFileTreeScrollOffset,
   restoreFileTreeScrollOffset,
   writeFileTreeScrollOffset,
 } from "./file-tree-scroll-offset";
+import {
+  isFileTreeDraftNodeId,
+  type FileTreeEntryCreateInput,
+} from "./file-tree-create-draft";
+import { FileTreeDraftRow, FileTreeRow } from "./file-tree-row";
+import { useFileTreeCreateDraft } from "./use-file-tree-create-draft";
 import {
   WorkspacePathContextMenu,
   type WorkspacePathContextMenuTarget,
@@ -45,6 +32,12 @@ import {
 const FILE_TREE_FALLBACK_HEIGHT = 600;
 
 export type FileTreeOpenState = Record<string, boolean>;
+
+/** 面板自己的菜单目标：在共享菜单目标上补一份「新建落点目录」归因。 */
+interface FileTreeMenuTarget extends WorkspacePathContextMenuTarget {
+  /** 目录行 → 自身；文件行 → 其父目录；根级文件 → 代码根（""）。 */
+  createDirectoryPath: string;
+}
 
 export interface FileTreePanelProps {
   errorMessage: string | null;
@@ -57,6 +50,11 @@ export interface FileTreePanelProps {
   onOpenStateChange?: (openState: FileTreeOpenState) => void;
   /** 展开目录时按层拉取子节点。已加载的目录由调用方去重。 */
   onDirectoryOpen?: (directoryPath: string) => void;
+  /**
+   * 可选的行内新建能力：注入后目录行与文件行的右键菜单出现「新建文件 / 新建文件夹」。
+   * 未注入时面板保持只读，菜单与行为与现状逐字一致。
+   */
+  onCreateEntry?: (input: FileTreeEntryCreateInput) => Promise<void>;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
   /** 文件路径 → 变更类型（git status），用于文件名着色与行末 A/M/D 徽标。 */
@@ -79,6 +77,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onOpenFile,
   onOpenStateChange,
   onDirectoryOpen,
+  onCreateEntry,
   workspacePath,
   changedFileKinds,
   directoryKinds,
@@ -91,24 +90,56 @@ export const FileTreePanel = memo(function FileTreePanel({
   const [viewportHeight, setViewportHeight] = useState(
     FILE_TREE_FALLBACK_HEIGHT,
   );
-  const [menu, setMenu] = useState<WorkspacePathContextMenuTarget | null>(null);
+  const [menu, setMenu] = useState<FileTreeMenuTarget | null>(null);
   const restoreKeyRef = useRef<string>("");
   const didRestoreScrollRef = useRef(false);
   // 文件树数据异步到达前 viewport 不挂载；必须在 hasFileTree 变为 true 后
   // 再测量，否则首次 useLayoutEffect 会在 ref 仍为 null 时空跑并卡住 fallback 高度。
   const hasFileTree = fileTree.length > 0 && !errorMessage;
 
+  const syncOpenState = useCallback(() => {
+    if (!onOpenStateChange) return;
+    const openState = treeApiRef.current?.openState;
+    if (openState) {
+      onOpenStateChange({ ...openState });
+    }
+  }, [onOpenStateChange]);
+
   const handleToggle = useCallback(
     (id: string) => {
       onDirectoryOpen?.(id);
-      if (!onOpenStateChange) return;
-      const openState = treeApiRef.current?.openState;
-      if (openState) {
-        onOpenStateChange({ ...openState });
-      }
+      syncOpenState();
     },
-    [onDirectoryOpen, onOpenStateChange],
+    [onDirectoryOpen, syncOpenState],
   );
+
+  /** 新建目录成功后的落点：展开它（同时触发该层加载）并选中。 */
+  const revealDirectory = useCallback(
+    (directoryPath: string) => {
+      treeApiRef.current?.open(directoryPath);
+      treeApiRef.current?.select(directoryPath);
+      syncOpenState();
+    },
+    [syncOpenState],
+  );
+
+  /** 新建草稿行的目标目录：先展开（根目录无节点，open 为 no-op）再触发该层加载。 */
+  const openCreateTargetDirectory = useCallback(
+    (directoryPath: string) => {
+      treeApiRef.current?.open(directoryPath);
+      onDirectoryOpen?.(directoryPath);
+      syncOpenState();
+    },
+    [onDirectoryOpen, syncOpenState],
+  );
+
+  const { cancelDraft, draftError, startDraft, submitDraftName, treeData } =
+    useFileTreeCreateDraft({
+      fileTree,
+      onCreateEntry,
+      onDirectoryOpen: openCreateTargetDirectory,
+      onRevealDirectory: revealDirectory,
+    });
 
   const handleScroll = useCallback(
     (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => {
@@ -188,6 +219,10 @@ export const FileTreePanel = memo(function FileTreePanel({
   const handleContextMenuNode = useCallback(
     (node: WorkspaceFileTreeNode, x: number, y: number) => {
       setMenu({
+        createDirectoryPath:
+          node.kind === "directory"
+            ? node.path
+            : parentFileTreeDirectory(node.path),
         displayName: node.name,
         relativePath: node.path,
         x,
@@ -198,24 +233,53 @@ export const FileTreePanel = memo(function FileTreePanel({
   );
 
   const renderFileTreeRow = useCallback(
-    (props: NodeRendererProps<WorkspaceFileTreeNode>) => (
-      <FileTreeRow
-        {...props}
-        changedFileKinds={changedFileKinds}
-        directoryKinds={directoryKinds}
-        isMenuTarget={menu?.relativePath === props.node.data.path}
-        onOpenFile={onOpenFile}
-        onContextMenuNode={handleContextMenuNode}
-      />
-    ),
+    (props: NodeRendererProps<WorkspaceFileTreeNode>) =>
+      isFileTreeDraftNodeId(props.node.data.id) ? (
+        <FileTreeDraftRow
+          {...props}
+          errorMessage={draftError?.message ?? null}
+          errorRevision={draftError?.revision ?? 0}
+          onCancel={cancelDraft}
+          onSubmit={submitDraftName}
+        />
+      ) : (
+        <FileTreeRow
+          {...props}
+          changedFileKinds={changedFileKinds}
+          directoryKinds={directoryKinds}
+          isMenuTarget={menu?.relativePath === props.node.data.path}
+          onOpenFile={onOpenFile}
+          onContextMenuNode={handleContextMenuNode}
+        />
+      ),
     [
+      cancelDraft,
       changedFileKinds,
       directoryKinds,
+      draftError?.message,
+      draftError?.revision,
       handleContextMenuNode,
       menu?.relativePath,
       onOpenFile,
+      submitDraftName,
     ],
   );
+
+  const createActions =
+    onCreateEntry && menu
+      ? {
+          onCreateDirectory: () =>
+            startDraft({
+              directoryPath: menu.createDirectoryPath,
+              kind: "directory",
+            }),
+          onCreateFile: () =>
+            startDraft({
+              directoryPath: menu.createDirectoryPath,
+              kind: "file",
+            }),
+        }
+      : null;
 
   return (
     <div
@@ -239,7 +303,7 @@ export const FileTreePanel = memo(function FileTreePanel({
             aria-label={messages.agentsFeature.fileTree}
             childrenAccessor={fileTreeChildrenAccessor}
             className="session-file-tree__arborist"
-            data={fileTree}
+            data={treeData}
             disableDrag
             disableDrop
             disableEdit
@@ -261,202 +325,9 @@ export const FileTreePanel = memo(function FileTreePanel({
       <WorkspacePathContextMenu
         target={menu}
         workspacePath={workspacePath}
+        createActions={createActions}
         onClose={() => setMenu(null)}
       />
     </div>
   );
 });
-
-interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNode> {
-  changedFileKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
-  directoryKinds?: ReadonlyMap<string, WorkspaceChangeKind>;
-  /** 是否为当前右键菜单的目标行；为 true 时保持悬停同款底色。 */
-  isMenuTarget: boolean;
-  onOpenFile: (file: WorkspaceFileTreeNode) => void;
-  onContextMenuNode: (
-    node: WorkspaceFileTreeNode,
-    x: number,
-    y: number,
-  ) => void;
-}
-
-function FileTreeRow({
-  node,
-  changedFileKinds,
-  directoryKinds,
-  isMenuTarget,
-  onOpenFile,
-  onContextMenuNode,
-  style,
-}: FileTreeRowProps) {
-  const treeDepthStyle = {
-    ...style,
-    "--tree-depth": node.level,
-  } as CSSProperties;
-
-  if (node.data.kind === "directory") {
-    const directoryKind = directoryKinds?.get(node.data.path);
-    return (
-      <button
-        aria-expanded={node.isOpen}
-        className={fileTreeRowClassName("session-file-tree__folder", {
-          isIgnored: node.data.isIgnored,
-          isMenuTarget,
-        })}
-        style={treeDepthStyle}
-        type="button"
-        onClick={() => node.toggle()}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onContextMenuNode(node.data, event.clientX, event.clientY);
-        }}
-      >
-        {node.isOpen ? (
-          <ChevronDown
-            aria-hidden="true"
-            className="session-file-tree__chevron"
-            size={13}
-            strokeWidth={2}
-          />
-        ) : (
-          <ChevronRight
-            aria-hidden="true"
-            className="session-file-tree__chevron"
-            size={13}
-            strokeWidth={2}
-          />
-        )}
-        <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
-        <span className={fileTreeNameClassName(directoryKind)}>
-          {node.data.name}
-        </span>
-      </button>
-    );
-  }
-
-  const fileKind = changedFileKinds?.get(node.data.path);
-  return (
-    <button
-      className={fileTreeRowClassName("session-file-tree__row", {
-        isIgnored: node.data.isIgnored,
-        isMenuTarget,
-      })}
-      style={treeDepthStyle}
-      type="button"
-      onClick={() => onOpenFile(node.data)}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onContextMenuNode(node.data, event.clientX, event.clientY);
-      }}
-    >
-      <span
-        aria-hidden="true"
-        className="session-file-tree__chevron session-file-tree__chevron--placeholder"
-      />
-      <FileTypeIcon fileName={node.data.name} />
-      <span className={fileTreeNameClassName(fileKind)}>{node.data.name}</span>
-      {fileKind !== undefined ? <FileTreeStatusBadge kind={fileKind} /> : null}
-    </button>
-  );
-}
-
-/** 文件/目录行 class：基类 + 可选忽略态 + 可选右键菜单目标态。 */
-function fileTreeRowClassName(
-  base: "session-file-tree__folder" | "session-file-tree__row",
-  { isIgnored, isMenuTarget }: { isIgnored: boolean; isMenuTarget: boolean },
-): string {
-  return [
-    base,
-    isIgnored ? "session-file-tree__row--ignored" : null,
-    isMenuTarget ? `${base}--menu-target` : null,
-  ]
-    .filter((value): value is string => value !== null)
-    .join(" ");
-}
-
-/** 文件/目录名 class：基类 + 可选变更状态色。 */
-function fileTreeNameClassName(kind: WorkspaceChangeKind | undefined): string {
-  if (kind === undefined) {
-    return "session-file-tree__name";
-  }
-  return `session-file-tree__name ${getChangeKindStatusClassName(kind)}`;
-}
-
-/** 文件树行尾的变更状态徽标：复用变更视图的 A/M/D 字样与配色（绿 A、金黄 M、红 D）。 */
-export function FileTreeStatusBadge({ kind }: { kind: WorkspaceChangeKind }) {
-  return (
-    <span
-      aria-label={getChangeKindStatusLabel(kind)}
-      className={`session-file-tree__status ${getChangeKindStatusClassName(kind)}`}
-    >
-      {getChangeKindStatusLabel(kind)}
-    </span>
-  );
-}
-
-export function FileTypeIcon({ fileName }: { fileName: string }) {
-  const extension = getFileExtension(fileName);
-  const className = `session-file-tree__icon session-file-tree__icon--${extension || "plain"}`;
-
-  switch (extension) {
-    case "css":
-    case "scss":
-    case "sass":
-    case "less":
-      return <SquareCode aria-hidden="true" className={className} size={15} />;
-    case "html":
-    case "vue":
-    case "svelte":
-      return <FileCode2 aria-hidden="true" className={className} size={15} />;
-    case "json":
-    case "jsonc":
-    case "lock":
-      return <FileJson2 aria-hidden="true" className={className} size={15} />;
-    case "ts":
-    case "tsx":
-    case "js":
-    case "jsx":
-    case "rs":
-    case "go":
-    case "py":
-    case "java":
-    case "kt":
-    case "swift":
-      return <FileBraces aria-hidden="true" className={className} size={15} />;
-    case "md":
-    case "mdx":
-    case "txt":
-      return <FileText aria-hidden="true" className={className} size={15} />;
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "webp":
-    case "svg":
-      return <FileImage aria-hidden="true" className={className} size={15} />;
-    case "zip":
-    case "gz":
-    case "tar":
-      return <FileArchive aria-hidden="true" className={className} size={15} />;
-    case "sh":
-    case "zsh":
-    case "bash":
-      return (
-        <FileTerminal aria-hidden="true" className={className} size={15} />
-      );
-    case "toml":
-    case "yaml":
-    case "yml":
-    case "env":
-      return <FileCog aria-hidden="true" className={className} size={15} />;
-    case "":
-      return <FileText aria-hidden="true" className={className} size={15} />;
-    default:
-      return <FileType aria-hidden="true" className={className} size={15} />;
-  }
-}
-
-function getFileExtension(fileName: string): string {
-  const lastDotIndex = fileName.lastIndexOf(".");
-  return lastDotIndex >= 0 ? fileName.slice(lastDotIndex + 1) : "";
-}

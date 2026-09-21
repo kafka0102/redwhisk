@@ -18,15 +18,26 @@ export interface WorkspacePathContextMenuTarget {
 export interface WorkspacePathContextMenuProps {
   target: WorkspacePathContextMenuTarget | null;
   workspacePath?: string | null;
+  /**
+   * 可选的行内新建能力：注入后在复制三项**之上**多出「新建文件 / 新建文件夹」。
+   * 未注入的调用方（会话侧栏文件树、代码搜索分组头、变更文件行）菜单保持现状。
+   */
+  createActions?: WorkspacePathContextMenuCreateActions | null;
   onClose: () => void;
+}
+
+export interface WorkspacePathContextMenuCreateActions {
+  onCreateDirectory: () => void;
+  onCreateFile: () => void;
 }
 
 export function WorkspacePathContextMenu({
   target,
   workspacePath,
+  createActions,
   onClose,
 }: WorkspacePathContextMenuProps): ReactElement {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
 
   const handleCopy = useCallback(
     async (text: string) => {
@@ -50,6 +61,28 @@ export function WorkspacePathContextMenu({
       }}
     >
       <ContextMenuContent anchor={target ? { x: target.x, y: target.y } : null}>
+        {createActions ? (
+          <>
+            <ContextMenuItem
+              onClick={() => {
+                if (target) {
+                  createActions.onCreateFile();
+                }
+              }}
+            >
+              {t("agentsFeature.newFile")}
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => {
+                if (target) {
+                  createActions.onCreateDirectory();
+                }
+              }}
+            >
+              {t("agentsFeature.newFolder")}
+            </ContextMenuItem>
+          </>
+        ) : null}
         <ContextMenuItem
           onClick={() => {
             if (target) {

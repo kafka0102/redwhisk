@@ -21,7 +21,17 @@ import type {
   WorkspaceChangeKind,
   WorkspaceFileTreeNode,
 } from "./workspace-commands";
-import { FileTreePanel, FileTreeStatusBadge } from "./file-tree-panel";
+import {
+  buildFileTreeDraftNode,
+  isFileTreeDraftNodeId,
+  type FileTreeEntryCreateInput,
+} from "./file-tree-create-draft";
+import {
+  FileTreeDraftRow,
+  FileTreeStatusBadge,
+  type FileTreeDraftRowProps,
+} from "./file-tree-row";
+import { FileTreePanel } from "./file-tree-panel";
 import {
   resetFileTreeScrollOffsetCacheForTests,
   writeFileTreeScrollOffset,
@@ -33,7 +43,10 @@ type FileTreeRowRenderer = (
 
 const treeHeights: number[] = [];
 const treeRowRenderers: FileTreeRowRenderer[] = [];
+const treeDataSnapshots: WorkspaceFileTreeNode[][] = [];
 const treeScrollTo = vi.fn();
+const treeOpen = vi.fn();
+const treeSelect = vi.fn();
 const treeOnScrollHandlers: Array<
   (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => void
 > = [];
@@ -52,16 +65,19 @@ vi.mock("../toast", () => ({
 }));
 
 const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 
 vi.mock("react-arborist", () => ({
   Tree: forwardRef(function MockTree(
     {
       children,
+      data,
       height,
       "aria-label": ariaLabel,
       onScroll,
     }: {
       children?: FileTreeRowRenderer;
+      data?: WorkspaceFileTreeNode[];
       height: number;
       "aria-label"?: string;
       onScroll?: (props: {
@@ -72,6 +88,9 @@ vi.mock("react-arborist", () => ({
     ref,
   ) {
     treeHeights.push(height);
+    if (data) {
+      treeDataSnapshots.push(data);
+    }
     if (children) {
       treeRowRenderers.push(children);
     }
@@ -81,6 +100,8 @@ vi.mock("react-arborist", () => ({
     useImperativeHandle(ref, () => ({
       list: { current: { scrollTo: treeScrollTo } },
       listEl: { current: null },
+      open: treeOpen,
+      select: treeSelect,
     }));
     return (
       <div
@@ -118,8 +139,12 @@ describe("FileTreePanel", () => {
   beforeEach(() => {
     treeHeights.length = 0;
     treeRowRenderers.length = 0;
+    treeDataSnapshots.length = 0;
     treeOnScrollHandlers.length = 0;
     treeScrollTo.mockReset();
+    treeOpen.mockReset();
+    treeSelect.mockReset();
+    toastErrorMock.mockReset();
     resetFileTreeScrollOffsetCacheForTests();
     resizeObserverCallback = null;
     observedElements = [];
@@ -582,6 +607,312 @@ describe("FileTreePanel", () => {
       });
     });
   });
+
+  describe("inline create", () => {
+    const createDirectoryNode: WorkspaceFileTreeNode = {
+      id: "src",
+      name: "src",
+      path: "src",
+      kind: "directory",
+      isIgnored: false,
+      children: [],
+    };
+    const createNestedFileNode: WorkspaceFileTreeNode = {
+      id: "src/a.ts",
+      name: "a.ts",
+      path: "src/a.ts",
+      kind: "file",
+      isIgnored: false,
+    };
+    const createRootFileNode: WorkspaceFileTreeNode = {
+      id: "a.ts",
+      name: "a.ts",
+      path: "a.ts",
+      kind: "file",
+      isIgnored: false,
+    };
+
+    it("shows the create items above the copy items when a capability is injected", async () => {
+      const row = renderCreatePanelRow(vi.fn(), createDirectoryNode);
+
+      const items = await openRowMenu(row);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "New File",
+        "New Folder",
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+      ]);
+    });
+
+    it("inserts the draft row in front of the target directory children", async () => {
+      const onDirectoryOpen = vi.fn();
+      const row = renderCreatePanelRow(
+        vi.fn(),
+        createDirectoryNode,
+        onDirectoryOpen,
+      );
+
+      await startDraft(row, "New File");
+
+      // 折叠 / 未加载的目标目录要先展开并拉取该层，草稿行才可见。
+      expect(treeOpen).toHaveBeenCalledWith("src");
+      expect(onDirectoryOpen).toHaveBeenCalledWith("src");
+      const tree = latestTreeData();
+      const draftNode = findDraftNode(tree);
+      expect(draftNode).not.toBeNull();
+      expect(draftNode?.kind).toBe("file");
+      expect(tree[0].children?.[0]).toBe(draftNode);
+      expect(tree[0].children?.[1].path).toBe("src/a.ts");
+
+      const draftRow = renderDraftRowElement();
+      expect(
+        within(draftRow).getByRole("textbox", { name: "New File" }),
+      ).toHaveFocus();
+    });
+
+    it("attributes a root level file row to the code root", async () => {
+      const row = renderCreatePanelRow(vi.fn(), createRootFileNode);
+
+      await startDraft(row, "New Folder");
+
+      const tree = latestTreeData();
+      expect(findDraftNode(tree)).toBe(tree[0]);
+    });
+
+    it("creates the entry on Enter and attributes it to the parent directory", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createNestedFileNode);
+      await startDraft(row, "New File");
+
+      submitDraftedName("new.ts");
+
+      await waitFor(() => {
+        expect(onCreateEntry).toHaveBeenCalledWith({
+          directoryPath: "src",
+          kind: "file",
+          name: "new.ts",
+        });
+      });
+      await waitFor(() => {
+        expect(findDraftNode(latestTreeData())).toBeNull();
+      });
+    });
+
+    it("creates the entry when the input loses focus with a non-empty name", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New Folder");
+
+      blurDraftedName("nested");
+
+      await waitFor(() => {
+        expect(onCreateEntry).toHaveBeenCalledWith({
+          directoryPath: "src",
+          kind: "directory",
+          name: "nested",
+        });
+      });
+    });
+
+    it("cancels the draft on Escape without creating", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New File");
+
+      pressDraftedKey("Escape");
+
+      expect(findDraftNode(latestTreeData())).toBeNull();
+      expect(onCreateEntry).not.toHaveBeenCalled();
+    });
+
+    it("cancels the draft on empty blur without creating", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New File");
+
+      blurDraftedName("   ");
+
+      expect(findDraftNode(latestTreeData())).toBeNull();
+      expect(onCreateEntry).not.toHaveBeenCalled();
+    });
+
+    it("cancels the draft on empty submit without creating", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New File");
+
+      submitDraftedName("");
+
+      expect(findDraftNode(latestTreeData())).toBeNull();
+      expect(onCreateEntry).not.toHaveBeenCalled();
+    });
+
+    it("does not create an invalid name and reports it", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New File");
+
+      submitDraftedName("nested/new.ts");
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Name is invalid. It cannot contain / or be . or ..",
+        );
+      });
+      expect(onCreateEntry).not.toHaveBeenCalled();
+      expect(findDraftNode(latestTreeData())).not.toBeNull();
+    });
+
+    it("keeps the draft row and reports the failure when creation fails", async () => {
+      const onCreateEntry = vi.fn().mockRejectedValue({
+        code: "AGENT_SESSION_VALIDATION_FAILED",
+        message: "新建路径失败。",
+        reason: "pathAlreadyExists",
+      });
+      const row = renderCreatePanelRow(onCreateEntry, createDirectoryNode);
+      await startDraft(row, "New File");
+
+      submitDraftedName("dup.ts");
+
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith("Target already exists.");
+      });
+      expect(findDraftNode(latestTreeData())).not.toBeNull();
+
+      const draftRow = renderDraftRowElement();
+      expect(
+        within(draftRow).getByRole("textbox", { name: "New File" }),
+      ).toHaveAttribute("aria-invalid", "true");
+    });
+
+    it("expands and selects the created directory once the tree data contains it", async () => {
+      const onCreateEntry = vi.fn().mockResolvedValue(undefined);
+      const view = renderCreatePanel(onCreateEntry);
+      const row = renderTreeRowElement(createDirectoryNode);
+      await startDraft(row, "New Folder");
+      submitDraftedName("nested");
+      await waitFor(() => {
+        expect(onCreateEntry).toHaveBeenCalled();
+      });
+
+      view.rerender(
+        <I18nProvider fixedLocale="en">
+          <FileTreePanel
+            errorMessage={null}
+            fileTree={[
+              {
+                ...createDirectoryNode,
+                children: [
+                  {
+                    id: "src/nested",
+                    name: "nested",
+                    path: "src/nested",
+                    kind: "directory",
+                    isIgnored: false,
+                  },
+                ],
+              },
+            ]}
+            isLoading={false}
+            onOpenFile={() => {}}
+            workspacePath="/repo"
+            onCreateEntry={onCreateEntry}
+          />
+        </I18nProvider>,
+      );
+
+      expect(treeOpen).toHaveBeenCalledWith("src/nested");
+      expect(treeSelect).toHaveBeenCalledWith("src/nested");
+    });
+
+    it("expands and selects the created directory when the listing lands first", async () => {
+      // 新建时强刷的 listing 有可能早于创建承诺落地；两种先后顺序都要落到展开选中。
+      let resolveCreate: () => void = () => {};
+      const onCreateEntry = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      );
+      const view = renderCreatePanel(onCreateEntry);
+      const row = renderTreeRowElement(createDirectoryNode);
+      await startDraft(row, "New Folder");
+      submitDraftedName("nested");
+      await waitFor(() => {
+        expect(onCreateEntry).toHaveBeenCalled();
+      });
+
+      view.rerender(
+        <I18nProvider fixedLocale="en">
+          <FileTreePanel
+            errorMessage={null}
+            fileTree={[
+              {
+                ...createDirectoryNode,
+                children: [
+                  {
+                    id: "src/nested",
+                    name: "nested",
+                    path: "src/nested",
+                    kind: "directory",
+                    isIgnored: false,
+                  },
+                ],
+              },
+            ]}
+            isLoading={false}
+            onOpenFile={() => {}}
+            workspacePath="/repo"
+            onCreateEntry={onCreateEntry}
+          />
+        </I18nProvider>,
+      );
+      expect(treeSelect).not.toHaveBeenCalled();
+
+      act(() => {
+        resolveCreate();
+      });
+
+      await waitFor(() => {
+        expect(treeOpen).toHaveBeenCalledWith("src/nested");
+        expect(treeSelect).toHaveBeenCalledWith("src/nested");
+      });
+    });
+  });
+
+  describe("draft row", () => {
+    it("keeps the typed name and re-selects it after a failed creation", () => {
+      const onSubmit = vi.fn();
+      const props = buildDraftRowProps({ onSubmit });
+      const view = renderWithI18n(<FileTreeDraftRow {...props} />);
+      const input = screen.getByRole("textbox", {
+        name: "New File",
+      }) as HTMLInputElement;
+
+      fireEvent.change(input, { target: { value: "dup.ts" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onSubmit).toHaveBeenCalledWith("dup.ts");
+
+      view.rerender(
+        <I18nProvider fixedLocale="en">
+          <FileTreeDraftRow
+            {...buildDraftRowProps({ onSubmit })}
+            errorMessage="Target already exists."
+            errorRevision={1}
+          />
+        </I18nProvider>,
+      );
+
+      expect(screen.getByRole("textbox", { name: "New File" })).toHaveValue(
+        "dup.ts",
+      );
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveFocus();
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe("dup.ts".length);
+    });
+  });
 });
 
 const menuTargetFileNode: WorkspaceFileTreeNode = {
@@ -681,6 +1012,137 @@ function renderTreeRow(
   const row = container.firstElementChild;
   expect(row).toBeInstanceOf(HTMLElement);
   return row as HTMLElement;
+}
+
+/** 渲染带「新建文件 / 新建文件夹」能力的面板，返回可 rerender 的视图。 */
+function renderCreatePanel(
+  onCreateEntry: (input: FileTreeEntryCreateInput) => Promise<void>,
+  onDirectoryOpen: (directoryPath: string) => void = () => {},
+): ReturnType<typeof renderWithI18n> {
+  return renderWithI18n(
+    <FileTreePanel
+      errorMessage={null}
+      fileTree={sampleTree}
+      isLoading={false}
+      onDirectoryOpen={onDirectoryOpen}
+      onOpenFile={() => {}}
+      workspacePath="/repo"
+      onCreateEntry={onCreateEntry}
+    />,
+  );
+}
+
+/** 渲染带能力的面板，并用手动渲染的行打开菜单（arborist 行在测试里不虚拟化）。 */
+function renderCreatePanelRow(
+  onCreateEntry: (input: FileTreeEntryCreateInput) => Promise<void>,
+  nodeData: WorkspaceFileTreeNode,
+  onDirectoryOpen?: (directoryPath: string) => void,
+): HTMLElement {
+  renderCreatePanel(onCreateEntry, onDirectoryOpen);
+  return renderTreeRowElement(nodeData);
+}
+
+/** 用面板最近一次的行渲染器渲染目标行，取回真实 DOM。 */
+function renderTreeRowElement(
+  nodeData: WorkspaceFileTreeNode,
+  level = 0,
+): HTMLElement {
+  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
+  expect(renderer).toBeTypeOf("function");
+  const rowElement = renderer({
+    node: {
+      data: nodeData,
+      level,
+      isOpen: false,
+      toggle: () => {},
+    },
+    style: {},
+  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
+  const { container } = render(rowElement);
+  const row = container.firstElementChild;
+  expect(row).toBeInstanceOf(HTMLElement);
+  return row as HTMLElement;
+}
+
+function latestTreeData(): WorkspaceFileTreeNode[] {
+  return treeDataSnapshots[treeDataSnapshots.length - 1] ?? [];
+}
+
+function findDraftNode(
+  nodes: readonly WorkspaceFileTreeNode[],
+): WorkspaceFileTreeNode | null {
+  for (const node of nodes) {
+    if (isFileTreeDraftNodeId(node.id)) {
+      return node;
+    }
+    const nested = findDraftNode(node.children ?? []);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+/** 打开右键菜单并取回菜单项（菜单项点击后菜单即关闭）。 */
+async function openRowMenu(row: HTMLElement): Promise<HTMLElement[]> {
+  fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+  return screen.findAllByRole("menuitem");
+}
+
+/** 打开右键菜单并点击「新建文件 / 新建文件夹」，让面板进入草稿行状态。 */
+async function startDraft(
+  row: HTMLElement,
+  itemName: "New File" | "New Folder",
+): Promise<void> {
+  fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+  fireEvent.click(await screen.findByRole("menuitem", { name: itemName }));
+}
+
+/** 从面板最近一次交给 Tree 的数据里取出草稿节点并渲染草稿行。 */
+function renderDraftRowElement(): HTMLElement {
+  const draftNode = findDraftNode(latestTreeData());
+  expect(draftNode).not.toBeNull();
+  return renderTreeRowElement(draftNode as WorkspaceFileTreeNode, 1);
+}
+
+function freshDraftInput(): HTMLInputElement {
+  return within(renderDraftRowElement()).getByRole(
+    "textbox",
+  ) as HTMLInputElement;
+}
+
+function submitDraftedName(name: string): void {
+  const input = freshDraftInput();
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.keyDown(input, { key: "Enter" });
+}
+
+function blurDraftedName(name: string): void {
+  const input = freshDraftInput();
+  fireEvent.change(input, { target: { value: name } });
+  fireEvent.blur(input);
+}
+
+function pressDraftedKey(key: string): void {
+  fireEvent.keyDown(freshDraftInput(), { key });
+}
+
+function buildDraftRowProps(
+  overrides: { onSubmit?: (name: string) => void } = {},
+): FileTreeDraftRowProps {
+  return {
+    errorMessage: null,
+    errorRevision: 0,
+    node: {
+      data: buildFileTreeDraftNode({ directoryPath: "src", kind: "file" }),
+      isOpen: false,
+      level: 1,
+      toggle: () => {},
+    },
+    onCancel: () => {},
+    onSubmit: overrides.onSubmit ?? (() => {}),
+    style: {},
+  } as unknown as FileTreeDraftRowProps;
 }
 
 describe("FileTreeStatusBadge", () => {

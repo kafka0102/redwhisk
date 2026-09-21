@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import {
+  createProjectWorktreeDirectory,
+  createProjectWorktreeFile,
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
@@ -211,6 +213,8 @@ vi.mock("./code-language-commands", () => ({
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
+  createProjectWorktreeDirectory: vi.fn(),
+  createProjectWorktreeFile: vi.fn(),
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeFileTree: vi.fn(),
   listCodeWorkspaceRoots: vi.fn(),
@@ -233,6 +237,7 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
     ...actual,
     FileTreePanel: ({
       onOpenFile,
+      onCreateEntry,
     }: {
       onOpenFile: (file: {
         id: string;
@@ -240,6 +245,11 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
         name: string;
         path: string;
       }) => void;
+      onCreateEntry?: (input: {
+        directoryPath: string;
+        kind: "file" | "directory";
+        name: string;
+      }) => Promise<void>;
     }) => (
       <>
         <button
@@ -288,6 +298,30 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() =>
+            void onCreateEntry?.({
+              directoryPath: "src",
+              kind: "file",
+              name: "new-file.ts",
+            })
+          }
+        >
+          Create file
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            void onCreateEntry?.({
+              directoryPath: "src",
+              kind: "directory",
+              name: "new-folder",
+            })
+          }
+        >
+          Create folder
+        </button>
       </>
     ),
   };
@@ -368,6 +402,10 @@ describe("CodeActivity", () => {
       modifiedAt: fileContent.modifiedAt,
     });
     vi.mocked(writeProjectWorktreeFile).mockReset();
+    vi.mocked(createProjectWorktreeFile).mockReset();
+    vi.mocked(createProjectWorktreeFile).mockResolvedValue(undefined);
+    vi.mocked(createProjectWorktreeDirectory).mockReset();
+    vi.mocked(createProjectWorktreeDirectory).mockResolvedValue(undefined);
     ensureCodeLanguageHost.mockReset();
     stopCodeLanguageHost.mockReset();
     notifyCodeLanguageDocument.mockReset();
@@ -646,6 +684,77 @@ describe("CodeActivity", () => {
     });
     await waitFor(() => {
       expect(getProjectWorktreeChanges).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+    });
+  });
+
+  it("opens a file created from the file tree as an editable tab", async () => {
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue({
+      ...fileContent,
+      content: "",
+      filePath: "src/new-file.ts",
+      sizeBytes: 0,
+    });
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create file" }));
+
+    await waitFor(() => {
+      expect(createProjectWorktreeFile).toHaveBeenCalledWith({
+        filePath: "src/new-file.ts",
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+    });
+    expect(
+      await screen.findByRole("tab", { name: /new-file.ts/ }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(readProjectWorktreeFile).toHaveBeenCalledWith({
+        filePath: "src/new-file.ts",
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+      // 新建文件打开即进入可编辑态，不需要再点一次编辑开关。
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-readonly",
+        "false",
+      );
+    });
+  });
+
+  it("forces a refresh of the target directory right after creating an entry", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+    await waitFor(() => {
+      expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Create folder" }));
+
+    await waitFor(() => {
+      expect(createProjectWorktreeDirectory).toHaveBeenCalledWith({
+        filePath: "src/new-folder",
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+      });
+      // 立即强刷该目录 listing，不等后台 5s 轮询。
+      expect(getProjectWorktreeFileTree).toHaveBeenCalledWith({
+        directoryPath: "src",
         projectId: 1,
         workspacePath: "/tmp/redwhisk",
       });

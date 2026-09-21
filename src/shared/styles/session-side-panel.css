@@ -700,6 +700,15 @@
   white-space: nowrap;
 }
 
+/* 行内新建草稿行的输入框：只收窄布局，边框 / 焦点态 / 非法态由共享 Input 承担。 */
+.session-file-tree__draft-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 12px;
+}
+
 .session-file-tree__status {
   margin-left: auto;
   flex-shrink: 0;

@@ -18,7 +18,7 @@ import {
 import { Input } from "../../components/ui/input";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import { FileTypeIcon } from "../../shared/workspace/file-tree-panel";
+import { FileTypeIcon } from "../../shared/workspace/file-tree-row";
 import {
   searchProjectWorktreeContent,
   type WorkspaceContentSearchFileGroup,
