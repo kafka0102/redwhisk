@@ -49,7 +49,7 @@ use crate::types::session_event::SessionEventType;
 
 use super::codex_session_id_capture::should_attempt_codex_session_capture;
 use super::command_snapshot::build_tui_command_snapshot_for_profile;
-use super::launch::start_provider_session;
+use super::launch::{start_provider_session, OwnedWorktreeCleanupGuard};
 use super::log_path::{
     build_issue_runtime_structured_log_path, build_pending_structured_log_path,
     is_archived_issue_log_path, remove_session_log_file,
@@ -179,7 +179,15 @@ impl<'connection> AgentSessionService<'connection> {
         progress: Option<&IssueSessionStartProgressSink<'_>>,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let mut launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input, progress)?;
-        match super::lifecycle::runtime_transport_from_raw(&launch.profile.display_mode)? {
+        // worktree 创建后、会话成功启动前，任何失败都必须自动删除该 worktree。
+        // 成功返回前 disarm；失败路径由守卫 Drop 统一 best-effort 清理。
+        let mut worktree_cleanup = OwnedWorktreeCleanupGuard::new(self, input.project_id, &launch);
+        let transport =
+            match super::lifecycle::runtime_transport_from_raw(&launch.profile.display_mode) {
+                Ok(transport) => transport,
+                Err(error) => return Err(error),
+            };
+        let result = match transport {
             super::lifecycle::RuntimeTransport::InteractiveTui => {
                 launch.command_snapshot =
                     build_tui_command_snapshot_for_profile(&launch.profile, input.model.as_deref());
@@ -201,6 +209,13 @@ impl<'connection> AgentSessionService<'connection> {
                     &DefaultAgentSessionProviderFactory,
                 )
             }
+        };
+        match result {
+            Ok(success) => {
+                worktree_cleanup.disarm();
+                Ok(success)
+            }
+            Err(error) => Err(error),
         }
     }
 
@@ -370,7 +385,18 @@ impl<'connection> AgentSessionService<'connection> {
         progress: Option<&IssueSessionStartProgressSink<'_>>,
     ) -> Result<StartAgentSessionResult, CommandError> {
         let launch = self.prepare_issue_session_launch(data_dir.as_ref(), &input, progress)?;
-        self.start_agent_session_internal_with_launch(data_dir, input, launch, pty_sessions)
+        // 与 `start_agent_session_with_runtime_progress` 同理：创建 worktree 后
+        // 启动失败自动清理，成功启动后 disarm。
+        let mut worktree_cleanup = OwnedWorktreeCleanupGuard::new(self, input.project_id, &launch);
+        let result =
+            self.start_agent_session_internal_with_launch(data_dir, input, launch, pty_sessions);
+        match result {
+            Ok(success) => {
+                worktree_cleanup.disarm();
+                Ok(success)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     fn start_agent_session_internal_with_launch(
@@ -470,13 +496,9 @@ impl<'connection> AgentSessionService<'connection> {
                 prompt_plan.trailing_prompt.as_deref(),
             ) {
                 Ok(child) => child,
-                Err(error) => {
-                    self.cleanup_owned_worktree(input.project_id, &launch);
-                    return Err(error);
-                }
+                Err(error) => return Err(error),
             };
             if let Err(error) = ensure_process_started(&mut child, &launch.command_snapshot) {
-                self.cleanup_owned_worktree(input.project_id, &launch);
                 return Err(error);
             }
             Some(child)
@@ -614,7 +636,6 @@ impl<'connection> AgentSessionService<'connection> {
                                 result.session_id,
                                 PtyExitStatus { exit_code: None },
                             );
-                            self.cleanup_owned_worktree(input.project_id, &launch);
                             let _ = self.rollback_failed_structured_issue_session(
                                 input.project_id,
                                 input.issue_id,
@@ -634,7 +655,6 @@ impl<'connection> AgentSessionService<'connection> {
                                     result.session_id,
                                     PtyExitStatus { exit_code: None },
                                 );
-                                self.cleanup_owned_worktree(input.project_id, &launch);
                                 let _ = self.rollback_failed_structured_issue_session(
                                     input.project_id,
                                     input.issue_id,
@@ -891,7 +911,6 @@ impl<'connection> AgentSessionService<'connection> {
             input.project_id,
             input.issue_id,
             result.session_id,
-            &launch,
             previous_archive_path.as_deref(),
         )?;
         Ok(result)
@@ -5768,7 +5787,6 @@ mod tests {
                 "spawn failed".into(),
             )))),
         };
-        let launch = issue_launch_context();
         let error = service
             .finish_structured_issue_provider_start(
                 &factory,
@@ -5779,7 +5797,6 @@ mod tests {
                 1,
                 50,
                 500,
-                &launch,
                 None,
             )
             .expect_err("factory failure should surface");
@@ -5818,7 +5835,6 @@ mod tests {
                 },
             ))),
         };
-        let launch = issue_launch_context();
         let error = service
             .finish_structured_issue_provider_start(
                 &factory,
@@ -5829,7 +5845,6 @@ mod tests {
                 1,
                 51,
                 501,
-                &launch,
                 None,
             )
             .expect_err("missing thread id should fail");
@@ -5864,7 +5879,6 @@ mod tests {
                 },
             ))),
         };
-        let launch = issue_launch_context();
         let error = service
             .finish_structured_issue_provider_start(
                 &factory,
@@ -5875,7 +5889,6 @@ mod tests {
                 1,
                 52,
                 502,
-                &launch,
                 None,
             )
             .expect_err("send failure should fail");
@@ -5909,7 +5922,6 @@ mod tests {
                 },
             ))),
         };
-        let launch = issue_launch_context();
         service
             .finish_structured_issue_provider_start(
                 &factory,
@@ -5920,7 +5932,6 @@ mod tests {
                 1,
                 53,
                 503,
-                &launch,
                 None,
             )
             .expect("success");

@@ -34,7 +34,8 @@ impl AgentSessionService<'_> {
     /// DB commit 之后的共享启动后半段（issue 结构化路径）。
     ///
     /// mark_starting → factory.start → thread_id 回填 → broadcast/register →
-    /// initial prompt；失败 unmark/shutdown/rollback/清理自有 worktree。
+    /// initial prompt；失败 unmark/shutdown/rollback。worktree 清理由调用方持有
+    /// 的 [`OwnedWorktreeCleanupGuard`] 统一负责，不在本方法内重复执行。
     #[allow(clippy::too_many_arguments)]
     pub(super) fn finish_structured_issue_provider_start(
         &self,
@@ -46,7 +47,6 @@ impl AgentSessionService<'_> {
         project_id: i64,
         issue_id: i64,
         session_id: i64,
-        launch: &SessionLaunchContext,
         previous_archive_path: Option<&str>,
     ) -> Result<(), CommandError> {
         // DB 事务已 commit（session 为 running），后续 handle 启动 + send_message
@@ -57,7 +57,6 @@ impl AgentSessionService<'_> {
             Ok(started) => started,
             Err(error) => {
                 agent_registry.unmark_starting(session_id);
-                self.cleanup_owned_worktree(project_id, launch);
                 let _ =
                     self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
                 return Err(error);
@@ -68,7 +67,6 @@ impl AgentSessionService<'_> {
         {
             agent_registry.unmark_starting(session_id);
             started.handle.shutdown();
-            self.cleanup_owned_worktree(project_id, launch);
             let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
             return Err(error);
         }
@@ -84,7 +82,6 @@ impl AgentSessionService<'_> {
         if let Err(error) = handle.send_message(prompt_snapshot.to_string(), attachments) {
             agent_registry.unmark_starting(session_id);
             handle.shutdown();
-            self.cleanup_owned_worktree(project_id, launch);
             let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
             return Err(agent_session_error_to_command_error(error));
         }
@@ -119,27 +116,6 @@ impl AgentSessionService<'_> {
         .map_err(agent_session_database_error)?;
         transaction.commit().map_err(agent_session_database_error)?;
         Ok(())
-    }
-
-    /// Agent 进程启动失败时清理 Redwhisk 自建 worktree。
-    ///
-    /// 仅在「agent 未真正产出」的启动失败路径调用：此时 worktree 无成果需保留，
-    /// 清理可避免残留目录/分支卡死下次启动（分支已检出 → `git worktree add` 失败）。
-    /// 外部/当前分支（External）不动；best-effort：清理失败不阻塞错误返回。
-    pub(super) fn cleanup_owned_worktree(&self, project_id: i64, launch: &SessionLaunchContext) {
-        if launch.worktree_owner != WorktreeOwner::Redwhisk {
-            return;
-        }
-        let (Some(workspace_path), Some(workspace_branch)) = (
-            launch.workspace_path.as_deref(),
-            launch.workspace_branch.as_deref(),
-        ) else {
-            return;
-        };
-        let Ok(project) = self.project_by_id(project_id) else {
-            return;
-        };
-        let _ = cleanup_worktree(&project.repo_path, workspace_path, workspace_branch);
     }
 
     pub(super) fn prepare_issue_session_launch(
@@ -324,6 +300,68 @@ impl AgentSessionService<'_> {
                     worktree_setup_command,
                 })
             }
+        }
+    }
+}
+
+/// 启动期间对 RedWhisk 自建 worktree 的清理守卫。
+///
+/// `prepare_issue_session_launch` 创建 worktree 后、会话被完整启动前，任何失败
+/// 路径都应在返回前删除该 worktree，避免残留未使用的目录与工作分支卡死后续
+/// 启动（分支已检出会让 `git worktree add` 失败）。守卫持有清理所需的最小快照
+/// （owner + 路径 + 分支），Drop 时 best-effort 清理；会话成功启动后调用方必须
+/// `disarm()` 取消清理，避免误删运行中的 worktree。外部/当前分支（External）
+/// 与 early-return（owner 非 Redwhisk、路径/分支缺失、项目查询失败）不动。
+pub(super) struct OwnedWorktreeCleanupGuard<'a, 'connection> {
+    service: &'a AgentSessionService<'connection>,
+    project_id: i64,
+    worktree_owner: WorktreeOwner,
+    workspace_path: Option<String>,
+    workspace_branch: Option<String>,
+    armed: bool,
+}
+
+impl<'a, 'connection> OwnedWorktreeCleanupGuard<'a, 'connection> {
+    pub(super) fn new(
+        service: &'a AgentSessionService<'connection>,
+        project_id: i64,
+        launch: &SessionLaunchContext,
+    ) -> Self {
+        Self {
+            service,
+            project_id,
+            worktree_owner: launch.worktree_owner,
+            workspace_path: launch.workspace_path.clone(),
+            workspace_branch: launch.workspace_branch.clone(),
+            armed: true,
+        }
+    }
+
+    pub(super) fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    fn cleanup(&self) {
+        if self.worktree_owner != WorktreeOwner::Redwhisk {
+            return;
+        }
+        let (Some(workspace_path), Some(workspace_branch)) = (
+            self.workspace_path.as_deref(),
+            self.workspace_branch.as_deref(),
+        ) else {
+            return;
+        };
+        let Ok(project) = self.service.project_by_id(self.project_id) else {
+            return;
+        };
+        let _ = cleanup_worktree(&project.repo_path, workspace_path, workspace_branch);
+    }
+}
+
+impl Drop for OwnedWorktreeCleanupGuard<'_, '_> {
+    fn drop(&mut self) {
+        if self.armed {
+            self.cleanup();
         }
     }
 }

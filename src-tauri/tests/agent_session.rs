@@ -1304,6 +1304,267 @@ fn start_agent_session_in_worktree_mode_creates_worktree_and_persists_context() 
 }
 
 #[test]
+fn start_agent_session_in_worktree_mode_removes_worktree_when_agent_process_fails() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-cleanup-spawn-fail");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET worktree_location = 'repo_internal' WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree location");
+    let missing_command = temp_dir.path().join("missing-agent.sh");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Broken Agent",
+            AgentType::Codex,
+            missing_command.to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "auto",
+            false,
+            "",
+            "",
+            "tui",
+            true,
+        )
+        .expect("save profile");
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    let workspace_branch = issue_worktree_base_name(issue_number, &repo_path);
+    let workspace_path = repo_path.join(".worktrees").join(workspace_branch.clone());
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "do work".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+        )
+        .expect_err("missing agent binary must fail start");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionStartFailed);
+    assert!(
+        !workspace_path.exists(),
+        "failed start must remove created worktree dir: {}",
+        workspace_path.display()
+    );
+    assert!(
+        !branch_exists(&repo_path, &workspace_branch),
+        "failed start must remove workspace branch: {workspace_branch}"
+    );
+}
+
+#[test]
+fn start_agent_session_in_worktree_mode_removes_worktree_when_prompt_validation_fails() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-cleanup-validation");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET worktree_location = 'repo_internal' WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree location");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+            "tui",
+            true,
+        )
+        .expect("save profile");
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    let workspace_branch = issue_worktree_base_name(issue_number, &repo_path);
+    let workspace_path = repo_path.join(".worktrees").join(workspace_branch.clone());
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+
+    let error = service
+        .start_agent_session(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: "   ".to_string(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+        )
+        .expect_err("empty prompt must fail start");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+    assert_eq!(error.reason.as_deref(), Some("finalPromptRequired"));
+    assert!(
+        !workspace_path.exists(),
+        "failed start must remove created worktree dir: {}",
+        workspace_path.display()
+    );
+    assert!(
+        !branch_exists(&repo_path, &workspace_branch),
+        "failed start must remove workspace branch: {workspace_branch}"
+    );
+}
+
+#[test]
+fn start_agent_session_runtime_in_worktree_mode_removes_worktree_when_structured_start_fails() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "worktree-cleanup-structured");
+    let repo_path: String = database
+        .connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .expect("repo path");
+    let repo_path = std::path::PathBuf::from(repo_path);
+    let issue_id = insert_issue(&database.connection, project_id, "backlog");
+    database
+        .connection
+        .execute(
+            "UPDATE projects SET worktree_location = 'repo_internal' WHERE id = ?1",
+            [project_id],
+        )
+        .expect("update project worktree location");
+    let profile = AgentProfileRepository::new(&database.connection)
+        .save_profile(
+            None,
+            "Codex",
+            AgentType::Codex,
+            success_command(temp_dir.path()).to_string_lossy().as_ref(),
+            &AgentScope::Project,
+            Some(project_id),
+            "full-auto",
+            true,
+            "bmad-dev-story",
+            "",
+            "json",
+            true,
+        )
+        .expect("save profile");
+    let issue_number: i64 = database
+        .connection
+        .query_row(
+            "SELECT number FROM issues WHERE id = ?1",
+            rusqlite::params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("read issue number");
+    let workspace_branch = issue_worktree_base_name(issue_number, &repo_path);
+    let workspace_path = repo_path.join(".worktrees").join(workspace_branch.clone());
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let error = service
+        .start_agent_session_with_runtime(
+            temp_dir.path(),
+            StartAgentSessionInput {
+                model: None,
+                project_id,
+                issue_id,
+                agent_profile_id: profile.id,
+                prompt_snapshot: String::new(),
+                workflow_skill_name: None,
+                workspace_mode: Some(WorkspaceMode::Worktree),
+                target_branch: Some("main".to_string()),
+                worktree_setup_command: None,
+            },
+            &pty,
+            &registry,
+            &broadcaster,
+        )
+        .expect_err("empty prompt must fail structured start");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+    assert_eq!(error.reason.as_deref(), Some("finalPromptRequired"));
+    assert!(
+        !workspace_path.exists(),
+        "failed structured start must remove created worktree dir: {}",
+        workspace_path.display()
+    );
+    assert!(
+        !branch_exists(&repo_path, &workspace_branch),
+        "failed structured start must remove workspace branch: {workspace_branch}"
+    );
+}
+
+#[test]
 fn start_agent_session_in_worktree_mode_with_empty_setup_emits_creating_then_starting_progress() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
@@ -3847,6 +4108,20 @@ fn git(repo: &std::path::Path, args: &[&str]) {
         "git command failed: git {}",
         args.join(" ")
     );
+}
+
+fn branch_exists(repo: &std::path::Path, branch: &str) -> bool {
+    let status = std::process::Command::new("git")
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .current_dir(repo)
+        .status()
+        .expect("run git");
+    status.success()
 }
 
 fn echo_stdin_command(base_dir: &std::path::Path) -> std::path::PathBuf {

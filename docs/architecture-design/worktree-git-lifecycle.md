@@ -1,6 +1,6 @@
 # Worktree 与 Git 生命周期
 
-本文档约束 Issue 在当前分支或隔离 worktree 中执行及其完成流程。实现入口为 `src-tauri/src/git/worktree.rs`、`features/agent_session/service.rs`、`features/issue/service.rs` 与 `types/issue_completion.rs`。
+本文档约束 Issue 在当前分支或隔离 worktree 中执行及其完成流程。实现入口为 `src-tauri/src/git/worktree.rs`、`features/agent_session/{service,launch}.rs`、`features/issue/service.rs` 与 `types/issue_completion.rs`。
 
 ## 执行空间
 
@@ -17,7 +17,8 @@
 1. 创建隔离会话前确定 target branch、worktree root 和 setup command。
 2. `git worktree add -B issue-{issueNumber}-{repoSlug}` 创建工作区（`repoSlug` 由仓库路径 basename 规范化，最长 20；空则省略）；目录冲突会产生明确阻断，不得静默复用未知目录。
 3. 仅 `worktree_owner=redwhisk` 的工作区可由应用执行 `worktree remove --force`、删除分支和 `worktree prune`。
-4. 外部工作区必须通过完成 flow 明示确认；不得删除用户拥有的目录或分支。
+4. 创建 worktree 后、Agent 会话完整启动前的任意失败（初始化命令、provider 进程启动、DB 写入、参数校验等）都会自动删除该 worktree（目录 + 工作分支）：启动入口持有 `OwnedWorktreeCleanupGuard`，成功启动才 disarm，清理为 best-effort 且不阻塞错误返回。
+5. 外部工作区必须通过完成 flow 明示确认；不得删除用户拥有的目录或分支。
 
 ## 完成 flow
 
