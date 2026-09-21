@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { invokeCommand } from "../commands/command-client";
 import {
+  createProjectWorktreeDirectory,
+  createProjectWorktreeFile,
+  deleteProjectWorktreePath,
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
@@ -262,6 +265,77 @@ describe("workspace commands", () => {
         },
       },
     );
+  });
+
+  it("invokes create and delete workspace path commands", async () => {
+    await expect(
+      createProjectWorktreeFile({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "notes.md",
+      }),
+    ).resolves.toEqual({ command: "create_project_worktree_file" });
+    await expect(
+      createProjectWorktreeDirectory({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "components",
+      }),
+    ).resolves.toEqual({ command: "create_project_worktree_directory" });
+    await expect(
+      deleteProjectWorktreePath({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "src/main.ts",
+      }),
+    ).resolves.toEqual({ command: "delete_project_worktree_path" });
+
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "create_project_worktree_file",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          filePath: "notes.md",
+        },
+      },
+    );
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "create_project_worktree_directory",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          filePath: "components",
+        },
+      },
+    );
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "delete_project_worktree_path",
+      {
+        input: {
+          projectId: 1,
+          workspacePath: "/tmp/root",
+          filePath: "src/main.ts",
+        },
+      },
+    );
+  });
+
+  it("propagates failures from create and delete workspace path commands", async () => {
+    invokeCommandMock.mockRejectedValueOnce({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "目标已存在。",
+      reason: "pathAlreadyExists",
+    });
+
+    await expect(
+      createProjectWorktreeFile({
+        projectId: 1,
+        workspacePath: "/tmp/root",
+        filePath: "notes.md",
+      }),
+    ).rejects.toMatchObject({ reason: "pathAlreadyExists" });
   });
 
   it("invokes github remote resolve and commit probe commands", async () => {

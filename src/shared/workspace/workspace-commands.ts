@@ -124,6 +124,24 @@ export function statProjectWorktreeFile(
   });
 }
 
+export function createProjectWorktreeFile(
+  input: ProjectWorkspacePathInput,
+): Promise<void> {
+  return invokeCommand<void>("create_project_worktree_file", { input });
+}
+
+export function createProjectWorktreeDirectory(
+  input: ProjectWorkspacePathInput,
+): Promise<void> {
+  return invokeCommand<void>("create_project_worktree_directory", { input });
+}
+
+export function deleteProjectWorktreePath(
+  input: ProjectWorkspacePathInput,
+): Promise<void> {
+  return invokeCommand<void>("delete_project_worktree_path", { input });
+}
+
 export type WorkspaceChangeKind =
   | "added"
   | "modified"

@@ -108,6 +108,36 @@ pub async fn stat_project_worktree_file(
 }
 
 #[tauri::command]
+pub async fn create_project_worktree_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspacePathInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.create_file(input)).await
+}
+
+#[tauri::command]
+pub async fn create_project_worktree_directory(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspacePathInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.create_directory(input)).await
+}
+
+#[tauri::command]
+pub async fn delete_project_worktree_path(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspacePathInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.delete_path(input)).await
+}
+
+#[tauri::command]
 pub async fn read_project_worktree_diff(
     app: tauri::AppHandle,
     state: State<'_, AppState>,

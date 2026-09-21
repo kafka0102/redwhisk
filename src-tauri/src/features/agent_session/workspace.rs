@@ -1392,7 +1392,7 @@ fn workspace_io_error(error: std::io::Error) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-fn workspace_validation_error(message: &str, file_path: &str) -> CommandError {
+pub(super) fn workspace_validation_error(message: &str, file_path: &str) -> CommandError {
     CommandError::new(CommandErrorCode::AgentSessionValidationFailed, message).with_detail(
         ErrorDetail::new("WorkspacePath").with_value("filePath", file_path.to_string()),
     )
