@@ -3,7 +3,10 @@ import { invokeCommand } from "../../shared/commands/command-client";
 export const CODE_LANGUAGE_DIAGNOSTICS_EVENT = "code-language-diagnostics";
 
 export type CodeLanguageHostStatusKind = "ready" | "unavailable";
-export type CodeLanguageUnavailableReason = "nodeNotFound" | "spawnFailed";
+export type CodeLanguageUnavailableReason =
+  | "nodeNotFound"
+  | "bundledRuntimeUnavailable"
+  | "spawnFailed";
 export type CodeLanguageDocumentKind = "didOpen" | "didChange" | "didClose";
 
 export interface CodeLanguageHostInput {

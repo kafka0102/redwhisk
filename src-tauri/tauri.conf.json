@@ -48,6 +48,7 @@
     ],
     "resources": {
       "../node_modules/typescript/lib": "language-runtime/typescript/lib",
+      "../node_modules/typescript/package.json": "language-runtime/typescript/package.json",
       "../node_modules/typescript-language-server/lib": "language-runtime/typescript-language-server/lib",
       "../node_modules/typescript-language-server/package.json": "language-runtime/typescript-language-server/package.json"
     }

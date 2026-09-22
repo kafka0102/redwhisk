@@ -1070,6 +1070,7 @@
     "findReferences": "Find References",
     "unavailable": {
       "nodeNotFound": "Node.js was not found, so TS/JS language intelligence is unavailable.",
+      "bundledRuntimeUnavailable": "RedWhisk's built-in TS/JS language runtime is missing or incomplete. Reinstalling RedWhisk should fix it.",
       "spawnFailed": "TS/JS language intelligence failed to start."
     }
   }

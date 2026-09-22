@@ -1070,6 +1070,7 @@
     "findReferences": "查找引用",
     "unavailable": {
       "nodeNotFound": "本机没有 Node，TS/JS 语言智能不可用。",
+      "bundledRuntimeUnavailable": "应用内置的 TS/JS 语言运行时缺失或不完整，重新安装 RedWhisk 可修复。",
       "spawnFailed": "TS/JS 语言智能启动失败。"
     }
   }

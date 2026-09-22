@@ -366,6 +366,40 @@ while True:
     }
 
     #[test]
+    fn ensure_returns_bundled_runtime_unavailable_when_bundled_runtime_is_missing() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace = temp_dir.path().join("repo");
+        fs::create_dir_all(&workspace).expect("workspace");
+        let registry = CodeLanguageHostRegistry::new();
+        let spawn_count = Arc::new(AtomicUsize::new(0));
+        let spawn_count_for_spawn = Arc::clone(&spawn_count);
+
+        let status = registry.ensure(
+            7,
+            workspace.to_str().expect("utf8"),
+            None,
+            || Ok("/usr/local/bin/node".to_string()),
+            move |_| {
+                spawn_count_for_spawn.fetch_add(1, Ordering::SeqCst);
+                Err(SpawnLanguageHostError::Unavailable(
+                    CodeLanguageUnavailableReason::SpawnFailed,
+                ))
+            },
+        );
+
+        assert_eq!(status.status, CodeLanguageHostStatusKind::Unavailable);
+        assert_eq!(
+            status.reason,
+            Some(CodeLanguageUnavailableReason::BundledRuntimeUnavailable)
+        );
+        assert_eq!(spawn_count.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            registry.stored_reason(7, workspace.to_str().expect("utf8")),
+            Some(CodeLanguageUnavailableReason::BundledRuntimeUnavailable)
+        );
+    }
+
+    #[test]
     fn ensure_reuses_ready_host_and_stop_clears_it() {
         let temp_dir = tempdir().expect("temp dir");
         let workspace = temp_dir.path().join("repo");

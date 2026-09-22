@@ -40,6 +40,8 @@
 
 > `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
 
+> `ensure_code_language_host`：返回 `CodeLanguageHostStatus`；`status = "unavailable"` 时 `reason` 取值 `nodeNotFound`（本机缺 Node）、`bundledRuntimeUnavailable`（安装包内置语言运行时缺失或不完整）、`spawnFailed`（进程启动或握手失败）。三类原因须在 `src-tauri/src/types/code_language.rs`、`features/code/code-language-commands.ts` 与 `codeLanguage.unavailable.*` locale（zh/en）之间一一对应，并由 `src/shared/commands/__parity__` 快照守住跨边界同步。
+
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
 

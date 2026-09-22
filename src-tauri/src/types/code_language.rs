@@ -42,6 +42,7 @@ pub enum CodeLanguageHostStatusKind {
 #[serde(rename_all = "camelCase")]
 pub enum CodeLanguageUnavailableReason {
     NodeNotFound,
+    BundledRuntimeUnavailable,
     SpawnFailed,
 }
 

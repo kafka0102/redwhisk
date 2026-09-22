@@ -1805,6 +1805,7 @@
       "rename": "camelCase",
       "variants": [
         "nodeNotFound",
+        "bundledRuntimeUnavailable",
         "spawnFailed"
       ]
     },

@@ -632,4 +632,36 @@ describe("CodeContent edit interactions", () => {
     );
     expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
   });
+
+  it("maps every unavailable reason to its own hint", async () => {
+    const cases = [
+      [
+        "nodeNotFound",
+        "Node.js was not found, so TS/JS language intelligence is unavailable.",
+      ],
+      [
+        "bundledRuntimeUnavailable",
+        "RedWhisk's built-in TS/JS language runtime is missing or incomplete. Reinstalling RedWhisk should fix it.",
+      ],
+      ["spawnFailed", "TS/JS language intelligence failed to start."],
+    ] as const;
+
+    for (const [reason, text] of cases) {
+      const { unmount } = render(
+        <I18nProvider initialLocale="en">
+          <CodeContent
+            projectId={1}
+            tab={buildTab()}
+            contentFontSize={14}
+            messages={messages}
+            theme="light"
+            unavailableReason={reason}
+          />
+        </I18nProvider>,
+      );
+
+      expect(screen.getByRole("status")).toHaveTextContent(text);
+      unmount();
+    }
+  });
 });
