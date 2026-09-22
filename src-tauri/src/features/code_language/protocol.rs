@@ -73,6 +73,34 @@ pub fn parse_publish_diagnostics(message: &Value) -> Option<(String, Vec<CodeLan
     Some((uri, diagnostics))
 }
 
+/// 语言服务的项目加载进度信号。
+///
+/// `typescript-language-server` 的 loadingIndicator 会把 tsserver 的 projectLoadingStart /
+/// projectLoadingFinish 转成 `$/progress` 通知；`begin` 表示开始加载，`end` 表示加载完成。
+/// 宿主只发 definition / references（不带 workDoneToken、不触发 source definition 进度），因此当前
+/// 使用范围内 `$/progress` 只有 loadingIndicator 一个来源，故不再按 token 过滤。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectLoadSignal {
+    Started,
+    Finished,
+}
+
+pub fn parse_project_load_signal(message: &Value) -> Option<ProjectLoadSignal> {
+    if message.get("method")?.as_str()? != "$/progress" {
+        return None;
+    }
+    match message.get("params")?.get("value")?.get("kind")?.as_str()? {
+        "begin" => Some(ProjectLoadSignal::Started),
+        "end" => Some(ProjectLoadSignal::Finished),
+        _ => None,
+    }
+}
+
+/// 是否为客户端发往语言服务的 `textDocument/didOpen` 通知（didOpen 可能触发项目加载）。
+pub fn is_document_open_notification(message: &Value) -> bool {
+    message.get("method").and_then(Value::as_str) == Some("textDocument/didOpen")
+}
+
 fn parse_diagnostic(value: &Value) -> Option<CodeLanguageDiagnostic> {
     let range = value.get("range")?;
     Some(CodeLanguageDiagnostic {
@@ -218,6 +246,57 @@ mod tests {
             "params": { "type": 3, "message": "hi" }
         });
         assert!(parse_publish_diagnostics(&message).is_none());
+    }
+
+    #[test]
+    fn parses_project_load_progress_notifications() {
+        let begin = json!({
+            "jsonrpc": "2.0",
+            "method": "$/progress",
+            "params": {
+                "token": "load",
+                "value": {
+                    "kind": "begin",
+                    "title": "Initializing JS/TS language features…"
+                }
+            }
+        });
+        assert_eq!(
+            parse_project_load_signal(&begin),
+            Some(ProjectLoadSignal::Started)
+        );
+
+        let end = json!({
+            "jsonrpc": "2.0",
+            "method": "$/progress",
+            "params": { "token": "load", "value": { "kind": "end" } }
+        });
+        assert_eq!(
+            parse_project_load_signal(&end),
+            Some(ProjectLoadSignal::Finished)
+        );
+
+        let report = json!({
+            "jsonrpc": "2.0",
+            "method": "$/progress",
+            "params": { "token": "load", "value": { "kind": "report", "percentage": 50 } }
+        });
+        assert!(parse_project_load_signal(&report).is_none());
+        assert!(parse_project_load_signal(&json!({ "method": "window/logMessage" })).is_none());
+    }
+
+    #[test]
+    fn detects_did_open_notification() {
+        assert!(is_document_open_notification(&json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": { "textDocument": { "uri": "file:///tmp/repo/src/file.ts" } }
+        })));
+        assert!(!is_document_open_notification(&json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didChange",
+            "params": {}
+        })));
     }
 
     #[test]

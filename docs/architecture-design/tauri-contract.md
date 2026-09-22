@@ -42,6 +42,8 @@
 
 > `ensure_code_language_host`：返回 `CodeLanguageHostStatus`；`status = "unavailable"` 时 `reason` 取值 `nodeNotFound`（本机缺 Node）、`bundledRuntimeUnavailable`（安装包内置语言运行时缺失或不完整）、`spawnFailed`（进程启动或握手失败）。三类原因须在 `src-tauri/src/types/code_language.rs`、`features/code/code-language-commands.ts` 与 `codeLanguage.unavailable.*` locale（zh/en）之间一一对应，并由 `src/shared/commands/__parity__` 快照守住跨边界同步。
 
+> `code_language_definition` / `code_language_references`：语义项目加载中（语言服务项目加载进度 begin 之后、end 之前，含 didOpen 后的短宽限窗）到达的请求会等到加载完成再取结果；等待超限时按未就绪返回空结果（不返回加载期的本文件 import 子句），不挂死。未处于加载中的请求不被额外等待拖慢。等待期间不持有宿主注册表锁，不阻塞其他代码根。等待上限与宽限窗取值见 `src-tauri/src/features/code_language/readiness.rs`（最坏同步阻塞约等于等待上限 + 请求自身超时）。
+
 
 > 注册表路径以 `src-tauri/src/lib.rs` 的 `generate_handler!` 与各 feature 的 `commands.rs` 为准；ADR-0013 feature-first 重构后命令已下沉到 `features/<feature>/`，本表随之回写。
 

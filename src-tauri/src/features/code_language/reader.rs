@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use super::protocol::parse_publish_diagnostics;
+use super::protocol::{parse_project_load_signal, parse_publish_diagnostics, ProjectLoadSignal};
+use super::readiness::Readiness;
 use super::rpc::{read_rpc, write_rpc};
 use crate::types::code_language::{CodeLanguageDiagnostic, CodeLanguageUnavailableReason};
 
@@ -23,6 +24,7 @@ pub fn handshake_and_listen(
     initialize: Value,
     on_diagnostics: DiagnosticsListener,
     pending: PendingResponses,
+    readiness: Arc<Readiness>,
 ) -> Result<(), CodeLanguageUnavailableReason> {
     let (sender, receiver) = mpsc::channel();
     let reader_stdin = Arc::clone(&stdin);
@@ -32,8 +34,16 @@ pub fn handshake_and_listen(
         let ok = handshake.is_ok();
         let _ = sender.send(handshake);
         if ok {
-            dispatch_loop(&mut reader, reader_stdin, on_diagnostics, pending);
+            dispatch_loop(
+                &mut reader,
+                reader_stdin,
+                on_diagnostics,
+                pending,
+                Arc::clone(&readiness),
+            );
         }
+        // 语言服务退出（含崩溃）：唤醒等待就绪的请求，避免它们等满上限。
+        readiness.host_stopped();
     });
 
     write_locked(&stdin, &initialize)?;
@@ -60,6 +70,7 @@ fn dispatch_loop(
     stdin: Arc<Mutex<ChildStdin>>,
     on_diagnostics: DiagnosticsListener,
     pending: PendingResponses,
+    readiness: Arc<Readiness>,
 ) {
     loop {
         let message = match read_rpc(reader) {
@@ -68,6 +79,13 @@ fn dispatch_loop(
         };
         if let Some((uri, diagnostics)) = parse_publish_diagnostics(&message) {
             on_diagnostics(uri, diagnostics);
+            continue;
+        }
+        if let Some(signal) = parse_project_load_signal(&message) {
+            match signal {
+                ProjectLoadSignal::Started => readiness.loading_started(),
+                ProjectLoadSignal::Finished => readiness.loading_finished(),
+            }
             continue;
         }
         if message.get("method").is_some() {

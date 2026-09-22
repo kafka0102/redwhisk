@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use super::protocol::is_document_open_notification;
 use super::reader::{handshake_and_listen, DiagnosticsListener, PendingResponses};
+use super::readiness::{Readiness, ReadinessConfig};
 use super::resolver::LanguageRuntime;
 use super::rpc::{file_uri, write_rpc};
 use crate::types::code_language::CodeLanguageUnavailableReason;
@@ -19,6 +21,7 @@ pub struct LanguageHost {
     stdin: Arc<Mutex<ChildStdin>>,
     pending: PendingResponses,
     next_id: AtomicI64,
+    readiness: Arc<Readiness>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +37,14 @@ impl LanguageHost {
     pub fn spawn_with_diagnostics(
         runtime: &LanguageRuntime,
         on_diagnostics: DiagnosticsListener,
+    ) -> Result<Self, SpawnLanguageHostError> {
+        Self::spawn_with_readiness(runtime, on_diagnostics, ReadinessConfig::default())
+    }
+
+    pub(crate) fn spawn_with_readiness(
+        runtime: &LanguageRuntime,
+        on_diagnostics: DiagnosticsListener,
+        readiness_config: ReadinessConfig,
     ) -> Result<Self, SpawnLanguageHostError> {
         let mut command = Command::new(&runtime.program);
         command
@@ -60,6 +71,7 @@ impl LanguageHost {
             ))?;
         let stdin = Arc::new(Mutex::new(stdin));
         let pending: PendingResponses = Arc::new(Mutex::new(Default::default()));
+        let readiness = Arc::new(Readiness::new(readiness_config));
 
         let initialize = json!({
             "jsonrpc": "2.0",
@@ -69,7 +81,10 @@ impl LanguageHost {
                 "processId": null,
                 "rootUri": file_uri(&runtime.cwd),
                 "rootPath": runtime.cwd,
-                "capabilities": {},
+                // 声明 workDoneProgress 后语言服务才会推送项目加载 `$/progress`（就绪判定依赖它）。
+                "capabilities": {
+                    "window": { "workDoneProgress": true }
+                },
                 "initializationOptions": {
                     "hostInfo": "RedWhisk",
                     "tsserver": {
@@ -85,6 +100,7 @@ impl LanguageHost {
             initialize,
             on_diagnostics,
             Arc::clone(&pending),
+            Arc::clone(&readiness),
         ) {
             let _ = child.kill();
             let _ = child.wait();
@@ -96,6 +112,7 @@ impl LanguageHost {
             stdin,
             pending,
             next_id: AtomicI64::new(NEXT_REQUEST_ID),
+            readiness,
         })
     }
 
@@ -107,6 +124,9 @@ impl LanguageHost {
     }
 
     pub fn write_message(&self, value: &Value) -> std::io::Result<()> {
+        if is_document_open_notification(value) {
+            self.readiness.document_opened();
+        }
         let mut stdin = self
             .stdin
             .lock()
@@ -120,6 +140,14 @@ impl LanguageHost {
         params: Value,
         timeout: Duration,
     ) -> std::io::Result<Value> {
+        // 语义项目加载中先等就绪，避免拿到加载期的本文件 import 子句假结果。
+        // `false` 表示宿主已停止或等待超限，调用方按未就绪返回。
+        if !self.readiness.await_ready() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "language intelligence not ready",
+            ));
+        }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let request_id = json!(id);
         let (sender, receiver) = mpsc::channel();
@@ -155,6 +183,7 @@ impl LanguageHost {
     }
 
     pub fn stop(&self) {
+        self.readiness.host_stopped();
         let _ = self.write_message(&json!({
             "jsonrpc": "2.0",
             "id": 2,
