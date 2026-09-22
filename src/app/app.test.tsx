@@ -35,9 +35,6 @@ const mockAppWindow = {
   isMaximized: vi.fn(),
   maximize: vi.fn(),
   unmaximize: vi.fn(),
-  isFullscreen: vi.fn().mockResolvedValue(false),
-  setFullscreen: vi.fn().mockResolvedValue(undefined),
-  onResized: vi.fn().mockResolvedValue(() => undefined),
 };
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -185,15 +182,9 @@ describe("App project entry", () => {
     mockAppWindow.isMaximized.mockReset();
     mockAppWindow.maximize.mockReset();
     mockAppWindow.unmaximize.mockReset();
-    mockAppWindow.isFullscreen.mockReset();
-    mockAppWindow.setFullscreen.mockReset();
-    mockAppWindow.onResized.mockReset();
     mockAppWindow.isMaximized.mockResolvedValue(false);
     mockAppWindow.maximize.mockResolvedValue(undefined);
     mockAppWindow.unmaximize.mockResolvedValue(undefined);
-    mockAppWindow.isFullscreen.mockResolvedValue(false);
-    mockAppWindow.setFullscreen.mockResolvedValue(undefined);
-    mockAppWindow.onResized.mockResolvedValue(() => undefined);
     initializeLocalDataMock.mockResolvedValue({
       databaseExists: true,
       currentVersion: "0001_core",
@@ -1386,6 +1377,22 @@ describe("App project entry", () => {
     expect(
       screen.queryByRole("menu", { name: "项目切换器" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("marks Escape keydown as handled so the fullscreen window keeps its state", async () => {
+    render(<App />);
+
+    await screen.findByRole("button", { name: "打开项目 RedWhisk" });
+
+    const escape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    document.body.dispatchEvent(escape);
+
+    expect(escape.defaultPrevented).toBe(true);
   });
 
   it("closes the project switcher when clicking outside it", async () => {

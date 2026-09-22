@@ -39,7 +39,7 @@ import {
 } from "../features/agents/session-notifications/session-monitor-commands";
 import { getCommandErrorMessage } from "../shared/commands/command-error";
 import { subscribeTauriEvent } from "../shared/tauri-event/use-tauri-event";
-import { installKeepWindowFullscreenOnEscape } from "./keep-window-fullscreen-on-escape";
+import { installBlockEscapeDefaultAction } from "./block-escape-default-action";
 
 export interface ProjectSummary {
   id: number;
@@ -65,7 +65,7 @@ interface CreateProjectDraft {
 export function App() {
   const appSurface = resolveAppSurface(window.location.search);
 
-  useEffect(() => installKeepWindowFullscreenOnEscape(), []);
+  useEffect(() => installBlockEscapeDefaultAction(), []);
 
   if (appSurface.type === "session-monitor") {
     return (
