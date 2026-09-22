@@ -2,6 +2,8 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
+use super::command_lookup_process::{output_with_timeout, DEFAULT_LOOKUP_TIMEOUT};
+
 const DEFAULT_LOOKUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
 const LOOKUP_PATH_MARKER: &str = "__REDWHISK_LOOKUP_PATH__=";
 const LOOKUP_ENV_MARKER: &str = "__REDWHISK_LOOKUP_ENV__";
@@ -124,7 +126,7 @@ fn resolve_path_with_shell(
         process.env(key, value);
     }
 
-    let output = process.output().ok()?;
+    let output = output_with_timeout(process, DEFAULT_LOOKUP_TIMEOUT).ok()?;
     if !output.status.success() {
         return None;
     }
@@ -202,7 +204,8 @@ fn run_shell_command_lookup_with_path(
         process.env(key, value);
     }
 
-    let output = process.output().map_err(|error| error.to_string())?;
+    let output = output_with_timeout(process, DEFAULT_LOOKUP_TIMEOUT)
+        .map_err(|error| error.to_lookup_message(command))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -289,6 +292,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn shell_lookup_candidates_fall_back_to_zsh_bash_and_sh() {
@@ -540,6 +544,40 @@ mod tests {
             }),
             "环境快照应包含 interactive PATH，实际：{:?}",
             lookup.environment
+        );
+    }
+
+    #[test]
+    fn command_lookup_falls_back_when_interactive_shell_rc_blocks() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        let command_path = bin_dir.join("redwhisk-test-agent");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("test command");
+        fs::set_permissions(&command_path, fs::Permissions::from_mode(0o755))
+            .expect("executable command");
+        fs::write(
+            temp_dir.path().join(".zshenv"),
+            format!("export PATH=\"{}:$PATH\"\n", bin_dir.display()),
+        )
+        .expect("zshenv");
+        fs::write(temp_dir.path().join(".zshrc"), "sleep 20\n").expect("hanging zshrc");
+
+        let home = temp_dir.path().as_os_str();
+        let baseline_path = OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin");
+        let started = Instant::now();
+        let lookup = run_command_lookup_with_path_with_shells_and_env(
+            "redwhisk-test-agent",
+            &["/bin/zsh".to_string()],
+            &[("HOME", home), ("ZDOTDIR", home), ("PATH", baseline_path)],
+        )
+        .expect("login fallback");
+
+        assert_eq!(lookup.command, command_path.display().to_string());
+        assert!(
+            started.elapsed() < Duration::from_secs(6),
+            "交互式 rc 卡住时必须超时回退，实际 {:?}",
+            started.elapsed()
         );
     }
 }

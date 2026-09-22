@@ -1,4 +1,6 @@
+use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tauri::{Emitter, Manager, State};
 
@@ -8,6 +10,7 @@ use super::registry::CodeLanguageHostRegistry;
 use super::resolver::resolve_bundled_runtime;
 use super::workspace::validate_code_language_workspace;
 use crate::agent::command_detector::run_command_lookup;
+use crate::agent::command_lookup_process::output_with_timeout;
 use crate::app_state::AppState;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
@@ -137,7 +140,7 @@ fn ensure_host_blocking(
         project_id,
         &workspace_path,
         bundled.as_ref(),
-        || run_command_lookup("node"),
+        lookup_language_host_node,
         move |runtime| {
             LanguageHost::spawn_with_diagnostics(
                 runtime,
@@ -239,4 +242,26 @@ fn join_error(message: String) -> CommandError {
     )
     .with_reason("joinFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", message))
+}
+
+fn lookup_language_host_node() -> Result<String, String> {
+    if let Some(path) = fast_node_exec_path() {
+        return Ok(path);
+    }
+    run_command_lookup("node")
+}
+
+fn fast_node_exec_path() -> Option<String> {
+    let mut command = Command::new("node");
+    command.arg("-p").arg("process.execPath");
+    let output = output_with_timeout(command, Duration::from_millis(400)).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
+    }
 }

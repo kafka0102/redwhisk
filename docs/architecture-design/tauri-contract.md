@@ -40,7 +40,7 @@
 
 > `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
 
-> `ensure_code_language_host`：返回 `CodeLanguageHostStatus`；`status = "unavailable"` 时 `reason` 取值 `nodeNotFound`（本机缺 Node）、`bundledRuntimeUnavailable`（安装包内置语言运行时缺失或不完整）、`spawnFailed`（进程启动或握手失败）。三类原因须在 `src-tauri/src/types/code_language.rs`、`features/code/code-language-commands.ts` 与 `codeLanguage.unavailable.*` locale（zh/en）之间一一对应，并由 `src/shared/commands/__parity__` 快照守住跨边界同步。
+> `ensure_code_language_host`：进程拉起后即返回 `CodeLanguageHostStatus`，不在命令路径上等待 LSP initialize 或语义项目加载。`status = "unavailable"` 时 `reason` 取值 `nodeNotFound`（本机缺 Node）、`bundledRuntimeUnavailable`（安装包内置语言运行时缺失或不完整）、`spawnFailed`（进程无法启动）。三类原因须在 `src-tauri/src/types/code_language.rs`、`features/code/code-language-commands.ts` 与 `codeLanguage.unavailable.*` locale（zh/en）之间一一对应，并由 `src/shared/commands/__parity__` 快照守住跨边界同步。握手在后台完成；失败时宿主随后退出，下次 ensure 再拉起。
 
 > `code_language_definition` / `code_language_references`：语义项目加载中（语言服务项目加载进度 begin 之后、end 之前，含 didOpen 后的短宽限窗）到达的请求会等到加载完成再取结果；等待超限时按未就绪返回空结果（不返回加载期的本文件 import 子句），不挂死。未处于加载中的请求不被额外等待拖慢。等待期间不持有宿主注册表锁，不阻塞其他代码根。等待上限与宽限窗取值见 `src-tauri/src/features/code_language/readiness.rs`（最坏同步阻塞约等于等待上限 + 请求自身超时）。
 

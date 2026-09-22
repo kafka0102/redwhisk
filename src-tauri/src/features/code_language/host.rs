@@ -7,7 +7,9 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::protocol::is_document_open_notification;
-use super::reader::{handshake_and_listen, DiagnosticsListener, PendingResponses};
+use super::reader::{
+    handshake_and_listen, DiagnosticsListener, Handshake, PendingResponses, HANDSHAKE_TIMEOUT,
+};
 use super::readiness::{Readiness, ReadinessConfig};
 use super::resolver::LanguageRuntime;
 use super::rpc::{file_uri, write_rpc};
@@ -22,6 +24,7 @@ pub struct LanguageHost {
     pending: PendingResponses,
     next_id: AtomicI64,
     readiness: Arc<Readiness>,
+    handshake: Handshake,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +75,7 @@ impl LanguageHost {
         let stdin = Arc::new(Mutex::new(stdin));
         let pending: PendingResponses = Arc::new(Mutex::new(Default::default()));
         let readiness = Arc::new(Readiness::new(readiness_config));
+        let handshake = Handshake::new();
 
         let initialize = json!({
             "jsonrpc": "2.0",
@@ -101,7 +105,9 @@ impl LanguageHost {
             on_diagnostics,
             Arc::clone(&pending),
             Arc::clone(&readiness),
+            handshake.clone(),
         ) {
+            handshake.mark_failed();
             let _ = child.kill();
             let _ = child.wait();
             return Err(SpawnLanguageHostError::Unavailable(reason));
@@ -113,6 +119,7 @@ impl LanguageHost {
             pending,
             next_id: AtomicI64::new(NEXT_REQUEST_ID),
             readiness,
+            handshake,
         })
     }
 
@@ -123,7 +130,18 @@ impl LanguageHost {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn wait_until_handshake(&self, timeout: Duration) -> bool {
+        self.handshake.wait(timeout)
+    }
+
     pub fn write_message(&self, value: &Value) -> std::io::Result<()> {
+        if !self.handshake.wait(HANDSHAKE_TIMEOUT) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "language host handshake failed",
+            ));
+        }
         if is_document_open_notification(value) {
             self.readiness.document_opened();
         }
@@ -184,17 +202,7 @@ impl LanguageHost {
 
     pub fn stop(&self) {
         self.readiness.host_stopped();
-        let _ = self.write_message(&json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "shutdown",
-            "params": null
-        }));
-        let _ = self.write_message(&json!({
-            "jsonrpc": "2.0",
-            "method": "exit",
-            "params": null
-        }));
+        self.handshake.mark_failed();
         if let Ok(mut child) = self.child.lock() {
             let _ = child.kill();
             let _ = child.wait();
@@ -299,7 +307,7 @@ while True:
         let workspace = temp_dir.path().join("repo");
         let runtime = runtime_with_script(&workspace, fake_lsp_script());
         let host = LanguageHost::spawn(&runtime).expect("spawn fake host");
-        assert!(host.is_alive(), "握手完成后宿主应仍在运行");
+        assert!(host.is_alive(), "拉起后宿主应仍在运行");
         host.stop();
         assert!(!host.is_alive(), "停止后宿主应退出");
     }
@@ -398,10 +406,71 @@ write_msg({"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32000, "mes
             .trim(),
         );
 
-        let error = LanguageHost::spawn(&runtime).expect_err("handshake rejected");
-        assert_eq!(
-            error,
-            SpawnLanguageHostError::Unavailable(CodeLanguageUnavailableReason::SpawnFailed)
+        let host = LanguageHost::spawn(&runtime).expect("process started");
+        let error = host
+            .write_message(&json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {}
+            }))
+            .expect_err("handshake rejected");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotConnected);
+        host.stop();
+    }
+
+    #[test]
+    fn spawn_returns_before_slow_initialize() {
+        let temp_dir = tempdir().expect("temp dir");
+        let workspace = temp_dir.path().join("repo");
+        let runtime = runtime_with_script(
+            &workspace,
+            r#"
+import json
+import sys
+import time
+
+def read_msg():
+    headers = {}
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        if line in (b"\r\n", b"\n"):
+            break
+        key, value = line.decode("utf-8").split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+    length = int(headers.get("content-length", "0"))
+    body = sys.stdin.buffer.read(length)
+    return json.loads(body)
+
+def write_msg(payload):
+    raw = json.dumps(payload).encode("utf-8")
+    sys.stdout.buffer.write(f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii") + raw)
+    sys.stdout.buffer.flush()
+
+while True:
+    message = read_msg()
+    if message is None:
+        break
+    method = message.get("method")
+    if method == "initialize":
+        time.sleep(2)
+        write_msg({"jsonrpc": "2.0", "id": message["id"], "result": {"capabilities": {}}})
+    elif method == "shutdown":
+        write_msg({"jsonrpc": "2.0", "id": message["id"], "result": None})
+    elif method == "exit":
+        break
+"#
+            .trim(),
         );
+
+        let started = std::time::Instant::now();
+        let host = LanguageHost::spawn(&runtime).expect("spawn fake host");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "ensure/spawn 不得等待 initialize，实际 {:?}",
+            started.elapsed()
+        );
+        host.stop();
     }
 }

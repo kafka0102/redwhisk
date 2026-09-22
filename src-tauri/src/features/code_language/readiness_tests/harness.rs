@@ -48,7 +48,13 @@ fn spawn_scripted(
     let mut fake_runtime = runtime.clone();
     fake_runtime.program = "python3".to_string();
     fake_runtime.args = vec![script_path.to_string_lossy().into_owned()];
-    LanguageHost::spawn_with_readiness(&fake_runtime, Arc::new(|_, _| {}), config)
+    let host = LanguageHost::spawn_with_readiness(&fake_runtime, Arc::new(|_, _| {}), config)?;
+    if !host.wait_until_handshake(Duration::from_secs(5)) {
+        return Err(SpawnLanguageHostError::Unavailable(
+            crate::types::code_language::CodeLanguageUnavailableReason::SpawnFailed,
+        ));
+    }
+    Ok(host)
 }
 
 /// 准备工作区：`src/file.ts` 是打开的文件，`src/lib.ts` 是它 import 的目标。

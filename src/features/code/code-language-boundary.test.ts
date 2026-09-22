@@ -39,6 +39,24 @@ describe("code language intelligence boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("does not start the language host from project home or app entry", () => {
+    const files = [
+      "src/app/app.tsx",
+      "src/app/app-shell.tsx",
+      "src/features/project/project-home.tsx",
+      "src/features/project/project-list.tsx",
+      "src/features/project/project-commands.ts",
+    ];
+    for (const file of files) {
+      const source = readFileSync(join(process.cwd(), file), "utf8");
+      expect(source).not.toMatch(/ensureCodeLanguageHost/);
+      expect(source).not.toMatch(/ensure_code_language_host/);
+      expect(source).not.toMatch(/use-code-language-host/);
+      expect(source).not.toMatch(/use-code-language-intelligence/);
+      expect(source).not.toMatch(/code-language-commands/);
+    }
+  });
+
   it("does not start the language host from session viewer or diff surfaces", () => {
     const files = [
       "src/features/agents/session-workspace/session-file-viewer.tsx",
