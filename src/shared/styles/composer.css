@@ -127,6 +127,19 @@
   font-size: 12px;
 }
 
+/* 排队追问 chip：占满 composer 可用宽度（不再固定 220px 截断），
+   只有消息正文按省略号截断；「已排队」标签保持单行不换行。 */
+.agents-composer__chip--queued {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agents-composer__chip-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .agents-composer__chip--error {
   border-color: var(--color-danger-border);
   background: var(--color-danger-muted);
@@ -138,6 +151,8 @@
 }
 
 .agents-composer__chip-name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

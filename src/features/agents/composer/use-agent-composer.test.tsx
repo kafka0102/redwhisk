@@ -675,7 +675,7 @@ describe("useAgentComposer", () => {
       });
     });
 
-    it("点停止先丢掉排队再 cancelAgentTurn，Turn 结束后也不发出", async () => {
+    it("点停止只取消当前 Turn，排队追问在 Turn 取消后发出", async () => {
       let resolveCancel: (() => void) | null = null;
       cancelAgentTurnMock.mockReturnValueOnce(
         new Promise<void>((resolve) => {
@@ -688,32 +688,73 @@ describe("useAgentComposer", () => {
         turnStatus: "running",
       });
       await act(async () => {
-        getState()!.setText("不要发出");
+        getState()!.setText("停止后仍要发出");
       });
       await act(async () => {
         await getState()!.handleSubmit();
       });
-      expect(getState()!.queuedFollowUp?.message).toBe("不要发出");
+      expect(getState()!.queuedFollowUp?.message).toBe("停止后仍要发出");
 
       let cancelPromise: Promise<void> | undefined;
       act(() => {
         cancelPromise = getState()!.handleCancel();
       });
-      expect(getState()!.queuedFollowUp).toBeNull();
       expect(cancelAgentTurnMock).toHaveBeenCalledWith({
         projectId: 1,
         sessionId: 10,
       });
+      // 停止只中断当前 Turn，不清空排队追问。
+      expect(getState()!.queuedFollowUp?.message).toBe("停止后仍要发出");
 
       await act(async () => {
         resolveCancel?.();
         await cancelPromise;
       });
       rerenderWith({ turnStatus: "canceled" });
+      await waitFor(() => {
+        expect(sendAgentMessageMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 10,
+          message: "停止后仍要发出",
+          attachments: [],
+        });
+      });
+      expect(getState()!.queuedFollowUp).toBeNull();
+    });
+
+    it("composer 重挂后，排队追问在 Turn 空闲时补发（回归 #241）", async () => {
+      const first = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+      });
       await act(async () => {
-        await Promise.resolve();
+        first.getState()!.setText("重挂后补发");
+      });
+      await act(async () => {
+        await first.getState()!.handleSubmit();
       });
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(first.getState()!.queuedFollowUp?.message).toBe("重挂后补发");
+
+      // 切到其它 Activity 会卸载 composer，期间 Turn 结束；排队内容只存活于
+      // 模块级缓存。重挂时不会再出现 running→非 running 的边沿事件。
+      first.unmount();
+      const second = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "idle",
+      });
+
+      await waitFor(() => {
+        expect(sendAgentMessageMock).toHaveBeenCalledWith({
+          projectId: 1,
+          sessionId: 10,
+          message: "重挂后补发",
+          attachments: [],
+        });
+      });
+      expect(second.getState()!.queuedFollowUp).toBeNull();
     });
 
     it("turnStatus 离开 running 后自动以 follow_up 发出排队追问", async () => {

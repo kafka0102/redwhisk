@@ -6,7 +6,9 @@
 // “点击发送 → running 事件回流”之间的空窗，防止重复点击重复发送。
 //
 // 排队追问：running 且非只读时提交写入按 sessionId 隔离的一条内存槽位，不调用
-// sendAgentMessage；turnStatus 离开 running 后自动发出。点停止先同步丢队。
+// sendAgentMessage；只要「存在排队」且「当前不在 running」就自动以 follow_up
+// 发出（水平触发，见下方 effect 注释）。点停止不再丢队——排队在 Turn 取消后发出；
+// 显式取消排队仍经 chip 的关闭按钮丢弃。
 //
 // 附件流程：
 //   open({ directory:false, multiple:false }) → sourcePath
@@ -191,7 +193,6 @@ export function useAgentComposer({
   );
   const cancelToastTimeoutRef = useRef<number | null>(null);
   const submitLockRef = useRef(false);
-  const previousTurnStatusRef = useRef(turnStatus);
 
   const isSending = turnStatus === "running";
 
@@ -325,14 +326,17 @@ export function useAgentComposer({
     t,
   ]);
 
+  // 排队发出采用水平触发：只要「还有排队」且「当前不在 running」就发送。
+  // 不能只盯 running→非 running 的边沿——composer 会随 Agents Activity 卸载、
+  // 并随切回页面重挂（排队内容由模块级缓存恢复），重挂后不会再产生边沿事件，
+  // 仅靠边沿会让排队追问永久停在「已排队」（issue #241）。
+  // 并发保护：sendQueuedFollowUp 同步抢 submitLockRef，重复触发只会早退。
   useEffect(() => {
-    const previousTurnStatus = previousTurnStatusRef.current;
-    previousTurnStatusRef.current = turnStatus;
-    if (previousTurnStatus !== "running" || turnStatus === "running") {
+    if (isSending || queuedFollowUp === null) {
       return;
     }
     void sendQueuedFollowUp();
-  }, [sendQueuedFollowUp, turnStatus]);
+  }, [isSending, queuedFollowUp, sendQueuedFollowUp]);
 
   const dropQueuedFollowUp = useCallback(() => {
     queuedFollowUpCache.delete(sessionId);
@@ -343,7 +347,8 @@ export function useAgentComposer({
     if (isCancelling) {
       return;
     }
-    dropQueuedFollowUp();
+    // 停止当前 Turn 不丢排队：Turn 进入取消态后，上方 effect 会把它作为
+    // follow_up 发出，与 Codex TUI「中断后继续提交排队输入」一致。
     setSubmitError(null);
     setIsCancelling(true);
     try {
@@ -353,14 +358,7 @@ export function useAgentComposer({
     } finally {
       setIsCancelling(false);
     }
-  }, [
-    dropQueuedFollowUp,
-    isCancelling,
-    projectId,
-    sessionId,
-    showCancelToast,
-    t,
-  ]);
+  }, [isCancelling, projectId, sessionId, showCancelToast, t]);
 
   const handleAddAttachment = useCallback(async () => {
     if (isReadOnly) {

@@ -126,8 +126,10 @@ export function AgentComposer({
     >
       {queuedFollowUp ? (
         <div className="agents-composer__queued" role="status">
-          <span className="agents-composer__chip">
-            <span>{t("agentsFeature.queuedFollowUp")}</span>
+          <span className="agents-composer__chip agents-composer__chip--queued">
+            <span className="agents-composer__chip-label">
+              {t("agentsFeature.queuedFollowUp")}
+            </span>
             <span className="agents-composer__chip-name">
               {queuedFollowUp.message}
             </span>

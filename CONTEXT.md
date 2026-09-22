@@ -182,8 +182,8 @@ Agent Session 中一次用户消息触发的回复轮次；停止与运行态只
 _Avoid_: 把 collab/sub-agent 子轮次当成可停止的当前 Turn
 
 **排队追问**：
-json composer 在当前 Turn 仍运行时用户提交的下一条消息；不中断当前 Turn，同一 Session 只保留一条（含已保存附件），待当前 Turn 真正结束后作为 follow_up 发出。停止当前 Turn 或取消排队时丢弃。
-_Avoid_: 运行中直接新开 Turn、先中断再发送、多条待发队列
+json composer 在当前 Turn 仍运行时用户提交的下一条消息；不中断当前 Turn，同一 Session 只保留一条（含已保存附件）。只要当前 Turn 不在运行就作为 follow_up 发出——Turn 正常结束、失败或用户停止（取消）后都发出，停止当前 Turn 不丢排队；只有显式取消排队（chip 关闭按钮）才丢弃。
+_Avoid_: 运行中直接新开 Turn、为发送而中断当前 Turn、多条待发队列、停止当前 Turn 时丢弃排队
 
 **工作区内容搜索**：
 在「代码」Activity 当前选中代码根内，按查询文本与匹配选项查找文件内容匹配的能力；结果按文件分组展示匹配行预览，作用于当前根而非全项目所有根。
