@@ -100,6 +100,12 @@
   align-content: start;
 }
 
+/* 只读详情页的标题与描述跟随全局内容字号，与会话消息、代码正文保持一致 */
+.issue-page__main--readonly .issue-detail__title,
+.issue-page__main--readonly .issue-detail__description {
+  font-size: var(--content-font-size);
+}
+
 .issue-page__more-button {
   display: inline-grid;
   place-items: center;
