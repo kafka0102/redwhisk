@@ -1,6 +1,8 @@
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use super::command_lookup_process::{
     extract_marked_path, output_on_pty_with_timeout, output_with_timeout, DEFAULT_LOOKUP_TIMEOUT,
@@ -104,9 +106,16 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
 /// 2s 超时后注入失败，项目终端 `-lc` 启动命令就会 `command not found: pnpm`。
 /// 失败再回退 login `-lc`；仍失败返回 `None`，调用方回退到继承的 PATH。
 pub(crate) fn resolve_interactive_shell_path() -> Option<OsString> {
+    static CACHED: OnceLock<OsString> = OnceLock::new();
+    if let Some(path) = CACHED.get() {
+        return Some(path.clone());
+    }
+
     let preferred_shell = env::var("SHELL").ok();
     let shells = shell_lookup_candidates(preferred_shell.as_deref());
-    resolve_interactive_shell_path_with_shells_and_env(&shells, &[])
+    let resolved = resolve_interactive_shell_path_with_shells_and_env(&shells, &[])?;
+    let _ = CACHED.set(resolved.clone());
+    Some(resolved)
 }
 
 fn resolve_interactive_shell_path_with_shells_and_env(
@@ -191,11 +200,52 @@ fn run_command_lookup_with_path_with_shells_and_env(
         match (login_result, interactive_result) {
             (_, Ok(interactive)) => return Ok(interactive),
             (Ok(login), Err(_)) => return Ok(login),
-            (Err(_), Err(error)) => last_error = Some(error),
+            (Err(_), Err(error)) => {
+                last_error = Some(error);
+                // 管道 `-lic` 只有 2s 超时：真实 `.zshrc`（nvm/compinit 等）常要
+                // 5s+，无 TTY 时还会卡住。login 也找不到只存在于 `.zshrc` 的命令
+                // （如 npm 全局 `codex`）。此时用 PTY 解析出的交互式 PATH 搜可执行文件。
+                if let Some(path) = interactive_path_for_lookup(shells, environment_overrides) {
+                    if let Some(resolved_command) = find_executable_in_path(command, &path) {
+                        return Ok(CommandLookupResult {
+                            command: resolved_command,
+                            path: Some(path),
+                            environment: Vec::new(),
+                        });
+                    }
+                }
+            }
         }
     }
 
     Err(last_error.unwrap_or_else(|| format!("未找到可执行命令：{}。", command)))
+}
+
+fn interactive_path_for_lookup(
+    shells: &[String],
+    environment_overrides: &[(&str, &OsStr)],
+) -> Option<OsString> {
+    if environment_overrides.is_empty() {
+        resolve_interactive_shell_path()
+    } else {
+        resolve_interactive_shell_path_with_shells_and_env(shells, environment_overrides)
+    }
+}
+
+fn find_executable_in_path(command: &str, path: &OsStr) -> Option<String> {
+    if command.is_empty() || Path::new(command).components().count() > 1 {
+        return None;
+    }
+
+    env::split_paths(path).find_map(|dir| {
+        if dir.as_os_str().is_empty() {
+            return None;
+        }
+        let candidate = dir.join(command);
+        candidate
+            .is_file()
+            .then(|| candidate.to_string_lossy().into_owned())
+    })
 }
 
 #[cfg(test)]
@@ -471,6 +521,78 @@ mod tests {
         assert!(
             env::split_paths(&path).any(|entry| entry == bin_dir),
             "PTY 解析出的 PATH 应包含 .zshrc 写入的目录，实际：{path:?}"
+        );
+    }
+
+    #[test]
+    fn command_lookup_finds_zshrc_binary_when_non_tty_rc_blocks() {
+        // 复现 GUI 执行 Issue：codex 只在 .zshrc/nvm PATH 里，管道 -lic 超时，
+        // login -lc 也找不到。应走 PTY PATH 搜索拿到绝对路径。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        let command_path = bin_dir.join("redwhisk-test-agent");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(&command_path, "#!/bin/sh\nexit 0\n").expect("test command");
+        fs::set_permissions(&command_path, fs::Permissions::from_mode(0o755))
+            .expect("executable command");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!(
+                "if [[ -t 0 ]]; then export PATH=\"{}:$PATH\"; else sleep 20; fi\n",
+                bin_dir.display()
+            ),
+        )
+        .expect("zshrc");
+
+        let started = Instant::now();
+        let lookup = run_command_lookup_with_path_with_shells_and_env(
+            "redwhisk-test-agent",
+            &["/bin/zsh".to_string()],
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("pty path fallback should find command");
+
+        assert!(
+            started.elapsed() < Duration::from_secs(8),
+            "管道 -lic 超时后必须走 PTY PATH 搜索，实际 {:?}",
+            started.elapsed()
+        );
+        assert_eq!(lookup.command, command_path.display().to_string());
+        let lookup_path = lookup.path.expect("lookup path");
+        assert!(
+            env::split_paths(&lookup_path).any(|entry| entry == bin_dir),
+            "回退 PATH 应包含 .zshrc 写入的目录，实际：{lookup_path:?}"
+        );
+    }
+
+    #[test]
+    fn find_executable_in_path_returns_first_match() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let first = temp_dir.path().join("first");
+        let second = temp_dir.path().join("second");
+        fs::create_dir_all(&first).expect("first dir");
+        fs::create_dir_all(&second).expect("second dir");
+        let first_command = first.join("redwhisk-which");
+        let second_command = second.join("redwhisk-which");
+        fs::write(&first_command, "#!/bin/sh\nexit 0\n").expect("first command");
+        fs::write(&second_command, "#!/bin/sh\nexit 0\n").expect("second command");
+        fs::set_permissions(&first_command, fs::Permissions::from_mode(0o755)).expect("chmod");
+        fs::set_permissions(&second_command, fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        let path = env::join_paths([&first, &second]).expect("join paths");
+        assert_eq!(
+            find_executable_in_path("redwhisk-which", &path).as_deref(),
+            Some(first_command.to_str().expect("utf8 path"))
+        );
+        assert_eq!(find_executable_in_path("missing-bin", &path), None);
+        assert_eq!(
+            find_executable_in_path("/tmp/redwhisk-which", &path),
+            None,
+            "带路径的命令名不应再扫 PATH"
         );
     }
 

@@ -25,7 +25,9 @@ use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::{run_command_lookup_with_path, CommandLookupResult};
+use crate::agent::command_detector::{
+    resolve_interactive_shell_path, run_command_lookup_with_path, CommandLookupResult,
+};
 
 /// stderr 缓冲上限，避免内存膨胀；保留尾部用于诊断。
 const STDERR_BUFFER_LIMIT: usize = 8192;
@@ -380,7 +382,13 @@ fn apply_spawn_environment(
     lookup_environment: &[(OsString, OsString)],
     path_entries: &[PathBuf],
 ) {
-    let fallback_path = env::var_os("PATH");
+    // GUI 启动时进程 PATH 不含 .zshrc 里的 nvm 目录；lookup 失败时才注入
+    // 交互式 PATH，才能找到 `codex` 以及其 shebang 依赖的 `node`。
+    let fallback_path = if lookup_path.is_some() {
+        None
+    } else {
+        resolve_interactive_shell_path().or_else(|| env::var_os("PATH"))
+    };
     let current_path = lookup_path.or(fallback_path.as_deref());
     if let Some(path) = build_spawn_path(current_path, path_entries) {
         command.env("PATH", path);
