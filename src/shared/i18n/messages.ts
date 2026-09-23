@@ -176,6 +176,7 @@ export interface I18nMessages {
     chooseFolder: string;
     createProject: string;
     creatingProject: string;
+    dismissOpeningProjectNotice: string;
     localProjects: string;
     newProject: string;
     openProject: (projectName: string) => string;

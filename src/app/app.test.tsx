@@ -731,6 +731,89 @@ describe("App project entry", () => {
     );
   });
 
+  it("shows a dismissible loading notice while opening a project from the list", async () => {
+    // 点击项目到工作台出现之间可能等待数秒，期间必须有反馈，否则用户会以为没点上而重复点击。
+    const user = userEvent.setup();
+    let resolveOpenProject: (project: ProjectRecord) => void = () => {};
+    openProjectMock.mockImplementation(
+      () =>
+        new Promise<ProjectRecord>((resolve) => {
+          resolveOpenProject = resolve;
+        }),
+    );
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
+    );
+
+    const loadingDialog = await screen.findByRole("dialog", {
+      name: "正在打开项目…",
+    });
+    await user.click(
+      within(loadingDialog).getByRole("button", {
+        name: "关闭打开项目提示",
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "正在打开项目…" }),
+    ).not.toBeInTheDocument();
+
+    resolveOpenProject({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the opening notice as soon as the project is open", async () => {
+    const user = userEvent.setup();
+    let resolveOpenProject: (project: ProjectRecord) => void = () => {};
+    openProjectMock.mockImplementation(
+      () =>
+        new Promise<ProjectRecord>((resolve) => {
+          resolveOpenProject = resolve;
+        }),
+    );
+
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开项目 RedWhisk" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "正在打开项目…" }),
+    ).toBeInTheDocument();
+
+    resolveOpenProject({
+      id: 1,
+      name: "RedWhisk",
+      repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
+      worktreeLocation: "repo_sibling",
+      worktreeSetupCommand: "",
+      createdAt: 1_780_581_600_000,
+      lastOpenedAt: 1_780_628_400_000,
+      codeWorkspaces: [],
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "正在打开项目…" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens global settings from the bottom activity bar icon without resetting project activities", async () => {
     const user = userEvent.setup();
     window.history.replaceState(null, "", "/?projectId=1");

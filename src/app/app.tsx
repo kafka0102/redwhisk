@@ -10,6 +10,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AppShell } from "./app-shell";
 import { resolveAppSurface } from "./app-surface";
 import { Toaster } from "../components/ui/sonner";
+import { LoadingDialog } from "../components/ui/loading-dialog";
 import "./app.css";
 import { ProjectDetailsForm } from "../features/project/project-details-form";
 import { ProjectHome } from "../features/project/project-home";
@@ -89,6 +90,11 @@ function ProjectApp() {
     string | null
   >(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  // 点击项目到工作台出现之间可能等待数秒（后台首次解析交互式 PATH 等），
+  // 用可关闭的 loading 弹窗给出反馈，避免用户以为没点上而重复点击。
+  const [isOpeningProject, setIsOpeningProject] = useState(false);
+  const [isOpeningProjectNoticeDismissed, setIsOpeningProjectNoticeDismissed] =
+    useState(false);
   const [openAgentSessionRequest, setOpenAgentSessionRequest] = useState<{
     projectId: number;
     requestId: number;
@@ -266,6 +272,8 @@ function ProjectApp() {
   async function handleOpenInCurrentWindow(project: ProjectSummary) {
     setProjectCreationError(null);
     setProjectOpenError(null);
+    setIsOpeningProjectNoticeDismissed(false);
+    setIsOpeningProject(true);
 
     try {
       const openedProject = await openProject({ projectId: project.id });
@@ -276,12 +284,16 @@ function ProjectApp() {
       setSelectedProject(projectSummary);
     } catch (error) {
       setProjectOpenError(getCommandErrorMessage(error, translate));
+    } finally {
+      setIsOpeningProject(false);
     }
   }
 
   async function handleProjectOpen(project: ProjectSummary) {
     setProjectCreationError(null);
     setProjectOpenError(null);
+    setIsOpeningProjectNoticeDismissed(false);
+    setIsOpeningProject(true);
 
     try {
       if (project.hasOpenWindow) {
@@ -297,6 +309,8 @@ function ProjectApp() {
       setSelectedProject(projectSummary);
     } catch (error) {
       setProjectOpenError(getCommandErrorMessage(error, translate));
+    } finally {
+      setIsOpeningProject(false);
     }
   }
 
@@ -410,6 +424,12 @@ function ProjectApp() {
             onCreate={handleCreateProjectConfirmed}
           />
         ) : null}
+        <LoadingDialog
+          closeLabel={translate("projectHome.dismissOpeningProjectNotice")}
+          message={translate("app.openingProject")}
+          open={isOpeningProject && !isOpeningProjectNoticeDismissed}
+          onOpenChange={() => setIsOpeningProjectNoticeDismissed(true)}
+        />
       </I18nProvider>
     );
   }
