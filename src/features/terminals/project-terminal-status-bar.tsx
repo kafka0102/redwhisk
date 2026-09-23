@@ -25,6 +25,8 @@ const TERMINAL_CWD_POLL_MS = 2_000;
 interface ProjectTerminalStatusBarProps {
   projectId: number;
   sessionId: number;
+  /** 该终端是否为当前展示的 pane（非当前 pane 被 hidden 挂载，不轮询 cwd）。 */
+  isActive?: boolean;
   /** 插入常用命令后，菜单关闭时把焦点还给终端（含滚到底部）。 */
   focusTerminal?: () => void;
 }
@@ -32,6 +34,7 @@ interface ProjectTerminalStatusBarProps {
 export function ProjectTerminalStatusBar({
   projectId,
   sessionId,
+  isActive = true,
   focusTerminal,
 }: ProjectTerminalStatusBarProps) {
   const { messages, t } = useI18n();
@@ -74,6 +77,11 @@ export function ProjectTerminalStatusBar({
 
   // 轮询当前终端工作目录。
   useEffect(() => {
+    // 非当前 pane 的终端只是被 hidden 挂载，仍会跑 effect；不轮询以免多终端叠加。
+    if (!isActive) {
+      return;
+    }
+
     isMountedRef.current = true;
     let cancelled = false;
 
@@ -99,7 +107,7 @@ export function ProjectTerminalStatusBar({
       isMountedRef.current = false;
       window.clearInterval(timer);
     };
-  }, [projectId, sessionId]);
+  }, [isActive, projectId, sessionId]);
 
   async function handleRunCommand(command: string) {
     try {

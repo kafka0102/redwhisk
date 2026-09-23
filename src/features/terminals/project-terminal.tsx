@@ -18,11 +18,14 @@ import {
 interface ProjectTerminalProps {
   projectId: number;
   sessionId: number;
+  /** 该终端是否为当前展示的 pane；非当前 pane 隐藏挂载，不轮询 cwd。 */
+  isActive?: boolean;
 }
 
 export function ProjectTerminal({
   projectId,
   sessionId,
+  isActive = true,
 }: ProjectTerminalProps) {
   const terminalSurfaceRef = useRef<TerminalSurfaceHandle | null>(null);
 
@@ -60,6 +63,7 @@ export function ProjectTerminal({
         transportKey={`project:${projectId}:${sessionId}`}
       />
       <ProjectTerminalStatusBar
+        isActive={isActive}
         projectId={projectId}
         sessionId={sessionId}
         focusTerminal={() => {

@@ -28,6 +28,7 @@ import {
   createTerminalSurfaceLiveHandlers,
   healTerminalViewport,
 } from "./terminal-surface-live-handlers";
+import { createTerminalStatusPoll } from "./terminal-status-poll";
 import { createTerminalWebglSession } from "./terminal-webgl-session";
 import { createTerminalXtermOptions } from "./terminal-xterm-options";
 import { TerminalLivePipeline } from "./terminal-live-pipeline";
@@ -284,7 +285,6 @@ export function TerminalSurface({
 
     statusSourceRef.current = null;
 
-    let statusTimer: number | null = null;
     let unlistenOutput: (() => void) | null = null;
     let desiredVisible = false;
 
@@ -350,6 +350,7 @@ export function TerminalSurface({
       // 无论 live 订阅是否变化，都按可见性对齐 WebGL：
       // 隐藏实例必须卸下 addon，否则会继续占用跨 Terminal 共享的字形 atlas。
       webglSession?.setActive(shouldBeVisible);
+      statusPoll.sync(shouldBeVisible);
 
       if (shouldBeVisible === desiredVisible) {
         return;
@@ -428,6 +429,11 @@ export function TerminalSurface({
       }
     };
 
+    // 仅可见终端保留 2s 快照轮询：隐藏即停表，重新可见由 refreshLiveVisibility 重启。
+    const statusPoll = createTerminalStatusPoll(TERMINAL_STATUS_POLL_MS, () => {
+      void refreshStatus();
+    });
+
     const startTerminal = async () => {
       try {
         unlistenOutput = await transportRef.current.subscribeOutput((event) => {
@@ -447,11 +453,7 @@ export function TerminalSurface({
 
       await refreshLiveVisibility();
       await refreshStatus();
-      if (!isDisposed) {
-        statusTimer = window.setInterval(() => {
-          void refreshStatus();
-        }, TERMINAL_STATUS_POLL_MS);
-      }
+      statusPoll.sync(isTerminalVisible());
     };
 
     void startTerminal();
@@ -464,9 +466,7 @@ export function TerminalSurface({
       inputWriter.dispose();
       unlistenOutput?.();
       disposeDragDrop();
-      if (statusTimer !== null) {
-        window.clearInterval(statusTimer);
-      }
+      statusPoll.dispose();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       host.removeEventListener("pointerenter", handlePointerEnter);
       resizeObserver?.disconnect();

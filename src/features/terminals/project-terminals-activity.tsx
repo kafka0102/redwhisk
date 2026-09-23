@@ -529,6 +529,7 @@ export function ProjectTerminalsActivity({
                     hidden={card.configId !== activeTerminal?.configId}
                   >
                     <ProjectTerminal
+                      isActive={card.configId === activeTerminal?.configId}
                       projectId={projectId}
                       sessionId={card.sessionId}
                     />

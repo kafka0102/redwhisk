@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { subscribeTauriEvent } from "../tauri-event/use-tauri-event";
+import { useWindowFocus } from "../window/use-window-focus";
 import {
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT,
   listCodeWorkspaceRoots,
@@ -23,7 +24,8 @@ export interface UseCodeWorkspaceRootsResult {
  *   Activity 期间发生 worktree 增删导致快照过期」的缺失（work tree 分支丢失）。
  * - 监听 `CODE_WORKSPACE_ROOTS_UPDATED_EVENT`（issue 开启 / session setup 等后端
  *   动作触发）即时更新。
- * - 可见时按 15s 定时轮询兜底，捕获应用外部的 `git worktree add / remove`。
+ * - 可见且窗口聚焦时按 15s 定时轮询兜底，捕获应用外部的 `git worktree add / remove`；
+ *   隐藏或失焦时不轮询，重新可见 / 聚焦立即补拉一次。
  *
  * 轮询结果按 branch+path+isProjectRoot 去重，集合不变则跳过 setState，避免无谓重渲染。
  * 卸载时清理监听与定时器。
@@ -38,7 +40,10 @@ export function useCodeWorkspaceRoots(
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" || document.visibilityState === "visible",
   );
-  const wasVisibleRef = useRef(isVisible);
+  // 失焦窗口（多窗口时的后台窗口）不轮询，重新聚焦立即补拉一次。
+  const isWindowFocused = useWindowFocus();
+  const isPollingActive = isVisible && isWindowFocused;
+  const wasPollingActiveRef = useRef(isPollingActive);
 
   const fetchRoots = useCallback(() => {
     void listCodeWorkspaceRoots(projectId)
@@ -85,26 +90,26 @@ export function useCodeWorkspaceRoots(
     };
   }, [enabled]);
 
-  // 由隐藏恢复可见 → 立即补拉一次（挂载时 wasVisibleRef 已为初始可见，跳过）。
+  // 由隐藏/失焦恢复 → 立即补拉一次（挂载时已是初始激活态，跳过）。
   useEffect(() => {
     if (!enabled) {
-      wasVisibleRef.current = isVisible;
+      wasPollingActiveRef.current = isPollingActive;
       return;
     }
-    if (!wasVisibleRef.current && isVisible) {
+    if (!wasPollingActiveRef.current && isPollingActive) {
       fetchRoots();
     }
-    wasVisibleRef.current = isVisible;
-  }, [isVisible, enabled, fetchRoots]);
+    wasPollingActiveRef.current = isPollingActive;
+  }, [isPollingActive, enabled, fetchRoots]);
 
-  // 可见 + enabled 时按间隔轮询；隐藏 / 禁用不起定时器。
+  // 可见且聚焦 + enabled 时按间隔轮询；隐藏 / 失焦 / 禁用不起定时器。
   useEffect(() => {
-    if (!enabled || !isVisible) return;
+    if (!enabled || !isPollingActive) return;
     const timerId = window.setInterval(fetchRoots, ROOTS_REFRESH_INTERVAL_MS);
     return () => {
       window.clearInterval(timerId);
     };
-  }, [enabled, isVisible, fetchRoots]);
+  }, [enabled, isPollingActive, fetchRoots]);
 
   return { roots };
 }

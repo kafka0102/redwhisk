@@ -33,6 +33,21 @@ vi.mock("../../shared/workspace/workspace-commands", () => ({
   getProjectWorktreeChanges: vi.fn(),
 }));
 
+const windowMocks = vi.hoisted(() => ({
+  focusListener: null as ((event: { payload: boolean }) => void) | null,
+  isFocused: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    isFocused: windowMocks.isFocused,
+    onFocusChanged: (handler: (event: { payload: boolean }) => void) => {
+      windowMocks.focusListener = handler;
+      return Promise.resolve(() => {});
+    },
+  }),
+}));
+
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeFileTree,
@@ -70,6 +85,9 @@ describe("useCodeWorkspaceFileTree", () => {
     vi.useFakeTimers();
     treeMock.mockReset();
     changesMock.mockReset();
+    windowMocks.focusListener = null;
+    windowMocks.isFocused.mockReset();
+    windowMocks.isFocused.mockResolvedValue(true);
     resetCodeWorkspaceFileTreeCacheForTests();
     setVisibility(true);
   });
@@ -145,13 +163,18 @@ describe("useCodeWorkspaceFileTree", () => {
     expect(result.current.directoryKinds.size).toBe(0);
   });
 
-  it("polls tree and changes every 5s while visible", async () => {
+  it("polls directory listing and change badges on separate intervals", async () => {
     treeMock.mockResolvedValue({ nodes: treeNodes, signature: "t1" });
     changesMock.mockResolvedValue({ files: [], signature: "c1" });
 
     renderHook(() => useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true));
     await settle();
     expect(treeMock).toHaveBeenCalledTimes(1);
+    expect(changesMock).toHaveBeenCalledTimes(1);
+
+    // 目录 listing 每 10s：此时变更徽标（15s）还没到点，不应跟着一起拉。
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(treeMock).toHaveBeenCalledTimes(2);
     expect(changesMock).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(5_000);
@@ -170,6 +193,37 @@ describe("useCodeWorkspaceFileTree", () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(treeMock).toHaveBeenCalledTimes(1);
     expect(changesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("pauses polling while the window is unfocused and refreshes on refocus", async () => {
+    treeMock.mockResolvedValue({ nodes: treeNodes, signature: "t1" });
+    changesMock.mockResolvedValue({ files: [], signature: "c1" });
+
+    renderHook(() => useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true));
+    await settle();
+    expect(treeMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      windowMocks.focusListener?.({ payload: false });
+    });
+    await settle();
+
+    // 失焦窗口不再按 10s / 15s 轮询，多窗口不再线性叠加 git 与 IPC。
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(treeMock).toHaveBeenCalledTimes(1);
+    expect(changesMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      windowMocks.focusListener?.({ payload: true });
+    });
+    await settle();
+
+    // 重新聚焦立即补拉一次，并恢复定时器。
+    expect(treeMock).toHaveBeenCalledTimes(2);
+    expect(changesMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(treeMock).toHaveBeenCalledTimes(3);
   });
 
   it("updates the tree when the polled signature changes", async () => {
@@ -200,7 +254,7 @@ describe("useCodeWorkspaceFileTree", () => {
     ];
     treeMock.mockResolvedValue({ nodes: newTree, signature: "t2" });
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await settle();
     expect(result.current.tree).toEqual(newTree);
   });
@@ -317,7 +371,7 @@ describe("useCodeWorkspaceFileTree", () => {
       signature: "t1",
     });
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await settle();
 
     expect(result.current.tree).toBe(firstTree);
@@ -345,7 +399,7 @@ describe("useCodeWorkspaceFileTree", () => {
     ];
     treeMock.mockResolvedValue({ nodes: newTree, signature: "t2" });
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await settle();
 
     expect(result.current.tree).toEqual(newTree);
@@ -425,7 +479,7 @@ describe("useCodeWorkspaceFileTree", () => {
 
     treeMock.mockRejectedValue(new Error("network down"));
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await settle();
 
     expect(result.current.tree).toEqual(treeNodes);
@@ -574,7 +628,7 @@ describe("useCodeWorkspaceFileTree", () => {
         : { nodes: srcDirectoryNodes, signature: "t1" },
     );
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await settle();
 
     // 轮询只重拉 listings 里已成功的目录，失败目录必须由重试表补回来。
@@ -614,7 +668,7 @@ describe("useCodeWorkspaceFileTree", () => {
       result.current.loadDirectory("src");
     });
     await settle();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
 
     // 重复触发与轮询都不能在同一个目录上叠加在途请求。
     expect(srcRequestCount()).toBe(1);

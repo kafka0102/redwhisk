@@ -57,7 +57,7 @@
 - 命令体内有 `Command::new("git")` / `Connection::open` / `fs::read_dir` 吗？→ `spawn_blocking`。
 - 命令体内会开库并跑迁移吗？→ 迁移检查必须走只读快路径（见 §1 反例），禁止每条命令 `BEGIN IMMEDIATE`。
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
-- 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？
+- 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？是否已按 §7 做「可见 + 聚焦」门控？
 - 会不会在已有的高频本地轮询（如变更页 4s/8s）里再嵌网络型 `git fetch`？→ 禁止；远端跟踪更新应低频独立（见 ADR-0032 的 60s 后台 fetch），失败不得阻塞本地 refresh。
 - 启动期任务 / 热路径会不会同步拉起 shell 探测（login+interactive）？→ 改成启动后台预热 + 命中缓存才用，禁止让用户动作等它。
 
@@ -86,3 +86,16 @@
 - `DatabaseConfig::open` 统一设置 `PRAGMA journal_mode = WAL`、`busy_timeout = 5000`、`synchronous = NORMAL`，读写不再互相阻塞。
 - 迁移检查先只读探测（`sqlite_master` + `schema_migrations`），全部迁移已记录时直接返回，不带写事务（见 §1 反例）。
 - 新增高频 command 前先问：它是否每次都要开库？能否复用只读连接 / 把过滤下推到 SQL（配合 §3）。
+
+## 7. 后台窗口不轮询（聚焦门控）
+
+**判据**：新增定时轮询（文件树 / 变更徽标 / 工作区 roots / 终端快照 / 侧栏数据）时，必须把「窗口可见且聚焦」作为门控条件之一。
+
+**为什么**：应用是单进程多窗口。`document.visibilityState` 对未最小化的后台窗口仍是 `visible`，只看可见性会让每个窗口都全速轮询：git 子进程、SQLite 连接与 IPC 会按窗口数线性叠加，正是「窗口开多了整体卡顿」的主因。
+
+**做法**：
+
+- `src/shared/window/use-window-focus.ts` 取 Tauri 窗口焦点（`getCurrentWindow().isFocused()` + `onFocusChanged()`）；非 Tauri 环境 / API 不可用时返回 `true`，即退回按可见性轮询，不会因为拿不到焦点信息而误停轮询。
+- 组合成 `isActive = isVisible && isWindowFocused` 后再决定是否起定时器；重新聚焦时立即补拉一次（`useConditionalPolling` 的 `refreshOnActivate`，或各 hook 自己的 recovery effect）。
+- 例外：**通知类**轮询不能因失焦而停——后台窗口正是系统通知的触发场景。`useAgentSessionNotifications` 的会话状态检查改为「事件驱动为主（`agent-session-list-changed`，去抖 300ms）+ 5s 低频兜底 + 在途去重」。
+- 不要用 `document.hasFocus()`：它反映 webview 内容是否持有 DOM 焦点，点窗口标题栏 / 原生菜单就会变 `false`，会把「正在看的窗口」误判成后台而停掉轮询。

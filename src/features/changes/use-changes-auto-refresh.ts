@@ -9,6 +9,7 @@ import {
   type AgentSessionListChangedEvent,
 } from "../agents/agent-session-events";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
+import { useWindowFocus } from "../../shared/window/use-window-focus";
 import { useConditionalPolling } from "../../shared/workspace/use-conditional-polling";
 import { fetchProjectRemotes } from "../../shared/workspace/workspace-commands";
 
@@ -33,6 +34,9 @@ export function useWorktreeRunningSession(
   enabled: boolean,
 ): boolean {
   const [isRunning, setIsRunning] = useState(false);
+  // 事件（agent-session-list-changed）是主路径；5s 兜底轮询只在窗口可见且聚焦时跑，
+  // 失焦的后台窗口不再每 5s 拉一次会话列表。
+  const isPollingActive = useWindowFocus();
 
   useEffect(() => {
     if (!enabled || !workspacePath) {
@@ -64,11 +68,13 @@ export function useWorktreeRunningSession(
       }, SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS);
     };
 
-    recompute();
-    fallbackTimer = window.setInterval(
-      recompute,
-      RUNNING_SESSION_FALLBACK_POLL_MS,
-    );
+    if (isPollingActive) {
+      recompute();
+      fallbackTimer = window.setInterval(
+        recompute,
+        RUNNING_SESSION_FALLBACK_POLL_MS,
+      );
+    }
 
     const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
       AGENT_SESSION_LIST_CHANGED_EVENT,
@@ -84,7 +90,7 @@ export function useWorktreeRunningSession(
       if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
       unsubscribe();
     };
-  }, [projectId, workspacePath, enabled]);
+  }, [projectId, workspacePath, enabled, isPollingActive]);
 
   return isRunning;
 }
@@ -150,7 +156,10 @@ export function useChangesAutoRefresh({
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" || document.visibilityState === "visible",
   );
-  const wasVisibleRef = useRef(isVisible);
+  // 失焦窗口（多窗口时的后台窗口）不轮询、也不做后台 fetch；重新聚焦立即补拉一次。
+  const isWindowFocused = useWindowFocus();
+  const isPollingActive = isVisible && isWindowFocused;
+  const wasPollingActiveRef = useRef(isPollingActive);
   const remoteFetchInFlightRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -175,19 +184,19 @@ export function useChangesAutoRefresh({
     };
   }, [enabled]);
 
-  // 由隐藏恢复可见 → 立即补拉一次本地数据（挂载时 wasVisibleRef 已为初始可见，跳过）。
+  // 由隐藏/失焦恢复 → 立即补拉一次本地数据（挂载时已是初始激活态，跳过）。
   useEffect(() => {
     if (!enabled) {
-      wasVisibleRef.current = isVisible;
+      wasPollingActiveRef.current = isPollingActive;
       return;
     }
-    if (!wasVisibleRef.current && isVisible && !isUnavailable) {
+    if (!wasPollingActiveRef.current && isPollingActive && !isUnavailable) {
       refresh();
     }
-    wasVisibleRef.current = isVisible;
-  }, [isVisible, enabled, isUnavailable, refresh]);
+    wasPollingActiveRef.current = isPollingActive;
+  }, [isPollingActive, enabled, isUnavailable, refresh]);
 
-  // 档位定时器：可见且非 unavailable 时按 running 选 4s/8s；隐藏 → 不起定时器。
+  // 档位定时器：可见、聚焦且非 unavailable 时按 running 选 4s/8s；隐藏 / 失焦 → 不起定时器。
   // refreshOnActivate=false：挂载 / 门控激活都不补拉（外层 useCodeWorkspaceChanges
   // 已在进入视图 / 切分支时首拉；「由隐藏恢复可见」的补拉由上方 recovery effect 负责）。
   useConditionalPolling({
@@ -195,7 +204,7 @@ export function useChangesAutoRefresh({
     intervalMs: running
       ? CHANGES_REFRESH_INTERVAL_RUNNING_MS
       : CHANGES_REFRESH_INTERVAL_IDLE_MS,
-    isActive: enabled && isVisible && !isUnavailable,
+    isActive: enabled && isPollingActive && !isUnavailable,
     refreshOnActivate: false,
   });
 
@@ -206,7 +215,7 @@ export function useChangesAutoRefresh({
   useEffect(() => {
     const canFetchRemote =
       enabled &&
-      isVisible &&
+      isPollingActive &&
       !isUnavailable &&
       isProjectRoot &&
       workspacePath != null &&
@@ -246,7 +255,7 @@ export function useChangesAutoRefresh({
     };
   }, [
     enabled,
-    isVisible,
+    isPollingActive,
     isUnavailable,
     isProjectRoot,
     projectId,

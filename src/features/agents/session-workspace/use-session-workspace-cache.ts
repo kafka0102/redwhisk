@@ -21,6 +21,7 @@ import {
   type FileTreeDirectoryListing,
 } from "../../../shared/workspace/file-tree-listings";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
+import { useWindowFocus } from "../../../shared/window/use-window-focus";
 import {
   COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
@@ -199,6 +200,9 @@ export function useSessionWorkspaceCache({
   isSidePanelOpen,
 }: UseSessionWorkspaceCacheInput) {
   const { t } = useI18n();
+  // 失焦窗口（多窗口后台窗口）不轮询侧栏数据：2s 变更 + 5s 文件树 / 提交历史会按
+  // 窗口数线性叠加；重新聚焦由 useConditionalPolling 的 refreshOnActivate 补拉。
+  const isWindowFocused = useWindowFocus();
   // 跨 Activity 卸载复用同一份 module-level Map：切走 Issues/Code 再回来时
   // 保留已打开的 file / change tab，而不是随着 hook 实例销毁丢失。
   const cacheBySessionRef = useRef(sessionWorkspaceCacheBySessionId);
@@ -983,10 +987,12 @@ export function useSessionWorkspaceCache({
   // 反复失败并让错误提示闪烁。此时停止自动刷新，交由用户手动操作；手动刷新成功
   // 后 isChangesUnavailable 会被重置为 false，本 hook 随即恢复轮询。
   // files tab 也需要未提交变更，用于文件树 Git 装饰；与 changes tab 共用同一轮询族。
+  // 三个轮询都额外要求窗口聚焦：后台窗口不轮询，重新聚焦时 refreshOnActivate 立即补拉。
   useConditionalPolling({
     refresh: refreshChanges,
     intervalMs: CHANGES_POLL_INTERVAL_MS,
     isActive:
+      isWindowFocused &&
       isSidePanelOpen &&
       (currentCache.sidePanelTab === "changes" ||
         currentCache.sidePanelTab === "files") &&
@@ -1001,6 +1007,7 @@ export function useSessionWorkspaceCache({
     refresh: refreshCommitHistory,
     intervalMs: COMMIT_HISTORY_POLL_INTERVAL_MS,
     isActive:
+      isWindowFocused &&
       isSidePanelOpen &&
       currentCache.sidePanelTab === "changes" &&
       currentCache.committedChangesExpanded &&
@@ -1010,7 +1017,10 @@ export function useSessionWorkspaceCache({
   useConditionalPolling({
     refresh: refreshFileTree,
     intervalMs: FILE_TREE_POLL_INTERVAL_MS,
-    isActive: isSidePanelOpen && currentCache.sidePanelTab === "files",
+    isActive:
+      isWindowFocused &&
+      isSidePanelOpen &&
+      currentCache.sidePanelTab === "files",
   });
 
   const toggleUncommittedChangesExpanded = useCallback(() => {

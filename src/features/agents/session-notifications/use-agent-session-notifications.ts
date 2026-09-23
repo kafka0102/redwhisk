@@ -11,6 +11,11 @@ import type { AgentSessionListItem } from "../agent-session-commands";
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { AGENT_SESSION_STREAM_EVENT } from "../message-stream/agent-stream-events";
 import {
+  AGENT_SESSION_LIST_CHANGED_EVENT,
+  type AgentSessionListChangedEvent,
+} from "../agent-session-events";
+import { subscribeTauriEvent } from "../../../shared/tauri-event/use-tauri-event";
+import {
   createAgentSessionNotificationIntent,
   type AgentSessionNotificationIntent,
 } from "./agent-session-notification-rules";
@@ -20,7 +25,14 @@ import {
 } from "./agent-session-notification-transport";
 import { createAgentSessionStatusNotificationIntent } from "./session-monitor-rules";
 
-const DEFAULT_SESSION_STATUS_POLL_INTERVAL_MS = 1_500;
+/**
+ * 状态兜底轮询间隔。会话状态变化以 `agent-session-list-changed` 事件为主路径
+ * （见下方 effect），轮询只兜住事件丢失，故取 5s；原先 1.5s × 每个项目窗口是
+ * 无谓的全窗口常驻负载。
+ */
+const DEFAULT_SESSION_STATUS_POLL_INTERVAL_MS = 5_000;
+/** 事件触发重算的去抖窗口：一次 turn 结束会连发多条 list-changed。 */
+const SESSION_STATUS_EVENT_DEBOUNCE_MS = 300;
 
 interface UseAgentSessionNotificationsArgs {
   pollIntervalMs?: number;
@@ -83,9 +95,10 @@ export function useAgentSessionNotifications({
 
   useEffect(() => {
     let isDisposed = false;
-    // 间隔只有 1.5s，多窗口 / 后端繁忙时请求可能来不及返回；堆叠只会继续放大负载。
-    // 上一次未结算就跳过本次 tick，下一次 tick 会照常补上。
+    // 多窗口 / 后端繁忙时请求可能来不及返回；堆叠只会继续放大负载。
+    // 上一次未结算就跳过本次触发，下一次触发会照常补上。
     let isStatusPollInFlight = false;
+    let eventDebounceTimer: number | null = null;
 
     async function refreshSessionStatuses() {
       if (isStatusPollInFlight) {
@@ -141,6 +154,24 @@ export function useAgentSessionNotifications({
       }
     }
 
+    // 事件驱动为主路径：会话状态变化会广播 agent-session-list-changed（一次 turn 结束
+    // 可能连发多条，故去抖 300ms）；下方 5s 轮询只兜住事件丢失。
+    const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
+      AGENT_SESSION_LIST_CHANGED_EVENT,
+      (event) => {
+        if (event.projectId !== projectId) {
+          return;
+        }
+        if (eventDebounceTimer !== null) {
+          return;
+        }
+        eventDebounceTimer = window.setTimeout(() => {
+          eventDebounceTimer = null;
+          void refreshSessionStatuses();
+        }, SESSION_STATUS_EVENT_DEBOUNCE_MS);
+      },
+    );
+
     void refreshSessionStatuses();
     const intervalId = window.setInterval(() => {
       void refreshSessionStatuses();
@@ -148,7 +179,11 @@ export function useAgentSessionNotifications({
 
     return () => {
       isDisposed = true;
+      if (eventDebounceTimer !== null) {
+        window.clearTimeout(eventDebounceTimer);
+      }
       window.clearInterval(intervalId);
+      unsubscribe();
     };
   }, [messages, pollIntervalMs, projectId, projectName, transport]);
 }

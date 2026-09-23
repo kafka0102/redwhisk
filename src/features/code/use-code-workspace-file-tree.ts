@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { useWindowFocus } from "../../shared/window/use-window-focus";
 import { buildFileTreeDecorations } from "../../shared/workspace/file-tree-git-decorations";
 import {
   clearFileTreeDirectoryLoadFailure,
@@ -25,7 +26,13 @@ import {
   type WorkspaceFileTreeNode,
 } from "../../shared/workspace/workspace-commands";
 
-const FILE_TREE_REFRESH_INTERVAL_MS = 5_000;
+/** 目录 listing 轮询间隔：只重拉已加载目录，展开新目录仍即时拉取。 */
+const FILE_TREE_LISTING_REFRESH_INTERVAL_MS = 10_000;
+/**
+ * 变更徽标轮询间隔。git status + branch sync 是子进程级成本，与目录 listing 解耦后
+ * 各自决定节奏：徽标晚 15s 刷新，远优于每 5s 与目录一起各起一次 git。
+ */
+const FILE_TREE_CHANGES_REFRESH_INTERVAL_MS = 15_000;
 const EMPTY_DECORATIONS = buildFileTreeDecorations([]);
 const EMPTY_CHANGE_KINDS = EMPTY_DECORATIONS.fileKinds;
 const EMPTY_DIRECTORY_KINDS = EMPTY_DECORATIONS.directoryKinds;
@@ -230,7 +237,11 @@ export function useCodeWorkspaceFileTree(
   const [isVisible, setIsVisible] = useState(
     () => document.visibilityState === "visible",
   );
-  const wasVisibleRef = useRef(isVisible);
+  // 失焦窗口（多窗口场景下的后台窗口）不起定时器：git 与 IPC 会按窗口数线性叠加，
+  // 重新聚焦时由下方 recovery effect 立即补拉一次，不丢新鲜度。
+  const isWindowFocused = useWindowFocus();
+  const isPollingActive = isVisible && isWindowFocused;
+  const wasPollingActiveRef = useRef(isPollingActive);
   const translateRef = useRef(t);
   const liveRef = useRef(live);
 
@@ -441,22 +452,38 @@ export function useCodeWorkspaceFileTree(
 
   useEffect(() => {
     if (!enabled || !workspacePath) {
-      wasVisibleRef.current = isVisible;
+      wasPollingActiveRef.current = isPollingActive;
       return;
     }
-    if (!wasVisibleRef.current && isVisible) {
+    if (!wasPollingActiveRef.current && isPollingActive) {
       refresh();
     }
-    wasVisibleRef.current = isVisible;
-  }, [isVisible, enabled, workspacePath, refresh]);
+    wasPollingActiveRef.current = isPollingActive;
+  }, [isPollingActive, enabled, workspacePath, refresh]);
 
+  // 目录 listing 与变更徽标各自独立计时：listing 便宜、要跟得上外部增删；变更徽标
+  // 每次都要起 git，节奏放慢一档。
   useEffect(() => {
-    if (!enabled || !isVisible || !workspacePath) return;
-    const timerId = window.setInterval(refresh, FILE_TREE_REFRESH_INTERVAL_MS);
+    if (!enabled || !isPollingActive || !workspacePath) return;
+    const timerId = window.setInterval(
+      loadTree,
+      FILE_TREE_LISTING_REFRESH_INTERVAL_MS,
+    );
     return () => {
       window.clearInterval(timerId);
     };
-  }, [enabled, isVisible, workspacePath, refresh]);
+  }, [enabled, isPollingActive, loadTree, workspacePath]);
+
+  useEffect(() => {
+    if (!enabled || !isPollingActive || !workspacePath) return;
+    const timerId = window.setInterval(
+      loadChanges,
+      FILE_TREE_CHANGES_REFRESH_INTERVAL_MS,
+    );
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [enabled, isPollingActive, loadChanges, workspacePath]);
 
   return {
     tree: live.tree,

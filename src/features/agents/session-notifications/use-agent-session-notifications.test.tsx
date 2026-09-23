@@ -381,6 +381,41 @@ describe("useAgentSessionNotifications", () => {
 
     expect(mockedPlayNotificationSound).not.toHaveBeenCalled();
   });
+
+  it("recomputes statuses from agent-session-list-changed instead of waiting for the poll", async () => {
+    // 事件去抖用真实计时会让断言依赖机器负载，这里用假计时器精确推进 300ms 去抖窗口。
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport({ isWindowFocused: true });
+      listAgentSessionsMock.mockResolvedValue({
+        sessions: [session({ sessionId: 3, status: "running" })],
+      });
+
+      // 兜底轮询拉到 60s：若重算来自轮询，这次断言不会成立。
+      await renderProbe({ pollIntervalMs: 60_000, transport });
+      expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
+
+      const listChangedListener = mocks.listeners.find(
+        (listener) => listener.eventName === "agent-session-list-changed",
+      );
+      expect(listChangedListener).toBeDefined();
+
+      await act(async () => {
+        listChangedListener?.callback({
+          payload: {
+            projectId: 1,
+            reason: "turn_grace_finalized",
+            sessionId: 3,
+          } as unknown as AgentStreamEventEnvelope,
+        });
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function createTransport({
