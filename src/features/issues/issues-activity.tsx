@@ -13,7 +13,6 @@ import {
   EMPTY_FORM,
   ISSUE_PAGE_SIZE,
   type AttachmentPreviewState,
-  type DialogMode,
   type IssueFormState,
 } from "./issue-activity-types";
 import {
@@ -21,11 +20,12 @@ import {
   type LaneTotalsMap,
   INITIAL_LANE_LOAD_STATE,
   INITIAL_LANE_TOTALS,
-  computeLaneLoadState,
-  deriveLaneTotals,
   mergeIssues,
-  sortIssuesByStatusChangedAtDesc,
 } from "./issue-lane-helpers";
+import {
+  readInitialIssuePageState,
+  resolveLoadedIssuePage,
+} from "./issue-page-restore";
 import {
   buildIssueDescription,
   canRunIssueFor,
@@ -48,7 +48,11 @@ import { IssueRunDialog } from "./issue-run/issue-run-dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
-import { issuePageStateCache } from "./issues-activity-cache";
+import {
+  issuePageStateCache,
+  markIssueOpenRequestApplied,
+  shouldApplyIssueOpenRequest,
+} from "./issues-activity-cache";
 import {
   isGlobalLabelOverridden,
   listProjectLabels,
@@ -56,10 +60,7 @@ import {
 } from "../settings/settings-commands";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
-import {
-  getIssueOpenRequestId,
-  type IssueOpenRequest,
-} from "./issue-open-request";
+import { type IssueOpenRequest } from "./issue-open-request";
 
 // 详情编辑 / 只读页含 Quill 与 react-markdown，按需 chunk，避免项目窗口冷启动
 // 同步解析重依赖（看板首屏不需要编辑器与 Markdown 渲染栈）。
@@ -93,18 +94,21 @@ export function IssuesActivity({
   issuesReturnSignal = 0,
 }: IssuesActivityProps) {
   const { locale, messages, t } = useI18n();
-  const cachedPageState = issuePageStateCache.get(projectId) ?? null;
-  const requestedIssueId =
-    getIssueOpenRequestId(requestedIssue) ?? legacyRequestedIssueId;
-  const hasRequestedIssue = requestedIssueId != null;
-  const [issues, setIssues] = useState<IssueRecord[]>([]);
-  const [selectedIssueId, setSelectedIssueId] = useState<number | null>(
-    requestedIssueId ?? cachedPageState?.selectedIssueId ?? null,
+  const initialPageState = readInitialIssuePageState({
+    projectId,
+    requestedIssue,
+    legacyRequestedIssueId,
+  });
+  const { hasRequestedIssue, openRequestToken, requestedIssueId } =
+    initialPageState;
+  const [issues, setIssues] = useState<IssueRecord[]>(initialPageState.issues);
+  const [selectedIssueId, setSelectedIssueId] = useState(
+    initialPageState.selectedIssueId,
   );
-  const [dialogMode, setDialogMode] = useState<DialogMode | null>(
-    hasRequestedIssue ? "edit" : (cachedPageState?.dialogMode ?? null),
+  const [dialogMode, setDialogMode] = useState(initialPageState.dialogMode);
+  const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(
+    initialPageState.isReadOnlyEditRequested,
   );
-  const [isReadOnlyEditRequested, setIsReadOnlyEditRequested] = useState(false);
   // 删除 Issue / 切换状态期间显示阻塞式 LoadingDialog，避免用户误以为提交无响应。
   const [isDeletingIssue, setIsDeletingIssue] = useState(false);
   const [isAdvancingStatus, setIsAdvancingStatus] = useState(false);
@@ -113,9 +117,7 @@ export function IssuesActivity({
   const [runDialogIssue, setRunDialogIssue] = useState<RunDialogIssue | null>(
     null,
   );
-  const [form, setForm] = useState<IssueFormState>(
-    cachedPageState?.form ?? EMPTY_FORM,
-  );
+  const [form, setForm] = useState<IssueFormState>(initialPageState.form);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -148,7 +150,7 @@ export function IssuesActivity({
   const activeProjectIdRef = useRef(projectId);
   const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
-    cachedPageState?.previousSelectedIssueId ?? null,
+    initialPageState.previousSelectedIssueId,
   );
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const cardRefs = useRef(new Map<number, HTMLButtonElement>());
@@ -180,44 +182,57 @@ export function IssuesActivity({
       return;
     }
 
+    const issueSnapshot =
+      issues.find((issue) => issue.id === selectedIssueId) ??
+      issuePageStateCache.get(projectId)?.issueSnapshot ??
+      null;
     issuePageStateCache.set(projectId, {
       dialogMode,
       form,
       previousSelectedIssueId: previousSelectedIssueIdRef.current,
       selectedIssueId,
+      isReadOnlyEditRequested,
+      issueSnapshot,
     });
-  }, [dialogMode, form, projectId, selectedIssueId]);
+  }, [
+    dialogMode,
+    form,
+    isReadOnlyEditRequested,
+    issues,
+    projectId,
+    selectedIssueId,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadIssues() {
       const cachedState = issuePageStateCache.get(projectId) ?? null;
+      const applyOpenRequest = shouldApplyIssueOpenRequest(
+        projectId,
+        openRequestToken,
+        hasRequestedIssue,
+      );
       setIsLoading(true);
       setErrorMessage(null);
-      setIssues([]);
-      setLaneLoadState(INITIAL_LANE_LOAD_STATE);
-      setLaneTotals(INITIAL_LANE_TOTALS);
       loadingMoreRef.current.clear();
-      setSelectedIssueId(
-        hasRequestedIssue
-          ? requestedIssueId
-          : (cachedState?.selectedIssueId ?? null),
-      );
-      setDialogMode(
-        hasRequestedIssue ? "edit" : (cachedState?.dialogMode ?? null),
-      );
-      setIsReadOnlyEditRequested(false);
       setRunDialogIssue(null);
-      setForm(cachedState?.form ?? EMPTY_FORM);
-      previousSelectedIssueIdRef.current =
-        cachedState?.previousSelectedIssueId ?? null;
       setIsSaving(false);
       setDialogErrorMessage(null);
       setTitleError(null);
       hideCompletionLoadingDialog();
       setIsDeletingIssue(false);
       setIsAdvancingStatus(false);
+      if (applyOpenRequest || !cachedState?.dialogMode) {
+        setIssues([]);
+        setLaneLoadState(INITIAL_LANE_LOAD_STATE);
+        setLaneTotals(INITIAL_LANE_TOTALS);
+        setSelectedIssueId(applyOpenRequest ? requestedIssueId : null);
+        setDialogMode(applyOpenRequest ? "edit" : null);
+        setIsReadOnlyEditRequested(false);
+        setForm(EMPTY_FORM);
+        previousSelectedIssueIdRef.current = null;
+      }
 
       try {
         const response = await listIssues({
@@ -228,42 +243,29 @@ export function IssuesActivity({
           return;
         }
 
-        const nextCachedState = issuePageStateCache.get(projectId) ?? null;
-        const cachedIssueExists =
-          nextCachedState?.dialogMode === "create" ||
-          response.issues.some(
-            (issue) => issue.id === nextCachedState?.selectedIssueId,
-          );
-
-        const sortedIssues = sortIssuesByStatusChangedAtDesc(response.issues);
-
-        setIssues(sortedIssues);
-        setLaneLoadState(computeLaneLoadState(sortedIssues));
-        setLaneTotals(deriveLaneTotals(response.statusTotals, sortedIssues));
-        if (hasRequestedIssue) {
-          const requestedIssue =
-            sortedIssues.find((issue) => issue.id === requestedIssueId) ?? null;
-          setSelectedIssueId(requestedIssue?.id ?? sortedIssues[0]?.id ?? null);
-          setDialogMode(requestedIssue ? "edit" : null);
-          setForm(requestedIssue ? issueToForm(requestedIssue) : EMPTY_FORM);
-          previousSelectedIssueIdRef.current = null;
-        } else if (nextCachedState && cachedIssueExists) {
-          setSelectedIssueId(nextCachedState.selectedIssueId);
-          setDialogMode(nextCachedState.dialogMode);
-          setForm(nextCachedState.form);
-          previousSelectedIssueIdRef.current =
-            nextCachedState.previousSelectedIssueId;
-        } else {
-          issuePageStateCache.delete(projectId);
-          setSelectedIssueId(
-            sortedIssues.find((issue) => issue.id === requestedIssueId)?.id ??
-              sortedIssues[0]?.id ??
-              null,
-          );
-          setDialogMode(null);
-          setForm(EMPTY_FORM);
-          previousSelectedIssueIdRef.current = null;
+        const restored = resolveLoadedIssuePage({
+          issues: response.issues,
+          statusTotals: response.statusTotals,
+          applyOpenRequest,
+          requestedIssueId,
+          cached: applyOpenRequest
+            ? null
+            : (issuePageStateCache.get(projectId) ?? null),
+        });
+        if (applyOpenRequest) {
+          markIssueOpenRequestApplied(projectId, openRequestToken);
         }
+        if (restored.clearCache) {
+          issuePageStateCache.delete(projectId);
+        }
+        setIssues(restored.issues);
+        setLaneLoadState(restored.laneLoadState);
+        setLaneTotals(restored.laneTotals);
+        setSelectedIssueId(restored.selectedIssueId);
+        setDialogMode(restored.dialogMode);
+        setIsReadOnlyEditRequested(restored.isReadOnlyEditRequested);
+        setForm(restored.form);
+        previousSelectedIssueIdRef.current = restored.previousSelectedIssueId;
       } catch (error) {
         if (isMounted) {
           setErrorMessage(getCommandErrorMessage(error, t));
@@ -280,7 +282,7 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [hasRequestedIssue, projectId, requestedIssueId, t]);
+  }, [hasRequestedIssue, openRequestToken, projectId, requestedIssueId, t]);
 
   useEffect(() => {
     let isMounted = true;

@@ -1807,6 +1807,83 @@ describe("IssuesActivity", () => {
     expect(within(page).getByLabelText("Description")).toHaveValue("kept body");
   });
 
+  it("keeps an edited issue open when it is missing from the reloaded first page", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    const { unmount } = renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    const title = await screen.findByLabelText("Title");
+    await user.clear(title);
+    await user.type(title, "kept edit");
+
+    unmount();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    renderIssuesActivity();
+
+    const page = await screen.findByRole("form", { name: "Edit Issue" });
+    expect(within(page).getByLabelText("Title")).toHaveValue("kept edit");
+    expect(
+      screen.queryByRole("region", { name: "Issues kanban" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a create draft across remount when a stale requested issue is absent from the first page", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+
+    const { unmount } = renderIssuesActivity({
+      requestedIssueId: existingIssue.id,
+    });
+
+    await user.click(
+      within(await screen.findByRole("form", { name: "Edit Issue" })).getByRole(
+        "button",
+        { name: "Back" },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "New Issue" }));
+    await user.type(screen.getByLabelText("Title"), "kept draft");
+
+    unmount();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    renderIssuesActivity({ requestedIssueId: existingIssue.id });
+
+    const page = await screen.findByRole("form", { name: "New Issue" });
+    expect(within(page).getByLabelText("Title")).toHaveValue("kept draft");
+    expect(
+      screen.queryByRole("region", { name: "Issues kanban" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a newly requested issue instead of restoring a cached create draft", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue, reviewIssue],
+    });
+
+    const { unmount } = renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
+    await user.type(await screen.findByLabelText("Title"), "kept draft");
+
+    unmount();
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue, reviewIssue],
+    });
+    renderIssuesActivity({ requestedIssueId: reviewIssue.id });
+
+    expect(
+      await screen.findByRole("region", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "New Issue" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("restores the selected issue when create is canceled", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
