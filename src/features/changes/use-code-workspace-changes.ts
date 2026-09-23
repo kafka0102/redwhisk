@@ -18,6 +18,12 @@ import {
   type WorkspaceChangedFile,
   type WorkspaceCommitRecord,
 } from "../../shared/workspace/workspace-commands";
+import {
+  getCachedWorkspaceChanges,
+  getCachedWorkspaceCommitHistory,
+  setCachedWorkspaceChanges,
+  setCachedWorkspaceCommitHistory,
+} from "./changes-workspace-cache";
 
 export interface UseCodeWorkspaceChangesResult {
   changes: WorkspaceChangedFile[];
@@ -54,6 +60,11 @@ type CommitHistoryRequestMode = "initial" | "refresh" | "load-more";
  * - 已有展示数据时后续 refresh：不进 loading；响应 signature 与上次相同则零
  *   setState（不替换 files/branchSync/commits）；不同则静默更新。
  *
+ * 跨卸载保留（见 ADR-0041）：切到别的 Activity 会整棵卸载 ChangesActivity，列表数据
+ * 只存在 hook state 时切回必然清空重拉 → 每次都先闪空态 / loading。上次成功响应按
+ * 「项目 + 工作区路径」缓存在 changes-workspace-cache，重挂载 / 切根时先回填旧数据
+ * 再后台 soft revalidate；无快照（首次访问该工作区）才走 clearStale 进 loading。
+ *
  * 已提交历史支持分页：首页 50；load-more 按 loadedCount offset 追加；刷新按
  * max(50, loadedCount) 整窗替换且不清空旧列表。刷新优先于 load-more，generation
  * 作废过期响应；同时最多一个 commit-history 请求。
@@ -68,23 +79,38 @@ export function useCodeWorkspaceChanges(
   enabled: boolean,
 ): UseCodeWorkspaceChangesResult {
   const { t } = useI18n();
-  const [changes, setChanges] = useState<WorkspaceChangedFile[]>([]);
-  const [branchSync, setBranchSync] = useState<BranchSyncStatus | null>(null);
+  // 挂载首帧就回填缓存快照：惰性 state 承载只读快照（不在 render 期写 ref）。
+  const [cacheSnapshot] = useState(() => ({
+    changes: getCachedWorkspaceChanges(projectId, workspacePath),
+    commitHistory: getCachedWorkspaceCommitHistory(projectId, workspacePath),
+  }));
+  const [changes, setChanges] = useState<WorkspaceChangedFile[]>(
+    () => cacheSnapshot.changes?.files ?? [],
+  );
+  const [branchSync, setBranchSync] = useState<BranchSyncStatus | null>(
+    () => cacheSnapshot.changes?.branchSync ?? null,
+  );
   const [isChangesLoading, setIsChangesLoading] = useState(false);
   const [changesErrorMessage, setChangesErrorMessage] = useState<string | null>(
     null,
   );
   const [isChangesUnavailable, setIsChangesUnavailable] = useState(false);
   const [commitHistory, setCommitHistory] = useState<WorkspaceCommitRecord[]>(
-    [],
+    () => cacheSnapshot.commitHistory?.commits ?? [],
   );
   const [isCommitHistoryLoading, setIsCommitHistoryLoading] = useState(false);
   const [commitHistoryErrorMessage, setCommitHistoryErrorMessage] = useState<
     string | null
   >(null);
-  const [isWorktree, setIsWorktree] = useState(false);
-  const [baseBranch, setBaseBranch] = useState<string | null>(null);
-  const [hasMoreCommitHistory, setHasMoreCommitHistory] = useState(false);
+  const [isWorktree, setIsWorktree] = useState(
+    () => cacheSnapshot.commitHistory?.isWorktree ?? false,
+  );
+  const [baseBranch, setBaseBranch] = useState<string | null>(
+    () => cacheSnapshot.commitHistory?.baseBranch ?? null,
+  );
+  const [hasMoreCommitHistory, setHasMoreCommitHistory] = useState(
+    () => cacheSnapshot.commitHistory?.hasMore ?? false,
+  );
   const [isLoadingMoreCommitHistory, setIsLoadingMoreCommitHistory] =
     useState(false);
   const [
@@ -102,7 +128,7 @@ export function useCodeWorkspaceChanges(
   const hasCommitHistoryDisplayRef = useRef(false);
   const isCommitHistoryLoadingRef = useRef(false);
   const commitHistoryErrorMessageRef = useRef<string | null>(null);
-  const commitHistoryLoadedCountRef = useRef(0);
+  const commitHistoryRef = useRef<WorkspaceCommitRecord[]>([]);
   const hasMoreCommitHistoryRef = useRef(false);
   const commitHistoryInFlightRef = useRef(false);
   const translateRef = useRef(t);
@@ -112,7 +138,7 @@ export function useCodeWorkspaceChanges(
   }, [t]);
 
   useEffect(() => {
-    commitHistoryLoadedCountRef.current = commitHistory.length;
+    commitHistoryRef.current = commitHistory;
   }, [commitHistory]);
 
   useEffect(() => {
@@ -172,6 +198,12 @@ export function useCodeWorkspaceChanges(
           if (!unchanged) {
             setChanges(response.files);
             setBranchSync(response.branchSync ?? null);
+            // 快照紧跟展示数据写入，供下次重挂载首帧回填。
+            setCachedWorkspaceChanges(projectId, workspacePath, {
+              files: response.files,
+              branchSync: response.branchSync ?? null,
+              signature: response.signature,
+            });
           }
           isChangesLoadingRef.current = false;
           setIsChangesLoading(false);
@@ -208,7 +240,14 @@ export function useCodeWorkspaceChanges(
       const requestSequence = (commitHistoryRequestSequenceRef.current += 1);
       commitHistoryInFlightRef.current = true;
 
-      const loadedCount = commitHistoryLoadedCountRef.current;
+      // 追加 / 整窗刷新都以「当前展示的整窗」为基准：优先取快照（本工作区最近一次被
+      // 采纳的整窗，同步写入，不受渲染时序影响），缺失时兜底渲染镜像 ref。
+      // 同一时刻最多一个 commit-history 请求在飞（load-more 遇 in-flight 直接跳过，
+      // 刷新会作废先前请求），故该基准在整个请求周期内保持有效。
+      const loadedCommitHistory =
+        getCachedWorkspaceCommitHistory(projectId, workspacePath)?.commits ??
+        commitHistoryRef.current;
+      const loadedCount = loadedCommitHistory.length;
       const limit =
         mode === "load-more"
           ? COMMIT_HISTORY_PAGE_SIZE
@@ -257,15 +296,25 @@ export function useCodeWorkspaceChanges(
             return;
           }
           if (mode === "load-more") {
-            setCommitHistory((current) =>
-              appendUniqueCommitsByHash(current, response.commits),
+            const nextCommitHistory = appendUniqueCommitsByHash(
+              loadedCommitHistory,
+              response.commits,
             );
+            setCommitHistory(nextCommitHistory);
             setIsWorktree(response.isWorktree);
             setBaseBranch(response.baseBranch ?? null);
             setHasMoreCommitHistory(response.hasMore);
-            // load-more 的 signature 仅代表一页；清空以便下次整窗刷新必应用。
+            // load-more 的 signature 仅代表一页；清空以便下次整窗刷新必应用
+            //（快照同步置空，重挂载恢复后也走整窗刷新）。
             lastCommitHistorySignatureRef.current = null;
             hasCommitHistoryDisplayRef.current = true;
+            setCachedWorkspaceCommitHistory(projectId, workspacePath, {
+              commits: nextCommitHistory,
+              isWorktree: response.isWorktree,
+              baseBranch: response.baseBranch ?? null,
+              hasMore: response.hasMore,
+              signature: null,
+            });
             setIsLoadingMoreCommitHistory(false);
             setLoadMoreCommitHistoryErrorMessage(null);
           } else {
@@ -287,6 +336,14 @@ export function useCodeWorkspaceChanges(
               setIsWorktree(response.isWorktree);
               setBaseBranch(response.baseBranch ?? null);
               setHasMoreCommitHistory(response.hasMore);
+              // 快照紧跟展示数据写入，供下次重挂载首帧回填。
+              setCachedWorkspaceCommitHistory(projectId, workspacePath, {
+                commits: response.commits,
+                isWorktree: response.isWorktree,
+                baseBranch: response.baseBranch ?? null,
+                hasMore: response.hasMore,
+                signature: response.signature,
+              });
             }
             isCommitHistoryLoadingRef.current = false;
             setIsCommitHistoryLoading(false);
@@ -317,13 +374,63 @@ export function useCodeWorkspaceChanges(
     [projectId, workspacePath],
   );
 
-  // 进入变更视图（enabled）或切换工作区时各拉取一次（切换工作区先丢弃旧根数据）。
-  // 轮询由外部 refresh* 触发，本 hook 内部 soft revalidate。
+  // 进入变更视图（enabled）、切换工作区或重挂载时各拉取一次。
+  // 有缓存快照（上次本工作区的成功响应）→ 先回填旧数据再 soft revalidate，切回变更
+  // 窗口时不闪空态 / loading；无快照 → 与旧行为一致，清空旧根数据并进 loading。
+  // ref 在 effect 内同步补齐，状态回填放微任务（react-hooks/set-state-in-effect），
+  // 微任务先于下方请求微任务执行，故请求能命中「已有展示数据」的 soft revalidate 分支。
   useEffect(() => {
     if (!enabled || !workspacePath) return;
-    runChangesRequest({ clearStale: true });
-    runCommitHistoryRequest("initial");
-  }, [enabled, workspacePath, runChangesRequest, runCommitHistoryRequest]);
+
+    const cachedChanges = getCachedWorkspaceChanges(projectId, workspacePath);
+    if (cachedChanges) {
+      hasChangesDisplayRef.current = true;
+      lastChangesSignatureRef.current = cachedChanges.signature;
+      isChangesLoadingRef.current = false;
+      changesErrorMessageRef.current = null;
+      isChangesUnavailableRef.current = false;
+      void Promise.resolve().then(() => {
+        setChanges(cachedChanges.files);
+        setBranchSync(cachedChanges.branchSync);
+        setIsChangesLoading(false);
+        setChangesErrorMessage(null);
+        setIsChangesUnavailable(false);
+      });
+      runChangesRequest({ clearStale: false });
+    } else {
+      runChangesRequest({ clearStale: true });
+    }
+
+    const cachedCommitHistory = getCachedWorkspaceCommitHistory(
+      projectId,
+      workspacePath,
+    );
+    if (cachedCommitHistory) {
+      hasCommitHistoryDisplayRef.current = true;
+      lastCommitHistorySignatureRef.current = cachedCommitHistory.signature;
+      isCommitHistoryLoadingRef.current = false;
+      commitHistoryErrorMessageRef.current = null;
+      commitHistoryRef.current = cachedCommitHistory.commits;
+      hasMoreCommitHistoryRef.current = cachedCommitHistory.hasMore;
+      void Promise.resolve().then(() => {
+        setCommitHistory(cachedCommitHistory.commits);
+        setIsWorktree(cachedCommitHistory.isWorktree);
+        setBaseBranch(cachedCommitHistory.baseBranch);
+        setHasMoreCommitHistory(cachedCommitHistory.hasMore);
+        setIsCommitHistoryLoading(false);
+        setCommitHistoryErrorMessage(null);
+      });
+      runCommitHistoryRequest("refresh");
+    } else {
+      runCommitHistoryRequest("initial");
+    }
+  }, [
+    enabled,
+    projectId,
+    workspacePath,
+    runChangesRequest,
+    runCommitHistoryRequest,
+  ]);
 
   const refreshChanges = useCallback(
     () => runChangesRequest({ clearStale: false }),

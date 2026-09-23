@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
 } from "../../shared/workspace/workspace-commands";
+import { resetChangesWorkspaceCacheForTests } from "./changes-workspace-cache";
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
@@ -41,6 +42,7 @@ const inaccessibleError = {
 
 describe("useCodeWorkspaceChanges", () => {
   beforeEach(() => {
+    resetChangesWorkspaceCacheForTests();
     vi.mocked(getProjectWorktreeChanges).mockReset();
     vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
       files: [],
@@ -374,6 +376,7 @@ function makeCommit(hash: string, message = `msg ${hash}`) {
 
 describe("useCodeWorkspaceChanges commit history pagination", () => {
   beforeEach(() => {
+    resetChangesWorkspaceCacheForTests();
     vi.mocked(getProjectWorktreeChanges).mockReset();
     vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
       files: [],
@@ -787,5 +790,200 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
     expect(result.current.isWorktree).toBe(true);
     expect(result.current.hasMoreCommitHistory).toBe(true);
     expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+});
+
+describe("useCodeWorkspaceChanges remount snapshot reuse", () => {
+  beforeEach(() => {
+    resetChangesWorkspaceCacheForTests();
+    vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
+      signature: "changes-empty",
+    });
+    vi.mocked(getProjectWorktreeCommitHistory).mockReset();
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [],
+      signature: "commits-empty",
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  it("restores cached changes on remount and soft-revalidates in the background", async () => {
+    const branchSync = { upstream: "origin/main", ahead: 1, behind: 0 };
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-1",
+      branchSync,
+    });
+
+    const first = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(first.result.current.changes).toEqual([changedFile]),
+    );
+    first.unmount();
+
+    let resolveReload:
+      | ((value: {
+          files: (typeof changedFile)[];
+          signature: string;
+          branchSync: typeof branchSync;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveReload = resolve;
+        }),
+    );
+
+    const second = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    // 首帧即旧数据，重拉在后台进行（不进 loading）。
+    expect(second.result.current.changes).toEqual([changedFile]);
+    expect(second.result.current.branchSync).toEqual(branchSync);
+    expect(second.result.current.isChangesLoading).toBe(false);
+
+    await act(async () => {
+      resolveReload?.({ files: [changedFile], signature: "sig-1", branchSync });
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2),
+    );
+    expect(second.result.current.isChangesLoading).toBe(false);
+    expect(second.result.current.changes).toEqual([changedFile]);
+  });
+
+  it("restores the loaded commit window on remount and refreshes that window", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`w1-${index}`),
+    );
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-page-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        commits: [makeCommit("w2-0")],
+        signature: "sig-page-2",
+        isWorktree: false,
+        hasMore: false,
+      });
+
+    const first = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(first.result.current.commitHistory).toHaveLength(50),
+    );
+    await act(async () => {
+      first.result.current.loadMoreCommitHistory();
+    });
+    await waitFor(() =>
+      expect(first.result.current.commitHistory).toHaveLength(51),
+    );
+    first.unmount();
+
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: page1,
+      signature: "sig-refresh",
+      isWorktree: false,
+      hasMore: true,
+    });
+
+    const second = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    // 快照含 load-more 追加的整窗；恢复期间不进 loading。
+    expect(second.result.current.commitHistory).toHaveLength(51);
+    expect(second.result.current.hasMoreCommitHistory).toBe(false);
+    expect(second.result.current.isCommitHistoryLoading).toBe(false);
+
+    await waitFor(() =>
+      expect(getProjectWorktreeCommitHistory).toHaveBeenLastCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        limit: 51,
+        offset: 0,
+      }),
+    );
+    expect(second.result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("renders cached changes on the first frame after remount", async () => {
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-1",
+    });
+
+    const first = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(first.result.current.changes).toEqual([changedFile]),
+    );
+    first.unmount();
+
+    const renderedChangeCounts: number[] = [];
+    function Probe() {
+      const { changes } = useCodeWorkspaceChanges(1, "/tmp/redwhisk", true);
+      renderedChangeCounts.push(changes.length);
+      return null;
+    }
+    render(<Probe />, { wrapper });
+
+    // 首帧（还未等任何请求回来）就必须是缓存数据，否则切回时会闪一下空态。
+    expect(renderedChangeCounts[0]).toBe(1);
+  });
+
+  it("clears stale changes and shows loading when switching to a never-visited workspace", async () => {
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [changedFile],
+      signature: "sig-1",
+    });
+
+    const { result, rerender } = renderHook(
+      ({ path }) => useCodeWorkspaceChanges(1, path, true),
+      { initialProps: { path: "/tmp/redwhisk" }, wrapper },
+    );
+    await waitFor(() => expect(result.current.changes).toEqual([changedFile]));
+
+    let resolveNext:
+      | ((value: { files: (typeof changedFile)[]; signature: string }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveNext = resolve;
+        }),
+    );
+
+    rerender({ path: "/tmp/never-visited" });
+
+    await waitFor(() => {
+      expect(result.current.changes).toEqual([]);
+      expect(result.current.isChangesLoading).toBe(true);
+    });
+
+    await act(async () => {
+      resolveNext?.({ files: [], signature: "sig-never" });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.isChangesLoading).toBe(false));
   });
 });
