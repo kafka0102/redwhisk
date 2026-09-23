@@ -66,12 +66,8 @@ where
     /// 或已存在记录则静默跳过。单条 profile 写入失败会记 stderr 但不阻断其余 agent 播种。
     pub fn seed_builtin_agents(&self) -> Result<(), CommandError> {
         for agent_type in BUILTIN_AGENT_SEED_ORDER {
-            let command_name = builtin_agent_command_name(&agent_type);
-            let detected_command = match self.detector.detect_command(command_name) {
-                Ok(command) => command,
-                Err(_) => continue,
-            };
-
+            // 先查是否已播种：命令探测要拉起 login/interactive shell（.zshrc 带 nvm 等
+            // 配置时每个命令数秒），每次启动为 4 个已播种 agent 白跑探测会明显加重开机负载。
             let already_seeded = self
                 .repository
                 .exists_profile_by_agent_type(agent_type.clone())
@@ -79,6 +75,12 @@ where
             if already_seeded {
                 continue;
             }
+
+            let command_name = builtin_agent_command_name(&agent_type);
+            let detected_command = match self.detector.detect_command(command_name) {
+                Ok(command) => command,
+                Err(_) => continue,
+            };
 
             let default_input =
                 default_builtin_profile_input(agent_type.clone(), &detected_command);

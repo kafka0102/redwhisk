@@ -2,7 +2,8 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Once, OnceLock};
+use std::thread;
 
 use super::command_lookup_process::{
     extract_marked_path, output_on_pty_with_timeout, output_with_timeout, DEFAULT_LOOKUP_TIMEOUT,
@@ -13,6 +14,9 @@ const DEFAULT_LOOKUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
 const LOOKUP_PATH_MARKER: &str = "__REDWHISK_LOOKUP_PATH__=";
 const LOOKUP_ENV_MARKER: &str = "__REDWHISK_LOOKUP_ENV__";
 const PATH_PROBE_COMMAND: &str = "printf '\n__REDWHISK_LOOKUP_PATH__=%s\n' \"$PATH\"";
+
+/// 「login+interactive shell」解析出的完整 `$PATH`；解析失败或尚未解析时为 `None`。
+static INTERACTIVE_SHELL_PATH: OnceLock<OsString> = OnceLock::new();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandLookupResult {
@@ -106,16 +110,35 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
 /// 2s 超时后注入失败，项目终端 `-lc` 启动命令就会 `command not found: pnpm`。
 /// 失败再回退 login `-lc`；仍失败返回 `None`，调用方回退到继承的 PATH。
 pub(crate) fn resolve_interactive_shell_path() -> Option<OsString> {
-    static CACHED: OnceLock<OsString> = OnceLock::new();
-    if let Some(path) = CACHED.get() {
+    if let Some(path) = INTERACTIVE_SHELL_PATH.get() {
         return Some(path.clone());
     }
 
     let preferred_shell = env::var("SHELL").ok();
     let shells = shell_lookup_candidates(preferred_shell.as_deref());
     let resolved = resolve_interactive_shell_path_with_shells_and_env(&shells, &[])?;
-    let _ = CACHED.set(resolved.clone());
+    let _ = INTERACTIVE_SHELL_PATH.set(resolved.clone());
     Some(resolved)
+}
+
+/// 读取已解析的交互式 `PATH`；未解析时立即返回 `None`，不触发 shell 探测。
+///
+/// 供「不能等待数秒 shell 探测」的热路径使用，配合 [`warm_interactive_shell_path`] 预热。
+pub(crate) fn resolved_interactive_shell_path() -> Option<OsString> {
+    INTERACTIVE_SHELL_PATH.get().cloned()
+}
+
+/// 后台预热交互式 `PATH`，进程内只启动一次。
+///
+/// 解析要拉起 login+interactive shell 并加载 `.zshrc`（nvm / compinit 等），实测可达
+/// 数秒；预热把这段成本放到后台线程，让首次打开项目等热路径直接命中缓存。
+pub(crate) fn warm_interactive_shell_path() {
+    static WARMING: Once = Once::new();
+    WARMING.call_once(|| {
+        thread::spawn(|| {
+            let _ = resolve_interactive_shell_path();
+        });
+    });
 }
 
 fn resolve_interactive_shell_path_with_shells_and_env(

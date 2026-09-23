@@ -12,11 +12,17 @@ use rusqlite::Connection;
 #[derive(Default, Clone)]
 struct SeedTestDetector {
     detect_results: std::collections::HashMap<String, Result<String, String>>,
+    detect_calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl SeedTestDetector {
     fn new() -> Self {
         Self::default()
+    }
+
+    /// 记录 `detect_command` 调用次数的共享句柄，供断言「未发生探测」。
+    fn calls_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<String>>> {
+        self.detect_calls.clone()
     }
 
     fn with_detect_result(command: &str, result: Result<&str, &str>) -> Self {
@@ -42,6 +48,10 @@ impl SeedTestDetector {
 
 impl AgentCommandDetector for SeedTestDetector {
     fn detect_command(&self, command_name: &str) -> Result<String, String> {
+        self.detect_calls
+            .lock()
+            .expect("detect calls")
+            .push(command_name.to_string());
         // 未显式配置结果的命令一律视为未装，保证 seed_builtin_agents 测试可控。
         self.detect_results
             .get(command_name)
@@ -52,6 +62,47 @@ impl AgentCommandDetector for SeedTestDetector {
     fn test_command(&self, command: &str) -> Result<String, String> {
         Ok(command.to_string())
     }
+}
+
+#[test]
+fn seed_builtin_agents_skips_command_detection_for_already_seeded_agents() {
+    // 已播种的 agent 不再探测命令：探测要拉起 login+interactive shell（.zshrc 带 nvm 时数秒），
+    // 每次启动为 4 个已播种 agent 白跑会明显加重开机后台负载。
+    let connection = migrated_in_memory_connection();
+    let detector = SeedTestDetector::new();
+    let detect_calls = detector.calls_handle();
+    let service = test_settings_service(&connection, detector);
+
+    for (agent_type, name) in [
+        (AgentType::Codex, "Codex"),
+        (AgentType::Claude, "Claude"),
+        (AgentType::OpenCode, "OpenCode"),
+        (AgentType::Grok, "Grok"),
+    ] {
+        service
+            .save_agent_profile(SaveAgentProfileInput {
+                id: None,
+                name: name.to_string(),
+                agent_type,
+                command: name.to_lowercase(),
+                scope: AgentScope::Global,
+                project_id: None,
+                mode: "default".to_string(),
+                dangerous: false,
+                default_skill: "".to_string(),
+                prompt_template: "".to_string(),
+                display_mode: "json".to_string(),
+                enabled: false,
+            })
+            .expect("save existing profile");
+    }
+
+    service.seed_builtin_agents().expect("seed");
+
+    assert!(
+        detect_calls.lock().expect("detect calls").is_empty(),
+        "已播种的 agent 不应再触发命令探测"
+    );
 }
 
 #[test]

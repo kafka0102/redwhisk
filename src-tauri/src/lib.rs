@@ -62,6 +62,9 @@ pub fn run() {
                 .set_app_handle(app.handle().clone());
             // 暂时不启用 Issue 交付摘要自动评论：保留 handle_turn_completed 逻辑，恢复时在此重新接线。
             trigger_global_skill_refresh(app.handle().clone(), state.agent_skills.clone());
+            // 交互式 PATH 解析（login+interactive shell）在 .zshrc 带 nvm 等配置时要数秒，
+            // 启动即在后台预热，避免用户首次打开项目时在 git / 终端子进程上同步等待。
+            crate::agent::command_detector::warm_interactive_shell_path();
             // 异步播种内置 agent（ADR-0020）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
             // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；
             // 失败仅记日志，不影响应用可用性。

@@ -1,7 +1,6 @@
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::{Command, Output};
-use std::sync::OnceLock;
 
 use thiserror::Error;
 
@@ -72,10 +71,12 @@ fn interactive_shell_path() -> Option<OsString> {
 }
 
 fn cached_interactive_shell_path() -> Option<OsString> {
-    static CACHED: OnceLock<Option<OsString>> = OnceLock::new();
-    CACHED
-        .get_or_init(crate::agent::command_detector::resolve_interactive_shell_path)
-        .clone()
+    // 只注入「已解析好」的 PATH，绝不在 git 热路径上同步等待 shell 探测。实测 .zshrc 带
+    // nvm 时该探测要 4–5 秒（上限 15 秒），历史上 `open_project` → `git worktree list`
+    // 会因此把「点击项目 → 工作台出现」拖到十秒级。解析由启动预热
+    // （`command_detector::warm_interactive_shell_path`）与终端 / agent 等后台路径完成；
+    // 解析完成后的 git 子进程仍拿到完整 PATH，hook 里的 pnpm 等命令不受影响。
+    crate::agent::command_detector::resolved_interactive_shell_path()
 }
 
 #[cfg(test)]

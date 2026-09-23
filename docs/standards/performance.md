@@ -18,6 +18,10 @@
 
 **反例**：`get_update_status` 曾为同步 command，且在缓存过期时直接 `ureq` 访问 GitHub（超时 15s）；Workbench（`AppShell`）每次挂载都会静默调用。网络慢/失败时把项目打开与 Issue 首屏拖到十多秒。已改为 `async` + `spawn_blocking`，失败时写入 `last_checked_at` 负缓存，TTL 内不再打远端。
 
+**反例**：git 子进程会注入「login+interactive shell 解析出的 PATH」（让 git hook 找到 pnpm 等），该解析曾同步执行：`.zshrc` 带 nvm 时实测 4–5 秒（上限 15 秒）。首个 git 调用恰在 `open_project` 热路径上（`list_code_workspaces` → `git worktree list`），于是「启动后点击项目 → 工作台出现」被拖到十秒级，之后切换项目因缓存命中只要百毫秒。现改为：git 子进程只读取已解析的 PATH，未解析就继承进程 PATH；解析改由应用 setup 后台预热（`agent/command_detector::warm_interactive_shell_path`）与终端 / agent 等后台路径完成，热路径绝不等待探测。回归：`src-tauri/tests/git_command_hot_path.rs`。
+
+**反例**：内置 agent 播种（ADR-0020）曾先探测命令、后查库，导致每次启动都为已播种的 codex/claude/opencode/grok 白跑 4 次 shell 探测（实测 9 秒后台负载，且与用户首次打开项目争抢 CPU）。现改为先查 `exists_profile_by_agent_type`，已播种直接跳过。回归：`service_seed_preview_tests.rs::seed_builtin_agents_skips_command_detection_for_already_seeded_agents`。
+
 ## 2. 批量取数，禁止 N+1 子进程 / 命令调用
 
 **判据**：对一组条目（提交、文件、行）逐条发起 `git` 子进程、SQL 查询或 Tauri command，就是 N+1。
@@ -49,6 +53,7 @@
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
 - 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？
 - 会不会在已有的高频本地轮询（如变更页 4s/8s）里再嵌网络型 `git fetch`？→ 禁止；远端跟踪更新应低频独立（见 ADR-0032 的 60s 后台 fetch），失败不得阻塞本地 refresh。
+- 启动期任务 / 热路径会不会同步拉起 shell 探测（login+interactive）？→ 改成启动后台预热 + 命中缓存才用，禁止让用户动作等它。
 
 ## 5. 新窗口 / 默认 Issues 首屏禁止同步拉起重依赖
 
@@ -63,4 +68,3 @@
 - URL 带 `projectId` 时，`openProject` 与 `listProjects` 并行，避免列表 IPC 串行拖长打开空态。
 - `IssuesActivity` 对详情编辑 / 只读页使用 `React.lazy` + `Suspense`；看板首屏保持同步，避免同步解析 Quill 与 `react-markdown`。
 - 回归：`src/app/main-entry-budget.test.ts`；本地可用 `pnpm exec vite build` 核对 `dist/assets/index-*.js` 体积与是否含 `monaco` / `quill`。
-
