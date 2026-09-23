@@ -2,11 +2,15 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
-use super::command_lookup_process::{output_with_timeout, DEFAULT_LOOKUP_TIMEOUT};
+use super::command_lookup_process::{
+    extract_marked_path, output_on_pty_with_timeout, output_with_timeout, DEFAULT_LOOKUP_TIMEOUT,
+    INTERACTIVE_PATH_TIMEOUT,
+};
 
 const DEFAULT_LOOKUP_SHELLS: [&str; 3] = ["/bin/zsh", "/bin/bash", "/bin/sh"];
 const LOOKUP_PATH_MARKER: &str = "__REDWHISK_LOOKUP_PATH__=";
 const LOOKUP_ENV_MARKER: &str = "__REDWHISK_LOOKUP_ENV__";
+const PATH_PROBE_COMMAND: &str = "printf '\n__REDWHISK_LOOKUP_PATH__=%s\n' \"$PATH\"";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandLookupResult {
@@ -96,8 +100,9 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
 /// 这些目录缺失而报 `command not found`。这里通过 `-lic` 让 shell 加载完整交互式
 /// 配置后回显 `$PATH`，供 PTY spawn 时注入子进程环境。
 ///
-/// 失败（找不到可用 shell 或 shell 异常退出）返回 `None`，调用方回退到继承的 PATH，
-/// 与未注入时的行为一致，不阻断启动。
+/// 交互式探测必须走 PTY：管道 + `-lic` 没有 TTY 时，nvm 等 hook 会 timeout，
+/// 2s 超时后注入失败，项目终端 `-lc` 启动命令就会 `command not found: pnpm`。
+/// 失败再回退 login `-lc`；仍失败返回 `None`，调用方回退到继承的 PATH。
 pub(crate) fn resolve_interactive_shell_path() -> Option<OsString> {
     let preferred_shell = env::var("SHELL").ok();
     let shells = shell_lookup_candidates(preferred_shell.as_deref());
@@ -120,24 +125,39 @@ fn resolve_path_with_shell(
     shell: &str,
     environment_overrides: &[(&str, &OsStr)],
 ) -> Option<OsString> {
+    if let Some(path) =
+        probe_path_on_pty(shell, &["-lic", PATH_PROBE_COMMAND], environment_overrides)
+    {
+        return Some(path);
+    }
+    probe_path_piped(shell, &["-lc", PATH_PROBE_COMMAND], environment_overrides)
+}
+
+fn probe_path_on_pty(
+    shell: &str,
+    args: &[&str],
+    environment_overrides: &[(&str, &OsStr)],
+) -> Option<OsString> {
+    let output =
+        output_on_pty_with_timeout(shell, args, environment_overrides, INTERACTIVE_PATH_TIMEOUT)
+            .ok()?;
+    extract_marked_path(&output, LOOKUP_PATH_MARKER)
+}
+
+fn probe_path_piped(
+    shell: &str,
+    args: &[&str],
+    environment_overrides: &[(&str, &OsStr)],
+) -> Option<OsString> {
     let mut process = Command::new(shell);
-    process.args(["-lic", "printf %s \"$PATH\""]);
+    process.args(args);
     for (key, value) in environment_overrides {
         process.env(key, value);
     }
 
     let output = output_with_timeout(process, DEFAULT_LOOKUP_TIMEOUT).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let path = String::from_utf8_lossy(&output.stdout);
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(OsString::from(trimmed))
-    }
+    extract_marked_path(&output.stdout, LOOKUP_PATH_MARKER)
+        .or_else(|| extract_marked_path(&output.stderr, LOOKUP_PATH_MARKER))
 }
 
 #[cfg(test)]
@@ -413,6 +433,44 @@ mod tests {
         assert!(
             env::split_paths(&path).any(|entry| entry == bin_dir),
             "解析出的 PATH 应包含 .zshrc 写入的目录，实际：{path:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_interactive_shell_path_uses_tty_when_non_tty_rc_blocks() {
+        // 复现 GUI 终端找不到 pnpm：.zshrc 只在 TTY 下写入 PATH，非 TTY 则卡住。
+        // 管道 -lic 会走卡住分支并超时；PTY 解析应拿到目录。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!(
+                "if [[ -t 0 ]]; then export PATH=\"{}:$PATH\"; else sleep 20; fi\n",
+                bin_dir.display()
+            ),
+        )
+        .expect("zshrc");
+
+        let started = Instant::now();
+        let path = resolve_interactive_shell_path_with_shells_and_env(
+            &["/bin/zsh".to_string()],
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("resolved interactive path via TTY");
+
+        assert!(
+            started.elapsed() < Duration::from_secs(6),
+            "非 TTY 卡住时必须走 PTY 解析，实际 {:?}",
+            started.elapsed()
+        );
+        assert!(
+            env::split_paths(&path).any(|entry| entry == bin_dir),
+            "PTY 解析出的 PATH 应包含 .zshrc 写入的目录，实际：{path:?}"
         );
     }
 

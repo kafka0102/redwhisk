@@ -468,7 +468,8 @@ impl PtySessionManager {
         }
         // 注入 login+interactive 解析出的完整 PATH：GUI 启动的进程继承 launchd 极简
         // PATH，缺少 nvm/fnm 等交互式配置（.zshrc）写入的目录，PTY 子进程用非交互
-        // `-lc` 执行用户命令（如 pnpm）会 command not found。解析失败回退继承 PATH。
+        // `-lc` 执行用户命令（如 pnpm）会 command not found。探测必须走伪终端，
+        // 否则 nvm 在无 TTY 管道里 timeout，2s 截断后注入失败。解析失败回退继承 PATH。
         if let Some(resolved_path) = self.resolved_interactive_path() {
             command.env("PATH", resolved_path);
         }
@@ -1588,6 +1589,105 @@ mod tests {
             "interactive shell history should recall launch command `{launch}`; snapshot tail:\n{}",
             tail_chars(&last_snapshot, 1200)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interactive_run_finds_zshrc_command_when_non_tty_rc_would_block() {
+        use super::{PtyCommandMode, PtySpawnRequest};
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("temp dir");
+        let user_zdot = temp.path().join("user-zdot");
+        let bin_dir = temp.path().join("bin");
+        std::fs::create_dir_all(&user_zdot).expect("user zdot");
+        std::fs::create_dir_all(&bin_dir).expect("bin dir");
+        let pnpm = bin_dir.join("pnpm");
+        std::fs::write(&pnpm, "#!/bin/sh\nprintf '%s\\n' 'PNPMOK'\n").expect("fake pnpm");
+        std::fs::set_permissions(&pnpm, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        std::fs::write(
+            user_zdot.join(".zshrc"),
+            format!(
+                "PS1='%# '\nif [[ -t 0 ]]; then export PATH=\"{}:$PATH\"; else sleep 20; fi\n",
+                bin_dir.display()
+            ),
+        )
+        .expect("write zshrc");
+        let log_path = temp.path().join("term.log");
+
+        let original_shell = std::env::var_os("SHELL");
+        let original_zdot = std::env::var_os("ZDOTDIR");
+        let original_home = std::env::var_os("HOME");
+        let original_path = std::env::var_os("PATH");
+        std::env::set_var("SHELL", "/bin/zsh");
+        std::env::set_var("ZDOTDIR", &user_zdot);
+        std::env::set_var("HOME", temp.path());
+        std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+
+        let manager = PtySessionManager::new();
+        let pending = match manager.spawn_pending(&PtySpawnRequest {
+            mode: PtyCommandMode::InteractiveRun,
+            command: "pnpm".to_string(),
+            working_dir: temp.path().to_string_lossy().to_string(),
+            log_path: log_path.to_string_lossy().to_string(),
+            initial_prompt: None,
+            rows: 24,
+            cols: 80,
+            startup_check_total_ms: 200,
+            startup_check_interval_ms: 20,
+        }) {
+            Ok(pending) => pending,
+            Err(error) => {
+                restore_env(original_shell, original_zdot, original_home);
+                restore_path(original_path);
+                panic!("spawn pending failed: {error}");
+            }
+        };
+        if let Err(error) = manager.register(9_002, pending, |_| {}) {
+            restore_env(original_shell, original_zdot, original_home);
+            restore_path(original_path);
+            panic!("register failed: {error:?}");
+        }
+
+        let mut last_snapshot = String::new();
+        let mut found = false;
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = match manager.restore_snapshot(9_002) {
+                Ok(snapshot) => snapshot,
+                Err(_) => continue,
+            };
+            let text = snapshot
+                .chunks
+                .iter()
+                .flat_map(|chunk| chunk.iter().copied())
+                .collect::<Vec<u8>>();
+            last_snapshot = String::from_utf8_lossy(&text).into_owned();
+            if last_snapshot.contains("PNPMOK") {
+                found = true;
+                break;
+            }
+            if last_snapshot.contains("command not found") {
+                break;
+            }
+        }
+
+        let _ = manager.kill(9_002);
+        restore_env(original_shell, original_zdot, original_home);
+        restore_path(original_path);
+
+        assert!(
+            found,
+            "launch command pnpm should run via injected interactive PATH; snapshot:\n{}",
+            tail_chars(&last_snapshot, 1200)
+        );
+    }
+
+    fn restore_path(original_path: Option<std::ffi::OsString>) {
+        match original_path {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
     }
 
     fn restore_env(
