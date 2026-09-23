@@ -83,8 +83,16 @@ export function useAgentSessionNotifications({
 
   useEffect(() => {
     let isDisposed = false;
+    // 间隔只有 1.5s，多窗口 / 后端繁忙时请求可能来不及返回；堆叠只会继续放大负载。
+    // 上一次未结算就跳过本次 tick，下一次 tick 会照常补上。
+    let isStatusPollInFlight = false;
 
     async function refreshSessionStatuses() {
+      if (isStatusPollInFlight) {
+        return;
+      }
+      isStatusPollInFlight = true;
+
       try {
         const response = await listAgentSessions(projectId);
         if (isDisposed) {
@@ -128,6 +136,8 @@ export function useAgentSessionNotifications({
         sessionStatusByIdRef.current = nextStatusById;
       } catch {
         // 状态轮询失败不影响主工作台；下次轮询会重新同步状态。
+      } finally {
+        isStatusPollInFlight = false;
       }
     }
 

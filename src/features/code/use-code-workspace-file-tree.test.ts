@@ -529,4 +529,101 @@ describe("useCodeWorkspaceFileTree", () => {
     await settle();
     expect(treeMock).toHaveBeenCalledTimes(1);
   });
+
+  const srcDirectoryNodes: WorkspaceFileTreeNode[] = [
+    {
+      id: "src",
+      name: "src",
+      path: "src",
+      kind: "directory",
+      isIgnored: false,
+    },
+  ];
+
+  const srcChildrenNodes: WorkspaceFileTreeNode[] = [
+    {
+      id: "src/main.ts",
+      name: "main.ts",
+      path: "src/main.ts",
+      kind: "file",
+      isIgnored: false,
+    },
+  ];
+
+  it("retries a failed directory listing instead of leaving the folder empty", async () => {
+    treeMock.mockResolvedValue({ nodes: srcDirectoryNodes, signature: "t1" });
+    changesMock.mockResolvedValue({ files: [], signature: "c1" });
+
+    const { result } = renderHook(() =>
+      useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true),
+    );
+    await settle();
+
+    // 展开目录的拉取失败（并发争抢 / 超时）后，箭头已向下但子节点为空。
+    treeMock.mockRejectedValueOnce(new Error("workspace read failed"));
+    act(() => {
+      result.current.loadDirectory("src");
+    });
+    await settle();
+    expect(result.current.tree[0]?.children).toBeUndefined();
+
+    // 按路径区分返回：轮询的根请求必须仍返回根节点，否则无法验证「失败目录被补拉」。
+    treeMock.mockImplementation(async (input) =>
+      input.directoryPath === "src"
+        ? { nodes: srcChildrenNodes, signature: "src1" }
+        : { nodes: srcDirectoryNodes, signature: "t1" },
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await settle();
+
+    // 轮询只重拉 listings 里已成功的目录，失败目录必须由重试表补回来。
+    expect(result.current.tree[0]?.children).toEqual(srcChildrenNodes);
+  });
+
+  it("keeps a single in-flight request per directory", async () => {
+    treeMock.mockResolvedValue({ nodes: srcDirectoryNodes, signature: "t1" });
+    changesMock.mockResolvedValue({ files: [], signature: "c1" });
+
+    const { result } = renderHook(() =>
+      useCodeWorkspaceFileTree(1, "/tmp/redwhisk", true),
+    );
+    await settle();
+
+    let resolveSrc!: (value: {
+      nodes: WorkspaceFileTreeNode[];
+      signature: string;
+    }) => void;
+    treeMock.mockImplementation((input) =>
+      input.directoryPath === "src"
+        ? new Promise((resolve) => {
+            resolveSrc = resolve;
+          })
+        : Promise.resolve({ nodes: srcDirectoryNodes, signature: "t1" }),
+    );
+    treeMock.mockClear();
+
+    const srcRequestCount = () =>
+      treeMock.mock.calls.filter(([input]) => input.directoryPath === "src")
+        .length;
+
+    act(() => {
+      result.current.loadDirectory("src");
+    });
+    act(() => {
+      result.current.loadDirectory("src");
+    });
+    await settle();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    // 重复触发与轮询都不能在同一个目录上叠加在途请求。
+    expect(srcRequestCount()).toBe(1);
+
+    await act(async () => {
+      resolveSrc({ nodes: srcChildrenNodes, signature: "src1" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.tree[0]?.children).toEqual(srcChildrenNodes);
+  });
 });

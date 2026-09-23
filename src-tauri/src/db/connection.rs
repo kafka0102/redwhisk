@@ -49,8 +49,17 @@ impl DatabaseConfig {
             path: path.clone(),
             source,
         })?;
+        // 多窗口下同一个库会被大量并发连接读写（每个 Tauri command 各开一次）。
+        // 默认 rollback journal 下写事务与读者互斥，实测并发写探测会出现秒级停顿，
+        // 并让并存读取以 SQLITE_BUSY 失败。WAL 让读写互不阻塞，busy_timeout 兜住
+        // 残余的写-写竞争。
         connection
-            .execute_batch("PRAGMA foreign_keys = ON;")
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 PRAGMA busy_timeout = 5000;
+                 PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;",
+            )
             .map_err(|source| DatabaseError::OpenDatabase {
                 path: path.clone(),
                 source,

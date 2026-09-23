@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
@@ -355,10 +355,18 @@ fn read_workspace_changes(root: &Path) -> Result<ProjectWorktreeChangesResponse,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )?;
     let entries = parse_status_entries(&status_output)?;
+    // 增删行数用一次 `git diff --numstat` 批量取回：逐文件为每个改动文件起一次
+    // git 子进程在 macOS 上实测每次约 100–160ms，改动文件多时单次调用即数秒
+    // （见 docs/standards/performance.md「批量取数，禁止 N+1 子进程」），而本命令在
+    // 代码 / 变更页按秒轮询。
+    let numstat_by_path = read_numstat_map(root);
     let mut files = Vec::new();
 
     for entry in entries {
-        let (additions, deletions, is_binary) = read_numstat(root, &entry.path);
+        let (additions, deletions, is_binary) = numstat_by_path
+            .get(&entry.path)
+            .copied()
+            .unwrap_or_else(|| read_untracked_numstat(root, &entry.path));
         let metadata_signature = file_metadata_signature(root, &entry.path);
         let content_hash = hash_string(&format!(
             "{}:{}:{}:{}:{}",
@@ -770,22 +778,68 @@ fn change_kind_from_status(status: &str) -> WorkspaceChangeKind {
     }
 }
 
-fn read_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
-    let output = run_git(root, &["diff", "--numstat", "HEAD", "--", path]).unwrap_or_default();
-    if let Some(line) = output.lines().next() {
-        let mut parts = line.split('\t');
-        let added = parts.next().unwrap_or("0");
-        let deleted = parts.next().unwrap_or("0");
-        if added == "-" || deleted == "-" {
-            return (0, 0, true);
+/// 单次 `git diff --numstat` 取回全部改动文件的增删行数：工作区相对路径 →
+/// (新增行, 删除行, 是否二进制)。
+///
+/// `--no-renames` 保留逐文件查询时的既有语义：重命名按新路径整体计为新增，而不是
+/// 把增删摊到旧路径。`-z` 让含空格 / 制表符 / 非 ASCII 的路径无需解析 git 的引号转义。
+fn read_numstat_map(root: &Path) -> HashMap<String, (i64, i64, bool)> {
+    let output = run_git_bytes(root, &["diff", "--numstat", "-z", "--no-renames", "HEAD"])
+        .unwrap_or_default();
+
+    parse_numstat_records(&output)
+}
+
+/// 解析 `--numstat -z` 输出。每条记录形如 `added\tdeleted\tpath`，记录之间以 NUL 分隔。
+fn parse_numstat_records(output: &[u8]) -> HashMap<String, (i64, i64, bool)> {
+    let mut stats = HashMap::new();
+
+    for record in output
+        .split(|byte| *byte == b'\0')
+        .filter(|record| !record.is_empty())
+    {
+        let Some(added_separator) = record.iter().position(|byte| *byte == b'\t') else {
+            continue;
+        };
+        let rest = &record[added_separator + 1..];
+        let Some(deleted_separator) = rest.iter().position(|byte| *byte == b'\t') else {
+            continue;
+        };
+        let path = String::from_utf8_lossy(&rest[deleted_separator + 1..]).to_string();
+        if path.is_empty() {
+            continue;
         }
-        return (
-            added.parse::<i64>().unwrap_or(0),
-            deleted.parse::<i64>().unwrap_or(0),
-            false,
+
+        let added = &record[..added_separator];
+        let deleted = &rest[..deleted_separator];
+        // 二进制文件的增删计数是字面量 `-`，沿用既有「(0, 0, true)」表达。
+        if added == b"-" || deleted == b"-" {
+            stats.insert(path, (0, 0, true));
+            continue;
+        }
+
+        stats.insert(
+            path,
+            (
+                parse_numstat_count(added),
+                parse_numstat_count(deleted),
+                false,
+            ),
         );
     }
 
+    stats
+}
+
+fn parse_numstat_count(bytes: &[u8]) -> i64 {
+    std::str::from_utf8(bytes)
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .unwrap_or(0)
+}
+
+/// `git diff` 不含未跟踪文件，沿用既有语义按文件内容回退估算新增行数。
+fn read_untracked_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
     if let Ok(workspace_file) = resolve_workspace_file(root, path) {
         if workspace_file.metadata.len() > MAX_TEXT_FILE_BYTES {
             return (0, 0, false);
@@ -2031,6 +2085,52 @@ mod tests {
         assert!(binary.is_binary);
         assert_eq!(binary.additions, 0);
         assert_eq!(binary.deletions, 0);
+    }
+
+    #[test]
+    fn parse_numstat_records_reads_nul_delimited_paths_and_binary_markers() {
+        let stats = parse_numstat_records(b"3\t1\tsrc/a b.ts\x00-\t-\tlogo.png\x00");
+
+        assert_eq!(stats.get("src/a b.ts").copied(), Some((3, 1, false)));
+        assert_eq!(stats.get("logo.png").copied(), Some((0, 0, true)));
+    }
+
+    #[test]
+    fn changes_report_numstat_in_one_batch_call() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        init_git_repo(root);
+        fs::write(root.join("modified.txt"), "one\ntwo\n").expect("write modified");
+        fs::create_dir_all(root.join("nested dir")).expect("create nested dir");
+        fs::write(root.join("nested dir/spaced name.txt"), "a\nb\n").expect("write spaced");
+        fs::write(root.join("renamed-old.txt"), "r1\nr2\n").expect("write rename source");
+        git(root, &["add", "."]);
+        git(root, &["commit", "-m", "base"]);
+
+        fs::write(root.join("modified.txt"), "one\ntwo\nthree\nfour\n").expect("modify");
+        fs::write(root.join("nested dir/spaced name.txt"), "a\nb\nc\n").expect("modify spaced");
+        fs::write(root.join("staged.txt"), "s1\ns2\n").expect("write staged");
+        git(root, &["add", "staged.txt"]);
+        git(root, &["mv", "renamed-old.txt", "renamed-new.txt"]);
+        fs::write(root.join("untracked.txt"), "u1\nu2\nu3\n").expect("write untracked");
+
+        let changes = read_workspace_changes(root).expect("read changes");
+        let stat_for = |path: &str| {
+            let file = changes
+                .files
+                .iter()
+                .find(|file| file.file_path == path)
+                .unwrap_or_else(|| panic!("missing change for {path}"));
+            (file.additions, file.deletions, file.is_binary)
+        };
+
+        assert_eq!(stat_for("modified.txt"), (2, 0, false));
+        assert_eq!(stat_for("nested dir/spaced name.txt"), (1, 0, false));
+        assert_eq!(stat_for("staged.txt"), (2, 0, false));
+        // 重命名与逐文件查询语义一致：按新路径整体计为新增，不摊到旧路径。
+        assert_eq!(stat_for("renamed-new.txt"), (2, 0, false));
+        // 未跟踪文件不在 `git diff` 里，回退成「读文件数行」。
+        assert_eq!(stat_for("untracked.txt"), (3, 0, false));
     }
 
     #[test]

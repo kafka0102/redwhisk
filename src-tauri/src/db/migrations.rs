@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use rusqlite::config::DbConfig;
@@ -205,6 +206,16 @@ impl MigrationRunner {
         let mut applied_versions = Vec::new();
 
         connection.busy_timeout(Duration::from_secs(5))?;
+
+        // 快路径：全部内置迁移都已记录时只读返回已应用状态，不开写事务。
+        // 本方法被几乎每条 Tauri command 调用（`prepare_*_data_dir` → 开库 → 迁移），
+        // 无条件 `BEGIN IMMEDIATE` 等于给每条命令加一次全局写锁：多窗口轮询下实测
+        // 并发写探测的尾延迟达秒级并会以 SQLITE_BUSY 打断读取。判定条件与慢路径
+        // 「没有需要应用的迁移」等价，命中时不需要写锁。
+        if let Some(status) = read_applied_status(connection, &migrations)? {
+            return Ok(status);
+        }
+
         ensure_migration_table(connection)?;
         connection.execute_batch("BEGIN IMMEDIATE")?;
 
@@ -548,6 +559,51 @@ fn has_migration(connection: &Connection, version: &str) -> rusqlite::Result<boo
     Ok(count > 0)
 }
 
+/// 只读探测「schema_migrations 已建好，且全部内置迁移都已记录」。
+///
+/// 返回 `Some` 表示慢路径将无事可做，可直接复用该状态；返回 `None` 表示需要
+/// 进入写事务补迁移。判定语句只读，不获取写锁，因此可安全用于每个 command
+/// 都会走到的迁移检查。
+fn read_applied_status(
+    connection: &Connection,
+    migrations: &[Migration],
+) -> rusqlite::Result<Option<MigrationStatus>> {
+    if !has_migration_table(connection)? {
+        return Ok(None);
+    }
+
+    let mut applied_versions = HashSet::with_capacity(migrations.len());
+    {
+        let mut statement = connection.prepare("SELECT version FROM schema_migrations")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            applied_versions.insert(row.get::<_, String>(0)?);
+        }
+    }
+
+    if migrations
+        .iter()
+        .any(|migration| !applied_versions.contains(migration.version))
+    {
+        return Ok(None);
+    }
+
+    Ok(Some(MigrationStatus {
+        current_version: current_version(connection)?,
+        applied_versions: Vec::new(),
+    }))
+}
+
+fn has_migration_table(connection: &Connection) -> rusqlite::Result<bool> {
+    let count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+        [],
+        |row| row.get(0),
+    )?;
+
+    Ok(count > 0)
+}
+
 fn current_version(connection: &Connection) -> rusqlite::Result<Option<String>> {
     let mut statement = connection
         .prepare("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")?;
@@ -567,6 +623,46 @@ mod tests {
     use super::{
         MigrationRunner, ISSUE_TIMELINE_ACTOR_MIGRATION_SQL, ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION,
     };
+
+    #[test]
+    fn run_skips_write_transaction_when_all_migrations_applied() {
+        let connection = Connection::open_in_memory().expect("connection");
+        MigrationRunner::default()
+            .run(&connection)
+            .expect("initial migrations");
+
+        // `query_only` 下任何写语句（含 `CREATE TABLE IF NOT EXISTS` 与
+        // `BEGIN IMMEDIATE`）都会报错；能通过即证明第二次检查完全走只读快路径，
+        // 不再为每条 Tauri command 抢占全局写锁。
+        connection
+            .execute_batch("PRAGMA query_only = ON;")
+            .expect("enable query_only");
+
+        let status = MigrationRunner::default()
+            .run(&connection)
+            .expect("second run stays read-only");
+
+        assert!(status.applied_versions.is_empty());
+        assert!(status.current_version.is_some());
+    }
+
+    #[test]
+    fn run_still_applies_migrations_missing_from_schema_migrations() {
+        let connection = Connection::open_in_memory().expect("connection");
+        MigrationRunner::runner_skipping(&[ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION])
+            .run(&connection)
+            .expect("migrations before timeline actor");
+
+        let status = MigrationRunner::default()
+            .run(&connection)
+            .expect("apply remaining migrations");
+
+        // 快路径必须在「有迁移未记录」时让位给写事务，否则漏迁移会被永久跳过。
+        assert_eq!(
+            status.applied_versions,
+            vec![ISSUE_TIMELINE_ACTOR_MIGRATION_VERSION.to_string()]
+        );
+    }
 
     #[test]
     fn issue_timeline_actor_migration_preserves_user_id_one_and_backfills_legacy_actions() {

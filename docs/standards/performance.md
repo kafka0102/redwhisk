@@ -4,7 +4,7 @@
 
 ## 1. 阻塞型 Tauri command 必须经 `spawn_blocking`
 
-**判据**：command 体内只要有同步阻塞操作——SQLite 开库 / 查询、`git` 子进程、文件系统遍历、`std::process::Command`——就必须把阻塞部分放进 `tauri::async_runtime::spawn_blocking`；轻量的目录解析 / 幂等初始化可留在 async 体内。
+**判据**：command 体内只要有同步阻塞操作——SQLite 开库 / 查询、`git` 子进程、文件系统遍历、`std::process::Command`——就必须把阻塞部分放进 `tauri::async_runtime::spawn_blocking`；轻量的目录解析，以及已经快路径化的幂等初始化，可留在 async 体内（若该初始化会开库、拿写事务或跑迁移，则必须先让它变成只读快路径，或一并移入 `spawn_blocking`）。
 
 **为什么**：同步 `#[tauri::command] pub fn`，或在 async command 里直接阻塞，会占用 Tauri 的 async 运行时线程，导致并发命令被串行化。曾表现为进入「变更」页时 `getProjectWorktreeChanges` / `getProjectWorktreeCommitHistory` / `listAgentSessions` 三条命令同时卡约 7.5s 才一起返回。
 
@@ -22,6 +22,8 @@
 
 **反例**：内置 agent 播种（ADR-0020）曾先探测命令、后查库，导致每次启动都为已播种的 codex/claude/opencode/grok 白跑 4 次 shell 探测（实测 9 秒后台负载，且与用户首次打开项目争抢 CPU）。现改为先查 `exists_profile_by_agent_type`，已播种直接跳过。回归：`service_seed_preview_tests.rs::seed_builtin_agents_skips_command_detection_for_already_seeded_agents`。
 
+**反例**：`prepare_*_data_dir` 里的「幂等 `local_data` 初始化」曾对每条命令都开新连接并完整跑一遍 `MigrationRunner`，即每条命令都执行 `BEGIN IMMEDIATE` 写事务。多窗口同时轮询时该写锁被反复抢占：实测并发写探测 p99.9 达 0.5–1s、最大 4s，并让并存的读命令以 `SQLITE_BUSY` 失败（表现为文件树展开后子节点一直为空）。现改为 `MigrationRunner::run` 先做只读探测，全部内置迁移已记录时直接返回、不开写事务。回归：`db/migrations.rs::tests::run_skips_write_transaction_when_all_migrations_applied`。
+
 ## 2. 批量取数，禁止 N+1 子进程 / 命令调用
 
 **判据**：对一组条目（提交、文件、行）逐条发起 `git` 子进程、SQL 查询或 Tauri command，就是 N+1。
@@ -32,8 +34,11 @@
 
 - 提交表头 + 每提交变更文件：单次 `git log --name-status`，提交头用 NUL 分隔、其后跟该提交的 name-status 行；
 - 批量祖先判定：单次 `git rev-list <ref>` 取可达集合，成员判定代替逐条 `git merge-base --is-ancestor`。
+- 改动文件增删行数：单次 `git diff --numstat -z --no-renames HEAD` 取全部文件，用 NUL 分隔路径避免引号转义；`--no-renames` 保持「重命名按新路径整体计为新增」的既有语义。
 
 **反例**：`src-tauri/src/features/agent_session/workspace.rs::read_workspace_commit_history` 历史上的逐提交 `diff-tree` / `merge-base`。已批量化。
+
+**反例**：`workspace.rs::read_workspace_changes` 曾对每个改动文件各起一次 `git diff --numstat HEAD -- <path>`（macOS 实测每次约 100–160ms）。30 个改动文件时该命令单次调用约 4.7s，而它在「代码 / 变更」页按秒轮询。改为单次批量调用后约 0.098s（约 48 倍）。
 
 ## 3. 按需过滤，禁止拉全量再前端过滤
 
@@ -50,6 +55,7 @@
 ## 4. 新增命令 / 轮询前的自检
 
 - 命令体内有 `Command::new("git")` / `Connection::open` / `fs::read_dir` 吗？→ `spawn_blocking`。
+- 命令体内会开库并跑迁移吗？→ 迁移检查必须走只读快路径（见 §1 反例），禁止每条命令 `BEGIN IMMEDIATE`。
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
 - 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？
 - 会不会在已有的高频本地轮询（如变更页 4s/8s）里再嵌网络型 `git fetch`？→ 禁止；远端跟踪更新应低频独立（见 ADR-0032 的 60s 后台 fetch），失败不得阻塞本地 refresh。
@@ -68,3 +74,15 @@
 - URL 带 `projectId` 时，`openProject` 与 `listProjects` 并行，避免列表 IPC 串行拖长打开空态。
 - `IssuesActivity` 对详情编辑 / 只读页使用 `React.lazy` + `Suspense`；看板首屏保持同步，避免同步解析 Quill 与 `react-markdown`。
 - 回归：`src/app/main-entry-budget.test.ts`；本地可用 `pnpm exec vite build` 核对 `dist/assets/index-*.js` 体积与是否含 `monaco` / `quill`。
+
+## 6. SQLite 连接与并发
+
+**判据**：高频 command（秒级轮询、会话状态）不得每条都开新连接并隐式拿写锁；数据库连接必须启用 WAL 与 `busy_timeout`。
+
+**为什么**：应用是单进程多窗口，多窗口各自轮询会让同一个库同时存在大量连接。SQLite 默认 rollback journal 下写事务与读者互斥：一个连接写时，其他连接的读会直接 `SQLITE_BUSY`（默认 `busy_timeout` 为 0），表现为文件树 / 变更页偶发读失败；写-写竞争实测还会出现秒级停顿。
+
+**做法**：
+
+- `DatabaseConfig::open` 统一设置 `PRAGMA journal_mode = WAL`、`busy_timeout = 5000`、`synchronous = NORMAL`，读写不再互相阻塞。
+- 迁移检查先只读探测（`sqlite_master` + `schema_migrations`），全部迁移已记录时直接返回，不带写事务（见 §1 反例）。
+- 新增高频 command 前先问：它是否每次都要开库？能否复用只读连接 / 把过滤下推到 SQL（配合 §3）。

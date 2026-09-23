@@ -4,6 +4,12 @@ import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { buildFileTreeDecorations } from "../../shared/workspace/file-tree-git-decorations";
 import {
+  clearFileTreeDirectoryLoadFailure,
+  dueFileTreeDirectoryRetryPaths,
+  markFileTreeDirectoryLoadFailed,
+  type FileTreeDirectoryRetryQueue,
+} from "../../shared/workspace/file-tree-directory-retry";
+import {
   ROOT_FILE_TREE_DIRECTORY,
   assembleFileTree,
   fileTreeDirectoryPathsToLoad,
@@ -215,6 +221,11 @@ export function useCodeWorkspaceFileTree(
   }
 
   const listingSeqRef = useRef(new Map<string, number>());
+  // 同一目录同一时刻只允许一个在途请求：5s 轮询、展开点击、新建后强刷会同时打同一
+  // 个路径，重复请求只会互相顶掉 seq 并放大后端并发。
+  const inFlightDirectoriesRef = useRef(new Set<string>());
+  // 失败目录的重试表：请求键 → { pathKey, attempts, nextAttemptAt }。
+  const directoryRetryRef = useRef<FileTreeDirectoryRetryQueue>(new Map());
   const changesSeqRef = useRef(0);
   const [isVisible, setIsVisible] = useState(
     () => document.visibilityState === "visible",
@@ -247,6 +258,15 @@ export function useCodeWorkspaceFileTree(
         return;
       }
       const seqKey = `${requestKey}::${pathKey}`;
+      // 在途请求回来前，同一目录的重复触发（含 5s 轮询的强刷）直接放弃：结果落地后
+      // 最多再等一个轮询周期，避免请求堆叠放大后端并发。
+      if (inFlightDirectoriesRef.current.has(seqKey)) {
+        return;
+      }
+      inFlightDirectoriesRef.current.add(seqKey);
+      const settle = () => {
+        inFlightDirectoriesRef.current.delete(seqKey);
+      };
       const seq = (listingSeqRef.current.get(seqKey) ?? 0) + 1;
       listingSeqRef.current.set(seqKey, seq);
       const input =
@@ -258,6 +278,7 @@ export function useCodeWorkspaceFileTree(
         .then((response) => {
           if (!response || listingSeqRef.current.get(seqKey) !== seq) return;
           if (liveRef.current.cacheKey !== requestKey) return;
+          clearFileTreeDirectoryLoadFailure(directoryRetryRef.current, seqKey);
           const nextListings = upsertFileTreeListing(
             liveRef.current.listings,
             pathKey,
@@ -299,6 +320,12 @@ export function useCodeWorkspaceFileTree(
         .catch((error) => {
           if (listingSeqRef.current.get(seqKey) !== seq) return;
           if (liveRef.current.cacheKey !== requestKey) return;
+          markFileTreeDirectoryLoadFailed(
+            directoryRetryRef.current,
+            seqKey,
+            pathKey,
+            Date.now(),
+          );
           setLive((current) => {
             if (current.cacheKey !== requestKey) return current;
             if (pathKey !== ROOT_FILE_TREE_DIRECTORY || current.hasTreeData) {
@@ -310,7 +337,8 @@ export function useCodeWorkspaceFileTree(
               treeError: getCommandErrorMessage(error, translateRef.current),
             };
           });
-        });
+        })
+        .finally(settle);
     },
     [enabled, projectId, workspacePath],
   );
@@ -323,6 +351,14 @@ export function useCodeWorkspaceFileTree(
     );
     for (const directoryPath of listingKeys) {
       fetchDirectory(directoryPath, true);
+    }
+    // 失败目录不在 listings 里，必须按重试表单独补拉，否则展开后一直空。
+    for (const directoryPath of dueFileTreeDirectoryRetryPaths(
+      directoryRetryRef.current,
+      requestKey,
+      Date.now(),
+    )) {
+      fetchDirectory(directoryPath, false);
     }
   }, [enabled, fetchDirectory, projectId, workspacePath]);
 
