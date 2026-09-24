@@ -26,6 +26,7 @@ vi.mock("../use-monaco-editor-ready", () => ({
 
 const loadedState: MultiDiffViewState = {
   commitHash: "abc",
+  mode: "details",
   files: [
     {
       fileName: "a.ts",
@@ -61,7 +62,9 @@ describe("MultiDiffViewer", () => {
   it("renders empty state when the commit has no files", () => {
     render(
       <I18nProvider initialLocale="en">
-        <MultiDiffViewer state={{ commitHash: "empty", files: [] }} />
+        <MultiDiffViewer
+          state={{ commitHash: "empty", mode: "details", files: [] }}
+        />
       </I18nProvider>,
     );
 
@@ -113,6 +116,7 @@ describe("MultiDiffViewer", () => {
   it("shows per-file error without a page-level summary bar", () => {
     const errorState: MultiDiffViewState = {
       commitHash: "err",
+      mode: "details",
       files: [
         {
           fileName: "a.ts",
@@ -172,5 +176,58 @@ describe("MultiDiffViewer", () => {
     headers.forEach((header) => {
       expect(header).toHaveClass("multi-diff-panel__header");
     });
+  });
+
+  it("renders hunks instead of the whole-file diff in summary mode", () => {
+    multiDiffEditorHeightProp.current = undefined;
+    const summaryState: MultiDiffViewState = {
+      commitHash: "sum",
+      mode: "summary",
+      files: [
+        {
+          fileName: "a.ts",
+          filePath: "src/a.ts",
+          status: "M",
+          kind: "modified",
+          diff: {
+            filePath: "src/a.ts",
+            oldPath: null,
+            kind: "modified",
+            language: "typescript",
+            originalContent: "l1\nl2\nl3\nl4\nl5\nl6\n",
+            modifiedContent: "l1\nl2\nL3\nl4\nl5\nl6\n",
+            isBinary: false,
+            isTooLarge: false,
+          },
+          isLoading: false,
+          errorMessage: null,
+        },
+      ],
+    };
+    render(
+      <I18nProvider initialLocale="en">
+        <MultiDiffViewer state={summaryState} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByLabelText("Commit change summary")).toBeInTheDocument();
+    expect(screen.getByText("a.ts")).toBeInTheDocument();
+    expect(screen.getByText("src/a.ts")).toBeInTheDocument();
+    expect(document.querySelectorAll(".diff-summary__hunk")).toHaveLength(1);
+    expect(screen.getByText("Lines 1-6")).toBeInTheDocument();
+    expect(screen.getByText("Original lines 1-6")).toBeInTheDocument();
+    // 摘要模式不再渲染整文件 Monaco 对比
+    expect(multiDiffEditorHeightProp.current).toBeUndefined();
+  });
+
+  it("keeps the details label in details mode", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <MultiDiffViewer state={loadedState} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByLabelText("Commit all changes")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Commit change summary")).toBeNull();
   });
 });

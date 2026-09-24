@@ -106,6 +106,7 @@ describe("SessionWorkspaceTabs", () => {
       commitHash: "abcdef123456",
       multiDiff: {
         commitHash: "abcdef123456",
+        mode: "details",
         files: [
           {
             fileName: "a.ts",
@@ -156,7 +157,7 @@ describe("SessionWorkspaceTabs", () => {
       mode: "multi",
       label: "deadbee chore: exclusivity",
       commitHash: "deadbeef",
-      multiDiff: { commitHash: "deadbeef", files: [] },
+      multiDiff: { commitHash: "deadbeef", mode: "details", files: [] },
     };
 
     render(

@@ -6,6 +6,7 @@ import type { WorkspaceDiffTab } from "../../shared/workspace/diff-viewer";
 import { mapPool } from "../../shared/workspace/map-pool";
 import type {
   MultiDiffFileState,
+  MultiDiffViewMode,
   MultiDiffViewState,
 } from "../../shared/workspace/multi-diff-types";
 import {
@@ -34,7 +35,10 @@ export interface UseCodeWorkspaceDiffResult {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  openCommitChanges: (commit: WorkspaceCommitRecord) => void;
+  openCommitChanges: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
   clear: () => void;
 }
 
@@ -42,7 +46,8 @@ export interface UseCodeWorkspaceDiffResult {
 const MULTI_DIFF_CONCURRENCY = 5;
 
 /**
- * 变更页 diff 取数：单文件与提交全部更改（多 diff）互斥。
+ * 变更页 diff 取数：单文件与提交级多文件视图（变更详情 / 变更摘要）互斥。
+ * 两个多文件模式共用同一份取数状态，只由调用方切换 mode。
  * 管理 loading / diff / error；root 切换时 clear 两侧。
  */
 export function useCodeWorkspaceDiff(
@@ -155,7 +160,7 @@ export function useCodeWorkspaceDiff(
   );
 
   const openCommitChanges = useCallback(
-    (commit: WorkspaceCommitRecord) => {
+    (commit: WorkspaceCommitRecord, mode: MultiDiffViewMode) => {
       if (!workspacePath) {
         return;
       }
@@ -175,6 +180,7 @@ export function useCodeWorkspaceDiff(
       }));
       setMultiDiff({
         commitHash: commit.hash,
+        mode,
         files: initialFiles,
       });
 

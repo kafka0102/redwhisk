@@ -505,7 +505,6 @@ export interface I18nMessages {
     baseBranchTag: string;
     loadingFileTree: string;
     noFiles: string;
-    openCommitChanges: string;
     noCommitFileChanges: string;
     commitAllChangesView: string;
     expandDiffPanel: (fileName: string) => string;

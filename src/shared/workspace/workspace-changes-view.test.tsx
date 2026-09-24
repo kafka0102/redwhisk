@@ -258,13 +258,14 @@ describe("CommittedChangesTimeline commit context menu", () => {
     return row;
   }
 
-  it("opens menu on right-click with open / copy id / copy message in order", async () => {
+  it("opens menu on right-click with details / summary / copy id / copy message in order", async () => {
     renderTimeline();
     openContextMenuOnCommit();
 
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Open Changes",
+      "Open Change Details",
+      "Open Change Summary",
       "Copy Commit ID",
       "Copy Commit Message",
     ]);
@@ -323,7 +324,7 @@ describe("CommittedChangesTimeline commit context menu", () => {
     expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 
-  it("calls onOpenCommitChanges and expands collapsed commit", async () => {
+  it("opens the details view and expands a collapsed commit", async () => {
     const onOpenCommitChanges = vi.fn();
     const onToggleCommit = vi.fn();
     renderTimeline({
@@ -333,7 +334,7 @@ describe("CommittedChangesTimeline commit context menu", () => {
     });
     openContextMenuOnCommit();
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Open Changes" }),
+      await screen.findByRole("menuitem", { name: "Open Change Details" }),
     );
 
     expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
@@ -341,10 +342,33 @@ describe("CommittedChangesTimeline commit context menu", () => {
       hash: "abcdef1234567890",
       message: "fix: timeline menu",
     });
+    expect(onOpenCommitChanges.mock.calls[0][1]).toBe("details");
     expect(onToggleCommit).toHaveBeenCalledWith("abcdef1234567890");
   });
 
-  it("calls onOpenCommitChanges without collapsing an already expanded commit", async () => {
+  it("opens the summary view and expands a collapsed commit", async () => {
+    const onOpenCommitChanges = vi.fn();
+    const onToggleCommit = vi.fn();
+    renderTimeline({
+      onOpenCommitChanges,
+      onToggleCommit,
+      expandedCommitHashes: new Set(),
+    });
+    openContextMenuOnCommit();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open Change Summary" }),
+    );
+
+    expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
+    expect(onOpenCommitChanges.mock.calls[0][0]).toMatchObject({
+      hash: "abcdef1234567890",
+      message: "fix: timeline menu",
+    });
+    expect(onOpenCommitChanges.mock.calls[0][1]).toBe("summary");
+    expect(onToggleCommit).toHaveBeenCalledWith("abcdef1234567890");
+  });
+
+  it("keeps the current expand state when opening the summary view", async () => {
     const onOpenCommitChanges = vi.fn();
     const onToggleCommit = vi.fn();
     renderTimeline({
@@ -354,10 +378,11 @@ describe("CommittedChangesTimeline commit context menu", () => {
     });
     openContextMenuOnCommit();
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Open Changes" }),
+      await screen.findByRole("menuitem", { name: "Open Change Summary" }),
     );
 
     expect(onOpenCommitChanges).toHaveBeenCalledTimes(1);
+    expect(onOpenCommitChanges.mock.calls[0][1]).toBe("summary");
     expect(onToggleCommit).not.toHaveBeenCalled();
   });
 
@@ -377,7 +402,8 @@ describe("CommittedChangesTimeline commit context menu", () => {
     openContextMenuOnCommit();
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Open Changes",
+      "Open Change Details",
+      "Open Change Summary",
       "Copy Commit ID",
       "Copy Commit Message",
     ]);
@@ -399,7 +425,8 @@ describe("CommittedChangesTimeline commit context menu", () => {
     openContextMenuOnCommit();
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Open Changes",
+      "Open Change Details",
+      "Open Change Summary",
       "Open on GitHub",
       "Copy Commit ID",
       "Copy Commit Message",
@@ -631,7 +658,9 @@ describe("CommittedFileRow workspace path context menu", () => {
       "Copy relative path",
       "Copy absolute path",
     ]);
-    expect(screen.queryByRole("menuitem", { name: "Open Changes" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Open Change Details" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("menuitem", { name: "Copy Commit ID" }),
     ).toBeNull();
@@ -711,7 +740,8 @@ describe("CommittedFileRow workspace path context menu", () => {
 
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Open Changes",
+      "Open Change Details",
+      "Open Change Summary",
       "Copy Commit ID",
       "Copy Commit Message",
     ]);

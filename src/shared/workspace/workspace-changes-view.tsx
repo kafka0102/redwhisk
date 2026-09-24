@@ -10,6 +10,7 @@ import {
 import { copyTextToClipboard } from "../commands/copy-text-to-clipboard";
 import { useI18n } from "../i18n/i18n";
 import { toast } from "../toast";
+import type { MultiDiffViewMode } from "./multi-diff-types";
 import { openCommitOnGithub } from "./open-commit-on-github";
 import type { WorkspaceGithubRemote } from "./workspace-commands";
 import type {
@@ -50,8 +51,11 @@ interface CommittedChangesTimelineProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  /** 提交上下文菜单「打开更改」；后续多 diff 视图由上层接线。 */
-  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  /** 提交上下文菜单「打开变更详情」/「打开变更摘要」；按模式进入提交级多文件视图。 */
+  onOpenCommitChanges?: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
   /** 可解析的 github.com remote；有值时显示「在 GitHub 上打开」，与 isPushed 无关。 */
   githubRemote?: WorkspaceGithubRemote | null;
   onToggleCommit: (hash: string) => void;
@@ -72,7 +76,7 @@ export function CommittedChangesTimeline({
   onToggleCommit,
   workspacePath,
 }: CommittedChangesTimelineProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   const [menu, setMenu] = useState<CommitContextMenuState | null>(null);
 
   const handleCopy = useCallback(
@@ -86,9 +90,9 @@ export function CommittedChangesTimeline({
   );
 
   const handleOpenCommitChanges = useCallback(
-    (commit: WorkspaceCommitRecord) => {
-      onOpenCommitChanges?.(commit);
-      // 「打开更改」顺带展开；已展开则保持，避免 toggle 收起。
+    (commit: WorkspaceCommitRecord, mode: MultiDiffViewMode) => {
+      onOpenCommitChanges?.(commit, mode);
+      // 「打开变更详情」/「打开变更摘要」顺带展开；已展开则保持，避免 toggle 收起。
       if (!expandedCommitHashes.has(commit.hash)) {
         onToggleCommit(commit.hash);
       }
@@ -247,11 +251,20 @@ export function CommittedChangesTimeline({
           <ContextMenuItem
             onClick={() => {
               if (menu) {
-                handleOpenCommitChanges(menu.commit);
+                handleOpenCommitChanges(menu.commit, "details");
               }
             }}
           >
-            {messages.agentsFeature.openCommitChanges}
+            {t("agentsFeature.openCommitDetails")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              if (menu) {
+                handleOpenCommitChanges(menu.commit, "summary");
+              }
+            }}
+          >
+            {t("agentsFeature.openCommitSummary")}
           </ContextMenuItem>
           {githubRemote ? (
             <ContextMenuItem

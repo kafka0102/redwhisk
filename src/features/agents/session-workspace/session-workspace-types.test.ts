@@ -22,7 +22,7 @@ describe("session workspace change tab labels", () => {
       mode: "multi",
       label: "abc subject",
       commitHash: "abc",
-      multiDiff: { commitHash: "abc", files: [] },
+      multiDiff: { commitHash: "abc", mode: "details", files: [] },
     };
     const single: SessionWorkspaceChangeTab = {
       mode: "file",

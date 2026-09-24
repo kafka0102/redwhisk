@@ -2,9 +2,11 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "../i18n/i18n";
-import { DiffViewer } from "./diff-viewer";
+import { DiffSummaryView } from "./diff-summary-view";
+import { DiffViewer, type WorkspaceDiffTab } from "./diff-viewer";
 import type {
   MultiDiffFileState,
+  MultiDiffViewMode,
   MultiDiffViewState,
 } from "./multi-diff-types";
 import { renderCommitFileStatusIcon } from "./workspace-commit-file-status";
@@ -14,12 +16,13 @@ interface MultiDiffViewerProps {
 }
 
 /**
- * 提交全部更改视图：主体叠放该提交全部文件 diff。
+ * 提交级多文件视图：主体叠放该提交全部文件。
  * 每文件可折叠（默认全展开，折叠态不持久化）；面板头 sticky 单层吸顶。
+ * 面板体按 mode 分流：details 为整文件原 / 新对比，summary 为按 hunk 的改动摘要。
  * 无页头摘要条。状态由调用方 hook 管理。
  */
 export function MultiDiffViewer({ state }: MultiDiffViewerProps) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
   // 折叠态仅存本组件内存；切换提交时 key 变化会重置（调用方应挂 key=commitHash）。
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(
     () => new Set(),
@@ -56,7 +59,11 @@ export function MultiDiffViewer({ state }: MultiDiffViewerProps) {
   return (
     <div
       className="multi-diff-viewer"
-      aria-label={messages.agentsFeature.commitAllChangesView}
+      aria-label={
+        state.mode === "summary"
+          ? t("agentsFeature.commitChangeSummaryView")
+          : messages.agentsFeature.commitAllChangesView
+      }
     >
       {state.files.map((file) => {
         const isCollapsed = collapsedPaths.has(file.filePath);
@@ -64,6 +71,7 @@ export function MultiDiffViewer({ state }: MultiDiffViewerProps) {
           <MultiDiffPanel
             key={file.filePath}
             file={file}
+            mode={state.mode}
             isCollapsed={isCollapsed}
             onToggle={() => toggle(file.filePath)}
           />
@@ -75,15 +83,22 @@ export function MultiDiffViewer({ state }: MultiDiffViewerProps) {
 
 interface MultiDiffPanelProps {
   file: MultiDiffFileState;
+  mode: MultiDiffViewMode;
   isCollapsed: boolean;
   onToggle: () => void;
 }
 
-function MultiDiffPanel({ file, isCollapsed, onToggle }: MultiDiffPanelProps) {
+function MultiDiffPanel({
+  file,
+  mode,
+  isCollapsed,
+  onToggle,
+}: MultiDiffPanelProps) {
   const { messages } = useI18n();
   const expandLabel = isCollapsed
     ? messages.agentsFeature.expandDiffPanel(file.fileName)
     : messages.agentsFeature.collapseDiffPanel(file.fileName);
+  const tab = toDiffTab(file);
 
   return (
     <section className="multi-diff-panel" aria-label={file.filePath}>
@@ -109,19 +124,23 @@ function MultiDiffPanel({ file, isCollapsed, onToggle }: MultiDiffPanelProps) {
       </header>
       {isCollapsed ? null : (
         <div className="multi-diff-panel__body">
-          <DiffViewer
-            tab={{
-              fileName: file.fileName,
-              filePath: file.filePath,
-              diff: file.diff,
-              isLoading: file.isLoading,
-              errorMessage: file.errorMessage,
-            }}
-            showStatusBar={false}
-            heightMode="content"
-          />
+          {mode === "summary" ? (
+            <DiffSummaryView tab={tab} />
+          ) : (
+            <DiffViewer tab={tab} showStatusBar={false} heightMode="content" />
+          )}
         </div>
       )}
     </section>
   );
+}
+
+function toDiffTab(file: MultiDiffFileState): WorkspaceDiffTab {
+  return {
+    fileName: file.fileName,
+    filePath: file.filePath,
+    diff: file.diff,
+    isLoading: file.isLoading,
+    errorMessage: file.errorMessage,
+  };
 }

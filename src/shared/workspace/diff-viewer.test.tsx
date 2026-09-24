@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
+import { getDiffAvailability } from "./diff-availability";
 import { DiffViewer, type WorkspaceDiffTab } from "./diff-viewer";
 import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
 
@@ -124,5 +125,60 @@ describe("DiffViewer", () => {
     expect(
       estimateDiffEditorContentHeightPx("a\nb\nc", "1\n2\n3\n4\n5", 14),
     ).toBe(5 * 21 + 12);
+  });
+
+  // 摘要视图靠 getDiffAvailability 决定是否切 hunk，这里把状态判定与详情视图实际
+  // 渲染的状态绑定，避免两处状态语义漂移。
+  it("keeps the rendered state ladder in sync with getDiffAvailability", () => {
+    const cases: Array<{
+      tab: WorkspaceDiffTab | null;
+      kind: string;
+      message: string | null;
+    }> = [
+      { tab: null, kind: "none", message: "Select a changed file." },
+      {
+        tab: { ...diffTab, isLoading: true },
+        kind: "loading",
+        message: "Loading diff...",
+      },
+      {
+        tab: { ...diffTab, errorMessage: "boom" },
+        kind: "error",
+        message: "boom",
+      },
+      {
+        tab: { ...diffTab, diff: null },
+        kind: "none",
+        message: "Select a changed file.",
+      },
+      {
+        tab: { ...diffTab, diff: { ...diffTab.diff!, isBinary: true } },
+        kind: "unavailable",
+        message: "Binary files cannot be previewed.",
+      },
+      {
+        tab: { ...diffTab, diff: { ...diffTab.diff!, isTooLarge: true } },
+        kind: "unavailable",
+        message: "This file is too large to preview.",
+      },
+      { tab: diffTab, kind: "content", message: null },
+    ];
+
+    for (const testCase of cases) {
+      const { unmount } = render(
+        <I18nProvider initialLocale="en">
+          <DiffViewer tab={testCase.tab} />
+        </I18nProvider>,
+      );
+
+      expect(getDiffAvailability(testCase.tab).kind).toBe(testCase.kind);
+      if (testCase.message) {
+        expect(screen.getByText(testCase.message)).toBeInTheDocument();
+      } else {
+        expect(document.querySelector(".session-viewer-state")).toBeNull();
+      }
+
+      unmount();
+    }
   });
 });

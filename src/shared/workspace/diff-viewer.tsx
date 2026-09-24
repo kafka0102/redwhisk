@@ -2,6 +2,7 @@ import { DiffEditor } from "@monaco-editor/react";
 
 import { useI18n } from "../i18n/i18n";
 import { useMonacoEditorReady } from "../use-monaco-editor-ready";
+import { getDiffAvailability } from "./diff-availability";
 import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
 import type {
   WorkspaceChangeKind,
@@ -50,8 +51,9 @@ export function DiffViewer({
 }: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
+  const availability = getDiffAvailability(tab);
 
-  if (!tab) {
+  if (availability.kind === "none") {
     return (
       <p className="session-viewer-state">
         {messages.agentsFeature.selectChangedFile}
@@ -59,7 +61,7 @@ export function DiffViewer({
     );
   }
 
-  if (tab.isLoading) {
+  if (availability.kind === "loading") {
     return (
       <p className="session-viewer-state">
         {messages.agentsFeature.loadingDiff}
@@ -67,31 +69,23 @@ export function DiffViewer({
     );
   }
 
-  if (tab.errorMessage) {
+  if (availability.kind === "error") {
     return (
       <p className="session-viewer-state" role="alert">
-        {tab.errorMessage}
+        {availability.message}
       </p>
     );
   }
 
-  if (!tab.diff) {
-    return (
-      <p className="session-viewer-state">
-        {messages.agentsFeature.selectChangedFile}
-      </p>
-    );
-  }
-
-  if (tab.diff.isBinary || tab.diff.isTooLarge) {
+  if (availability.kind === "unavailable") {
     return (
       <section
         className="session-viewer-state"
         aria-label={messages.agentsFeature.diffUnavailable}
       >
-        <h3>{tab.fileName}</h3>
+        <h3>{availability.fileName}</h3>
         <p>
-          {tab.diff.isBinary
+          {availability.isBinary
             ? messages.agentsFeature.binaryPreviewUnavailable
             : messages.agentsFeature.largeFilePreviewUnavailable}
         </p>
@@ -107,18 +101,19 @@ export function DiffViewer({
     );
   }
 
+  const { diff, fileName, filePath } = availability;
   const editorHeight =
     heightMode === "content"
       ? `${estimateDiffEditorContentHeightPx(
-          tab.diff.originalContent,
-          tab.diff.modifiedContent,
+          diff.originalContent,
+          diff.modifiedContent,
           contentFontSize,
         )}px`
       : "100%";
 
   return (
     <section
-      aria-label={messages.agentsFeature.diffView(tab.fileName)}
+      aria-label={messages.agentsFeature.diffView(fileName)}
       className={
         showStatusBar
           ? "session-diff-viewer"
@@ -128,21 +123,20 @@ export function DiffViewer({
     >
       {showStatusBar ? (
         <div className="session-diff-viewer__status">
-          {t(CHANGE_KIND_KEY[tab.diff.kind])} {tab.filePath}
+          {t(CHANGE_KIND_KEY[diff.kind])} {filePath}
         </div>
       ) : null}
       <DiffEditor
         height={editorHeight}
         theme={theme === "dark" ? "vs-dark" : "light"}
-        language={tab.diff.language ?? undefined}
-        modified={tab.diff.modifiedContent}
-        original={tab.diff.originalContent}
+        language={diff.language ?? undefined}
+        modified={diff.modifiedContent}
+        original={diff.originalContent}
         options={{
           fontSize: contentFontSize,
           minimap: { enabled: false },
           readOnly: true,
-          renderSideBySide:
-            tab.diff.kind !== "added" && tab.diff.kind !== "untracked",
+          renderSideBySide: diff.kind !== "added" && diff.kind !== "untracked",
           scrollBeyondLastLine: false,
           ...(heightMode === "content"
             ? {

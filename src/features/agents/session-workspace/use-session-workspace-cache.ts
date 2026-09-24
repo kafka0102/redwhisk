@@ -971,6 +971,7 @@ export function useSessionWorkspaceCache({
           commitHash: commit.hash,
           multiDiff: {
             commitHash: commit.hash,
+            mode: "details",
             files: initialFiles,
           },
         },

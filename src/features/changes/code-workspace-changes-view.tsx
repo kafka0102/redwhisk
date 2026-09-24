@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 
+import type { MultiDiffViewMode } from "../../shared/workspace/multi-diff-types";
 import { WorkspaceChangesPanels } from "../../shared/workspace/workspace-changes-panels";
 import type {
   WorkspaceChangedFile,
@@ -29,7 +30,10 @@ interface CodeWorkspaceChangesViewProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  onOpenCommitChanges?: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
 }
 
 /**

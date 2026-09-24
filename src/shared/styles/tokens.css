@@ -58,6 +58,8 @@
   --color-danger: #b42318;
   --color-danger-border: #d6aaa4;
   --color-danger-muted: #f4ece8;
+  --color-diff-added: #e7f4ea;
+  --color-diff-removed: #fbeae8;
   --color-lane-backlog: #fbfbfc;
   --color-lane-running: #fdfbf4;
   --color-lane-review: #f5fbf6;
@@ -115,6 +117,8 @@
   --color-danger: #f87171;
   --color-danger-border: #5c332d;
   --color-danger-muted: #2d1c18;
+  --color-diff-added: #1f3629;
+  --color-diff-removed: #3a2523;
   --color-lane-backlog: #333335;
   --color-lane-running: #3b362f;
   --color-lane-review: #2f3834;

@@ -6,6 +6,7 @@ import {
   COMMIT_HISTORY_LOAD_MORE_THRESHOLD_PX,
   isNearScrollBottom,
 } from "./commit-history-pagination";
+import type { MultiDiffViewMode } from "./multi-diff-types";
 import {
   ChangedFileRow,
   CommittedChangesTimeline,
@@ -34,8 +35,11 @@ interface WorkspaceChangesPanelsProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  /** 提交上下文菜单「打开更改」；可选，后续多 diff 视图接线。 */
-  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  /** 提交上下文菜单「打开变更详情」/「打开变更摘要」；可选。 */
+  onOpenCommitChanges?: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
   /** 用于解析 github.com remote 以显示「在 GitHub 上打开」；缺省不显示。 */
   workspaceInput?: ProjectWorkspaceInput | null;
   commitHistory: WorkspaceCommitRecord[];

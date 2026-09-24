@@ -186,11 +186,12 @@ describe("useCodeWorkspaceDiff", () => {
     expect(result.current.diffTab).not.toBeNull();
 
     await act(async () => {
-      result.current.openCommitChanges(commit);
+      result.current.openCommitChanges(commit, "details");
     });
 
     expect(result.current.diffTab).toBeNull();
     expect(result.current.multiDiff?.commitHash).toBe("fullhash123");
+    expect(result.current.multiDiff?.mode).toBe("details");
     expect(result.current.multiDiff?.files).toHaveLength(2);
 
     await waitFor(() =>
@@ -228,11 +229,12 @@ describe("useCodeWorkspaceDiff", () => {
     const { result } = renderDiffHook();
 
     await act(async () => {
-      result.current.openCommitChanges(commit);
+      result.current.openCommitChanges(commit, "details");
     });
 
     expect(result.current.multiDiff).toEqual({
       commitHash: "emptyhash",
+      mode: "details",
       files: [],
     });
     expect(readDiffMock).not.toHaveBeenCalled();
@@ -253,7 +255,7 @@ describe("useCodeWorkspaceDiff", () => {
     const { result } = renderDiffHook();
 
     await act(async () => {
-      result.current.openCommitChanges(commit);
+      result.current.openCommitChanges(commit, "details");
     });
     await waitFor(() =>
       expect(result.current.multiDiff?.files[0].isLoading).toBe(false),
@@ -294,7 +296,7 @@ describe("useCodeWorkspaceDiff", () => {
     const { result } = renderDiffHook();
 
     await act(async () => {
-      result.current.openCommitChanges(commit);
+      result.current.openCommitChanges(commit, "details");
     });
 
     await waitFor(() =>
@@ -323,7 +325,7 @@ describe("useCodeWorkspaceDiff", () => {
     const { result } = renderDiffHook();
 
     await act(async () => {
-      result.current.openCommitChanges(commit);
+      result.current.openCommitChanges(commit, "details");
     });
     expect(result.current.multiDiff).not.toBeNull();
 
@@ -332,5 +334,93 @@ describe("useCodeWorkspaceDiff", () => {
     });
     expect(result.current.multiDiff).toBeNull();
     expect(result.current.diffTab).toBeNull();
+  });
+
+  it("loads the summary mode over the same file list, concurrency and error states", async () => {
+    const fileB: WorkspaceCommitChangedFile = {
+      filePath: "src/b.ts",
+      oldPath: null,
+      fileName: "b.ts",
+      kind: "modified",
+      status: "M",
+    };
+    const commit: WorkspaceCommitRecord = {
+      hash: "fullhash123",
+      shortHash: "fullhash",
+      message: "feat: summary",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile, fileB],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockImplementation(async ({ filePath }) => {
+      if (filePath === "src/a.ts") {
+        throw { code: "WORKSPACE_DIFF_FAILED", message: "boom-a" };
+      }
+      return { ...diffContent, filePath: "src/b.ts" };
+    });
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit, "summary");
+    });
+
+    expect(result.current.multiDiff?.mode).toBe("summary");
+    expect(result.current.multiDiff?.files).toHaveLength(2);
+
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files.every((f) => !f.isLoading)).toBe(
+        true,
+      ),
+    );
+    expect(readDiffMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitHash: "fullhash123",
+        filePath: "src/a.ts",
+      }),
+    );
+    expect(readDiffMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitHash: "fullhash123",
+        filePath: "src/b.ts",
+      }),
+    );
+    expect(result.current.multiDiff?.files[0].errorMessage).not.toBeNull();
+    expect(result.current.multiDiff?.files[1].diff?.filePath).toBe("src/b.ts");
+  });
+
+  it("replaces the multi-diff state when the other mode is opened for the same commit", async () => {
+    const commit: WorkspaceCommitRecord = {
+      hash: "h4",
+      shortHash: "h4",
+      message: "m",
+      authorName: "dev",
+      committedAt: 1,
+      files: [committedFile],
+      isPushed: false,
+      isCreatedInWorktree: false,
+    };
+    readDiffMock.mockResolvedValue(diffContent);
+    const { result } = renderDiffHook();
+
+    await act(async () => {
+      result.current.openCommitChanges(commit, "details");
+    });
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files[0].isLoading).toBe(false),
+    );
+
+    await act(async () => {
+      result.current.openCommitChanges(commit, "summary");
+    });
+
+    expect(result.current.diffTab).toBeNull();
+    expect(result.current.multiDiff?.mode).toBe("summary");
+    expect(result.current.multiDiff?.files).toHaveLength(1);
+    await waitFor(() =>
+      expect(result.current.multiDiff?.files[0].isLoading).toBe(false),
+    );
+    expect(result.current.multiDiff?.files[0].diff).toEqual(diffContent);
   });
 });
