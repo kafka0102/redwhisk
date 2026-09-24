@@ -7,6 +7,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from "../../components/ui/context-menu";
+import { copyTextToClipboard } from "../commands/copy-text-to-clipboard";
 import { useI18n } from "../i18n/i18n";
 import { toast } from "../toast";
 import { openCommitOnGithub } from "./open-commit-on-github";
@@ -76,12 +77,10 @@ export function CommittedChangesTimeline({
 
   const handleCopy = useCallback(
     async (text: string) => {
-      try {
-        await navigator.clipboard?.writeText(text);
+      if (await copyTextToClipboard(text)) {
         toast.success(messages.agentsFeature.copiedToClipboard);
-      } catch {
-        // 剪贴板写入失败时静默忽略，与文件树 / terminal 既有处理一致。
       }
+      // 剪贴板写入失败时静默忽略，与文件树 / terminal 既有处理一致。
     },
     [messages.agentsFeature.copiedToClipboard],
   );

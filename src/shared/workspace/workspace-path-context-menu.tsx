@@ -5,6 +5,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
 } from "../../components/ui/context-menu";
+import { copyTextToClipboard } from "../commands/copy-text-to-clipboard";
 import { useI18n } from "../i18n/i18n";
 import { toast } from "../toast";
 
@@ -51,12 +52,10 @@ export function WorkspacePathContextMenu({
 
   const handleCopy = useCallback(
     async (text: string) => {
-      try {
-        await navigator.clipboard?.writeText(text);
+      if (await copyTextToClipboard(text)) {
         toast.success(messages.agentsFeature.copiedToClipboard);
-      } catch {
-        // 剪贴板写入失败时静默忽略，与 terminal 的既有处理保持一致。
       }
+      // 剪贴板写入失败时静默忽略，与 terminal 的既有处理保持一致。
     },
     [messages.agentsFeature.copiedToClipboard],
   );
