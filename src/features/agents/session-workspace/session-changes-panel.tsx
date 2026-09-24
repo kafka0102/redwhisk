@@ -1,4 +1,5 @@
 import { WorkspaceChangesPanels } from "../../../shared/workspace/workspace-changes-panels";
+import type { MultiDiffViewMode } from "../../../shared/workspace/multi-diff-types";
 import type {
   ProjectWorkspaceInput,
   WorkspaceChangedFile,
@@ -26,7 +27,10 @@ interface SessionChangesPanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  onOpenCommitChanges?: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
   /** 解析 github remote；缺省不显示「在 GitHub 上打开」。 */
   workspaceInput?: ProjectWorkspaceInput | null;
   hasMoreCommitHistory?: boolean;

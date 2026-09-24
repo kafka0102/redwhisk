@@ -51,7 +51,10 @@ import {
   isSingleFileChangeTab,
 } from "./session-workspace-types";
 import { mapPool } from "../../../shared/workspace/map-pool";
-import type { MultiDiffFileState } from "../../../shared/workspace/multi-diff-types";
+import type {
+  MultiDiffFileState,
+  MultiDiffViewMode,
+} from "../../../shared/workspace/multi-diff-types";
 import { clearSessionFileReadingPositions } from "./session-file-reading-position";
 
 const CHANGES_POLL_INTERVAL_MS = 2_000;
@@ -946,7 +949,7 @@ export function useSessionWorkspaceCache({
   );
 
   const openCommitChanges = useCallback(
-    (commit: WorkspaceCommitRecord) => {
+    (commit: WorkspaceCommitRecord, mode: MultiDiffViewMode) => {
       if (sessionId == null) {
         return;
       }
@@ -967,11 +970,17 @@ export function useSessionWorkspaceCache({
         activeWorkspaceTab: "changes",
         changeTab: {
           mode: "multi",
-          label: formatCommitChangeTabLabel(commit.shortHash, commit.message),
+          label: formatCommitChangeTabLabel(
+            commit.shortHash,
+            commit.message,
+            mode === "summary"
+              ? t("agentsFeature.commitChangeSummaryTabLabel")
+              : null,
+          ),
           commitHash: commit.hash,
           multiDiff: {
             commitHash: commit.hash,
-            mode: "details",
+            mode,
             files: initialFiles,
           },
         },

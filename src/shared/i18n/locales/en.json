@@ -555,6 +555,7 @@
     "openCommitDetails": "Open Change Details",
     "openCommitSummary": "Open Change Summary",
     "commitChangeSummaryView": "Commit change summary",
+    "commitChangeSummaryTabLabel": "Change Summary",
     "diffSummaryNoContentChange": "No content changes",
     "diffSummaryLineLabel": "Line {{line}}",
     "diffSummaryLineRangeLabel": "Lines {{start}}-{{end}}",

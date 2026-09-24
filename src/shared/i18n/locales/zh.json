@@ -555,6 +555,7 @@
     "openCommitDetails": "打开变更详情",
     "openCommitSummary": "打开变更摘要",
     "commitChangeSummaryView": "提交变更摘要",
+    "commitChangeSummaryTabLabel": "变更摘要",
     "diffSummaryNoContentChange": "无内容变更",
     "diffSummaryLineLabel": "第 {{line}} 行",
     "diffSummaryLineRangeLabel": "第 {{start}}-{{end}} 行",

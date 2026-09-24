@@ -46,13 +46,19 @@ export type SessionWorkspaceTabKind =
   | SessionWorkspaceToolTabKind;
 export type SessionSidePanelTab = "issue" | "changes" | "files";
 
-/** 组装提交全部更改 tab 标签：`短 hash + 空格 + 主题行`；无主题时仅短 hash。 */
+/**
+ * 组装提交级变更 tab 标签：`短 hash +（摘要态）摘要标识 + 空格 + 主题行`；
+ * 无主题时省略主题行。`viewTag` 为已本地化的摘要标识（变更摘要态才传入），
+ * 使标签能看出进入的是摘要视图。
+ */
 export function formatCommitChangeTabLabel(
   shortHash: string,
   message: string,
+  viewTag?: string | null,
 ): string {
   const subject = message.trim();
-  return subject.length > 0 ? `${shortHash} ${subject}` : shortHash;
+  const label = viewTag ? `${shortHash} ${viewTag}` : shortHash;
+  return subject.length > 0 ? `${label} ${subject}` : label;
 }
 
 export function isSingleFileChangeTab(

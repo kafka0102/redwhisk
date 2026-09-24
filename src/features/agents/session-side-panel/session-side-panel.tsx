@@ -12,6 +12,7 @@ import type {
   WorkspaceFileTreeNode,
 } from "../session-workspace/session-workspace-commands";
 import type { SessionSidePanelTab } from "../session-workspace/session-workspace-types";
+import type { MultiDiffViewMode } from "../../../shared/workspace/multi-diff-types";
 
 interface SessionSidePanelProps {
   activeTab: SessionSidePanelTab;
@@ -42,7 +43,10 @@ interface SessionSidePanelProps {
     commitHash: string,
     file: WorkspaceCommitChangedFile,
   ) => void;
-  onOpenCommitChanges?: (commit: WorkspaceCommitRecord) => void;
+  onOpenCommitChanges?: (
+    commit: WorkspaceCommitRecord,
+    mode: MultiDiffViewMode,
+  ) => void;
   onOpenIssue: (issueId: number) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onDirectoryOpen?: (directoryPath: string) => void;

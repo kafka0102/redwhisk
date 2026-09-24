@@ -152,6 +152,67 @@ describe("SessionWorkspaceTabs", () => {
     expect(screen.getByLabelText("Commit all changes")).toBeInTheDocument();
   });
 
+  it("renders the summary-mode change tab with hunk panels", () => {
+    const changeTab: SessionWorkspaceChangeTab = {
+      mode: "multi",
+      label: "abcdef1 Change Summary feat: open summary",
+      commitHash: "abcdef123456",
+      multiDiff: {
+        commitHash: "abcdef123456",
+        mode: "summary",
+        files: [
+          {
+            fileName: "a.ts",
+            filePath: "src/a.ts",
+            status: "M",
+            kind: "modified",
+            diff: {
+              filePath: "src/a.ts",
+              oldPath: null,
+              kind: "modified",
+              language: "typescript",
+              originalContent: "line1\nline2\nline3",
+              modifiedContent: "line1\nchanged\nline3",
+              isBinary: false,
+              isTooLarge: false,
+            },
+            isLoading: false,
+            errorMessage: null,
+          },
+        ],
+      },
+    };
+
+    render(
+      <SessionWorkspaceTabs
+        activeTab="changes"
+        changeTab={changeTab}
+        fileTab={null}
+        projectId={1}
+        sessionId={7}
+        sessionAgentType="claude_code"
+        sessionContent={<div>Session content</div>}
+        toolTabs={[]}
+        onCloseTab={vi.fn()}
+        onCreateBrowserTab={vi.fn()}
+        onCreateTerminalTab={vi.fn()}
+        onSelectTab={vi.fn()}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("tablist"))
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["Session", "abcdef1 Change Summary feat: open summary"]);
+    // 摘要视图（按 hunk 的折叠面板）而非整文件对比。
+    expect(screen.getByLabelText("Commit change summary")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Collapse Lines 1-3" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("changed")).toBeInTheDocument();
+  });
+
   it("shows only one change tab for multi-diff (slot exclusive with single file)", () => {
     const changeTab: SessionWorkspaceChangeTab = {
       mode: "multi",

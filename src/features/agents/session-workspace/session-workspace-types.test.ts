@@ -17,6 +17,15 @@ describe("session workspace change tab labels", () => {
     expect(formatCommitChangeTabLabel("abcdef1", "   ")).toBe("abcdef1");
   });
 
+  it("inserts the summary tag between short hash and subject", () => {
+    expect(
+      formatCommitChangeTabLabel("abcdef1", "feat: open changes", "变更摘要"),
+    ).toBe("abcdef1 变更摘要 feat: open changes");
+    expect(formatCommitChangeTabLabel("abcdef1", "   ", "变更摘要")).toBe(
+      "abcdef1 变更摘要",
+    );
+  });
+
   it("getChangeTabLabel uses multi label or single file name", () => {
     const multi: SessionWorkspaceChangeTab = {
       mode: "multi",
