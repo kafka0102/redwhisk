@@ -11,6 +11,10 @@ import {
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import { useWindowFocus } from "../../shared/window/use-window-focus";
 import { useConditionalPolling } from "../../shared/workspace/use-conditional-polling";
+import {
+  createInFlightRequests,
+  workspaceRequestKey,
+} from "../../shared/workspace/in-flight-requests";
 import { fetchProjectRemotes } from "../../shared/workspace/workspace-commands";
 
 const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
@@ -19,6 +23,8 @@ const CHANGES_REFRESH_INTERVAL_RUNNING_MS = 4_000;
 const CHANGES_REFRESH_INTERVAL_IDLE_MS = 8_000;
 /** 主 checkout 可见时后台更新 remote-tracking 的间隔；不嵌套在 4s/8s 本地轮询里。 */
 const CHANGES_REMOTE_FETCH_INTERVAL_MS = 60_000;
+/** 会话列表（running 判定）在途登记簿的资源名。 */
+const RUNNING_SESSIONS_REQUEST_RESOURCE = "worktree-running-sessions";
 
 /**
  * 判定选中 worktree 上是否存在 running turn 的 Agent session。
@@ -26,6 +32,8 @@ const CHANGES_REMOTE_FETCH_INTERVAL_MS = 60_000;
  * 数据来自 listAgentSessions（传 status=running 只取运行中会话）再按 workspacePath 判定；
  * 监听 agent-session-list-changed 事件，payload 命中本 projectId 时去抖 500ms
  * 重算（先例 agents-activity.tsx），外加 5s 慢速兜底轮询保证事件丢失时仍能收敛。
+ * 同一工作区同一时刻至多一个在途会话列表请求：兜底 tick 与事件去抖在途时跳过本次
+ * （单次往返超过 5s 时不再按 tick 堆叠请求）。
  * `workspacePath` 为空或未启用 → false。卸载时清理监听与定时器。
  */
 export function useWorktreeRunningSession(
@@ -37,6 +45,7 @@ export function useWorktreeRunningSession(
   // 事件（agent-session-list-changed）是主路径；5s 兜底轮询只在窗口可见且聚焦时跑，
   // 失焦的后台窗口不再每 5s 拉一次会话列表。
   const isPollingActive = useWindowFocus();
+  const [inFlightRequests] = useState(createInFlightRequests);
 
   useEffect(() => {
     if (!enabled || !workspacePath) {
@@ -50,13 +59,25 @@ export function useWorktreeRunningSession(
     let fallbackTimer: number | null = null;
 
     const recompute = () => {
-      void listAgentSessions(projectId, { status: "running" })
+      const requestKey = workspaceRequestKey(
+        RUNNING_SESSIONS_REQUEST_RESOURCE,
+        projectId,
+        workspacePath,
+      );
+      // 同一工作区已在途：跳过本次（不作废在途请求），running 状态由在途请求收口。
+      if (!inFlightRequests.tryBegin(requestKey)) return;
+      // 命令调用放进微任务：同步抛错也走 catch/finally，不让在途登记悬挂。
+      void Promise.resolve()
+        .then(() => listAgentSessions(projectId, { status: "running" }))
         .then((response) => {
           if (isDisposed) return;
           setIsRunning(hasRunningTurn(response.sessions, workspacePath));
         })
         .catch(() => {
           // 拉取失败时保持既有 running 标志，下次事件 / 兜底轮询会重试。
+        })
+        .finally(() => {
+          inFlightRequests.settle(requestKey);
         });
     };
 
@@ -90,7 +111,7 @@ export function useWorktreeRunningSession(
       if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
       unsubscribe();
     };
-  }, [projectId, workspacePath, enabled, isPollingActive]);
+  }, [projectId, workspacePath, enabled, isPollingActive, inFlightRequests]);
 
   return isRunning;
 }

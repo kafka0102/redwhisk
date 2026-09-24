@@ -1,6 +1,6 @@
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import {
@@ -8,12 +8,14 @@ import {
   getProjectWorktreeCommitHistory,
 } from "../../shared/workspace/workspace-commands";
 import { resetChangesWorkspaceCacheForTests } from "./changes-workspace-cache";
+import { useChangesAutoRefresh } from "./use-changes-auto-refresh";
 import { useCodeWorkspaceChanges } from "./use-code-workspace-changes";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   COMMIT_HISTORY_PAGE_SIZE: 50,
   getProjectWorktreeChanges: vi.fn(),
   getProjectWorktreeCommitHistory: vi.fn(),
+  fetchProjectRemotes: vi.fn(),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -524,19 +526,11 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
     expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 
-  it("discards a stale load-more when a refresh starts first", async () => {
+  it("does not preempt an in-flight load-more with a background refresh", async () => {
     const page1 = Array.from({ length: 50 }, (_, index) =>
       makeCommit(`g1-${index}`),
     );
     let resolveLoadMore:
-      | ((value: {
-          commits: ReturnType<typeof makeCommit>[];
-          signature: string;
-          isWorktree: boolean;
-          hasMore: boolean;
-        }) => void)
-      | undefined;
-    let resolveRefresh:
       | ((value: {
           commits: ReturnType<typeof makeCommit>[];
           signature: string;
@@ -557,12 +551,6 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
           new Promise((resolve) => {
             resolveLoadMore = resolve;
           }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveRefresh = resolve;
-          }),
       );
 
     const { result } = renderHook(
@@ -582,14 +570,14 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
       result.current.refreshCommitHistory();
     });
 
-    // 刷新优先：作废 load-more loading 态。
-    await waitFor(() =>
-      expect(result.current.isLoadingMoreCommitHistory).toBe(false),
-    );
+    // 同一资源单一在途请求：后台刷新被跳过，不抢占在途的 load-more。
+    expect(getProjectWorktreeCommitHistory).toHaveBeenCalledTimes(2);
+    expect(result.current.isLoadingMoreCommitHistory).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
 
     await act(async () => {
       resolveLoadMore?.({
-        commits: [makeCommit("stale-page-2")],
+        commits: [makeCommit("page-2-0")],
         signature: "sig-stale",
         isWorktree: false,
         hasMore: false,
@@ -597,29 +585,24 @@ describe("useCodeWorkspaceChanges commit history pagination", () => {
       await Promise.resolve();
     });
 
-    // 过期 load-more 不得污染列表。
-    expect(result.current.commitHistory).toHaveLength(50);
+    // load-more 正常落地：追加页、收口 load-more 加载态。
+    await waitFor(() => expect(result.current.commitHistory).toHaveLength(51));
+    expect(result.current.isLoadingMoreCommitHistory).toBe(false);
     expect(
-      result.current.commitHistory.some(
-        (commit) => commit.hash === "stale-page-2",
-      ),
-    ).toBe(false);
+      result.current.commitHistory.some((commit) => commit.hash === "page-2-0"),
+    ).toBe(true);
 
+    // 结算后同资源可再次发起：整窗刷新按当前整窗条数取数。
     await act(async () => {
-      resolveRefresh?.({
-        commits: page1.map((commit) => ({
-          ...commit,
-          message: "refreshed",
-        })),
-        signature: "sig-refresh",
-        isWorktree: false,
-        hasMore: true,
-      });
-      await Promise.resolve();
+      result.current.refreshCommitHistory();
     });
-
     await waitFor(() => {
-      expect(result.current.commitHistory[0]?.message).toBe("refreshed");
+      expect(getProjectWorktreeCommitHistory).toHaveBeenLastCalledWith({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        limit: 51,
+        offset: 0,
+      });
     });
   });
 
@@ -985,5 +968,239 @@ describe("useCodeWorkspaceChanges remount snapshot reuse", () => {
       await Promise.resolve();
     });
     await waitFor(() => expect(result.current.isChangesLoading).toBe(false));
+  });
+});
+
+/** 单次取数往返 10s，远大于 4s 的 running 轮询间隔。 */
+const SLOW_ROUND_TRIP_MS = 10_000;
+const RUNNING_POLL_INTERVAL_MS = 4_000;
+
+// 变更 Activity 的真实接线：数据 hook + 4s/8s 轮询 hook。
+function useSlowRefreshHarness(workspacePath: string) {
+  const state = useCodeWorkspaceChanges(1, workspacePath, true);
+  useChangesAutoRefresh({
+    enabled: true,
+    running: true,
+    refreshChanges: state.refreshChanges,
+    refreshCommitHistory: state.refreshCommitHistory,
+    isUnavailable: false,
+    projectId: 1,
+    workspacePath,
+    isProjectRoot: false,
+  });
+  return state;
+}
+
+describe("useCodeWorkspaceChanges refresh resilience", () => {
+  beforeEach(() => {
+    resetChangesWorkspaceCacheForTests();
+    vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
+      signature: "changes-empty",
+    });
+    vi.mocked(getProjectWorktreeCommitHistory).mockReset();
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [],
+      signature: "commits-empty",
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("converges without stacking requests when the round trip outlasts the poll interval", async () => {
+    vi.useFakeTimers();
+    const commits = [makeCommit("slow-1")];
+    // 每次请求都在 10s 后才返回：轮询间隔内响应永远不可能落地。
+    vi.mocked(getProjectWorktreeChanges).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(
+            () => resolve({ files: [changedFile], signature: "sig-changes" }),
+            SLOW_ROUND_TRIP_MS,
+          );
+        }),
+    );
+    vi.mocked(getProjectWorktreeCommitHistory).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                commits,
+                signature: "sig-commits",
+                isWorktree: false,
+                hasMore: false,
+              }),
+            SLOW_ROUND_TRIP_MS,
+          );
+        }),
+    );
+
+    const { result } = renderHook(
+      () => useSlowRefreshHarness("/tmp/redwhisk"),
+      { wrapper },
+    );
+
+    // 无展示数据的首拉进加载态。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.isChangesLoading).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    // 首个响应落地前经过两个轮询 tick：在途请求直接跳过，不发起、不作废。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RUNNING_POLL_INTERVAL_MS * 2);
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistory).toHaveBeenCalledTimes(1);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    // 10s 后首个响应落地：加载态收口，列表展示。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_ROUND_TRIP_MS);
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.changes).toEqual([changedFile]);
+    expect(result.current.commitHistory).toEqual(commits);
+
+    // 已有数据后的后台轮询刷新不进加载态（哪怕这次响应比轮询更慢）。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RUNNING_POLL_INTERVAL_MS);
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toEqual(commits);
+
+    // 继续跑到 30s 以上：随 tick 线性堆叠会到 8 次以上，收敛后最多 4 次。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(
+      vi.mocked(getProjectWorktreeCommitHistory).mock.calls.length,
+    ).toBeLessThanOrEqual(4);
+    expect(
+      vi.mocked(getProjectWorktreeChanges).mock.calls.length,
+    ).toBeLessThanOrEqual(4);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toEqual(commits);
+  });
+
+  it("shows commit-history loading for the first pull and closes it when the response lands", async () => {
+    const commits = [makeCommit("first-1")];
+    let resolveHistory:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeCommitHistory).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHistory = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+    expect(result.current.commitHistory).toEqual([]);
+
+    await act(async () => {
+      resolveHistory?.({
+        commits,
+        signature: "sig-first",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.commitHistory).toEqual(commits));
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("switches workspace root with loading and ignores the old root's late commit history", async () => {
+    let resolveOldRoot:
+      | ((value: {
+          commits: ReturnType<typeof makeCommit>[];
+          signature: string;
+          isWorktree: boolean;
+          hasMore: boolean;
+        }) => void)
+      | undefined;
+    let resolveNewRoot: typeof resolveOldRoot;
+    vi.mocked(getProjectWorktreeCommitHistory)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOldRoot = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveNewRoot = resolve;
+          }),
+      );
+
+    const { result, rerender } = renderHook(
+      ({ path }) => useCodeWorkspaceChanges(1, path, true),
+      { initialProps: { path: "/tmp/redwhisk" }, wrapper },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    rerender({ path: "/tmp/other" });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // 新根仍无展示数据 → 继续进加载态。
+    expect(result.current.commitHistory).toEqual([]);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    // 旧根的迟到响应不得写入新根，也不得提前收口新根的加载态。
+    await act(async () => {
+      resolveOldRoot?.({
+        commits: [makeCommit("old-root")],
+        signature: "sig-old",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    expect(result.current.commitHistory).toEqual([]);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    await act(async () => {
+      resolveNewRoot?.({
+        commits: [makeCommit("new-root")],
+        signature: "sig-new",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(result.current.commitHistory.map((commit) => commit.hash)).toEqual(
+        ["new-root"],
+      ),
+    );
+    expect(result.current.isCommitHistoryLoading).toBe(false);
   });
 });

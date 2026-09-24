@@ -275,6 +275,65 @@ describe("useWorktreeRunningSession", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(listAgentSessionsMock.mock.calls.length).toBe(callsBefore);
   });
+
+  it("skips the fallback tick while a session-list request is still in flight", async () => {
+    // 单次往返 10s，远大于 5s 兜底轮询：在途期间的 tick 直接跳过，不叠加请求。
+    listAgentSessionsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                sessions: [
+                  makeSession({
+                    workspacePath: "/tmp/redwhisk",
+                    status: "running",
+                    isTurnRunning: true,
+                  }),
+                ],
+              }),
+            10_000,
+          );
+        }),
+    );
+
+    const { result } = renderHook(() =>
+      useWorktreeRunningSession(1, "/tmp/redwhisk", true),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    // 首拉落地：running 状态收敛。
+    expect(result.current).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    // 30s / 5s 兜底轮询会 tick 6 次；在途去重后最多 4 次请求。
+    expect(listAgentSessionsMock.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(result.current).toBe(true);
+  });
+
+  it("keeps ticking when the session-list command throws synchronously", async () => {
+    // 同步抛错也必须结算在途登记，否则后续 tick 会被永久跳过。
+    let shouldThrow = true;
+    listAgentSessionsMock.mockImplementation(() => {
+      if (shouldThrow) throw new Error("boom");
+      return Promise.resolve({ sessions: [] });
+    });
+
+    const { result } = renderHook(() =>
+      useWorktreeRunningSession(1, "/tmp/redwhisk", true),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(1);
+
+    shouldThrow = false;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(listAgentSessionsMock).toHaveBeenCalledTimes(2);
+    expect(result.current).toBe(false);
+  });
 });
 
 describe("useChangesAutoRefresh", () => {
