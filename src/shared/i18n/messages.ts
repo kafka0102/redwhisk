@@ -446,6 +446,10 @@ export interface I18nMessages {
     modelLoadFailed: (message: string) => string;
     messageStream: string;
     emptyMessageStream: string;
+    /** 用户消息超过折叠行数时的展开切换文案。 */
+    expandUserMessage: string;
+    /** 已展开用户消息的收起切换文案。 */
+    collapseUserMessage: string;
     thinking: string;
     /** 长内容时回到底部的导航按钮 aria-label。 */
     scrollToBottom: string;

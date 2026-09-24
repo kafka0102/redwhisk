@@ -6,7 +6,7 @@ import {
   formatProcessingDuration,
   getSessionEndedAt,
 } from "../agent-session-formatters";
-import { ExpandableText } from "./expandable-text";
+import { ExpandableText } from "../expandable-text";
 import type { AgentSessionListItem } from "../agent-session-commands";
 import { listIssues, type IssueRecord } from "../../issues/issue-commands";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";

@@ -28,6 +28,7 @@ import type {
   ToolCallDetail,
   ToolCallStatus,
 } from "../agent-stream-types";
+import { ExpandableText } from "../expandable-text";
 import { AgentMarkdown } from "./agent-markdown";
 import { HighlightedDiffBlock } from "./highlighted-diff-block";
 import type { MessageStreamEntry } from "./message-stream-types";
@@ -37,6 +38,9 @@ interface AgentMessageCardsProps {
 }
 
 const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
+
+// 用户消息可能是一次粘贴的长代码，折叠行数限制避免单条消息占据多个屏幕。
+const USER_MESSAGE_MAX_LINES = 5;
 
 // memo 化：entries 引用不变时跳过整棵卡片树的 map + reconciliation。
 // 实例池模式下 sessions 列表刷新不再触发未变 session 的卡片重渲染。
@@ -90,10 +94,17 @@ function UserMessageCard({
 }: {
   item: Extract<AgentTimelineItem, { type: "user_message" }>;
 }) {
+  const { messages } = useI18n();
   return (
     <article className="agents-message__entry agents-message__entry--user">
       <div className="agents-message__bubble agents-message__bubble--user">
-        <p className="agents-message__text">{item.text}</p>
+        <ExpandableText
+          className="agents-message__text"
+          text={item.text}
+          maxLines={USER_MESSAGE_MAX_LINES}
+          expandLabel={messages.agentsFeature.expandUserMessage}
+          collapseLabel={messages.agentsFeature.collapseUserMessage}
+        />
       </div>
     </article>
   );

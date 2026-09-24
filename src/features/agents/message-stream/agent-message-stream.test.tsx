@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AgentMessageStream,
@@ -1059,5 +1065,92 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     fireEvent.scroll(scroll);
 
     expect(readMessageStreamScrollOffset(9)).toBe(250);
+  });
+});
+
+describe("AgentMessageStreamView 用户消息折叠", () => {
+  let resizeCallbacks: ResizeObserverCallback[] = [];
+
+  beforeEach(() => {
+    resizeCallbacks = [];
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe() {}
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function renderUserMessage(text: string) {
+    const state = createMessageStreamState({
+      entries: [
+        {
+          id: "u1",
+          kind: "user_message",
+          item: { type: "user_message", text, messageId: "u1" },
+        },
+      ],
+    });
+    const view = render(<AgentMessageStreamView state={state} />);
+    const content = view.container.querySelector<HTMLElement>(
+      ".agents-message__text",
+    );
+    if (!content) {
+      throw new Error("missing user message text container");
+    }
+    return { view, content };
+  }
+
+  it("粘贴的长代码默认折叠为五行并可展开收起", () => {
+    const longText = Array.from(
+      { length: 20 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
+    const { view, content } = renderUserMessage(longText);
+    expect(content.className).toContain("expandable-text__content--clamped");
+
+    // jsdom 不做布局，手工注入尺寸后触发重新判定。
+    Object.defineProperty(content, "clientHeight", {
+      configurable: true,
+      get: () => 70,
+    });
+    Object.defineProperty(content, "scrollHeight", {
+      configurable: true,
+      get: () => 280,
+    });
+    act(() => {
+      for (const callback of resizeCallbacks) {
+        callback([], {} as ResizeObserver);
+      }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(
+      view.container.querySelector(".expandable-text__content--clamped"),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(
+      view.container.querySelector(".expandable-text__content--clamped"),
+    ).not.toBeNull();
+  });
+
+  it("短用户消息不渲染折叠切换按钮", () => {
+    renderUserMessage("开始处理");
+
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("开始处理")).toBeInTheDocument();
   });
 });

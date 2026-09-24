@@ -494,6 +494,8 @@
     "modelLoadFailed": "Model load failed: {{message}}",
     "messageStream": "Agent session message stream",
     "emptyMessageStream": "Send a message to start the conversation.",
+    "expandUserMessage": "Show more",
+    "collapseUserMessage": "Collapse",
     "thinking": "Thinking...",
     "scrollToBottom": "Scroll to bottom",
     "scrollToTop": "Scroll to top",

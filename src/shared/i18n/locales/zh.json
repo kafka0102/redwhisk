@@ -494,6 +494,8 @@
     "modelLoadFailed": "模型加载失败：{{message}}",
     "messageStream": "智能体会话消息流",
     "emptyMessageStream": "发送一条消息开始对话。",
+    "expandUserMessage": "展开更多",
+    "collapseUserMessage": "收起",
     "thinking": "正在思考…",
     "scrollToBottom": "回到底部",
     "scrollToTop": "回到顶部",

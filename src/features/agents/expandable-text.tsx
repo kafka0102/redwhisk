@@ -1,3 +1,8 @@
+// 通用的「超过 N 行折叠 + 展开/收起」纯文本渲染件。
+//
+// 折叠判定基于实际布局（scrollHeight / clientHeight），容器宽度变化会重新判定，
+// 因此不依赖调用方预先估算行数。当前由会话右侧栏 issue 描述与消息流用户消息共用。
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
