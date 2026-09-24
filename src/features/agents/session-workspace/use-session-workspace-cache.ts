@@ -12,6 +12,11 @@ import {
 } from "../../../shared/workspace/commit-history-pagination";
 import { buildFileTreeDecorations } from "../../../shared/workspace/file-tree-git-decorations";
 import {
+  createInFlightRequests,
+  type InFlightRequests,
+  workspaceRequestKey,
+} from "../../../shared/workspace/in-flight-requests";
+import {
   ROOT_FILE_TREE_DIRECTORY,
   assembleFileTree,
   fileTreeDirectoryPathsToLoad,
@@ -53,6 +58,9 @@ const COMMIT_HISTORY_POLL_INTERVAL_MS = 5_000;
 const FILE_TREE_POLL_INTERVAL_MS = 5_000;
 /** 提交全部更改多文件 diff 有界并发上限。 */
 const MULTI_DIFF_CONCURRENCY = 5;
+/** 在途登记簿的资源名（配合项目 + 会话组成 key）。 */
+const CHANGES_REQUEST_RESOURCE = "session-workspace-changes";
+const COMMIT_HISTORY_REQUEST_RESOURCE = "session-workspace-commit-history";
 
 interface UseSessionWorkspaceCacheInput {
   projectId: number;
@@ -95,6 +103,10 @@ interface SessionWorkspaceCache {
   fileTree: WorkspaceFileTreeNode[];
   fileTreeListings: Record<string, FileTreeDirectoryListing>;
   fileTreeErrorMessage: string | null;
+  /** 未提交变更是否已有可展示数据（含空列表的成功响应）：加载态 = 无展示数据 && 在途。 */
+  hasChangesDisplay: boolean;
+  /** 已提交历史是否已有可展示数据（含空列表的成功响应）。 */
+  hasCommitHistoryDisplay: boolean;
   isChangesLoading: boolean;
   isChangesUnavailable: boolean;
   isCommitHistoryLoading: boolean;
@@ -109,7 +121,64 @@ const sessionWorkspaceCacheBySessionId = new Map<
   number,
   SessionWorkspaceCache
 >();
+const inFlightRequestsBySessionId = new Map<number, InFlightRequests>();
 const fileTreeListingSequenceByKey = new Map<string, number>();
+
+/**
+ * 会话侧栏资源 key：资源名 + 项目 + 会话（会话即本 hook 的工作区标识）。
+ */
+function sessionWorkspaceRequestKey(
+  resource: string,
+  projectId: number,
+  sessionId: number,
+): string {
+  return workspaceRequestKey(resource, projectId, `session:${sessionId}`);
+}
+
+/**
+ * 会话侧栏的在途请求登记簿，与 module-level 会话缓存同寿命（删除会话 / 测试隔离时一并丢弃）。
+ *
+ * 同一会话同一资源（未提交变更 / 已提交历史）同一时刻至多一个在途请求：轮询 tick、
+ * 重新展开 / 切回 Tab 的补拉、手动刷新都先尝试登记，登记失败即跳过本次而不作废在途请求。
+ * 否则慢机器 / 大仓库下单次往返超过轮询间隔时，每个响应都会在落地前被下一个 tick 作废，
+ * 面板永久停在加载态。登记簿跨 hook 实例存活：快速重挂载复用同一份在途状态，不并发发起。
+ */
+function inFlightRequestsForSession(sessionId: number): InFlightRequests {
+  const existing = inFlightRequestsBySessionId.get(sessionId);
+  if (existing) {
+    return existing;
+  }
+  const next = createInFlightRequests();
+  inFlightRequestsBySessionId.set(sessionId, next);
+  return next;
+}
+
+/**
+ * 会话侧栏加载标记在缓存里的字段：未提交变更 / 已提交历史各一个。
+ */
+type ResourceLoadingField = "isChangesLoading" | "isCommitHistoryLoading";
+
+/**
+ * 推导并收敛加载态：加载态 = 无展示数据 && 本资源有在途请求（与
+ * `useWorkspaceResourceLoading` 同一语义）。
+ *
+ * 会话侧栏的数据与加载态同存于 module-level Map（跨 Activity 卸载复用，且按会话隔离），
+ * 因此这里在缓存里直接推导，而不是用基于 React state 的 `useWorkspaceResourceLoading`：
+ * 已有展示数据时后台刷新 / 补拉 / 手动刷新都不进加载态，任何一次结算（成功 / 失败 /
+ * 过期 / 被跳过）都收口它自己那次加载态。返回同一引用表示无需更新缓存（不触发无谓重渲染）。
+ */
+function reconcileResourceLoading(
+  cache: SessionWorkspaceCache,
+  loadingField: ResourceLoadingField,
+  hasDisplay: boolean,
+  inFlightRequests: InFlightRequests,
+  requestKey: string,
+): SessionWorkspaceCache {
+  const isLoading = !hasDisplay && inFlightRequests.isInFlight(requestKey);
+  return cache[loadingField] === isLoading
+    ? cache
+    : { ...cache, [loadingField]: isLoading };
+}
 
 function fileTreeListingSeqKey(
   sessionId: number,
@@ -148,6 +217,9 @@ function isCurrentFileTreeListingSequence(
  */
 export function clearSessionWorkspaceCache(sessionId: number): void {
   sessionWorkspaceCacheBySessionId.delete(sessionId);
+  // agent_sessions.id 可能被复用：连同该会话的在途登记一起丢弃，避免新会话首次取数被旧
+  // 会话的在途请求挡住。
+  inFlightRequestsBySessionId.delete(sessionId);
   // agent_sessions.id 可能被复用：一并清掉该 session 的文件阅读位置，避免串味。
   clearSessionFileReadingPositions(sessionId);
 }
@@ -157,6 +229,7 @@ export function clearSessionWorkspaceCache(sessionId: number): void {
  */
 export function clearSessionWorkspaceCacheForTest(): void {
   sessionWorkspaceCacheBySessionId.clear();
+  inFlightRequestsBySessionId.clear();
   fileTreeListingSequenceByKey.clear();
 }
 
@@ -184,6 +257,8 @@ const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   fileTree: [],
   fileTreeListings: {},
   fileTreeErrorMessage: null,
+  hasChangesDisplay: false,
+  hasCommitHistoryDisplay: false,
   isChangesLoading: false,
   isChangesUnavailable: false,
   isCommitHistoryLoading: false,
@@ -278,22 +353,41 @@ export function useSessionWorkspaceCache({
       return;
     }
 
+    const requestSessionId = sessionId;
+    const requestKey = sessionWorkspaceRequestKey(
+      CHANGES_REQUEST_RESOURCE,
+      projectId,
+      requestSessionId,
+    );
+    const inFlightRequests = inFlightRequestsForSession(requestSessionId);
+    // 同一资源已在途：跳过本次（不作废在途请求），加载态由在途请求的结算收口。
+    if (!inFlightRequests.tryBegin(requestKey)) {
+      return;
+    }
+
     let requestSequence = 0;
-    updateCurrentCache((cache) => ({
-      ...cache,
-      changesRequestSequence: (requestSequence =
-        cache.changesRequestSequence + 1),
-      isChangesLoading: true,
-      changesErrorMessage: null,
-    }));
+    updateSessionCache(requestSessionId, (cache) =>
+      reconcileResourceLoading(
+        {
+          ...cache,
+          changesRequestSequence: (requestSequence =
+            cache.changesRequestSequence + 1),
+          changesErrorMessage: null,
+        },
+        "isChangesLoading",
+        cache.hasChangesDisplay,
+        inFlightRequests,
+        requestKey,
+      ),
+    );
 
     try {
       const response = await getProjectWorktreeChanges({
         projectId,
-        sessionId,
+        sessionId: requestSessionId,
       });
 
-      updateCurrentCache((cache) =>
+      updateSessionCache(requestSessionId, (cache) =>
         cache.changesRequestSequence === requestSequence
           ? {
               ...cache,
@@ -301,6 +395,7 @@ export function useSessionWorkspaceCache({
                 cache.lastChangesSignature === response.signature
                   ? cache.changes
                   : response.files,
+              hasChangesDisplay: true,
               isChangesLoading: false,
               changesErrorMessage: null,
               isChangesUnavailable: false,
@@ -311,7 +406,7 @@ export function useSessionWorkspaceCache({
     } catch (error) {
       const commandError = toCommandError(error);
       const isUnavailable = isWorkspaceRootInaccessibleError(commandError);
-      updateCurrentCache((cache) =>
+      updateSessionCache(requestSessionId, (cache) =>
         cache.changesRequestSequence === requestSequence
           ? {
               ...cache,
@@ -321,8 +416,20 @@ export function useSessionWorkspaceCache({
             }
           : cache,
       );
+    } finally {
+      // 任何一次结算（成功 / 失败 / 过期）都收口它自己那次加载态。
+      inFlightRequests.settle(requestKey);
+      updateSessionCache(requestSessionId, (cache) =>
+        reconcileResourceLoading(
+          cache,
+          "isChangesLoading",
+          cache.hasChangesDisplay,
+          inFlightRequests,
+          requestKey,
+        ),
+      );
     }
-  }, [projectId, sessionId, updateCurrentCache, t]);
+  }, [projectId, sessionId, updateSessionCache, t]);
 
   const fetchFileTreeDirectory = useCallback(
     async (targetSessionId: number, directoryPath: string, force: boolean) => {
@@ -455,20 +562,34 @@ export function useSessionWorkspaceCache({
     }
 
     const requestSessionId = sessionId;
+    const requestKey = sessionWorkspaceRequestKey(
+      COMMIT_HISTORY_REQUEST_RESOURCE,
+      projectId,
+      requestSessionId,
+    );
+    const inFlightRequests = inFlightRequestsForSession(requestSessionId);
+    // 同一资源已在途（后台刷新或 load-more）：跳过本次，加载态由在途请求的结算收口。
+    // 因此后台刷新不抢占在途的 load-more，也不会把「新请求作废旧请求」变成永久加载。
+    if (!inFlightRequests.tryBegin(requestKey)) {
+      return;
+    }
+
     let requestSequence = 0;
     let loadedCount = 0;
     updateSessionCache(requestSessionId, (cache) => {
       requestSequence = cache.commitHistoryRequestSequence + 1;
       loadedCount = cache.commitHistory.length;
-      return {
-        ...cache,
-        commitHistoryRequestSequence: requestSequence,
-        isCommitHistoryLoading: true,
-        // 刷新优先：作废进行中的 load-more UI 态，且不清空旧列表。
-        isLoadingMoreCommitHistory: false,
-        loadMoreCommitHistoryErrorMessage: null,
-        commitHistoryErrorMessage: null,
-      };
+      return reconcileResourceLoading(
+        {
+          ...cache,
+          commitHistoryRequestSequence: requestSequence,
+          commitHistoryErrorMessage: null,
+        },
+        "isCommitHistoryLoading",
+        cache.hasCommitHistoryDisplay,
+        inFlightRequests,
+        requestKey,
+      );
     });
 
     try {
@@ -493,8 +614,12 @@ export function useSessionWorkspaceCache({
                 cache.lastCommitHistorySignature === response.signature
                   ? cache.hasMoreCommitHistory
                   : response.hasMore,
+              hasCommitHistoryDisplay: true,
               isCommitHistoryLoading: false,
               commitHistoryErrorMessage: null,
+              // 整窗刷新成功在语义上覆盖上一轮失败的 load-more：清掉它的错误提示，
+              // 否则该错误会永久挡住面板的自动连拉与后续重试。
+              loadMoreCommitHistoryErrorMessage: null,
               lastCommitHistorySignature: response.signature,
             }
           : cache,
@@ -509,6 +634,18 @@ export function useSessionWorkspaceCache({
             }
           : cache,
       );
+    } finally {
+      // 任何一次结算（成功 / 失败 / 过期）都收口它自己那次加载态。
+      inFlightRequests.settle(requestKey);
+      updateSessionCache(requestSessionId, (cache) =>
+        reconcileResourceLoading(
+          cache,
+          "isCommitHistoryLoading",
+          cache.hasCommitHistoryDisplay,
+          inFlightRequests,
+          requestKey,
+        ),
+      );
     }
   }, [projectId, sessionId, updateSessionCache, t]);
 
@@ -518,15 +655,23 @@ export function useSessionWorkspaceCache({
     }
 
     const requestSessionId = sessionId;
+    const requestKey = sessionWorkspaceRequestKey(
+      COMMIT_HISTORY_REQUEST_RESOURCE,
+      projectId,
+      requestSessionId,
+    );
+    const inFlightRequests = inFlightRequestsForSession(requestSessionId);
+    // 与整窗刷新共用同一资源登记：后台刷新在途时 load-more 跳过（由在途请求的结算收口），
+    // 在途 load-more 也同样挡住后台刷新，二者不会互相作废。
+    if (!inFlightRequests.tryBegin(requestKey)) {
+      return;
+    }
+
     let requestSequence = 0;
     let loadedCount = 0;
     let shouldRequest = false;
     updateSessionCache(requestSessionId, (cache) => {
-      if (
-        !cache.hasMoreCommitHistory ||
-        cache.isLoadingMoreCommitHistory ||
-        cache.isCommitHistoryLoading
-      ) {
+      if (!cache.hasMoreCommitHistory) {
         return cache;
       }
       shouldRequest = true;
@@ -540,6 +685,7 @@ export function useSessionWorkspaceCache({
       };
     });
     if (!shouldRequest) {
+      inFlightRequests.settle(requestKey);
       return;
     }
 
@@ -564,6 +710,7 @@ export function useSessionWorkspaceCache({
               hasMoreCommitHistory: response.hasMore,
               // 分页 signature 仅代表一页，清空以便下次整窗刷新必应用。
               lastCommitHistorySignature: null,
+              hasCommitHistoryDisplay: true,
               isLoadingMoreCommitHistory: false,
               loadMoreCommitHistoryErrorMessage: null,
             }
@@ -582,6 +729,8 @@ export function useSessionWorkspaceCache({
             }
           : cache,
       );
+    } finally {
+      inFlightRequests.settle(requestKey);
     }
   }, [projectId, sessionId, updateSessionCache, t]);
 

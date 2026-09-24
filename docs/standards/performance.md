@@ -57,7 +57,7 @@
 - 命令体内有 `Command::new("git")` / `Connection::open` / `fs::read_dir` 吗？→ `spawn_blocking`。
 - 命令体内会开库并跑迁移吗？→ 迁移检查必须走只读快路径（见 §1 反例），禁止每条命令 `BEGIN IMMEDIATE`。
 - 有「对每条结果再调一次命令 / git」的循环吗？→ 改单次批量。
-- 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？是否已按 §7 做「可见 + 聚焦」门控？
+- 前端在轮询吗？轮询的数据能否后端过滤、或改为事件驱动（`agent-session-list-changed` 等）？是否已按 §7 做「可见 + 聚焦」门控、按 §8 做在途去重与加载态收敛？
 - 会不会在已有的高频本地轮询（如变更页 4s/8s）里再嵌网络型 `git fetch`？→ 禁止；远端跟踪更新应低频独立（见 ADR-0032 的 60s 后台 fetch），失败不得阻塞本地 refresh。
 - 启动期任务 / 热路径会不会同步拉起 shell 探测（login+interactive）？→ 改成启动后台预热 + 命中缓存才用，禁止让用户动作等它。
 
@@ -99,3 +99,20 @@
 - 组合成 `isActive = isVisible && isWindowFocused` 后再决定是否起定时器；重新聚焦时立即补拉一次（`useConditionalPolling` 的 `refreshOnActivate`，或各 hook 自己的 recovery effect）。
 - 例外：**通知类**轮询不能因失焦而停——后台窗口正是系统通知的触发场景。`useAgentSessionNotifications` 的会话状态检查改为「事件驱动为主（`agent-session-list-changed`，去抖 300ms）+ 5s 低频兜底 + 在途去重」。
 - 不要用 `document.hasFocus()`：它反映 webview 内容是否持有 DOM 焦点，点窗口标题栏 / 原生菜单就会变 `false`，会把「正在看的窗口」误判成后台而停掉轮询。
+
+## 8. 刷新收敛与加载态
+
+**判据**：轮询 / 事件 / 手动刷新共同驱动的数据（未提交变更、已提交变更历史、会话列表等）必须同时满足两条：同一资源同一时刻至多一个在途请求；加载态只表示「还没有任何数据可展示」，且任何一次请求结算（成功 / 失败 / 过期）都收口它自己那次加载态。
+
+**为什么**：多窗口 + 慢机器 / 大仓库时，单次往返可能超过轮询间隔。旧写法让新请求一发起就作废旧请求，而加载标记只在「请求序号匹配」的分支里清除：每个响应都在落地前被下一个 tick 作废，面板永久停在「正在加载」；离开焦点停轮询后最后一个响应才落地，表现为「十多分钟后突然显示」。同一资源没有在途去重时，请求还会按 tick 线性堆叠，把后端压得更慢。
+
+**做法**：
+
+- 在途登记簿 `src/shared/workspace/in-flight-requests.ts`（`createInFlightRequests()` + `workspaceRequestKey(资源名, 项目, 工作区根 / 会话)`）是唯一簿记：轮询 tick、事件触发刷新、手动刷新都先 `tryBegin(key)`，登记失败即跳过本次（**不作废**在途请求），请求结算（含过期 / 作废）时 `settle(key)`。
+- 加载态语义为 `isLoading = 无展示数据 && 该资源有在途请求`。React state 形态的资源用 `src/shared/workspace/use-workspace-resource-loading.ts`；状态存放在 module-level 缓存里的资源（如 Agent 会话侧栏的 `use-session-workspace-cache`，见 [ADR-0041](../adr/0041-changes-activity-snapshot-on-remount.md) 的跨卸载复用）按同一语义在缓存里置 / 清，并让缓存记住「已有展示数据」（含空列表的成功响应也算已有展示）。
+- 已有展示数据时，后台刷新 / 补拉 / 手动刷新一律静默：不置加载态、不用加载态盖掉旧内容；signature 未变则零 `setState`。
+- 请求序号 + signature 去重保留，但只服务于工作区根切换、分页等显式作废场景与零 `setState` 优化，不能作为加载态能否收口的唯一依赖。
+- 失效信号优先、轮询兜底：已接线的失效事件路径（如变更 Activity 用 `agent-session-list-changed` 判断回合开始 / 结束、提交可能发生）在聚焦窗口下去抖立即刷新；未接线的消费方（如 Agent 会话右侧栏变更 Tab）仍由各自的 2s / 5s 轮询与展开 / 切回补拉在数秒内收敛，不为此提高轮询频率。
+- 后端按需定向取数：只为当前需要的对象取数（如单文件差异按文件路径定向读取变更条目），不在高频路径上重算整个工作区集合（配合 §2、§3）。
+
+**反例**：`useSessionWorkspaceCache` 的未提交变更（2s）与已提交历史（5s）、变更 Activity 的 4s/8s 轮询曾都无在途去重，且加载标记只在请求序号匹配时清除，慢时序下面板永久停在「正在加载」；`useWorktreeRunningSession` 的 5s 兜底轮询曾按 tick 堆叠会话列表请求。均已按本节收敛。

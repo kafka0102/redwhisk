@@ -360,6 +360,49 @@ describe("useSessionWorkspaceCache commit history pagination", () => {
     expect(result.current.loadMoreCommitHistoryErrorMessage).not.toBeNull();
     expect(result.current.isLoadingMoreCommitHistory).toBe(false);
   });
+
+  it("clears the previous load-more error once a full-window refresh succeeds", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`ce-${index}`),
+    );
+    getProjectWorktreeCommitHistoryMock
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockRejectedValueOnce(new Error("page failed"))
+      .mockResolvedValue({
+        commits: page1,
+        signature: "sig-refresh",
+        isWorktree: false,
+        hasMore: true,
+      });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    await act(async () => {
+      await result.current.loadMoreCommitHistory();
+    });
+    expect(result.current.loadMoreCommitHistoryErrorMessage).not.toBeNull();
+
+    // 整窗刷新成功后不再保留上一轮 load-more 的错误提示（避免挡住自动连拉与重试）。
+    await act(async () => {
+      await result.current.refreshCommitHistory();
+    });
+    expect(result.current.loadMoreCommitHistoryErrorMessage).toBeNull();
+    expect(result.current.commitHistory).toHaveLength(50);
+  });
 });
 
 function makeChangedFile(
@@ -858,5 +901,433 @@ describe("useSessionWorkspaceCache remount persistence", () => {
 
     expect(remounted.result.current.activeWorkspaceTab).toBe("session");
     expect(remounted.result.current.changeTab).toBeNull();
+  });
+});
+
+/** 单次取数往返 10s，远大于未提交变更 2s 与已提交历史 5s 的轮询间隔。 */
+const SLOW_ROUND_TRIP_MS = 10_000;
+
+type CommitHistoryPage = {
+  commits: ReturnType<typeof makeCommit>[];
+  signature: string;
+  isWorktree: boolean;
+  hasMore: boolean;
+};
+
+describe("useSessionWorkspaceCache refresh resilience", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("converges without stacking requests when the round trip outlasts the poll intervals", async () => {
+    const changedFile = makeChangedFile("src/a.ts", "modified");
+    const commits = [makeCommit("slow-1")];
+    // 每次请求都在 10s 后才返回：轮询间隔内响应永远不可能落地。
+    getProjectWorktreeChangesMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(
+            () => resolve({ files: [changedFile], signature: "sig-changes" }),
+            SLOW_ROUND_TRIP_MS,
+          );
+        }),
+    );
+    getProjectWorktreeCommitHistoryMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                commits,
+                signature: "sig-commits",
+                isWorktree: false,
+                hasMore: false,
+              }),
+            SLOW_ROUND_TRIP_MS,
+          );
+        }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    // 无展示数据的首拉进加载态。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.isChangesLoading).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    // 首个响应落地前经过两个 2s tick 与一个 5s tick：在途请求直接跳过，不发起也不作废。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+    expect(result.current.isChangesLoading).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(true);
+
+    // 10s 后首个响应落地：加载态收口，数据展示。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_ROUND_TRIP_MS);
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.changes).toEqual([changedFile]);
+    expect(result.current.commitHistory).toEqual(commits);
+
+    // 已有展示数据后的后台轮询刷新不进加载态（哪怕响应仍然比轮询慢）。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_ROUND_TRIP_MS);
+    });
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toEqual(commits);
+
+    // 继续跑到 46s：随 tick 线性堆叠会到 20 次以上；收敛后只随响应落地次数增长。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(getProjectWorktreeChangesMock.mock.calls.length).toBeLessThanOrEqual(
+      6,
+    );
+    expect(
+      getProjectWorktreeCommitHistoryMock.mock.calls.length,
+    ).toBeLessThanOrEqual(6);
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toEqual(commits);
+  });
+
+  it("does not flash loading while refreshing a commit history that already has commits", async () => {
+    const commits = [makeCommit("existing-1")];
+    let resolveRefresh: ((page: CommitHistoryPage) => void) | undefined;
+    getProjectWorktreeCommitHistoryMock
+      .mockResolvedValueOnce({
+        commits,
+        signature: "sig-existing",
+        isWorktree: false,
+        hasMore: false,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(result.current.commitHistory).toEqual(commits);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+
+    // 5s tick 进入慢刷新：已有展示数据，不进加载态、不覆盖列表。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+    expect(result.current.commitHistory).toEqual(commits);
+
+    await act(async () => {
+      resolveRefresh?.({
+        commits: [...commits, makeCommit("existing-2")],
+        signature: "sig-existing-2",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    expect(result.current.commitHistory).toHaveLength(2);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("deduplicates repeated refreshes while the first request is still in flight", async () => {
+    const changedFile = makeChangedFile("src/dedup.ts", "modified");
+    const commits = [makeCommit("dedup-1")];
+    let resolveChanges:
+      | ((page: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    let resolveHistory: ((page: CommitHistoryPage) => void) | undefined;
+    getProjectWorktreeChangesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveChanges = resolve;
+        }),
+    );
+    getProjectWorktreeCommitHistoryMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHistory = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    // 挂载首拉仍在途：重复点击刷新不再发起并发请求。
+    act(() => {
+      void result.current.refreshChanges();
+      void result.current.refreshChanges();
+      void result.current.refreshCommitHistory();
+      void result.current.refreshCommitHistory();
+    });
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveChanges?.({ files: [changedFile], signature: "sig-changes" });
+      resolveHistory?.({
+        commits,
+        signature: "sig-commits",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(result.current.changes).toEqual([changedFile]);
+    expect(result.current.commitHistory).toEqual(commits);
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("does not start a concurrent request when the hook remounts while a request is in flight", async () => {
+    const commits = [makeCommit("remount-1")];
+    let resolveFirst: ((page: CommitHistoryPage) => void) | undefined;
+    getProjectWorktreeCommitHistoryMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValue({
+        commits,
+        signature: "sig-remount",
+        isWorktree: false,
+        hasMore: false,
+      });
+
+    const first = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+
+    // 卸载重挂载复用同一份会话缓存与在途登记：在途请求未结算前不并发发起。
+    first.unmount();
+    const second = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+    expect(second.result.current.isCommitHistoryLoading).toBe(true);
+    expect(second.result.current.commitHistory).toEqual([]);
+
+    // 旧实例的响应写入 module-level 会话缓存；重挂载后的下一次轮询渲染出来。
+    await act(async () => {
+      resolveFirst?.({
+        commits,
+        signature: "sig-remount",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+    expect(second.result.current.commitHistory).toEqual(commits);
+    expect(second.result.current.isCommitHistoryLoading).toBe(false);
+  });
+
+  it("keeps the previous session's late response out of the newly selected session", async () => {
+    const firstSessionFile = makeChangedFile("src/one.ts", "modified");
+    const secondSessionFile = makeChangedFile("src/two.ts", "modified");
+    let resolveFirstSession:
+      | ((page: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    getProjectWorktreeChangesMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstSession = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        signature: "session-2",
+        files: [secondSessionFile],
+      });
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }: { sessionId: number }) =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId,
+          isSidePanelOpen: true,
+        }),
+      { wrapper, initialProps: { sessionId: 1 } },
+    );
+    await settle();
+    expect(result.current.changes).toEqual([]);
+
+    // 切到另一个会话：新会话按自己的会话缓存取数，进入加载态后展示自己的数据。
+    rerender({ sessionId: 2 });
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isChangesLoading).toBe(false);
+    expect(result.current.changes).toEqual([secondSessionFile]);
+
+    // 旧会话的迟到响应不得写入新会话（各会话的在途登记与缓存互相隔离）。
+    await act(async () => {
+      resolveFirstSession?.({
+        signature: "session-1",
+        files: [firstSessionFile],
+      });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(result.current.changes).toEqual([secondSessionFile]);
+  });
+
+  it("does not preempt an in-flight load-more with a background refresh", async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) =>
+      makeCommit(`lm-${index}`),
+    );
+    let resolveLoadMore: ((page: CommitHistoryPage) => void) | undefined;
+    getProjectWorktreeCommitHistoryMock
+      .mockResolvedValueOnce({
+        commits: page1,
+        signature: "sig-1",
+        isWorktree: false,
+        hasMore: true,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLoadMore = resolve;
+          }),
+      )
+      .mockResolvedValue({
+        commits: page1,
+        signature: "sig-2",
+        isWorktree: false,
+        hasMore: true,
+      });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(result.current.commitHistory).toHaveLength(50);
+
+    act(() => {
+      void result.current.loadMoreCommitHistory();
+    });
+    await settle();
+    expect(result.current.isLoadingMoreCommitHistory).toBe(true);
+
+    // load-more 在途时 5s tick 与手动刷新都被跳过：不抢占在途请求。
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    act(() => {
+      void result.current.refreshCommitHistory();
+    });
+    await settle();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isLoadingMoreCommitHistory).toBe(true);
+    expect(result.current.isCommitHistoryLoading).toBe(false);
+
+    // load-more 正常落地：追加页、收口 load-more 加载态。
+    await act(async () => {
+      resolveLoadMore?.({
+        commits: [makeCommit("lm-page-2")],
+        signature: "sig-page-2",
+        isWorktree: false,
+        hasMore: false,
+      });
+      await Promise.resolve();
+    });
+    await settle();
+    expect(result.current.isLoadingMoreCommitHistory).toBe(false);
+    expect(result.current.commitHistory).toHaveLength(51);
+    expect(
+      result.current.commitHistory.some(
+        (commit) => commit.hash === "lm-page-2",
+      ),
+    ).toBe(true);
+
+    // 结算之后同资源可再次发起：整窗刷新按当前整窗条数取数。
+    act(() => {
+      void result.current.refreshCommitHistory();
+    });
+    await settle();
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      limit: 51,
+      offset: 0,
+    });
   });
 });

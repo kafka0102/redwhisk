@@ -984,15 +984,11 @@ describe("AgentsActivity", () => {
     expect(screen.getByRole("button", { name: /two.ts/ })).toBeInTheDocument();
   });
 
-  it("keeps newer uncommitted changes when an older refresh returns last", async () => {
+  it("skips the poll tick while an uncommitted-changes refresh is still in flight", async () => {
     vi.useFakeTimers();
-    const oldChanges =
+    const pendingChanges =
       deferred<Awaited<ReturnType<typeof getProjectWorktreeChanges>>>();
-    const newChanges =
-      deferred<Awaited<ReturnType<typeof getProjectWorktreeChanges>>>();
-    getProjectWorktreeChangesMock
-      .mockReturnValueOnce(oldChanges.promise)
-      .mockReturnValueOnce(newChanges.promise);
+    getProjectWorktreeChangesMock.mockReturnValueOnce(pendingChanges.promise);
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],
     });
@@ -1003,32 +999,22 @@ describe("AgentsActivity", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Changes" }));
     expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
 
+    // 2s tick 时首个请求仍在途：同一资源单一在途请求，本次跳过（不作废在途请求）。
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_100);
     });
-    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      newChanges.resolve({
-        signature: "new",
-        files: [changedFile("src/new.ts", "modified")],
+      pendingChanges.resolve({
+        signature: "one",
+        files: [changedFile("src/one.ts", "modified")],
       });
-      await newChanges.promise;
-    });
-    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
-
-    await act(async () => {
-      oldChanges.resolve({
-        signature: "old",
-        files: [changedFile("src/old.ts", "modified")],
-      });
-      await oldChanges.promise;
+      await pendingChanges.promise;
     });
 
-    expect(screen.getByRole("button", { name: /new.ts/ })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /old.ts/ }),
-    ).not.toBeInTheDocument();
+    // 在途响应落地：数据展示、加载态收口。
+    expect(screen.getByRole("button", { name: /one.ts/ })).toBeInTheDocument();
   });
 
   it("stops auto-refreshing uncommitted changes when the workspace root is inaccessible", async () => {
