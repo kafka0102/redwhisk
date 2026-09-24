@@ -7,7 +7,12 @@
 // base-ui Select 的弹出层在 jsdom 中需交互才挂载，故选项渲染测试通过
 // SelectItem 的文本（在 content 内）配合 waitFor 断言；发送/取消等核心交互
 // 直接验证命令 mock 被调用。
+//
+// 布局契约（composer 被超长排队正文顶宽的回归）在 jsdom 无布局引擎，
+// 只能断言 CSS 声明本身，见文件末尾的 `composer 宽度契约` 用例。
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   act,
   fireEvent,
@@ -643,5 +648,22 @@ describe("AgentComposer", () => {
     );
     expect(screen.queryByText("Queued")).not.toBeInTheDocument();
     expect(cancelAgentTurnMock).not.toHaveBeenCalled();
+  });
+});
+
+// 回归：超长排队追问会把 composer 撑得比窗口还宽，右侧终止按钮被
+// `.agents-session-view` 的 overflow:hidden 裁掉、点不到，用户因此无法停下来。
+// 根因是 composer 作为 grid item 的 min-width:auto 会把排队 chip 的 min-content
+// （chip 正文是 nowrap，min-content 等于整条消息宽度）顶成轨道宽度。
+// jsdom 无布局引擎，无法断言几何，故锁定 CSS 契约；几何验证见 issue 记录。
+describe("composer 宽度契约", () => {
+  it("声明 min-width: 0，避免长排队正文顶宽 grid 轨道", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/shared/styles/composer.css"),
+      "utf8",
+    );
+    const rule = css.match(/\.agents-composer\s*\{[^}]+\}/)?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).toMatch(/min-width:\s*0/);
   });
 });

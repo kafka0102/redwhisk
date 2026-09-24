@@ -7,7 +7,11 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
+  /* grid item 默认 min-width:auto 会把子元素的 min-content（排队 chip 的正文
+     是 nowrap，min-content 等于整条消息宽度）顶成轨道宽度，撑破
+     `.agents-session-view` 的 overflow:hidden 裁掉右侧终止按钮。 */
   width: auto;
+  min-width: 0;
   margin: 0 18px 14px;
   padding: 9px 10px 8px;
   border: 1px solid var(--color-border);
