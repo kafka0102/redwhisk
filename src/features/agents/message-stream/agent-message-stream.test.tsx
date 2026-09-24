@@ -824,6 +824,52 @@ describe("AgentMessageStreamView 长内容跳转按钮", () => {
     ).toBeInTheDocument();
   });
 
+  it("向下滚动时显示向下按钮，即使已滚到底部附近", () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    scroll.scrollTop = 400;
+    fireEvent.scroll(scroll);
+
+    expect(
+      screen.getByRole("button", { name: "Scroll to bottom" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Scroll to top" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("向上滚动时显示向上按钮，即使距底部较远", () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 320;
+    fireEvent.scroll(scroll);
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+
+    expect(
+      screen.getByRole("button", { name: "Scroll to top" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Scroll to bottom" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("停止滚动后按当前位置回落到默认方向", async () => {
+    const { scroll } = renderLongStream();
+    scroll.scrollTop = 320;
+    fireEvent.scroll(scroll);
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(
+      screen.getByRole("button", { name: "Scroll to top" }),
+    ).toBeInTheDocument();
+
+    // 停稳（无新 scroll 事件）后交回位置判定：中段未贴底，回落为向下。
+    expect(
+      await screen.findByRole("button", { name: "Scroll to bottom" }),
+    ).toBeInTheDocument();
+  });
+
   it("内容不足两屏时不显示跳转按钮", () => {
     const state = createStateWithMessages();
     const { container } = render(<AgentMessageStreamView state={state} />);
