@@ -112,7 +112,7 @@
 - 加载态语义为 `isLoading = 无展示数据 && 该资源有在途请求`。React state 形态的资源用 `src/shared/workspace/use-workspace-resource-loading.ts`；状态存放在 module-level 缓存里的资源（如 Agent 会话侧栏的 `use-session-workspace-cache`，见 [ADR-0041](../adr/0041-changes-activity-snapshot-on-remount.md) 的跨卸载复用）按同一语义在缓存里置 / 清，并让缓存记住「已有展示数据」（含空列表的成功响应也算已有展示）。
 - 已有展示数据时，后台刷新 / 补拉 / 手动刷新一律静默：不置加载态、不用加载态盖掉旧内容；signature 未变则零 `setState`。
 - 请求序号 + signature 去重保留，但只服务于工作区根切换、分页等显式作废场景与零 `setState` 优化，不能作为加载态能否收口的唯一依赖。
-- 失效信号优先、轮询兜底：已接线的失效事件路径（如变更 Activity 用 `agent-session-list-changed` 判断回合开始 / 结束、提交可能发生）在聚焦窗口下去抖立即刷新；未接线的消费方（如 Agent 会话右侧栏变更 Tab）仍由各自的 2s / 5s 轮询与展开 / 切回补拉在数秒内收敛，不为此提高轮询频率。
+- 失效信号优先、轮询兜底：`agent-session-list-changed`（回合开始 / 结束，提交可能发生）是两个消费方共用的失效事件——变更 Activity 与会话右侧栏变更 Tab 都在聚焦窗口下去抖后立即刷新（`isAgentSessionListChangedFor` 判定命中：按项目，会话侧再按会话，payload `sessionId` 为 null 视为命中本项目）；事件刷新的门控与同资源的定时轮询一致（不可见 / 失焦 / 侧栏未打开 / 仓库不可访问时不刷新），后台窗口不因此恢复刷新，也不为此提高轮询频率。在途与失效的关系是「不叠加、不丢失」：失效到达时若该资源已有在途请求，用 `waitForIdle(key)` 等它结算后再补一次，而不是直接跳过（跳过会把这次失效丢给下一个 tick）。
 - 后端按需定向取数：只为当前需要的对象取数（如单文件差异按文件路径定向读取变更条目），不在高频路径上重算整个工作区集合（配合 §2、§3）。
 
 **反例**：`useSessionWorkspaceCache` 的未提交变更（2s）与已提交历史（5s）、变更 Activity 的 4s/8s 轮询曾都无在途去重，且加载标记只在请求序号匹配时清除，慢时序下面板永久停在「正在加载」；`useWorktreeRunningSession` 的 5s 兜底轮询曾按 tick 堆叠会话列表请求。均已按本节收敛。

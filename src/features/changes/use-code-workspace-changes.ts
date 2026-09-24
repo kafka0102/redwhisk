@@ -8,6 +8,7 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import {
   createInFlightRequests,
+  refreshAfterIdle,
   workspaceRequestKey,
 } from "../../shared/workspace/in-flight-requests";
 import { useWorkspaceResourceLoading } from "../../shared/workspace/use-workspace-resource-loading";
@@ -33,6 +34,13 @@ export interface UseCodeWorkspaceChangesResult extends UseCodeWorkspaceCommitHis
   changesErrorMessage: string | null;
   isChangesUnavailable: boolean;
   refreshChanges: () => void;
+  /**
+   * 未提交变更的失效刷新（会话列表变更事件 / 回合结束，Agent 可能刚提交）。
+   * 无在途请求立即刷新；已有在途请求时等它结算后补一次，不叠加、不丢失。
+   * `isStillWanted` 在补刷新发起前求值：续延期间门控收紧（失焦等）时由消费方返回
+   * false 放弃这次补刷新；切根 / 卸载由本 hook 自己的当前资源 key 兜住。
+   */
+  invalidateChanges: (isStillWanted: () => boolean) => void;
 }
 
 /** 在途登记簿的资源名（配合项目 + 工作区根组成 key）。 */
@@ -93,6 +101,8 @@ export function useCodeWorkspaceChanges(
   const translateRef = useRef(t);
   // 同一资源同一时刻至多一个在途请求；key 含工作区根，切根时新根不被旧根阻塞。
   const [inFlightRequests] = useState(createInFlightRequests);
+  // 当前展示的资源 key：停在 waitForIdle 上的失效续延要拿它确认「还没切根」。
+  const currentRequestKeyRef = useRef<string | null>(null);
   const { isLoading: isChangesLoading, controls: changesLoading } =
     useWorkspaceResourceLoading(inFlightRequests);
   const commitHistory = useCodeWorkspaceCommitHistory(
@@ -203,10 +213,14 @@ export function useCodeWorkspaceChanges(
     if (!enabled || !workspacePath) return;
 
     // 当前展示的资源 key：加载态只由「当前根是否有在途请求」推导，旧根的迟到结算
-    // 不得收口新根的加载态。
-    changesLoading.setRequestKey(
-      workspaceRequestKey(CHANGES_REQUEST_RESOURCE, projectId, workspacePath),
+    // 不得收口新根的加载态；停在 waitForIdle 上的失效续延也用它确认自己还属于当前根。
+    const requestKey = workspaceRequestKey(
+      CHANGES_REQUEST_RESOURCE,
+      projectId,
+      workspacePath,
     );
+    currentRequestKeyRef.current = requestKey;
+    changesLoading.setRequestKey(requestKey);
 
     const cachedChanges = getCachedWorkspaceChanges(projectId, workspacePath);
     if (cachedChanges) {
@@ -232,6 +246,26 @@ export function useCodeWorkspaceChanges(
     [runChangesRequest],
   );
 
+  const invalidateChanges = useCallback(
+    (isStillWanted: () => boolean) => {
+      if (!workspacePath) return;
+      const requestKey = workspaceRequestKey(
+        CHANGES_REQUEST_RESOURCE,
+        projectId,
+        workspacePath,
+      );
+      // 事件失效必须复用同一在途登记：在途时先等结算再补一次，而不是叠加请求或
+      // 让这次失效丢失（「提交后数量立即收敛」不允许被一次恰好在飞的轮询吞掉）。
+      refreshAfterIdle(
+        requestKey,
+        inFlightRequests,
+        () => runChangesRequest({ clearStale: false }),
+        () => currentRequestKeyRef.current === requestKey && isStillWanted(),
+      );
+    },
+    [inFlightRequests, projectId, runChangesRequest, workspacePath],
+  );
+
   return {
     ...commitHistory,
     changes,
@@ -240,6 +274,7 @@ export function useCodeWorkspaceChanges(
     changesErrorMessage,
     isChangesUnavailable,
     refreshChanges,
+    invalidateChanges,
   };
 }
 

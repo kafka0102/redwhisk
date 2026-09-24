@@ -8,6 +8,7 @@ import {
 } from "../../shared/workspace/commit-history-pagination";
 import {
   type InFlightRequests,
+  refreshAfterIdle,
   workspaceRequestKey,
 } from "../../shared/workspace/in-flight-requests";
 import { useWorkspaceResourceLoading } from "../../shared/workspace/use-workspace-resource-loading";
@@ -39,6 +40,13 @@ export interface UseCodeWorkspaceCommitHistoryResult {
   isLoadingMoreCommitHistory: boolean;
   loadMoreCommitHistoryErrorMessage: string | null;
   refreshCommitHistory: () => void;
+  /**
+   * 已提交历史的失效刷新（会话列表变更事件 / 回合结束，提交可能已发生）。
+   * 无在途请求立即刷新；已有在途请求时等它结算后补一次，不叠加、不丢失。
+   * `isStillWanted` 在补刷新发起前求值：续延期间门控收紧时由消费方返回 false 放弃；
+   * 切根 / 卸载由本 hook 自己的当前资源 key 兜住。
+   */
+  invalidateCommitHistory: (isStillWanted: () => boolean) => void;
   loadMoreCommitHistory: () => void;
 }
 
@@ -93,6 +101,8 @@ export function useCodeWorkspaceCommitHistory(
   const commitHistoryRef = useRef<WorkspaceCommitRecord[]>([]);
   const hasMoreCommitHistoryRef = useRef(false);
   const translateRef = useRef(t);
+  // 当前展示的资源 key：停在 waitForIdle 上的失效续延要拿它确认「还没切根」。
+  const currentRequestKeyRef = useRef<string | null>(null);
   const { isLoading: isCommitHistoryLoading, controls } =
     useWorkspaceResourceLoading(inFlightRequests);
 
@@ -261,14 +271,14 @@ export function useCodeWorkspaceCommitHistory(
     if (!enabled || !workspacePath) return;
 
     // 当前展示的资源 key：加载态只由「当前根是否有在途请求」推导，旧根的迟到结算
-    // 不得收口新根的加载态。
-    controls.setRequestKey(
-      workspaceRequestKey(
-        COMMIT_HISTORY_REQUEST_RESOURCE,
-        projectId,
-        workspacePath,
-      ),
+    // 不得收口新根的加载态；停在 waitForIdle 上的失效续延也用它确认自己还属于当前根。
+    const requestKey = workspaceRequestKey(
+      COMMIT_HISTORY_REQUEST_RESOURCE,
+      projectId,
+      workspacePath,
     );
+    currentRequestKeyRef.current = requestKey;
+    controls.setRequestKey(requestKey);
 
     const cachedCommitHistory = getCachedWorkspaceCommitHistory(
       projectId,
@@ -299,6 +309,26 @@ export function useCodeWorkspaceCommitHistory(
     [runCommitHistoryRequest],
   );
 
+  const invalidateCommitHistory = useCallback(
+    (isStillWanted: () => boolean) => {
+      if (!workspacePath) return;
+      const requestKey = workspaceRequestKey(
+        COMMIT_HISTORY_REQUEST_RESOURCE,
+        projectId,
+        workspacePath,
+      );
+      // 有在途请求（含 load-more）时先等它结算：既不用第二次请求作废它，也不把这次
+      // 失效丢给下一个 5s tick。
+      refreshAfterIdle(
+        requestKey,
+        inFlightRequests,
+        () => runCommitHistoryRequest("refresh"),
+        () => currentRequestKeyRef.current === requestKey && isStillWanted(),
+      );
+    },
+    [inFlightRequests, projectId, runCommitHistoryRequest, workspacePath],
+  );
+
   const loadMoreCommitHistory = useCallback(
     () => runCommitHistoryRequest("load-more"),
     [runCommitHistoryRequest],
@@ -314,6 +344,7 @@ export function useCodeWorkspaceCommitHistory(
     isLoadingMoreCommitHistory,
     loadMoreCommitHistoryErrorMessage,
     refreshCommitHistory,
+    invalidateCommitHistory,
     loadMoreCommitHistory,
   };
 }

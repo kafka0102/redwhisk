@@ -43,6 +43,16 @@ const listAgentSessionsMock = vi.mocked(listAgentSessions);
 const fetchProjectRemotesMock = vi.mocked(fetchProjectRemotes);
 
 const REMOTE_FETCH_MS = 60_000;
+/** 会话列表变更事件的失效去抖窗口（与源码常量同值）。 */
+const SESSION_LIST_EVENT_DEBOUNCE_MS = 500;
+
+function dispatchSessionListChanged(payload: AgentSessionListChangedEvent) {
+  eventMocks.listeners
+    .filter((listener) => listener.eventName === "agent-session-list-changed")
+    .forEach((listener) => {
+      listener.callback({ payload });
+    });
+}
 
 function baseAutoRefreshOptions(
   overrides: Partial<{
@@ -50,6 +60,8 @@ function baseAutoRefreshOptions(
     running: boolean;
     refreshChanges: () => void;
     refreshCommitHistory: () => void;
+    invalidateChanges: (isStillWanted: () => boolean) => void;
+    invalidateCommitHistory: (isStillWanted: () => boolean) => void;
     isUnavailable: boolean;
     projectId: number;
     workspacePath: string | null;
@@ -61,6 +73,12 @@ function baseAutoRefreshOptions(
     running: false,
     refreshChanges: vi.fn() as unknown as () => void,
     refreshCommitHistory: vi.fn() as unknown as () => void,
+    invalidateChanges: vi.fn() as unknown as (
+      isStillWanted: () => boolean,
+    ) => void,
+    invalidateCommitHistory: vi.fn() as unknown as (
+      isStillWanted: () => boolean,
+    ) => void,
     isUnavailable: false,
     projectId: 1,
     workspacePath: "/tmp/repo",
@@ -341,11 +359,21 @@ describe("useChangesAutoRefresh", () => {
   // 选项签名对齐（vitest Mock 含构造签名，直接赋值会触发 TS 不兼容）。
   let refreshChanges: () => void;
   let refreshCommitHistory: () => void;
+  let invalidateChanges: (isStillWanted: () => boolean) => void;
+  let invalidateCommitHistory: (isStillWanted: () => boolean) => void;
 
   beforeEach(() => {
     vi.useFakeTimers();
     refreshChanges = vi.fn() as unknown as () => void;
     refreshCommitHistory = vi.fn() as unknown as () => void;
+    invalidateChanges = vi.fn() as unknown as (
+      isStillWanted: () => boolean,
+    ) => void;
+    invalidateCommitHistory = vi.fn() as unknown as (
+      isStillWanted: () => boolean,
+    ) => void;
+    eventMocks.listeners = [];
+    eventMocks.unlisten.mockReset();
     fetchProjectRemotesMock.mockReset();
     fetchProjectRemotesMock.mockResolvedValue(undefined);
     setVisibility(true);
@@ -623,5 +651,186 @@ describe("useChangesAutoRefresh", () => {
     expect((refreshChanges as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       localCallsBeforeFetch,
     );
+  });
+
+  it("invalidates uncommitted changes and commit history after a debounced session list event for this project", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+
+    // 去抖窗口内不刷新：一次回合开始 / 结束会连发多条会话列表变更事件。
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS - 1);
+    expect(invalidateChanges).not.toHaveBeenCalled();
+    expect(invalidateCommitHistory).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(invalidateChanges).toHaveBeenCalledTimes(1);
+    expect(invalidateCommitHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores session list events for other projects", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+
+    dispatchSessionListChanged({
+      projectId: 999,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+
+    expect(invalidateChanges).not.toHaveBeenCalled();
+    expect(invalidateCommitHistory).not.toHaveBeenCalled();
+  });
+
+  it("merges a burst of session list events into a single invalidation", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+
+    for (let index = 0; index < 3; index += 1) {
+      dispatchSessionListChanged({
+        projectId: 1,
+        sessionId: index,
+        reason: "turn-running",
+      });
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+
+    expect(invalidateChanges).toHaveBeenCalledTimes(1);
+    expect(invalidateCommitHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invalidate while the document is hidden and drops a pending debounce when it goes hidden", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          refreshChanges,
+          refreshCommitHistory,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS - 100);
+    // 去抖窗口未到期就切到后台：这次失效不发起请求。
+    changeVisibility(false);
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+    expect(invalidateChanges).not.toHaveBeenCalled();
+
+    // 隐藏期间收到的事件同样不刷新。
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+    expect(invalidateChanges).not.toHaveBeenCalled();
+
+    // 恢复可见仍走既有补拉（与失效路径无关）。
+    changeVisibility(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshChanges).toHaveBeenCalledTimes(1);
+    expect(invalidateChanges).not.toHaveBeenCalled();
+  });
+
+  it("hands the invalidation a gate check that turns false once the window goes hidden", async () => {
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    expect(invalidateChanges).toHaveBeenCalledTimes(1);
+
+    // 失效刷新可能停泊在「等在途结算」上；门控收紧后消费方必须能放弃这次补刷新。
+    const isStillWanted = (invalidateChanges as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (() => boolean) | undefined;
+    expect(isStillWanted?.()).toBe(true);
+
+    changeVisibility(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(isStillWanted?.()).toBe(false);
+  });
+
+  it("does not invalidate while the changes view is disabled or the workspace is unavailable", async () => {
+    const { unmount } = renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          enabled: false,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+    expect(invalidateChanges).not.toHaveBeenCalled();
+    unmount();
+
+    renderHook(() =>
+      useChangesAutoRefresh(
+        baseAutoRefreshOptions({
+          isUnavailable: true,
+          invalidateChanges,
+          invalidateCommitHistory,
+        }),
+      ),
+    );
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 7,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+    expect(invalidateChanges).not.toHaveBeenCalled();
   });
 });

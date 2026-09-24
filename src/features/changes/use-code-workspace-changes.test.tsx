@@ -362,6 +362,188 @@ describe("useCodeWorkspaceChanges", () => {
   });
 });
 
+describe("useCodeWorkspaceChanges event invalidation", () => {
+  beforeEach(() => {
+    resetChangesWorkspaceCacheForTests();
+    vi.mocked(getProjectWorktreeChanges).mockReset();
+    vi.mocked(getProjectWorktreeChanges).mockResolvedValue({
+      files: [],
+      signature: "changes-empty",
+    });
+    vi.mocked(getProjectWorktreeCommitHistory).mockReset();
+    vi.mocked(getProjectWorktreeCommitHistory).mockResolvedValue({
+      commits: [],
+      signature: "commits-empty",
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("refreshes uncommitted changes and commit history immediately when nothing is in flight", async () => {
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(getProjectWorktreeCommitHistory).toHaveBeenCalledTimes(1),
+    );
+
+    await act(async () => {
+      result.current.invalidateChanges(() => true);
+      result.current.invalidateCommitHistory(() => true);
+    });
+
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeCommitHistory).toHaveBeenCalledTimes(2);
+  });
+
+  it("defers an invalidation to after the in-flight request settles instead of dropping it", async () => {
+    vi.useFakeTimers();
+    let resolveFirstChanges:
+      | ((value: {
+          files: Array<typeof changedFile>;
+          signature: string;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+
+    // 失效到达时首个请求仍在途：不叠加第二次请求。
+    act(() => {
+      result.current.invalidateChanges(() => true);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+
+    // 在途请求结算后补一次刷新，失效不丢失。
+    await act(async () => {
+      resolveFirstChanges?.({
+        files: [changedFile],
+        signature: "sig-late",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops the deferred invalidation when the caller's gate closed before the in-flight request settled", async () => {
+    vi.useFakeTimers();
+    let resolveFirstChanges:
+      | ((value: {
+          files: Array<typeof changedFile>;
+          signature: string;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () => useCodeWorkspaceChanges(1, "/tmp/redwhisk", true),
+      { wrapper },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+
+    let isStillWanted = true;
+    act(() => {
+      result.current.invalidateChanges(() => isStillWanted);
+    });
+    // 续延期间窗口失焦 / 界面隐藏：这次补刷新不再发起。
+    isStillWanted = false;
+    await act(async () => {
+      resolveFirstChanges?.({
+        files: [changedFile],
+        signature: "sig-gate-closed",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the deferred invalidation when the workspace root switched before the in-flight request settled", async () => {
+    vi.useFakeTimers();
+    let resolveFirstChanges:
+      | ((value: {
+          files: Array<typeof changedFile>;
+          signature: string;
+        }) => void)
+      | undefined;
+    vi.mocked(getProjectWorktreeChanges).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ path }) => useCodeWorkspaceChanges(1, path, true),
+      { initialProps: { path: "/tmp/redwhisk" }, wrapper },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.invalidateChanges(() => true);
+    });
+
+    // 切根：新根自己走首拉（clearStale），旧根的失效续延不得再为旧根发请求。
+    rerender({ path: "/tmp/other" });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeChanges).toHaveBeenLastCalledWith({
+      projectId: 1,
+      workspacePath: "/tmp/other",
+    });
+
+    await act(async () => {
+      resolveFirstChanges?.({
+        files: [changedFile],
+        signature: "sig-old-root",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChanges).toHaveBeenCalledTimes(2);
+  });
+});
+
 function makeCommit(hash: string, message = `msg ${hash}`) {
   return {
     hash,
@@ -983,6 +1165,8 @@ function useSlowRefreshHarness(workspacePath: string) {
     running: true,
     refreshChanges: state.refreshChanges,
     refreshCommitHistory: state.refreshCommitHistory,
+    invalidateChanges: state.invalidateChanges,
+    invalidateCommitHistory: state.invalidateCommitHistory,
     isUnavailable: false,
     projectId: 1,
     workspacePath,

@@ -4,11 +4,7 @@ import {
   type AgentSessionListItem,
   listAgentSessions,
 } from "../agents/agent-session-commands";
-import {
-  AGENT_SESSION_LIST_CHANGED_EVENT,
-  type AgentSessionListChangedEvent,
-} from "../agents/agent-session-events";
-import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
+import { subscribeDebouncedSessionListChange } from "../agents/agent-session-list-change-subscription";
 import { useWindowFocus } from "../../shared/window/use-window-focus";
 import { useConditionalPolling } from "../../shared/workspace/use-conditional-polling";
 import {
@@ -17,7 +13,6 @@ import {
 } from "../../shared/workspace/in-flight-requests";
 import { fetchProjectRemotes } from "../../shared/workspace/workspace-commands";
 
-const SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS = 500;
 const RUNNING_SESSION_FALLBACK_POLL_MS = 5_000;
 const CHANGES_REFRESH_INTERVAL_RUNNING_MS = 4_000;
 const CHANGES_REFRESH_INTERVAL_IDLE_MS = 8_000;
@@ -55,7 +50,6 @@ export function useWorktreeRunningSession(
     }
 
     let isDisposed = false;
-    let debounceTimer: number | null = null;
     let fallbackTimer: number | null = null;
 
     const recompute = () => {
@@ -81,14 +75,6 @@ export function useWorktreeRunningSession(
         });
     };
 
-    const scheduleRecompute = () => {
-      if (debounceTimer !== null) return;
-      debounceTimer = window.setTimeout(() => {
-        debounceTimer = null;
-        recompute();
-      }, SESSION_LIST_EVENT_REFRESH_DEBOUNCE_MS);
-    };
-
     if (isPollingActive) {
       recompute();
       fallbackTimer = window.setInterval(
@@ -97,17 +83,13 @@ export function useWorktreeRunningSession(
       );
     }
 
-    const unsubscribe = subscribeTauriEvent<AgentSessionListChangedEvent>(
-      AGENT_SESSION_LIST_CHANGED_EVENT,
-      (event) => {
-        if (event.projectId !== projectId) return;
-        scheduleRecompute();
-      },
+    const unsubscribe = subscribeDebouncedSessionListChange(
+      { projectId },
+      recompute,
     );
 
     return () => {
       isDisposed = true;
-      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
       if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
       unsubscribe();
     };
@@ -135,6 +117,13 @@ export interface UseChangesAutoRefreshOptions {
   running: boolean;
   refreshChanges: () => void;
   refreshCommitHistory: () => void;
+  /**
+   * 会话列表变更事件（回合开始 / 结束，Agent 可能刚提交）命中的即时失效入口：
+   * 无在途请求立即刷新；已有在途请求时等它结算后补一次，不叠加、不丢失。
+   * `isStillWanted` 在补刷新发起前求值（续延期间门控收紧时返回 false 即可放弃）。
+   */
+  invalidateChanges: (isStillWanted: () => boolean) => void;
+  invalidateCommitHistory: (isStillWanted: () => boolean) => void;
   /** worktree 不可恢复（isWorkspaceRootInaccessibleError）时停轮询。 */
   isUnavailable: boolean;
   /** 项目 ID；主 checkout 后台 fetch 需要。 */
@@ -152,6 +141,8 @@ export interface UseChangesAutoRefreshOptions {
  * 变更视图条件轮询：可见 + running turn → 4s；可见 + 空闲 → 8s；隐藏 → 暂停。
  * 每次 tick 同时刷新未提交变更与已提交历史。由隐藏恢复可见时立即补拉一次；
  * worktree 不可恢复（isUnavailable）→ 停轮询，待切分支重置 / 再次可见时重试。
+ * 另：会话列表变更事件（回合开始 / 结束，Agent 可能在回合内提交）在聚焦窗口下去抖
+ * 立即失效未提交变更与已提交历史——提交后数量收敛走这条主路径，4s/8s 只做兜底。
  *
  * 另：项目主 checkout 且页面可见时，激活即后台 `fetch_project_remotes`
  *（`git fetch --all --prune`，fire-and-forget 不阻塞首屏），之后每 60s 再拉；
@@ -169,6 +160,8 @@ export function useChangesAutoRefresh({
   running,
   refreshChanges,
   refreshCommitHistory,
+  invalidateChanges,
+  invalidateCommitHistory,
   isUnavailable,
   projectId,
   workspacePath,
@@ -216,6 +209,39 @@ export function useChangesAutoRefresh({
     }
     wasPollingActiveRef.current = isPollingActive;
   }, [isPollingActive, enabled, isUnavailable, refresh]);
+
+  // 失效信号：会话列表变更（回合开始 / 结束，Agent 可能在回合内真的 `git commit`）
+  // → 去抖后即时刷新未提交变更与已提交历史，让数量与列表立刻收敛，不再等下一个 tick。
+  // 门控与轮询一致（enabled + 可见 + 聚焦 + 仓库可访问）：多窗口下后台窗口不因事件恢复
+  // 刷新；门控收紧（失焦 / 隐藏 / 切根 / 卸载）时 effect teardown 一到，既丢掉未到期的去抖
+  // 窗口，也让停泊在「等在途结算」上的补刷新作废，恢复可见仍走既有补拉。
+  useEffect(() => {
+    if (!enabled || !isPollingActive || isUnavailable) {
+      return;
+    }
+
+    let isStillWanted = true;
+    const unsubscribe = subscribeDebouncedSessionListChange(
+      { projectId },
+      () => {
+        const isStillWantedNow = () => isStillWanted;
+        invalidateChanges(isStillWantedNow);
+        invalidateCommitHistory(isStillWantedNow);
+      },
+    );
+
+    return () => {
+      isStillWanted = false;
+      unsubscribe();
+    };
+  }, [
+    enabled,
+    invalidateChanges,
+    invalidateCommitHistory,
+    isPollingActive,
+    isUnavailable,
+    projectId,
+  ]);
 
   // 档位定时器：可见、聚焦且非 unavailable 时按 running 选 4s/8s；隐藏 / 失焦 → 不起定时器。
   // refreshOnActivate=false：挂载 / 门控激活都不补拉（外层 useCodeWorkspaceChanges

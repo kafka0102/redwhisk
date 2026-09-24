@@ -27,6 +27,7 @@ import {
 } from "../../../shared/workspace/file-tree-listings";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import { useWindowFocus } from "../../../shared/window/use-window-focus";
+import { useSessionWorkspaceChangesInvalidation } from "./use-session-workspace-changes-invalidation";
 import {
   COMMIT_HISTORY_PAGE_SIZE,
   getProjectWorktreeChanges,
@@ -1137,15 +1138,25 @@ export function useSessionWorkspaceCache({
   // 后 isChangesUnavailable 会被重置为 false，本 hook 随即恢复轮询。
   // files tab 也需要未提交变更，用于文件树 Git 装饰；与 changes tab 共用同一轮询族。
   // 三个轮询都额外要求窗口聚焦：后台窗口不轮询，重新聚焦时 refreshOnActivate 立即补拉。
+  // 未提交变更 / 已提交历史的刷新门控：定时轮询与失效事件共用同一份判定（事件只在
+  // 用户正在看的面板上刷新，与轮询不会出现「一个拉、一个不拉」的漂移）。
+  const isChangesRefreshActive =
+    isWindowFocused &&
+    isSidePanelOpen &&
+    (currentCache.sidePanelTab === "changes" ||
+      currentCache.sidePanelTab === "files") &&
+    !currentCache.isChangesUnavailable;
+  const isCommitHistoryRefreshActive =
+    isWindowFocused &&
+    isSidePanelOpen &&
+    currentCache.sidePanelTab === "changes" &&
+    currentCache.committedChangesExpanded &&
+    !currentCache.isChangesUnavailable;
+
   useConditionalPolling({
     refresh: refreshChanges,
     intervalMs: CHANGES_POLL_INTERVAL_MS,
-    isActive:
-      isWindowFocused &&
-      isSidePanelOpen &&
-      (currentCache.sidePanelTab === "changes" ||
-        currentCache.sidePanelTab === "files") &&
-      !currentCache.isChangesUnavailable,
+    isActive: isChangesRefreshActive,
   });
 
   // 已提交历史门控轮询：仅在「侧栏打开 + changes tab + 已提交面板展开 + 仓库可访问」
@@ -1155,12 +1166,7 @@ export function useSessionWorkspaceCache({
   useConditionalPolling({
     refresh: refreshCommitHistory,
     intervalMs: COMMIT_HISTORY_POLL_INTERVAL_MS,
-    isActive:
-      isWindowFocused &&
-      isSidePanelOpen &&
-      currentCache.sidePanelTab === "changes" &&
-      currentCache.committedChangesExpanded &&
-      !currentCache.isChangesUnavailable,
+    isActive: isCommitHistoryRefreshActive,
   });
 
   useConditionalPolling({
@@ -1170,6 +1176,34 @@ export function useSessionWorkspaceCache({
       isWindowFocused &&
       isSidePanelOpen &&
       currentCache.sidePanelTab === "files",
+  });
+
+  // 失效信号：会话列表变更（回合开始 / 结束，Agent 可能在回合内真的 `git commit`）
+  // → 去抖后即时刷新未提交变更与已提交历史，让数量与列表立刻收敛，不再等 2s / 5s tick。
+  // 门控 fold 进 key：只在「用户正在看且在用」的面板上刷新，与同资源的轮询门控同源。
+  useSessionWorkspaceChangesInvalidation({
+    projectId,
+    sessionId,
+    inFlightRequests:
+      sessionId == null ? null : inFlightRequestsForSession(sessionId),
+    changesRequestKey:
+      sessionId != null && isChangesRefreshActive
+        ? sessionWorkspaceRequestKey(
+            CHANGES_REQUEST_RESOURCE,
+            projectId,
+            sessionId,
+          )
+        : null,
+    commitHistoryRequestKey:
+      sessionId != null && isCommitHistoryRefreshActive
+        ? sessionWorkspaceRequestKey(
+            COMMIT_HISTORY_REQUEST_RESOURCE,
+            projectId,
+            sessionId,
+          )
+        : null,
+    refreshChanges,
+    refreshCommitHistory,
   });
 
   const toggleUncommittedChangesExpanded = useCallback(() => {

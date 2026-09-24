@@ -8,6 +8,7 @@ import {
   clearSessionWorkspaceCacheForTest,
   useSessionWorkspaceCache,
 } from "./use-session-workspace-cache";
+import type { AgentSessionListChangedEvent } from "../agent-session-events";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -17,6 +18,26 @@ import {
   type WorkspaceCommitRecord,
   type WorkspaceDiffContent,
 } from "./session-workspace-commands";
+
+const eventMocks = vi.hoisted(() => ({
+  listeners: [] as Array<{
+    eventName: string;
+    callback: (event: { payload: AgentSessionListChangedEvent }) => void;
+  }>,
+  unlisten: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    (
+      eventName: string,
+      callback: (event: { payload: AgentSessionListChangedEvent }) => void,
+    ) => {
+      eventMocks.listeners.push({ eventName, callback });
+      return Promise.resolve(eventMocks.unlisten);
+    },
+  ),
+}));
 
 vi.mock("../session-workspace/session-workspace-commands", () => ({
   CODE_WORKSPACE_ROOTS_UPDATED_EVENT: "code-workspace-roots-updated",
@@ -1329,5 +1350,361 @@ describe("useSessionWorkspaceCache refresh resilience", () => {
       limit: 51,
       offset: 0,
     });
+  });
+});
+
+/** 会话列表变更事件的失效去抖窗口（与源码常量同值）。 */
+const SESSION_LIST_EVENT_DEBOUNCE_MS = 500;
+
+function dispatchSessionListChanged(payload: AgentSessionListChangedEvent) {
+  eventMocks.listeners
+    .filter((listener) => listener.eventName === "agent-session-list-changed")
+    .forEach((listener) => {
+      listener.callback({ payload });
+    });
+}
+
+describe("useSessionWorkspaceCache session list event invalidation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    eventMocks.listeners = [];
+    eventMocks.unlisten.mockReset();
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("invalidates uncommitted changes and committed history after a debounced event for this session", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+
+    // 去抖窗口内不刷新：一次回合开始 / 结束会连发多条会话列表变更事件。
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS - 1);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a project-level event without sessionId as hitting this session", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: null,
+      reason: "updated",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    await settle();
+
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores events for other sessions and other projects", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    // 两次推进合计仍短于 2s 轮询间隔，计数只反映事件路径。
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 999,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS + 100);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 999,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS + 100);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("merges a burst of events into a single invalidation", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+
+    for (let index = 0; index < 3; index += 1) {
+      dispatchSessionListChanged({
+        projectId: 1,
+        sessionId: 1,
+        reason: "turn-running",
+      });
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    await settle();
+
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+    expect(getProjectWorktreeCommitHistoryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("defers the invalidation instead of stacking when a changes request is already in flight", async () => {
+    let resolveFirstChanges:
+      | ((value: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    getProjectWorktreeChangesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    // 在途：不叠加上第二次请求。
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    // 在途请求结算后补一次刷新，失效不丢失。
+    await act(async () => {
+      resolveFirstChanges?.({ files: [], signature: "sig-late" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops the deferred invalidation when the side panel closes before the in-flight request settles", async () => {
+    let resolveFirstChanges:
+      | ((value: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    getProjectWorktreeChangesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { rerender } = renderHook(
+      ({ isSidePanelOpen }: { isSidePanelOpen: boolean }) =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen,
+        }),
+      { initialProps: { isSidePanelOpen: true }, wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    // 在途：这次失效停泊在结算之后，不叠加第二个请求。
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    // 结算前关闭侧栏：补刷新作废（用户已不在看这块面板）。
+    rerender({ isSidePanelOpen: false });
+    await settle();
+    await act(async () => {
+      resolveFirstChanges?.({ files: [], signature: "sig-panel-closed" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the uncommitted-changes invalidation when the committed panel is collapsed mid-flight", async () => {
+    let resolveFirstChanges:
+      | ((value: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    getProjectWorktreeChangesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    // 收起「已提交」面板：只作废已提交历史的补刷新，未提交变更仍要看在途请求的结算。
+    act(() => {
+      result.current.toggleCommittedChangesExpanded();
+    });
+    await settle();
+
+    await act(async () => {
+      resolveFirstChanges?.({ files: [], signature: "sig-late" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops the deferred invalidation when the session switches before the in-flight request settles", async () => {
+    let resolveFirstChanges:
+      | ((value: { files: WorkspaceChangedFile[]; signature: string }) => void)
+      | undefined;
+    getProjectWorktreeChangesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstChanges = resolve;
+        }),
+    );
+
+    const { rerender } = renderHook(
+      ({ sessionId }: { sessionId: number }) =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId,
+          isSidePanelOpen: true,
+        }),
+      { initialProps: { sessionId: 1 }, wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenCalledTimes(1);
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS);
+
+    // 切到另一个会话：新会话自己走首拉，旧会话的补刷新作废。
+    rerender({ sessionId: 2 });
+    await settle();
+    expect(getProjectWorktreeChangesMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 2,
+    });
+    const callsAfterSwitch = getProjectWorktreeChangesMock.mock.calls.length;
+
+    await act(async () => {
+      resolveFirstChanges?.({ files: [], signature: "sig-old-session" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getProjectWorktreeChangesMock.mock.calls.length).toBe(
+      callsAfterSwitch,
+    );
+  });
+
+  it("does not invalidate while the side panel is closed", async () => {
+    renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: false,
+        }),
+      { wrapper },
+    );
+    await settle();
+    expect(getProjectWorktreeChangesMock).not.toHaveBeenCalled();
+
+    dispatchSessionListChanged({
+      projectId: 1,
+      sessionId: 1,
+      reason: "turn-ended",
+    });
+    await vi.advanceTimersByTimeAsync(SESSION_LIST_EVENT_DEBOUNCE_MS * 2);
+
+    expect(getProjectWorktreeChangesMock).not.toHaveBeenCalled();
+    expect(getProjectWorktreeCommitHistoryMock).not.toHaveBeenCalled();
   });
 });

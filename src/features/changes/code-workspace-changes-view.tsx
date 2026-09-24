@@ -67,6 +67,8 @@ export function CodeWorkspaceChangesView({
     loadMoreCommitHistoryErrorMessage,
     refreshChanges,
     refreshCommitHistory,
+    invalidateChanges,
+    invalidateCommitHistory,
     loadMoreCommitHistory,
   } = useCodeWorkspaceChanges(projectId, selectedRootWorkspacePath, true);
 
@@ -80,6 +82,8 @@ export function CodeWorkspaceChangesView({
     running: isWorktreeRunning,
     refreshChanges,
     refreshCommitHistory,
+    invalidateChanges,
+    invalidateCommitHistory,
     isUnavailable: isChangesUnavailable,
     projectId,
     workspacePath: selectedRootWorkspacePath,
