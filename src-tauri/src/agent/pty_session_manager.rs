@@ -36,7 +36,6 @@ struct PtySessionStore {
     subscribers: Mutex<HashMap<i64, usize>>,
     pending_emits: Mutex<HashMap<i64, PendingEmit>>,
     app_theme: Mutex<TerminalBackgroundTheme>,
-    interactive_path: Mutex<Option<OsString>>,
     /// 递减的负 id，专供 spawn→register 窗口内挂载 reader。
     next_pending_id: AtomicI64,
     #[cfg(test)]
@@ -186,7 +185,6 @@ impl PtySessionManager {
             // 前端未同步前的保守默认：与无 COLORFGBG 时多数 CLI 的 dark fallback 等价，
             // 避免极端时序下误判为 light 导致深色背景上输出不可见。
             app_theme: Mutex::new(TerminalBackgroundTheme::Dark),
-            interactive_path: Mutex::new(None),
             // 负 id 从 -1 递减，避免与真实 DB session id（正整数）冲突。
             next_pending_id: AtomicI64::new(-1),
             #[cfg(test)]
@@ -327,26 +325,13 @@ impl PtySessionManager {
             .insert(session_id, handle);
     }
 
-    /// 解析并缓存「login+interactive shell」的完整 `$PATH`，供 PTY 子进程注入。
+    /// 取「login+interactive shell」的完整 `$PATH`，供 PTY 子进程注入。
     ///
-    /// 命中缓存直接返回；否则以用户首选 shell 的 `-lic` 解析一次（加载 `.zshrc` 等
-    /// 交互式配置，得到含 nvm/fnm 等目录的完整 PATH），成功后缓存供后续 spawn 复用。
-    /// 解析在释放锁的状态下进行，避免持锁 fork 子进程阻塞并发 spawn。
-    /// 解析失败不缓存、返回 `None`，调用方回退到继承的 PATH（与历史行为一致）。
+    /// 解析由 `command_detector` 统一负责：PTY `-lic` 探测（含重试与单飞）成功后
+    /// 才写入进程级缓存，login `-lc` 回退的降级 PATH 不缓存。本层不再二次缓存，
+    /// 否则一次负载抖动就会把缺 nvm/node/pnpm 的 PATH 固定给后续所有终端。
     fn resolved_interactive_path(&self) -> Option<OsString> {
-        if let Ok(guard) = self.store.interactive_path.lock() {
-            if let Some(cached) = guard.as_ref() {
-                return Some(cached.clone());
-            }
-        }
-
-        let resolved = crate::agent::command_detector::resolve_interactive_shell_path();
-        if let Some(resolved) = resolved.as_ref() {
-            if let Ok(mut guard) = self.store.interactive_path.lock() {
-                *guard = Some(resolved.clone());
-            }
-        }
-        resolved
+        crate::agent::command_detector::resolve_interactive_shell_path()
     }
 
     pub fn set_output_sink<F>(&self, sink: F)
@@ -1368,6 +1353,13 @@ mod tests {
     use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
     use std::io::Write;
 
+    /// 拉起真实 PTY 的 spawn 测试都会改进程级 env（`HOME` / `ZDOTDIR` / `PATH`），
+    /// 必须串行执行，否则并发的交互式 PATH 解析会读到对方 test 的 env。
+    fn spawn_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn terminal_background_theme_color_fgbg_matches_palette() {
         assert_eq!(TerminalBackgroundTheme::Dark.color_fgbg(), "15;0");
@@ -1493,6 +1485,7 @@ mod tests {
     fn interactive_run_keepalive_seeds_launch_command_into_zsh_history() {
         use super::{PtyCommandMode, PtySpawnRequest};
 
+        let _env_guard = spawn_env_test_lock();
         let temp = tempfile::tempdir().expect("temp dir");
         let user_zdot = temp.path().join("user-zdot");
         std::fs::create_dir_all(&user_zdot).expect("user zdot");
@@ -1507,6 +1500,13 @@ mod tests {
         std::env::set_var("SHELL", "/bin/zsh");
         std::env::set_var("ZDOTDIR", &user_zdot);
         std::env::set_var("HOME", temp.path());
+
+        // 交互式 PATH 缓存是全进程共享的，而本测试改了 HOME / ZDOTDIR：按线程固定
+        // 解析结果，避免与并发的 spawn 测试互相覆盖（见 command_detector 测试覆盖）。
+        let _interactive_path_guard =
+            crate::agent::command_detector::pin_test_interactive_shell_path(
+                crate::agent::command_detector::resolve_interactive_shell_path_without_cache(),
+            );
 
         let manager = PtySessionManager::new();
         let pending = match manager.spawn_pending(&PtySpawnRequest {
@@ -1597,6 +1597,7 @@ mod tests {
         use super::{PtyCommandMode, PtySpawnRequest};
         use std::os::unix::fs::PermissionsExt;
 
+        let _env_guard = spawn_env_test_lock();
         let temp = tempfile::tempdir().expect("temp dir");
         let user_zdot = temp.path().join("user-zdot");
         let bin_dir = temp.path().join("bin");
@@ -1623,6 +1624,13 @@ mod tests {
         std::env::set_var("ZDOTDIR", &user_zdot);
         std::env::set_var("HOME", temp.path());
         std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+
+        // 同 `interactive_run_keepalive_seeds_launch_command_into_zsh_history`：本测试
+        // 改了 HOME / ZDOTDIR / PATH，必须按线程固定交互式 PATH 解析结果。
+        let _interactive_path_guard =
+            crate::agent::command_detector::pin_test_interactive_shell_path(
+                crate::agent::command_detector::resolve_interactive_shell_path_without_cache(),
+            );
 
         let manager = PtySessionManager::new();
         let pending = match manager.spawn_pending(&PtySpawnRequest {

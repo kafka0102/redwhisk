@@ -4083,7 +4083,11 @@ fn insert_agent_profile_with_command(
 
 fn success_command(base_dir: &std::path::Path) -> std::path::PathBuf {
     let path = base_dir.join("success-agent.sh");
-    std::fs::write(&path, "#!/bin/sh\nsleep 1\n").expect("write success script");
+    // 假 Agent 命令启动后存活 5s 再退出：有用例在 start 返回后立刻断言「会话仍在
+    // 运行」（重复启动被拒时回读的 status 必须是 running），而进程退出会被 exit
+    // 回调记为 closed。`sleep 1` 与 start 收尾耗时同量级，机器负载一高就抢先退出，
+    // 断言随之偶发失败。
+    std::fs::write(&path, "#!/bin/sh\nsleep 5\n").expect("write success script");
     set_executable(&path);
     path
 }

@@ -8,8 +8,14 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
 pub const DEFAULT_LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
 /// nvm 等写在 `.zshrc` 的 hook 在无 TTY 时会卡住或自报 timeout；
-/// 走 PTY 解析时给足时间加载，结果由 PtySessionManager 缓存。
-pub const INTERACTIVE_PATH_TIMEOUT: Duration = Duration::from_secs(15);
+/// 走 PTY 解析交互式 `$PATH` 的总预算（多次尝试共享，见 `command_detector`）。
+///
+/// 真实 `.zshrc`（nvm / compinit / pyenv / rbenv / 多条 PATH export）空闲约 1–3s，
+/// 重载机器实测 5–15s，负载 100+ 时可达 40s。预算给到 45s 才能覆盖重载场景；
+/// 此前 15s 一旦被越过，调用方只能拿到缺 nvm 目录的降级 PATH，spawn 出的终端与
+/// Agent 会话随即报 `env: node: No such file or directory` / `codex: No such file
+/// or directory`。
+pub const INTERACTIVE_PATH_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[derive(Debug)]
 pub enum LookupProcessError {

@@ -67,6 +67,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 - 改动 TypeScript / TSX / JavaScript：读取 `docs/standards/engineering-spec.md`、`docs/standards/coding-style.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。
 - 改动 Rust（`src-tauri/src/**/*.rs`）：读取 `docs/architecture-design/backend-large-file-splitting-rules.md`、`docs/architecture-design/agent-development-rules.md`「后端 Rust 文件复杂度」章节。
+- 改动子进程环境注入（交互式 `PATH` 解析、终端 / Agent spawn、git 子进程）：读取 `docs/architecture-design/agent-development-rules.md`「Agent Profile 与 Settings 规则」中的「交互式 PATH 三条不变量」。
 - 改动 UI、页面或组件：在前端代码规范外，额外读取 `docs/architecture-design/design-guide.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。涉及 Settings 时，额外读取 `docs/architecture-design/settings-page-layout.md`。
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
@@ -85,6 +86,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
 6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后必跑；越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
 7. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
+8. `cd src-tauri && cargo test --lib agent::command_detector` — 改动交互式 `PATH` 解析或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后必跑；缓存与回退规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 
 依赖与安装前提（跑门禁前必须满足）：
 

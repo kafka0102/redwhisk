@@ -326,6 +326,16 @@ Agent command 检测必须考虑桌面应用启动环境与用户终端环境的
 
 Git 命令 adapter（`src-tauri/src/git/command.rs`）必须把同一套 login+interactive `PATH` 注入 git 子进程，使 `pre-push` / `pre-commit` 等 hook 能找到用户终端里的 `pnpm` / `node`。解析失败则继承当前进程 PATH，不阻断 git 本身。
 
+### 交互式 PATH 三条不变量
+
+`src-tauri/src/agent/command_detector.rs` 是全应用唯一的「用户终端环境」来源：Agent spawn、项目终端 / TUI 会话、git 子进程都注入它解析出的 `PATH`。它必须始终满足以下三条不变量，否则会复现同一类事故（前端分别表现为 Agent 报 `codex: No such file or directory`、终端启动命令报 `env: node: No such file or directory` 或 `command not found: pnpm`，而根因相同）：
+
+1. **只有交互式探测结果才可缓存**。`-lic` 走 PTY 拿到的 `PATH` 才写入进程级缓存；探测失败时回退的 login `-lc` PATH 缺 `.zshrc` 写入的 nvm / node / pnpm / codex 目录，是降级值，只能用于本次 spawn。任何一层（包括 `pty_session_manager` 的本地缓存）都不得把它固定下来，否则一次负载抖动会让整个进程后续所有 spawn 都缺 node。
+2. **探测必须单飞、预算必须给足、失败要重试**。应用启动 / 打开项目会同时恢复多个项目终端，若每个 spawn 各自拉起一个交互式 shell，实测单次 `.zshrc`（nvm / compinit / pyenv / rbenv）加载会从数秒涨到 40s 以上并集体超时；探测要串行（`INTERACTIVE_PROBE_LOCK`），整体预算按重载机器实测给足（`INTERACTIVE_PATH_TIMEOUT`，多次尝试共享），并在快速失败时重试（`INTERACTIVE_PROBE_ATTEMPTS`）。收紧这个预算等于把「重载」直接变成「找不到 node」。
+3. **禁止在 spawn 时静默降级**。缺 nvm 目录的 `PATH` 一旦注入子进程，用户看到的报错（`env: node: No such file or directory`、`codex app-server 二进制未找到`）与真实根因无关，排查成本极高。降级只能作为「本次 spawn 仍要跑」的显式回退，并且必须保持可被后续重试纠正。
+
+回归：`src-tauri/src/agent/command_detector.rs::tests` 的 `resolve_interactive_shell_path_retries_transient_probe_failure`、`interactive_path_fallback_is_not_cacheable`、`interactive_path_resolution_marks_pty_result_cacheable`。测试若修改 `HOME` / `ZDOTDIR` / `PATH` 等进程 env，必须用 `pin_test_interactive_shell_path` 固定当前线程的解析结果（进程级缓存是跨测试共享的），并按 `pty_session_manager` 的 `spawn_env_test_lock` 串行执行，避免测试互相污染。
+
 ## 文案与国际化
 
 前端 i18n 运行时基于 `i18next` + `react-i18next`，资源为 `src/shared/i18n/locales/{en,zh}.json`。前端页面文本必须按 locale 统一管理，不再允许继续扩大硬编码文案范围。

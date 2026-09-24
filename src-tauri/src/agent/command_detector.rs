@@ -2,8 +2,9 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Once, OnceLock};
+use std::sync::{Mutex, Once, OnceLock};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use super::command_lookup_process::{
     extract_marked_path, output_on_pty_with_timeout, output_with_timeout, DEFAULT_LOOKUP_TIMEOUT,
@@ -17,6 +18,30 @@ const PATH_PROBE_COMMAND: &str = "printf '\n__REDWHISK_LOOKUP_PATH__=%s\n' \"$PA
 
 /// 「login+interactive shell」解析出的完整 `$PATH`；解析失败或尚未解析时为 `None`。
 static INTERACTIVE_SHELL_PATH: OnceLock<OsString> = OnceLock::new();
+
+/// 交互式 PATH 探测的单飞锁。
+///
+/// 应用启动会同时恢复多个项目终端，若每个 spawn 各自拉起一个交互式 shell，实测
+/// 单次 `.zshrc`（nvm / compinit / pyenv / rbenv）加载会从数秒涨到 40s 以上，集体
+/// 越过 `INTERACTIVE_PATH_TIMEOUT`。这里串行化探测，其余 spawn 复用同一结果。
+static INTERACTIVE_PROBE_LOCK: Mutex<()> = Mutex::new(());
+
+/// 交互式探测的尝试轮数（共享 `INTERACTIVE_PATH_TIMEOUT` 总预算）。
+///
+/// 失败后重试可以救回「快速失败」（PTY 分配失败、shell 早退等）的一次抖动；
+/// 若首轮就吃满预算（真超时），剩余预算为 0 会直接跳到回退，避免成倍阻塞。
+const INTERACTIVE_PROBE_ATTEMPTS: usize = 2;
+
+#[cfg(test)]
+thread_local! {
+    /// 测试专用：当前线程固定的交互式 PATH 解析结果，优先于进程级缓存。
+    ///
+    /// 生产环境进程 env（`HOME` / `ZDOTDIR` / `SHELL` / `PATH`）在生命周期内不变，
+    /// 进程级缓存成立；测试会改这些 env，同一测试二进制内多个 spawn 测试并发跑时
+    /// 会命中别人的缓存并拿到错误 PATH，因此按线程固定结果。
+    static TEST_INTERACTIVE_SHELL_PATH: std::cell::RefCell<Option<Option<OsString>>> =
+        const { std::cell::RefCell::new(None) };
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandLookupResult {
@@ -108,17 +133,108 @@ fn shell_lookup_candidates(preferred_shell: Option<&str>) -> Vec<String> {
 ///
 /// 交互式探测必须走 PTY：管道 + `-lic` 没有 TTY 时，nvm 等 hook 会 timeout，
 /// 2s 超时后注入失败，项目终端 `-lc` 启动命令就会 `command not found: pnpm`。
-/// 失败再回退 login `-lc`；仍失败返回 `None`，调用方回退到继承的 PATH。
+///
+/// 探测在并发 spawn 下单飞串行（见 `INTERACTIVE_PROBE_LOCK`），失败按
+/// `INTERACTIVE_PROBE_ATTEMPTS` 重试（各次共享 `INTERACTIVE_PATH_TIMEOUT` 总预算，
+/// 该预算按重载机器实测给足）；只有交互式探测结果才写入进程级缓存。
+/// 全部失败才回退 login `-lc` 的 PATH，且该回退不写缓存——它是降级值（缺
+/// `.zshrc` 的 nvm/node/pnpm 目录），缓存会让整个进程后续 spawn 全部失效。
+/// 连回退都失败则返回 `None`，调用方回退到继承的 PATH。
 pub(crate) fn resolve_interactive_shell_path() -> Option<OsString> {
+    #[cfg(test)]
+    if let Some(overridden) = TEST_INTERACTIVE_SHELL_PATH.with(|slot| slot.borrow().clone()) {
+        return overridden;
+    }
+
+    if let Some(path) = INTERACTIVE_SHELL_PATH.get() {
+        return Some(path.clone());
+    }
+
+    // 单飞 + 双重检查：并发 spawn 只拉起一个交互式 shell。
+    let _guard = INTERACTIVE_PROBE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(path) = INTERACTIVE_SHELL_PATH.get() {
         return Some(path.clone());
     }
 
     let preferred_shell = env::var("SHELL").ok();
     let shells = shell_lookup_candidates(preferred_shell.as_deref());
-    let resolved = resolve_interactive_shell_path_with_shells_and_env(&shells, &[])?;
-    let _ = INTERACTIVE_SHELL_PATH.set(resolved.clone());
-    Some(resolved)
+    let resolution = resolve_interactive_path_with(
+        |deadline| probe_interactive_path(&shells, &[], deadline),
+        || probe_login_path(&shells, &[]),
+    );
+    // 只有交互式探测的结果才进缓存。login 回退 PATH 缺 `.zshrc` 写入的 nvm / node /
+    // pnpm / codex 目录，一旦缓存，进程内后续所有 spawn 都会命中这份降级 PATH。
+    if resolution.cacheable {
+        if let Some(path) = resolution.path.as_ref() {
+            let _ = INTERACTIVE_SHELL_PATH.set(path.clone());
+        }
+    }
+    resolution.path
+}
+
+/// 测试专用：把当前线程的交互式 PATH 解析结果固定为 `path`（`None` 表示解析失败），
+/// drop 时恢复原值。
+#[cfg(test)]
+pub(crate) struct TestInteractiveShellPathGuard {
+    previous: Option<Option<OsString>>,
+}
+
+#[cfg(test)]
+impl Drop for TestInteractiveShellPathGuard {
+    fn drop(&mut self) {
+        TEST_INTERACTIVE_SHELL_PATH.with(|slot| *slot.borrow_mut() = self.previous.take());
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn pin_test_interactive_shell_path(
+    path: Option<OsString>,
+) -> TestInteractiveShellPathGuard {
+    let previous = TEST_INTERACTIVE_SHELL_PATH.with(|slot| slot.replace(Some(path)));
+    TestInteractiveShellPathGuard { previous }
+}
+
+/// 测试专用：按当前进程 env 解析交互式 PATH，但不写进程级缓存、不读测试覆盖值。
+#[cfg(test)]
+pub(crate) fn resolve_interactive_shell_path_without_cache() -> Option<OsString> {
+    let preferred_shell = env::var("SHELL").ok();
+    let shells = shell_lookup_candidates(preferred_shell.as_deref());
+    resolve_interactive_shell_path_with_shells_and_env(&shells, &[])
+}
+
+/// 一次交互式 PATH 解析的结果。
+struct InteractivePathResolution {
+    /// 本次 spawn 可注入的 PATH；连 login 回退都失败时为 `None`。
+    path: Option<OsString>,
+    /// 结果来自交互式 PTY 探测、可写入进程级缓存。login 回退为 `false`。
+    cacheable: bool,
+}
+
+/// 交互式 PATH 解析策略：先用 `-lic` 走 PTY（加载 `.zshrc`）并允许重试，全部失败
+/// 才回退 login `-lc`，且回退结果不带缓存资格。
+fn resolve_interactive_path_with(
+    mut probe_interactive: impl FnMut(Instant) -> Option<OsString>,
+    probe_login_fallback: impl FnOnce() -> Option<OsString>,
+) -> InteractivePathResolution {
+    let deadline = Instant::now() + INTERACTIVE_PATH_TIMEOUT;
+    for _ in 0..INTERACTIVE_PROBE_ATTEMPTS {
+        if Instant::now() >= deadline {
+            break;
+        }
+        if let Some(path) = probe_interactive(deadline) {
+            return InteractivePathResolution {
+                path: Some(path),
+                cacheable: true,
+            };
+        }
+    }
+
+    InteractivePathResolution {
+        path: probe_login_fallback(),
+        cacheable: false,
+    }
 }
 
 /// 读取已解析的交互式 `PATH`；未解析时立即返回 `None`，不触发 shell 探测。
@@ -145,34 +261,54 @@ fn resolve_interactive_shell_path_with_shells_and_env(
     shells: &[String],
     environment_overrides: &[(&str, &OsStr)],
 ) -> Option<OsString> {
+    resolve_interactive_path_with(
+        |deadline| probe_interactive_path(shells, environment_overrides, deadline),
+        || probe_login_path(shells, environment_overrides),
+    )
+    .path
+}
+
+/// 用 `-lic` 走 PTY 解析交互式 `$PATH`（加载 `.zshrc` 等交互式配置）。
+fn probe_interactive_path(
+    shells: &[String],
+    environment_overrides: &[(&str, &OsStr)],
+    deadline: Instant,
+) -> Option<OsString> {
     for shell in shells {
-        if let Some(path) = resolve_path_with_shell(shell, environment_overrides) {
+        // 每换一个 shell 重新计算剩余预算，避免前一个 shell 吃满后仍继续等待。
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        if let Some(path) = probe_path_on_pty(
+            shell,
+            &["-lic", PATH_PROBE_COMMAND],
+            environment_overrides,
+            remaining,
+        ) {
             return Some(path);
         }
     }
     None
 }
 
-fn resolve_path_with_shell(
-    shell: &str,
+/// `-lc` 非交互 login shell 的 `$PATH`：不含 `.zshrc` 目录，只作持久失败时的回退。
+fn probe_login_path(
+    shells: &[String],
     environment_overrides: &[(&str, &OsStr)],
 ) -> Option<OsString> {
-    if let Some(path) =
-        probe_path_on_pty(shell, &["-lic", PATH_PROBE_COMMAND], environment_overrides)
-    {
-        return Some(path);
-    }
-    probe_path_piped(shell, &["-lc", PATH_PROBE_COMMAND], environment_overrides)
+    shells.iter().find_map(|shell| {
+        probe_path_piped(shell, &["-lc", PATH_PROBE_COMMAND], environment_overrides)
+    })
 }
 
 fn probe_path_on_pty(
     shell: &str,
     args: &[&str],
     environment_overrides: &[(&str, &OsStr)],
+    timeout: Duration,
 ) -> Option<OsString> {
-    let output =
-        output_on_pty_with_timeout(shell, args, environment_overrides, INTERACTIVE_PATH_TIMEOUT)
-            .ok()?;
+    let output = output_on_pty_with_timeout(shell, args, environment_overrides, timeout).ok()?;
     extract_marked_path(&output, LOOKUP_PATH_MARKER)
 }
 
@@ -782,5 +918,74 @@ mod tests {
             "交互式 rc 卡住时必须超时回退，实际 {:?}",
             started.elapsed()
         );
+    }
+
+    #[test]
+    fn resolve_interactive_shell_path_retries_transient_probe_failure() {
+        // 线上事故复现：GUI 启动恢复多个项目终端时，交互式 PTY 探测在负载下首次失败
+        // （这里用「首次 PTY 探测不输出 marker」等价表达）。旧实现立刻把 login `-lc`
+        // PATH 当成交互式 PATH 返回并缓存，之后所有 spawn 都拿到没有 nvm/node 的
+        // PATH，报 `env: node: No such file or directory`（终端启动命令）与
+        // `codex: No such file or directory`（Agent 会话）。
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let bin_dir = temp_dir.path().join("bin");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::write(
+            temp_dir.path().join(".zshrc"),
+            format!(
+                "if [[ -t 0 ]]; then\n  if [[ -f \"$HOME/.probe-attempted\" ]]; then\n    export PATH=\"{bin}:$PATH\"\n  else\n    : > \"$HOME/.probe-attempted\"\n    exit 0\n  fi\nfi\n",
+                bin = bin_dir.display()
+            ),
+        )
+        .expect("zshrc");
+
+        let path = resolve_interactive_shell_path_with_shells_and_env(
+            &["/bin/zsh".to_string()],
+            &[
+                ("HOME", temp_dir.path().as_os_str()),
+                ("ZDOTDIR", temp_dir.path().as_os_str()),
+                ("PATH", OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin")),
+            ],
+        )
+        .expect("transient failure should be retried");
+
+        assert!(
+            env::split_paths(&path).any(|entry| entry == bin_dir),
+            "首次交互式探测失败时应重试，而不是回退 login PATH，实际：{path:?}"
+        );
+    }
+
+    #[test]
+    fn interactive_path_fallback_is_not_cacheable() {
+        // 持久失败时才允许回退 login PATH，但它不是交互式 PATH，绝不能写进缓存：
+        // 一旦缓存，整个进程后续 spawn 都缺 .zshrc 写入的目录（nvm/node/pnpm）。
+        let resolution = resolve_interactive_path_with(
+            |_deadline| None,
+            || Some(OsString::from("/usr/local/bin:/usr/bin:/bin")),
+        );
+
+        assert_eq!(
+            resolution.path.as_deref(),
+            Some(OsStr::new("/usr/local/bin:/usr/bin:/bin")),
+            "交互式探测持久失败时应保留 login 回退 PATH 供本次 spawn 使用"
+        );
+        assert!(
+            !resolution.cacheable,
+            "login 回退 PATH 不得写入交互式 PATH 缓存"
+        );
+    }
+
+    #[test]
+    fn interactive_path_resolution_marks_pty_result_cacheable() {
+        let resolution = resolve_interactive_path_with(
+            |_deadline| Some(OsString::from("/nvm/bin:/usr/bin:/bin")),
+            || panic!("交互式探测成功时不应再跑 login 回退"),
+        );
+
+        assert_eq!(
+            resolution.path.as_deref(),
+            Some(OsStr::new("/nvm/bin:/usr/bin:/bin"))
+        );
+        assert!(resolution.cacheable, "交互式探测结果应写进缓存");
     }
 }
