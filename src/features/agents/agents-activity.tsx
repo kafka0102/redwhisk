@@ -46,6 +46,7 @@ import {
   clearSessionWorkspaceCache,
   useSessionWorkspaceCache,
 } from "./session-workspace/use-session-workspace-cache";
+import { clearMessageStreamScrollOffset } from "./message-stream/message-stream-scroll-offset";
 import { useSessionPaneCache } from "./session-pane/use-session-pane-cache";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import {
@@ -402,6 +403,7 @@ export function AgentsActivity({
       clearComposerDraft(deletedSessionId);
       clearToolTabsForSession(deletedSessionId);
       clearSessionWorkspaceCache(deletedSessionId);
+      clearMessageStreamScrollOffset(deletedSessionId);
       setAllSessions((currentSessions) =>
         currentSessions.filter(
           (session) => session.sessionId !== deletedSessionId,

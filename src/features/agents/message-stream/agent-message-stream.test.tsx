@@ -5,6 +5,11 @@ import {
   AgentMessageStream,
   AgentMessageStreamView,
 } from "./agent-message-stream";
+import {
+  readMessageStreamScrollOffset,
+  resetMessageStreamScrollOffsetCacheForTests,
+  writeMessageStreamScrollOffset,
+} from "./message-stream-scroll-offset";
 import type { MessageStreamState } from "./message-stream-types";
 import { clearAgentMessageStreamCacheForTest } from "./use-agent-message-stream";
 
@@ -49,6 +54,7 @@ function createMessageStreamState(
 
 afterEach(() => {
   clearAgentMessageStreamCacheForTest();
+  resetMessageStreamScrollOffsetCacheForTests();
 });
 
 describe("AgentMessageStream", () => {
@@ -837,5 +843,175 @@ describe("AgentMessageStreamView 长内容跳转按钮", () => {
     expect(
       screen.queryByRole("button", { name: "Scroll to top" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置", () => {
+  /** 用真实浏览器语义模拟滚动盒子：scrollTop 赋值时夹到 [0, scrollHeight - clientHeight]。 */
+  function mockScrollBox(
+    el: HTMLElement,
+    metrics: { clientHeight: number; scrollHeight: number },
+  ) {
+    Object.defineProperty(el, "clientHeight", {
+      configurable: true,
+      get: () => metrics.clientHeight,
+    });
+    Object.defineProperty(el, "scrollHeight", {
+      configurable: true,
+      get: () => metrics.scrollHeight,
+    });
+    let current = el.scrollTop;
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => current,
+      set: (value: number) => {
+        current = Math.min(
+          Math.max(value, 0),
+          Math.max(0, metrics.scrollHeight - metrics.clientHeight),
+        );
+      },
+    });
+  }
+
+  function createStateWithMessages(count = 2) {
+    return createMessageStreamState({
+      entries: Array.from({ length: count }, (_, index) => ({
+        id: `a${index}`,
+        kind: "assistant_message" as const,
+        item: {
+          type: "assistant_message" as const,
+          text: `第 ${index} 条`,
+          messageId: `a${index}`,
+        },
+      })),
+    });
+  }
+
+  it("重挂载后内容填充到可恢复高度时回到记录位置，而不是跳到底部", () => {
+    writeMessageStreamScrollOffset(9, 200);
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createMessageStreamState()}
+        autoScrollOnActivate={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    // 缓存预览 / 历史 timeline 异步填充内容后的提交。
+    rerender(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages()}
+        autoScrollOnActivate={false}
+      />,
+    );
+
+    expect(scroll.scrollTop).toBe(200);
+  });
+
+  it("内容先到一屏、完整 timeline 后到时，最终仍落在记录位置", () => {
+    writeMessageStreamScrollOffset(9, 900);
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createMessageStreamState()}
+        autoScrollOnActivate={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    // 第一段内容只有一屏：900 尚不可达，位置被夹到当前最大可滚动高度。
+    rerender(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages(2)}
+        autoScrollOnActivate={false}
+      />,
+    );
+    expect(scroll.scrollTop).toBe(400);
+
+    // 完整 timeline 到位后恢复到记录位置。
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 2000 });
+    rerender(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages(3)}
+        autoScrollOnActivate={false}
+      />,
+    );
+    expect(scroll.scrollTop).toBe(900);
+  });
+
+  it("运行中 session 忽略记录位置，仍跟随到底部", () => {
+    writeMessageStreamScrollOffset(9, 200);
+    const { container, rerender } = render(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createMessageStreamState()}
+        autoScrollOnActivate
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    rerender(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages()}
+        autoScrollOnActivate
+      />,
+    );
+
+    // 500 - 100：贴底即最大可滚动高度。
+    expect(scroll.scrollTop).toBe(400);
+  });
+
+  it("滚动时记录当前位置，供切回时恢复", () => {
+    const { container } = render(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages()}
+        autoScrollOnActivate={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+    scroll.scrollTop = 250;
+    fireEvent.scroll(scroll);
+
+    expect(readMessageStreamScrollOffset(9)).toBe(250);
+  });
+
+  it("零高度（被其它子 tab 遮蔽）时的滚动不覆盖已记录位置", () => {
+    writeMessageStreamScrollOffset(9, 250);
+    const { container } = render(
+      <AgentMessageStreamView
+        sessionId={9}
+        state={createStateWithMessages()}
+        autoScrollOnActivate={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    // clientHeight 保持 jsdom 默认 0，模拟 display:none 遮蔽。
+    Object.defineProperty(scroll, "scrollHeight", {
+      configurable: true,
+      get: () => 500,
+    });
+    fireEvent.scroll(scroll);
+
+    expect(readMessageStreamScrollOffset(9)).toBe(250);
   });
 });

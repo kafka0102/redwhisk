@@ -110,6 +110,7 @@ export const AgentSessionView = memo(function AgentSessionView({
         agentType={agentType}
         isActive={isActive}
         autoScrollOnActivate={!isReadOnly}
+        sessionId={sessionId}
       />
 
       <div className="agents-session-view__permissions">

@@ -26,6 +26,10 @@ import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { AgentMessageCards } from "./agent-message-cards";
 import { installSelectionDragClamp } from "./selection-drag-clamp";
+import {
+  readMessageStreamScrollOffset,
+  writeMessageStreamScrollOffset,
+} from "./message-stream-scroll-offset";
 import type {
   MessageStreamEntry,
   MessageStreamState,
@@ -48,7 +52,7 @@ export function AgentMessageStream({
   sessionId,
 }: AgentMessageStreamProps) {
   const { state } = useAgentMessageStream({ projectId, sessionId });
-  return <AgentMessageStreamView state={state} />;
+  return <AgentMessageStreamView state={state} sessionId={sessionId} />;
 }
 
 interface AgentMessageStreamViewProps {
@@ -62,6 +66,8 @@ interface AgentMessageStreamViewProps {
   /** 切换到本 session（isActive 由 false 变 true）时是否自动定位到底部。
    * 完成态 session 传 false 以保持原样。 */
   autoScrollOnActivate?: boolean;
+  /** 当前 session id：用于按 session 记录并恢复滚动位置。缺省（未提供）时不恢复。 */
+  sessionId?: number;
 }
 
 /**
@@ -79,11 +85,23 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   agentType,
   isActive = true,
   autoScrollOnActivate = false,
+  sessionId,
 }: AgentMessageStreamViewProps) {
   const { messages, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
   const [navTarget, setNavTarget] = useState<ScrollNavTarget>("hidden");
+  // 只读（Issue 已完成）session 重挂载时的滚动位置恢复目标。
+  // Agents Activity 切菜单会整体卸载，切回时消息流 DOM 重建、位置归零；不做恢复会
+  // 触发贴底跟随跳到底部，破坏用户来回切窗口复制文本的位置。
+  // 运行中 session（autoScrollOnActivate=true）不读取缓存，保持原本的贴底行为。
+  const [restoreTarget] = useState<number | null>(() =>
+    sessionId !== undefined && !autoScrollOnActivate
+      ? readMessageStreamScrollOffset(sessionId)
+      : null,
+  );
+  // 恢复尚未落地前抑制贴底跟随：内容分帧填充时先别抢滚动位置。
+  const isRestorePendingRef = useRef(restoreTarget !== null);
   const {
     entries,
     turnStatus,
@@ -108,6 +126,9 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const lastSignature =
     entries.length > 0 ? signatureOf(entries[entries.length - 1]) : "";
   useEffect(() => {
+    if (isRestorePendingRef.current) {
+      return;
+    }
     if (!isPinnedRef.current) {
       return;
     }
@@ -145,6 +166,43 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     node.scrollTop = node.scrollHeight;
     isPinnedRef.current = true;
   }, [isActive, autoScrollOnActivate]);
+  // 只读 session 重挂载后恢复记录的滚动位置。
+  // 内容（缓存预览 / 历史 timeline）异步分帧填充，因此每次内容提交后的 layout 阶段
+  // 尝试定位：layout 阶段在 paint 前执行，避免先闪到顶部再跳；位置尚不可达
+  // （内容未撑开）时保持待定，等下一次提交再试。
+  useLayoutEffect(() => {
+    if (!isRestorePendingRef.current) {
+      return;
+    }
+    // 会话变为可交互（Issue 不再完成）时放弃恢复，交回原本的贴底跟随逻辑。
+    if (autoScrollOnActivate) {
+      isRestorePendingRef.current = false;
+      return;
+    }
+    const node = scrollRef.current;
+    if (restoreTarget === null || !node || node.clientHeight === 0) {
+      return;
+    }
+    node.scrollTop = restoreTarget;
+    isPinnedRef.current =
+      node.scrollHeight - node.scrollTop - node.clientHeight <=
+      PIN_TO_BOTTOM_THRESHOLD_PX;
+    if (node.scrollTop >= restoreTarget) {
+      isRestorePendingRef.current = false;
+    }
+  }, [
+    autoScrollOnActivate,
+    restoreTarget,
+    entries.length,
+    lastSignature,
+    isInitialized,
+    isActive,
+    turnStatus,
+    shouldShowThinking,
+    hasClaudeOutput,
+    turnInterrupted,
+    subagentInterrupted,
+  ]);
   // 拖拽选择修正：指针落到命中不到文本的位置（滚动容器 padding、容器外相邻区域）时，
   // 内核会把选区端点夹到容器内容起点（长会话表现为整段被选中），这里把端点贴回内容盒
   // 边缘的可见文本。详见 selection-drag-clamp.ts。
@@ -190,6 +248,16 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   ]);
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
+    // 缓存始终跟随滚动更新，切走再回来即可恢复。
+    // 恢复过程中的程序化滚动不改写待恢复目标；零高度（被其它子 tab 遮蔽）时也不写，
+    // 否则会把真实位置覆盖成瞬时顶部。
+    if (
+      sessionId !== undefined &&
+      !isRestorePendingRef.current &&
+      node.clientHeight > 0
+    ) {
+      writeMessageStreamScrollOffset(sessionId, node.scrollTop);
+    }
     const distanceFromBottom =
       node.scrollHeight - node.scrollTop - node.clientHeight;
     isPinnedRef.current = distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX;

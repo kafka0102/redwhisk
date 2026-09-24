@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { AgentSessionView } from "./agent-session-view";
+import {
+  resetMessageStreamScrollOffsetCacheForTests,
+  writeMessageStreamScrollOffset,
+} from "../message-stream/message-stream-scroll-offset";
 import { clearAgentMessageStreamCacheForTest } from "../message-stream/use-agent-message-stream";
 import { clearComposerDraftCacheForTest } from "../composer/use-agent-composer";
 
@@ -104,6 +108,7 @@ function emitEvent(payload: AgentStreamEventEnvelope) {
 afterEach(() => {
   clearAgentMessageStreamCacheForTest();
   clearComposerDraftCacheForTest();
+  resetMessageStreamScrollOffsetCacheForTests();
 });
 
 describe("AgentSessionView", () => {
@@ -430,6 +435,41 @@ describe("AgentSessionView", () => {
     expect(
       screen.queryByRole("button", { name: "Send message" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("已完成 Issue 的 session 重挂载时恢复到记录的滚动位置", async () => {
+    setupTimeline([
+      { type: "assistant_message", text: "最终结论", messageId: "a1" } as never,
+    ]);
+    writeMessageStreamScrollOffset(10, 200);
+
+    const { container } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="completed"
+      />,
+    );
+    // 在历史 timeline 到达前撑开滚动盒子，模拟真实布局。
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    Object.defineProperty(scroll, "clientHeight", {
+      configurable: true,
+      get: () => 100,
+    });
+    Object.defineProperty(scroll, "scrollHeight", {
+      configurable: true,
+      get: () => 500,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("最终结论")).toBeInTheDocument();
+    });
+
+    expect(scroll.scrollTop).toBe(200);
   });
 
   it("切换 session 后不沿用上一个 session 的输入错误", async () => {
