@@ -157,6 +157,28 @@ Orca 也明确区分：
 - renderer 捕获的 `buffersByLeafId` 只在 remote/runtime 场景保留；
 - serialize 快照与 raw PTY backlog 是两条线。
 
+### 4.7 并发 spawn 的 id 命名空间（首屏永远空白 / 终端静默不启动）
+
+用户症状：打开项目后进终端 Activity，窗口一片空白、等多久都没有提示符；敲一次回车后
+提示符（或启动命令输出）才出现；或个别终端长期停在「未运行」，命令型配置连报错都没有。
+
+机制：`PtySessionStore` 的 **pending id** 与 `ProjectTerminalRegistry` 的 **session id** 是两套
+递减的负 id。两者若共用同一空间（都从 `-1` 起步），并发 spawn 时会互相顶号：
+
+- `open_project` 把终端 restore 丢到后台任务，前端终端 Activity 的 hydrate 又会自己跑
+  `ensure`；两条循环对不同 config 并发 spawn，「分配 session id 的先后」与「spawn 内部
+  `fetch_sub` 取 pending id 的先后」可能相反（交互式 PATH 探测耗时可达数十秒，窗口极大）。
+- 此时 `register` 的 `sessions.remove(&pending_id)` 会删掉**另一个**会话的句柄：轻则
+  `register` 撞到 `already registered` 直接失败（命令型配置不进 `shellFailures`，于是静默
+  不启动，只留下 0 字节 log 与被 kill 的子进程）；重则该 key 上挂着别的会话的 writer，
+  `flush_log` 刷的不是它自己那份 log，前端 catch-up 永远读到空首屏，只有新输出（回车）
+  走 live 通道才显示。
+
+修复：`PtySessionManager` 的 pending id 改从 `PTY_PENDING_ID_BASE`（远离 0 的负值）递减，
+与 registry session id 完全不相交。回归：
+`pty_session_manager::tests::register_keeps_pending_ids_disjoint_from_registry_session_ids`
+锁定「每个注册 session 的 flush 必须刷到自己那份 log」。
+
 ## 5. Orca 对照（可借鉴点）
 
 来源：Orca asar `out/shared/*` 与竞品分析文档。

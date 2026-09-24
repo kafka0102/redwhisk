@@ -24,6 +24,15 @@ const EMIT_COALESCE_MAX_BYTES: usize = 64 * 1024;
 // 交互回显优先：合并窗口过大会让 TUI 输入（如 grok）感觉“粘滞”。
 const EMIT_COALESCE_MAX_MS: u64 = 4;
 const COALESCE_TICK_MS: u64 = 2;
+/// spawn→register 窗口内挂载 reader 用的临时 id 起点。
+///
+/// 必须与项目终端 registry 分配的 session id（同为负值、从 -1 递减）完全不相交：
+/// `open_project` 的后台 restore 与前端终端 Activity 的 `ensure` 会对同一项目不同
+/// config 并发 spawn，「分配 session id 的先后」与「spawn 内部取 pending id 的先后」
+/// 可能相反；两套 id 若共用一个递减空间，交错注册时 `remove(pending_id)` 会顶掉
+/// 另一个会话的句柄 —— 表现为该终端静默启动失败（命令型不报错），或 registry 指向的
+/// log 根本不是该会话 writer 写的那份，前端 catch-up 永远读到空首屏。
+const PTY_PENDING_ID_BASE: i64 = -1_000_000_000;
 
 #[derive(Clone)]
 pub struct PtySessionManager {
@@ -185,8 +194,10 @@ impl PtySessionManager {
             // 前端未同步前的保守默认：与无 COLORFGBG 时多数 CLI 的 dark fallback 等价，
             // 避免极端时序下误判为 light 导致深色背景上输出不可见。
             app_theme: Mutex::new(TerminalBackgroundTheme::Dark),
-            // 负 id 从 -1 递减，避免与真实 DB session id（正整数）冲突。
-            next_pending_id: AtomicI64::new(-1),
+            // 负 id 从远离 0 的起点递减：既避开真实 DB session id（正整数），
+            // 也避开项目终端 registry 的 session id（负值、从 -1 递减），见
+            // PTY_PENDING_ID_BASE 注释。
+            next_pending_id: AtomicI64::new(PTY_PENDING_ID_BASE),
             #[cfg(test)]
             kill_failures: Mutex::new(HashSet::new()),
         });
@@ -1373,6 +1384,80 @@ mod tests {
         assert!(snapshot.is_complete);
         assert_eq!(snapshot.sequence, 0);
         assert!(snapshot.chunks.is_empty());
+    }
+
+    /// 项目终端的 registry session id 与 PTY pending id 必须是两套不相交的命名空间。
+    ///
+    /// `open_project` 会把终端 restore 丢到后台任务，前端终端 Activity 的 hydrate 又
+    /// 会自己跑一次 `ensure`；两条循环对同一项目不同 config 并发 spawn 时，「分配
+    /// session id 的先后」与「spawn 内部取 pending id 的先后」可能相反（交互式 PATH
+    /// 探测耗时可到数十秒）。若两套 id 都从 -1 递减，交错注册就会互相顶掉句柄：
+    /// 该 session 注册失败（命令型终端静默不报错），或 registry 指向的 log 文件
+    /// 根本不是该会话 writer 写的那份（前端 catch-up 永远读到空首屏，只有新输出
+    /// 才走 live 显示）。
+    #[cfg(unix)]
+    #[test]
+    fn register_keeps_pending_ids_disjoint_from_registry_session_ids() {
+        use super::{PtyCommandMode, PtySpawnRequest};
+        use crate::agent::command_detector::pin_test_interactive_shell_path;
+
+        let _env_guard = spawn_env_test_lock();
+        // 固定交互式 PATH 解析，避免测试真的去拉起 .zshrc 探测。
+        let _pin = pin_test_interactive_shell_path(Some(std::ffi::OsString::from(
+            "/usr/bin:/bin:/usr/sbin:/sbin",
+        )));
+
+        let temp = tempfile::tempdir().expect("temp dir");
+        let manager = PtySessionManager::new();
+        let log_a = temp.path().join("session-1.log");
+        let log_b = temp.path().join("session-2.log");
+
+        let spawn = |command: &str, log_path: &std::path::Path| {
+            manager
+                .spawn_pending(&PtySpawnRequest {
+                    mode: PtyCommandMode::InteractiveRun,
+                    command: command.to_string(),
+                    working_dir: temp.path().to_string_lossy().to_string(),
+                    log_path: log_path.to_string_lossy().to_string(),
+                    initial_prompt: None,
+                    rows: 24,
+                    cols: 80,
+                    startup_check_total_ms: 200,
+                    startup_check_interval_ms: 20,
+                })
+                .expect("spawn pending")
+        };
+
+        // registry 先给会话 1/2 分配 -1/-2；两个 spawn 的完成先后与之相反。
+        let pending_b = spawn("printf 'MARK-B\\n'; sleep 30", &log_b);
+        let pending_a = spawn("printf 'MARK-A\\n'; sleep 30", &log_a);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+
+        manager
+            .register(-2, pending_b, |_| {})
+            .expect("会话 2 必须在并发交错下注册成功");
+        manager
+            .register(-1, pending_a, |_| {})
+            .expect("会话 1 必须在并发交错下注册成功");
+
+        // 每个 session 的 flush 必须刷到自己那份 log（前端 catch-up 读的就是它）。
+        manager.flush_log(-2).expect("flush 会话 2");
+        manager.flush_log(-1).expect("flush 会话 1");
+        let bytes_b = std::fs::read(&log_b).expect("read session 2 log");
+        let bytes_a = std::fs::read(&log_a).expect("read session 1 log");
+        assert_eq!(
+            String::from_utf8_lossy(&bytes_b).trim(),
+            "MARK-B",
+            "会话 2 的 log 必须由会话 2 的 writer 写入"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&bytes_a).trim(),
+            "MARK-A",
+            "会话 1 的 log 必须由会话 1 的 writer 写入"
+        );
+
+        let _ = manager.kill(-1);
+        let _ = manager.kill(-2);
     }
 
     #[test]
