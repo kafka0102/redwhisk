@@ -21,7 +21,9 @@ use crate::types::session_workspace::{
     WorkspaceFileContent, WorkspaceFileStat, WorkspaceFileTreeNode, WorkspaceFileTreeNodeKind,
 };
 
-const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
+use super::workspace_diff::{read_workspace_commit_diff, read_workspace_diff};
+
+pub(super) const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
 const HIDDEN_DIRS: &[&str] = &[
     ".git",
     "node_modules",
@@ -302,7 +304,7 @@ pub fn resolve_workspace_relative_path(
     Ok(joined_path)
 }
 
-fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandError> {
+pub(super) fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandError> {
     let relative_path = Path::new(file_path);
     if file_path.is_empty()
         || relative_path.is_absolute()
@@ -320,6 +322,12 @@ fn validate_workspace_relative_path(file_path: &str) -> Result<&Path, CommandErr
     }
 
     Ok(relative_path)
+}
+
+/// git 的 pathspec 默认按 glob 解释，`a[1].txt` 这类路径会被当成通配符。用
+/// `:(literal)` magic 把它按字面量匹配，保证定向查询命中的就是这一个文件。
+pub(super) fn literal_pathspec(file_path: &str) -> String {
+    format!(":(literal){file_path}")
 }
 
 pub(super) fn canonical_workspace_root(path: &str) -> Result<PathBuf, CommandError> {
@@ -657,35 +665,7 @@ fn find_branch_base(
     Ok(None)
 }
 
-fn read_commit_changed_files(
-    root: &Path,
-    commit_hash: &str,
-) -> Result<Vec<WorkspaceCommitChangedFile>, CommandError> {
-    let output = run_git(
-        root,
-        &[
-            "diff-tree",
-            "--root",
-            "--no-commit-id",
-            "--name-status",
-            "-r",
-            "-M",
-            "-C",
-            commit_hash,
-        ],
-    )?;
-    let mut files = Vec::new();
-
-    for line in output.lines().filter(|line| !line.is_empty()) {
-        if let Some(file) = parse_commit_changed_file(line) {
-            files.push(file);
-        }
-    }
-
-    Ok(files)
-}
-
-fn parse_commit_changed_file(line: &str) -> Option<WorkspaceCommitChangedFile> {
+pub(super) fn parse_commit_changed_file(line: &str) -> Option<WorkspaceCommitChangedFile> {
     let mut parts = line.split('\t');
     let raw_status = parts.next()?;
     let status = raw_status.chars().next()?.to_string();
@@ -717,14 +697,14 @@ fn change_kind_from_commit_status(status: &str) -> WorkspaceChangeKind {
 }
 
 #[derive(Debug, Clone)]
-struct StatusEntry {
-    status: String,
-    path: String,
-    old_path: Option<String>,
-    kind: WorkspaceChangeKind,
+pub(super) struct StatusEntry {
+    pub(super) status: String,
+    pub(super) path: String,
+    pub(super) old_path: Option<String>,
+    pub(super) kind: WorkspaceChangeKind,
 }
 
-fn parse_status_entries(output: &[u8]) -> Result<Vec<StatusEntry>, CommandError> {
+pub(super) fn parse_status_entries(output: &[u8]) -> Result<Vec<StatusEntry>, CommandError> {
     let mut records = output
         .split(|byte| *byte == b'\0')
         .filter(|record| !record.is_empty());
@@ -761,7 +741,7 @@ fn parse_status_entries(output: &[u8]) -> Result<Vec<StatusEntry>, CommandError>
     Ok(entries)
 }
 
-fn change_kind_from_status(status: &str) -> WorkspaceChangeKind {
+pub(super) fn change_kind_from_status(status: &str) -> WorkspaceChangeKind {
     let bytes = status.as_bytes();
     if bytes.contains(&b'R') {
         WorkspaceChangeKind::Renamed
@@ -791,7 +771,7 @@ fn read_numstat_map(root: &Path) -> HashMap<String, (i64, i64, bool)> {
 }
 
 /// 解析 `--numstat -z` 输出。每条记录形如 `added\tdeleted\tpath`，记录之间以 NUL 分隔。
-fn parse_numstat_records(output: &[u8]) -> HashMap<String, (i64, i64, bool)> {
+pub(super) fn parse_numstat_records(output: &[u8]) -> HashMap<String, (i64, i64, bool)> {
     let mut stats = HashMap::new();
 
     for record in output
@@ -839,7 +819,7 @@ fn parse_numstat_count(bytes: &[u8]) -> i64 {
 }
 
 /// `git diff` 不含未跟踪文件，沿用既有语义按文件内容回退估算新增行数。
-fn read_untracked_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
+pub(super) fn read_untracked_numstat(root: &Path, path: &str) -> (i64, i64, bool) {
     if let Ok(workspace_file) = resolve_workspace_file(root, path) {
         if workspace_file.metadata.len() > MAX_TEXT_FILE_BYTES {
             return (0, 0, false);
@@ -1011,7 +991,10 @@ fn stat_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileStat
     })
 }
 
-fn read_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileContent, CommandError> {
+pub(super) fn read_workspace_file(
+    root: &Path,
+    file_path: &str,
+) -> Result<WorkspaceFileContent, CommandError> {
     let workspace_file = resolve_workspace_file(root, file_path)?;
     let size_bytes = workspace_file.metadata.len();
     let language = language_from_path(file_path);
@@ -1089,204 +1072,6 @@ fn write_workspace_file(
     read_workspace_file(root, file_path)
 }
 
-fn read_workspace_diff(root: &Path, file_path: &str) -> Result<WorkspaceDiffContent, CommandError> {
-    let changes = read_workspace_changes(root)?;
-    let change = changes
-        .files
-        .into_iter()
-        .find(|file| file.file_path == file_path)
-        .ok_or_else(|| {
-            workspace_validation_error("文件没有未提交变更。", file_path)
-                .with_reason("fileNoUncommittedChanges")
-        })?;
-
-    if change.is_binary {
-        return Ok(WorkspaceDiffContent {
-            file_path: change.file_path,
-            old_path: change.old_path,
-            kind: WorkspaceChangeKind::Binary,
-            language: language_from_path(file_path),
-            original_content: String::new(),
-            modified_content: String::new(),
-            is_binary: true,
-            is_too_large: false,
-        });
-    }
-
-    let original_content = match change.kind {
-        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
-        _ => {
-            let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
-            match read_head_file(root, original_path)? {
-                HeadFileRead::Content(content) => content,
-                HeadFileRead::Binary => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: WorkspaceChangeKind::Binary,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: true,
-                        is_too_large: false,
-                    });
-                }
-                HeadFileRead::TooLarge => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: change.kind,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: false,
-                        is_too_large: true,
-                    });
-                }
-            }
-        }
-    };
-
-    let modified_content = match change.kind {
-        WorkspaceChangeKind::Deleted => String::new(),
-        _ => {
-            let content = read_workspace_file(root, &change.file_path)?;
-            if content.is_binary || content.is_too_large {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: change.kind,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary: content.is_binary,
-                    is_too_large: content.is_too_large,
-                });
-            }
-            content.content
-        }
-    };
-
-    Ok(WorkspaceDiffContent {
-        file_path: change.file_path,
-        old_path: change.old_path,
-        kind: change.kind,
-        language: language_from_path(file_path),
-        original_content,
-        modified_content,
-        is_binary: false,
-        is_too_large: false,
-    })
-}
-
-fn read_workspace_commit_diff(
-    root: &Path,
-    commit_hash: &str,
-    file_path: &str,
-) -> Result<WorkspaceDiffContent, CommandError> {
-    let commit_hash = resolve_commit_hash(root, commit_hash)?;
-    let change = read_commit_changed_files(root, &commit_hash)?
-        .into_iter()
-        .find(|file| file.file_path == file_path)
-        .ok_or_else(|| {
-            workspace_validation_error("文件不属于该提交。", file_path)
-                .with_reason("fileNotInCommit")
-        })?;
-    validate_workspace_relative_path(&change.file_path)?;
-    if let Some(old_path) = &change.old_path {
-        validate_workspace_relative_path(old_path)?;
-    }
-
-    let parent_ref = format!("{commit_hash}^");
-    let has_parent = run_git(
-        root,
-        &[
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            &format!("{parent_ref}{{commit}}"),
-        ],
-    )
-    .is_ok();
-
-    let original_content = match change.kind {
-        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
-        _ if !has_parent => String::new(),
-        _ => {
-            let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
-            match read_git_file(root, &parent_ref, original_path)? {
-                HeadFileRead::Content(content) => content,
-                HeadFileRead::Binary => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: WorkspaceChangeKind::Binary,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: true,
-                        is_too_large: false,
-                    });
-                }
-                HeadFileRead::TooLarge => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: change.kind,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: false,
-                        is_too_large: true,
-                    });
-                }
-            }
-        }
-    };
-
-    let modified_content = match change.kind {
-        WorkspaceChangeKind::Deleted => String::new(),
-        _ => match read_git_file(root, &commit_hash, &change.file_path)? {
-            HeadFileRead::Content(content) => content,
-            HeadFileRead::Binary => {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: WorkspaceChangeKind::Binary,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary: true,
-                    is_too_large: false,
-                });
-            }
-            HeadFileRead::TooLarge => {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: change.kind,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary: false,
-                    is_too_large: true,
-                });
-            }
-        },
-    };
-
-    Ok(WorkspaceDiffContent {
-        file_path: change.file_path,
-        old_path: change.old_path,
-        kind: change.kind,
-        language: language_from_path(file_path),
-        original_content,
-        modified_content,
-        is_binary: false,
-        is_too_large: false,
-    })
-}
-
 struct WorkspaceFile {
     absolute_path: PathBuf,
     metadata: fs::Metadata,
@@ -1309,17 +1094,23 @@ fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile,
     })
 }
 
-enum HeadFileRead {
+pub(super) enum HeadFileRead {
     Content(String),
     Binary,
     TooLarge,
 }
 
-fn read_head_file(root: &Path, path: &str) -> Result<HeadFileRead, CommandError> {
+/// 读取某个 revision 下该路径的文件内容（HEAD / 提交 / 父提交），供单文件差异取原始
+/// 与修改后内容使用。
+pub(super) fn read_head_file(root: &Path, path: &str) -> Result<HeadFileRead, CommandError> {
     read_git_file(root, "HEAD", path)
 }
 
-fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead, CommandError> {
+pub(super) fn read_git_file(
+    root: &Path,
+    treeish: &str,
+    path: &str,
+) -> Result<HeadFileRead, CommandError> {
     validate_workspace_relative_path(path)?;
     let object_spec = format!("{treeish}:{path}");
     let size_output = match run_git(root, &["cat-file", "-s", &object_spec]) {
@@ -1355,7 +1146,7 @@ fn read_git_file(root: &Path, treeish: &str, path: &str) -> Result<HeadFileRead,
         })
 }
 
-fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, CommandError> {
+pub(super) fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, CommandError> {
     let commit_hash = commit_hash.trim();
     if commit_hash.is_empty()
         || commit_hash.len() > 64
@@ -1388,11 +1179,11 @@ fn resolve_commit_hash(root: &Path, commit_hash: &str) -> Result<String, Command
     Ok(resolved_hash.to_string())
 }
 
-fn is_binary_bytes(bytes: &[u8]) -> bool {
+pub(super) fn is_binary_bytes(bytes: &[u8]) -> bool {
     bytes.contains(&0) || std::str::from_utf8(bytes).is_err()
 }
 
-fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
+pub(super) fn run_git(root: &Path, args: &[&str]) -> Result<String, CommandError> {
     command::run_git(root, args).map_err(map_git_command_error)
 }
 
@@ -1401,7 +1192,7 @@ fn run_git_owned(root: &Path, args: &[String]) -> Result<String, CommandError> {
     run_git(root, &args)
 }
 
-fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
+pub(super) fn run_git_bytes(root: &Path, args: &[&str]) -> Result<Vec<u8>, CommandError> {
     command::run_git_bytes(root, args).map_err(map_git_command_error)
 }
 
@@ -1495,7 +1286,7 @@ fn hash_string(value: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-fn language_from_path(path: &str) -> Option<String> {
+pub(super) fn language_from_path(path: &str) -> Option<String> {
     // 返回 Monaco / VS Code language id；前端只读查看器据此启用语法高亮。
     // 扩展名大小写不敏感；无匹配时返回 None，Monaco 退化为纯文本。
     let path = Path::new(path);
@@ -1578,7 +1369,8 @@ fn language_from_path(path: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
+// 同 feature 的 workspace_diff 单测复用这里的临时 git 仓库助手。
+pub(super) mod tests {
     use super::*;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::migrations::MigrationRunner;
@@ -2134,25 +1926,6 @@ mod tests {
     }
 
     #[test]
-    fn diff_marks_large_head_content_too_large_without_returning_original() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let root = temp_dir.path();
-        init_git_repo(root);
-        let large_content = "a".repeat((MAX_TEXT_FILE_BYTES + 1) as usize);
-        fs::write(root.join("large.txt"), large_content).expect("write large");
-        git(root, &["add", "large.txt"]);
-        git(root, &["commit", "-m", "add large"]);
-        fs::write(root.join("large.txt"), "small\n").expect("write small");
-
-        let diff = read_workspace_diff(root, "large.txt").expect("read diff");
-
-        assert!(diff.is_too_large);
-        assert!(!diff.is_binary);
-        assert!(diff.original_content.is_empty());
-        assert!(diff.modified_content.is_empty());
-    }
-
-    #[test]
     fn commit_history_lists_recent_commits_in_non_worktree_branch() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let root = temp_dir.path();
@@ -2223,28 +1996,6 @@ mod tests {
             history.commits[1].pushed_to.as_deref(),
             Some("base-for-session")
         );
-    }
-
-    #[test]
-    fn committed_diff_reads_parent_and_commit_content() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let root = temp_dir.path();
-        init_git_repo(root);
-        fs::write(root.join("story.ts"), "const title = 'old';\n").expect("write base");
-        git(root, &["add", "story.ts"]);
-        git(root, &["commit", "-m", "base"]);
-        fs::write(root.join("story.ts"), "const title = 'new';\n").expect("modify file");
-        git(root, &["add", "story.ts"]);
-        git(root, &["commit", "-m", "update story"]);
-        let commit_hash = run_git(root, &["rev-parse", "HEAD"]).expect("read head");
-
-        let diff =
-            read_workspace_commit_diff(root, commit_hash.trim(), "story.ts").expect("read diff");
-
-        assert_eq!(diff.file_path, "story.ts");
-        assert_eq!(diff.kind, WorkspaceChangeKind::Modified);
-        assert_eq!(diff.original_content, "const title = 'old';\n");
-        assert_eq!(diff.modified_content, "const title = 'new';\n");
     }
 
     #[test]
@@ -2551,13 +2302,13 @@ mod tests {
         assert!(!history.commits[2].is_created_in_worktree);
     }
 
-    fn init_git_repo(root: &Path) {
+    pub(crate) fn init_git_repo(root: &Path) {
         git(root, &["init"]);
         git(root, &["config", "user.email", "test@example.com"]);
         git(root, &["config", "user.name", "Test User"]);
     }
 
-    fn git(root: &Path, args: &[&str]) {
+    pub(crate) fn git(root: &Path, args: &[&str]) {
         let output = Command::new("git")
             .args(args)
             .current_dir(root)
