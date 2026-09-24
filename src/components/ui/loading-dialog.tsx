@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { LoaderCircle, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,11 @@ export function LoadingDialog({
   onOpenChange,
   open,
 }: LoadingDialogProps) {
+  // base-ui 默认把初始焦点交给弹窗内第一个可聚焦元素，即右上角关闭按钮；
+  // 全局 `button:focus-visible` 会因此给它画上焦点方块。这里改为让弹窗容器
+  // 自己接管初始焦点：既不再高亮关闭按钮，也保留 Esc / Tab 的键盘可达性。
+  const popupRef = useRef<HTMLDivElement>(null);
+
   return (
     <Dialog
       open={open}
@@ -37,6 +43,8 @@ export function LoadingDialog({
     >
       <DialogContent
         className="max-w-[min(calc(100%-2rem),22rem)] gap-0 p-5"
+        initialFocus={popupRef}
+        ref={popupRef}
         showCloseButton={false}
       >
         {dismissible ? (
