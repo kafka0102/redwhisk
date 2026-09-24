@@ -434,6 +434,8 @@ export interface I18nMessages {
     removeAttachment: (fileName: string) => string;
     attachmentsSavedHint: string;
     selectModel: string;
+    /** 模型下拉里标默认条目的选项标签，入参为模型 id 原文。 */
+    defaultModelOption: (modelId: string) => string;
     thinkMode: string;
     cancelCurrentTurn: string;
     sendMessage: string;

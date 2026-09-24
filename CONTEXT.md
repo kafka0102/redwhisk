@@ -280,7 +280,8 @@ _Avoid_: 仅刷新内存索引不对账 DB、项目对账只看项目目录、�
 
 **模型目录**（Model Catalog）：
 某一 Agent 在本机配置中声明的可选模型集合，是 RedWhisk 展示模型选项的唯一来源；Codex 取自模型目录文件或 CLI 模型缓存，Grok 取自配置中的模型别名表，Claude 取自官方别名或第三方网关下的单条真实模型。不经 Agent 的模型接口获取。
-_Avoid_: 在线模型接口、Agent 内置默认模型、会话内已选模型
+下拉标签一律展示模型 id 原文（目录条目 `slug` / 配置里的别名 / 第三方网关下的真实模型名，含内置模型回退条目的 id），不使用目录条目的 `display_name`，也不做大小写或格式改写（见 [ADR-0042 模型选项标签展示模型 id 原文](docs/adr/0042-model-option-label-shows-raw-model-id.md)）。
+_Avoid_: 在线模型接口、Agent 内置默认模型、会话内已选模型、用 `display_name` 当展示名
 
 **内置模型回退列表**：
 仅当某 Agent 本机不存在任何模型目录时，RedWhisk 自带的候选模型集合；当前只有 Codex 有，其余 Agent 无模型目录时不提供任何默认模型。

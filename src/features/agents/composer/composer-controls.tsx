@@ -86,11 +86,9 @@ export function ComposerControls({
     capabilities.canShowModel &&
     (isModelReadOnly || !capabilities.supportsModelSwitching);
   const showThinkSelect = capabilities.supportsReasoningEffort && !isReadOnly;
-  const modelLabel = formatModelLabel(
-    selectedModelId,
-    models,
-    fallbackModelLabel(capabilities),
-  );
+  // 展示口径（ADR-0042）：标签一律展示模型 id（目录条目 slug / 别名 / 真实模型名）
+  // 原文，不用 `display_name`，也不做任何大小写改写。
+  const modelLabel = selectedModelId ?? fallbackModelLabel(capabilities);
   const modelPlaceholder =
     modelsError ??
     (isLoadingModels ? messages.settings.loading : messages.settings.none);
@@ -132,8 +130,9 @@ export function ComposerControls({
               <SelectContent align="start" className="agents-composer__menu">
                 {models.map((model) => (
                   <SelectItem key={model.modelId} value={model.modelId}>
-                    {formatModelLabel(model.modelId, models, null)}
-                    {model.isDefault ? " (default)" : ""}
+                    {model.isDefault
+                      ? messages.agentsFeature.defaultModelOption(model.modelId)
+                      : model.modelId}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -224,20 +223,4 @@ export function ComposerControls({
 
 function fallbackModelLabel(capabilities: AgentUiCapabilities): string | null {
   return capabilities.modelTypeLabel;
-}
-
-function formatModelLabel(
-  modelId: string | null,
-  models: AgentModel[],
-  fallback: string | null,
-): string | null {
-  if (modelId == null) {
-    return fallback;
-  }
-  const model = models.find((candidate) => candidate.modelId === modelId);
-  return normalizeModelLabel(model?.displayName ?? modelId);
-}
-
-function normalizeModelLabel(label: string): string {
-  return label.replace(/^gpt\b/i, "GPT").replace(/^gpt(?=[-.0-9])/i, "GPT");
 }

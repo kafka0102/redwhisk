@@ -1,5 +1,7 @@
 # 0036. Agent 模型列表以本机配置为唯一来源，启动期模型选择不写回全局配置
 
+> **状态补充**：本 ADR 第 2 条中「`display_name` 映射为展示名」的展示口径，已被 [ADR 0042](./0042-model-option-label-shows-raw-model-id.md) 取代；同条内 `slug` 为模型 id、effort 能力映射，以及其它决定仍适用。
+
 **状态**：采纳（待执行）
 
 ## 背景

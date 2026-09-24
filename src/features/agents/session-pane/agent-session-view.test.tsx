@@ -275,7 +275,7 @@ describe("AgentSessionView", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("combobox", { name: "Select model" }),
-      ).toHaveTextContent("GPT-5.2");
+      ).toHaveTextContent("gpt-5.2");
     });
   });
 
@@ -583,7 +583,7 @@ describe("AgentSessionView", () => {
     await user.click(
       await screen.findByRole("combobox", { name: "Select model" }),
     );
-    await user.click(await screen.findByRole("option", { name: "GPT-4o" }));
+    await user.click(await screen.findByRole("option", { name: "gpt-4o" }));
 
     await waitFor(() => {
       expect(resumeAgentSessionMock).toHaveBeenCalledWith({

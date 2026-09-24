@@ -5279,9 +5279,10 @@ describe("Run Dialog 启动期模型选择", () => {
     const modelSelect = await within(dialog).findByRole("combobox", {
       name: "Select model",
     });
-    expect(modelSelect).toHaveTextContent("GPT-5.5");
+    // 标签展示模型 id 原文，不做任何大小写改写。
+    expect(modelSelect).toHaveTextContent("gpt-5.5");
 
-    await selectShadcnOption(user, within(dialog), "Select model", "GPT-5.2");
+    await selectShadcnOption(user, within(dialog), "Select model", "gpt-5.2");
     const startButton = within(dialog).getByRole("button", { name: "Start" });
     await waitFor(() => expect(startButton).toBeEnabled());
     await user.click(startButton);
@@ -5390,12 +5391,12 @@ describe("Run Dialog 启动期模型选择", () => {
     const modelSelect = await within(dialog).findByRole("combobox", {
       name: "Select model",
     });
-    expect(modelSelect).toHaveTextContent("GPT-5.5");
-    await selectShadcnOption(user, within(dialog), "Select model", "GPT-5.2");
+    expect(modelSelect).toHaveTextContent("gpt-5.5");
+    await selectShadcnOption(user, within(dialog), "Select model", "gpt-5.2");
     await waitFor(() =>
       expect(
         within(dialog).getByRole("combobox", { name: "Select model" }),
-      ).toHaveTextContent("GPT-5.2"),
+      ).toHaveTextContent("gpt-5.2"),
     );
 
     await selectShadcnOption(
@@ -5417,7 +5418,7 @@ describe("Run Dialog 启动期模型选择", () => {
     await waitFor(() =>
       expect(
         within(dialog).getByRole("combobox", { name: "Select model" }),
-      ).toHaveTextContent("GPT-6-Astra"),
+      ).toHaveTextContent("gpt-6-astra"),
     );
 
     // 切换后未再改动：启动请求不带模型。

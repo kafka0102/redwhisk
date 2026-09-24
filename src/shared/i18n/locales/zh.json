@@ -481,6 +481,7 @@
     "removeAttachment": "移除附件 {{fileName}}",
     "attachmentsSavedHint": "附件已保存，暂不随消息发送",
     "selectModel": "选择模型",
+    "defaultModelOption": "{{modelId}}（默认）",
     "thinkMode": "思考模式",
     "queuedFollowUp": "已排队",
     "cancelQueuedFollowUp": "取消排队",

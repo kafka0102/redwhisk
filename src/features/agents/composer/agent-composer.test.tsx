@@ -495,11 +495,39 @@ describe("AgentComposer", () => {
     expect(screen.queryByText("ultra")).not.toBeInTheDocument();
   });
 
-  it("模型选中值使用统一展示大小写", async () => {
+  it("模型选中值展示模型 id 原文", async () => {
     await renderComposer({ currentModelId: "gpt-5" });
     expect(
       screen.getByRole("combobox", { name: "Select model" }),
-    ).toHaveTextContent("GPT-5");
+    ).toHaveTextContent("gpt-5");
+  });
+
+  it("只读模型标签展示真实模型名原文（第三方网关）", async () => {
+    listAgentModelsMock.mockResolvedValueOnce({
+      isReadOnly: true,
+      capabilities: {
+        modelTypeLabel: "Claude",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: false,
+        supportsModes: false,
+        supportsTuiResume: false,
+      },
+      models: [
+        {
+          modelId: "claude-opus-4-1-20250805",
+          displayName: "Opus 4.1",
+          isDefault: true,
+          supportedReasoningEfforts: [],
+        },
+      ],
+    });
+
+    await renderComposer();
+
+    expect(screen.getByLabelText("Current model type")).toHaveTextContent(
+      "claude-opus-4-1-20250805",
+    );
   });
 
   it("当前模型未知时优先显示列表里的默认模型", async () => {
@@ -534,7 +562,7 @@ describe("AgentComposer", () => {
 
     expect(
       screen.getByRole("combobox", { name: "Select model" }),
-    ).toHaveTextContent("GPT-5.5");
+    ).toHaveTextContent("gpt-5.5");
   });
 
   it("Claude 也请求模型列表并展示模型选择器（Think 仍不展示）", async () => {

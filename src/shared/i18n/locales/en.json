@@ -481,6 +481,7 @@
     "removeAttachment": "Remove attachment {{fileName}}",
     "attachmentsSavedHint": "Attachments are saved but will not be sent with messages yet.",
     "selectModel": "Select model",
+    "defaultModelOption": "{{modelId}} (default)",
     "thinkMode": "Think mode",
     "queuedFollowUp": "Queued",
     "cancelQueuedFollowUp": "Cancel queued follow-up",

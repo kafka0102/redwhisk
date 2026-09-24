@@ -1,4 +1,6 @@
 // Run Dialog 的启动期模型下拉（独立单元，避免继续撑大 Run Dialog 主文件）。
+// 展示口径（ADR-0042）：标签一律展示模型 id（目录条目 slug / 别名 / 真实模型名）
+// 原文，不用 `display_name`，也不做任何大小写改写。
 // 展示规则（ADR-0036 第 9 条）：候选 >=2 条且列表非只读才渲染下拉；1 条 / 0 条 /
 // 只读整块不渲染；加载中显示占位；加载失败显示错误文案但不阻断启动。
 import { Label } from "@/components/ui/label";
@@ -68,10 +70,7 @@ export function RunModelSelect({
     return null;
   }
 
-  const selectedLabel =
-    models.find((model) => model.modelId === selectedModelId)?.displayName ??
-    selectedModelId ??
-    "";
+  const selectedLabel = selectedModelId ?? "";
 
   return (
     <div className="grid gap-1.5">
@@ -100,7 +99,7 @@ export function RunModelSelect({
         <SelectContent>
           {models.map((model) => (
             <SelectItem key={model.modelId} value={model.modelId}>
-              {model.displayName ?? model.modelId}
+              {model.modelId}
             </SelectItem>
           ))}
         </SelectContent>
