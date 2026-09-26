@@ -75,25 +75,113 @@ describe("formatProcessingDuration", () => {
     expect(formatProcessingDuration(null, "zh")).toBe("-");
   });
 
-  it("returns dash when elapsed time is missing or non-positive", () => {
-    expect(formatProcessingDuration({ ...base }, "zh")).toBe("-");
+  it("returns dash when the wall-clock span is missing or non-positive", () => {
+    expect(
+      formatProcessingDuration({ ...base, displayMode: "tui" }, "zh"),
+    ).toBe("-");
     expect(
       formatProcessingDuration(
-        { ...base, startedAt: 1_000, closedAt: 1_000 },
+        { ...base, displayMode: "tui", startedAt: 1_000, closedAt: 1_000 },
+        "en",
+      ),
+    ).toBe("-");
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          displayMode: "tui",
+          status: "closed",
+          startedAt: 1_000,
+          closedAt: null,
+        },
         "en",
       ),
     ).toBe("-");
   });
 
-  it("formats wall-clock duration for crashed and stopped sessions", () => {
+  it("shows the accumulated processing duration for a closed json session", () => {
     expect(
       formatProcessingDuration(
         {
           ...base,
+          displayMode: "json",
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 60_000,
+        },
+        "en",
+      ),
+    ).toBe("1m 0s");
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          displayMode: "json",
+          startedAt: 1_000,
+          closedAt: 185_000,
+          processingMs: 60_000,
+        },
+        "zh",
+      ),
+    ).toBe("1分0秒");
+  });
+
+  it("shows the accumulated processing duration for a running json session without growing with the wall clock", () => {
+    const startedAt = 1_789_352_695_333;
+    const session = {
+      ...base,
+      displayMode: "json",
+      status: "running",
+      startedAt,
+      closedAt: null,
+      processingMs: 1_502_399,
+    } satisfies AgentSessionListItem;
+    expect(
+      formatProcessingDuration(session, "zh", startedAt + 24_797_314),
+    ).toBe("25分2秒");
+    expect(
+      formatProcessingDuration(session, "zh", startedAt + 999_999_999),
+    ).toBe("25分2秒");
+  });
+
+  it("falls back to wall-clock for a tui session", () => {
+    expect(
+      formatProcessingDuration(
+        { ...base, displayMode: "tui", startedAt: 1_000, closedAt: 185_000 },
+        "en",
+      ),
+    ).toBe("3m 4s");
+    expect(
+      formatProcessingDuration(
+        { ...base, displayMode: "tui", startedAt: 1_000, closedAt: 185_000 },
+        "zh",
+      ),
+    ).toBe("3分4秒");
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          displayMode: "tui",
+          status: "running",
+          startedAt: 1_000,
+          closedAt: null,
+        },
+        "en",
+        185_000,
+      ),
+    ).toBe("3m 4s");
+  });
+
+  it("falls back to wall-clock when the accumulated duration is zero", () => {
+    expect(
+      formatProcessingDuration(
+        {
+          ...base,
+          displayMode: "json",
           status: "crashed",
           startedAt: 1_000,
           closedAt: 185_000,
-          processingMs: 60_000,
+          processingMs: 0,
         },
         "en",
       ),
@@ -102,47 +190,24 @@ describe("formatProcessingDuration", () => {
       formatProcessingDuration(
         {
           ...base,
+          displayMode: "json",
           status: "stopped",
           startedAt: 1_000,
           closedAt: 185_000,
-          processingMs: 60_000,
+          processingMs: 0,
         },
         "zh",
       ),
     ).toBe("3分4秒");
   });
 
-  it("formats wall-clock duration for a normally closed session", () => {
-    expect(
-      formatProcessingDuration(
-        {
-          ...base,
-          startedAt: 1_000,
-          closedAt: 185_000,
-          processingMs: 5_000,
-        },
-        "en",
-      ),
-    ).toBe("3m 4s");
-    expect(
-      formatProcessingDuration(
-        {
-          ...base,
-          startedAt: 1_000,
-          closedAt: 185_000,
-          processingMs: 5_000,
-        },
-        "zh",
-      ),
-    ).toBe("3分4秒");
-  });
-
-  it("uses live elapsed time for a running session instead of lastOutputAt or processingMs", () => {
+  it("uses live elapsed time for a running session when the accumulated duration is zero", () => {
     const startedAt = 1_789_352_695_333;
     expect(
       formatProcessingDuration(
         {
           ...base,
+          displayMode: "json",
           status: "running",
           startedAt,
           closedAt: null,
@@ -151,7 +216,7 @@ describe("formatProcessingDuration", () => {
           tokenInput: null,
           tokenOutput: null,
           tokenCache: null,
-          processingMs: 1_502_399,
+          processingMs: 0,
         },
         "zh",
         startedAt + 24_797_314,

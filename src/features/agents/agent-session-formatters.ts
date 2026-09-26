@@ -194,7 +194,20 @@ function getSessionElapsedMs(
   return elapsedMs;
 }
 
-// 详情区执行时长：按墙钟时间（开始到结束/当前）展示，运行中不含 lastOutputAt / processingMs。
+/**
+ * 累计活跃处理时长：只有 json（结构化传输）会话能逐 Turn 统计，由后端心跳独占写入；
+ * tui（PTY）没有 Turn 事件，累计值缺失或为 0 的存量会话也走回退。
+ */
+function getAccumulatedProcessingMs(
+  session: AgentSessionListItem,
+): number | null {
+  if (session.displayMode !== "json" || session.processingMs <= 0) {
+    return null;
+  }
+  return session.processingMs;
+}
+
+// 详情区执行时长：json 会话取后端累计处理时长，其余回退墙钟差（开始 → 结束/当前）。
 export function formatProcessingDuration(
   session: AgentSessionListItem | null,
   locale: string,
@@ -202,6 +215,10 @@ export function formatProcessingDuration(
 ): string {
   if (!session) {
     return "-";
+  }
+  const accumulatedMs = getAccumulatedProcessingMs(session);
+  if (accumulatedMs != null) {
+    return formatDuration(accumulatedMs, locale);
   }
   const elapsedMs = getSessionElapsedMs(session, now);
   if (elapsedMs == null) {
