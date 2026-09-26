@@ -346,11 +346,17 @@ export function IssueRunDialog({
         }
       }
 
+      const workflowSkillName =
+        effectiveWorkflowSkill !== null &&
+        effectiveWorkflowSkill.trim().length > 0
+          ? effectiveWorkflowSkill.trim()
+          : null;
       const result = await startAgentSession({
         projectId,
         issueId: issue.id,
         agentProfileId: selectedProfile.id,
         promptSnapshot: promptDraft,
+        workflowSkillName,
         workspaceMode,
         targetBranch: effectiveTargetBranch,
         worktreeSetupCommand: effectiveSetupCommand,
