@@ -8,6 +8,8 @@
   min-height: 0;
   padding: 0;
   overflow: hidden;
+  overflow: clip;
+  overflow-anchor: none;
 }
 
 .agents-sidebar,
@@ -18,10 +20,17 @@
 
 .agents-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
+  overflow: hidden;
   padding: 14px 0 12px;
   background: var(--color-surface);
+}
+
+.agents-sidebar__body {
+  min-height: 0;
+  overflow: auto;
+  overflow-anchor: none;
 }
 
 .agents-sidebar__header {
@@ -154,6 +163,7 @@
   width: 100%;
   min-height: 72px;
   padding: 8px 10px;
+  overflow: hidden;
   border: 0;
   border-bottom: 1px solid var(--color-border);
   border-radius: 0;

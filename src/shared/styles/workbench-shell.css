@@ -248,6 +248,7 @@
      只能重启窗口。`clip` 彻底不可滚动，`hidden` 作为老内核的兜底。 */
   overflow: hidden;
   overflow: clip;
+  overflow-anchor: none;
   background: var(--color-app);
 }
 
@@ -274,6 +275,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-anchor: none;
 }
 
 .activity-bar__button {
@@ -608,6 +610,7 @@
   padding: 22px;
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
 }
 
 .activity-surface--issues {
@@ -622,6 +625,8 @@
   gap: 12px;
   padding: 0 0 8px;
   overflow: hidden;
+  overflow: clip;
+  overflow-anchor: none;
 }
 
 .activity-surface--issues .issues-status,

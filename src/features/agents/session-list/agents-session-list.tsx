@@ -41,29 +41,31 @@ export function AgentsSessionList({
         </div>
       </div>
 
-      {errorMessage ? (
-        <p
-          className="issues-status"
-          role="status"
-          aria-label={messages.agentsFeature.agentsStatus}
-        >
-          {errorMessage}
-        </p>
-      ) : null}
-      {isLoading ? (
-        <p className="issues-loading" role="status">
-          {messages.agentsFeature.loadingSessions}
-        </p>
-      ) : null}
+      <div className="agents-sidebar__body">
+        {errorMessage ? (
+          <p
+            className="issues-status"
+            role="status"
+            aria-label={messages.agentsFeature.agentsStatus}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
+        {isLoading ? (
+          <p className="issues-loading" role="status">
+            {messages.agentsFeature.loadingSessions}
+          </p>
+        ) : null}
 
-      {!isLoading && !errorMessage ? (
-        <SessionRows
-          messages={messages}
-          onSelect={onSelectSession}
-          selectedSessionId={selectedSessionId}
-          sessions={sessions}
-        />
-      ) : null}
+        {!isLoading && !errorMessage ? (
+          <SessionRows
+            messages={messages}
+            onSelect={onSelectSession}
+            selectedSessionId={selectedSessionId}
+            sessions={sessions}
+          />
+        ) : null}
+      </div>
     </aside>
   );
 }

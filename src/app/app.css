@@ -31,6 +31,9 @@ body,
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  /* WebKit 在滚动锚定改写 scrollTop 后，下一次点击的命中位置会相对光标向下偏移。
+     运行中的 session 会持续改高度；文档滚动口退出锚定，避免活动栏被带着错位。 */
+  overflow-anchor: none;
 }
 
 body {
