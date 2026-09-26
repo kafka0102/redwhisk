@@ -799,7 +799,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
-    /// turn 开始：记录 turn_started_at，供 turn 正常结束时累加处理时长。
+    /// turn 开始：记录 turn_started_at，供活跃时长心跳做 Turn 边界夹取与诊断。
     pub fn update_turn_started_at(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
@@ -844,15 +844,25 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
-    /// turn 正常完成：写结束时间与最后输出时间，并按 turn_started_at 原子累加
-    /// processing_ms。漏记 turn_started_at 时本次不计（COALESCE 兜底为 0 增量），
-    /// 避免负值或异常值污染累计处理时长。
+    /// 活跃时长心跳：对「运行中且当前 turn 正在运行」的会话批量累加一次活跃时长。
+    /// 累加值以当前 Turn 开始时刻夹取，Turn 开始之前的时间不计入本轮；漏记
+    /// turn_started_at 时不累加（COALESCE 兜底为 0）。单条 UPDATE 覆盖全部命中会话。
+    pub fn accumulate_active_time_ms(&self, active_ms: i64, now: i64) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET processing_ms = processing_ms + MIN(?1, MAX(0, ?2 - COALESCE(turn_started_at, ?2)))
+             WHERE status = 'running' AND is_turn_running = 1 AND del = 0",
+            params![active_ms, now],
+        )
+    }
+
+    /// turn 正常完成：写结束时间与最后输出时间。processing_ms 由活跃时长心跳
+    /// 独占累加，此处不再按 turn_started_at 的墙钟差追加。
     pub fn record_turn_completed(&self, session_id: i64, now: i64) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
              SET turn_ended_at = ?1,
                  last_output_at = ?1,
-                 processing_ms = processing_ms + MAX(0, ?1 - COALESCE(turn_started_at, ?1)),
                  last_active_at = MAX(last_active_at + 1, ?1)
              WHERE id = ?2 AND status = 'running' AND del = 0",
             params![now, session_id],

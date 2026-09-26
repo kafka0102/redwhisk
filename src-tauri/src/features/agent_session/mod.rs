@@ -2,6 +2,8 @@
 // commands/agent_session_commands + session_monitor_commands + session_workspace_commands。
 // 详见 docs/architecture-design/backend-feature-first-refactor.md §四.1 与 ADR-0013。
 
+mod active_time;
+pub mod active_time_heartbeat;
 mod codex_session_id_capture;
 mod command_snapshot;
 pub mod commands;

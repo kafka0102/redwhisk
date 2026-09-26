@@ -3832,7 +3832,7 @@ mod tests {
     }
 
     #[test]
-    fn record_turn_completed_accumulates_processing_ms_and_writes_last_output_at() {
+    fn record_turn_completed_writes_times_without_touching_processing_ms() {
         let database = setup_session_list_database();
         insert_session_list_row(
             &database,
@@ -3846,8 +3846,15 @@ mod tests {
         );
         let repository = AgentSessionRepository::new(&database);
         repository
+            .update_turn_running(410, true, 1_000)
+            .expect("start turn");
+        repository
             .update_turn_started_at(410, 1_000)
-            .expect("set turn_started_at");
+            .expect("set turn start");
+        // 累计处理时长由活跃时长心跳独占写入；Turn 正常完成不再追加墙钟差。
+        repository
+            .accumulate_active_time_ms(3_000, 4_000)
+            .expect("accumulate active time");
         repository
             .record_turn_completed(410, 4_200)
             .expect("complete turn");
@@ -3859,8 +3866,8 @@ mod tests {
                     [],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
-                .expect("read duration columns");
-        assert_eq!(processing_ms, 3_200);
+            .expect("read duration columns");
+        assert_eq!(processing_ms, 3_000);
         assert_eq!(last_output_at, Some(4_200));
         assert_eq!(turn_ended_at, Some(4_200));
 
@@ -3871,12 +3878,12 @@ mod tests {
             .iter()
             .find(|session| session.session_id == 410)
             .expect("find session");
-        assert_eq!(session.processing_ms, 3_200);
+        assert_eq!(session.processing_ms, 3_000);
         assert_eq!(session.last_output_at, Some(4_200));
     }
 
     #[test]
-    fn record_turn_completed_accumulates_across_multiple_turns() {
+    fn record_turn_completed_does_not_accumulate_across_multiple_turns() {
         let database = setup_session_list_database();
         insert_session_list_row(
             &database,
@@ -3909,11 +3916,11 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("read processing_ms");
-        assert_eq!(processing_ms, 5_200);
+        assert_eq!(processing_ms, 0);
     }
 
     #[test]
-    fn record_turn_completed_skips_accumulation_when_started_at_missing() {
+    fn record_turn_completed_without_turn_start_keeps_processing_ms_and_writes_last_output_at() {
         let database = setup_session_list_database();
         insert_session_list_row(
             &database,
@@ -3926,7 +3933,7 @@ mod tests {
             None,
         );
         let repository = AgentSessionRepository::new(&database);
-        // 漏记 turn_started_at 直接完成：COALESCE 兜底，本次不计入，避免负值。
+        // 漏记 turn_started_at 直接完成：仍照旧写最后输出时间，累计值不受影响。
         repository
             .record_turn_completed(412, 4_200)
             .expect("complete turn");
@@ -3940,6 +3947,150 @@ mod tests {
             .expect("read columns");
         assert_eq!(processing_ms, 0);
         assert_eq!(last_output_at, Some(4_200));
+    }
+
+    fn active_time_processing_ms(connection: &Connection, session_id: i64) -> i64 {
+        connection
+            .query_row(
+                "SELECT processing_ms FROM agent_sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .expect("read processing_ms")
+    }
+
+    /// 直接置 Turn 运行标记：仓储方法带 status / del 守卫，构造「已停止 / 已删除但
+    /// Turn 标记仍在」的组合只能写库。
+    fn force_session_turn_running(connection: &Connection, session_id: i64, turn_started_at: i64) {
+        connection
+            .execute(
+                "UPDATE agent_sessions SET is_turn_running = 1, turn_started_at = ?1 WHERE id = ?2",
+                params![turn_started_at, session_id],
+            )
+            .expect("start turn");
+    }
+
+    #[test]
+    fn active_time_heartbeat_accumulates_only_running_sessions_with_running_turn() {
+        let database = setup_session_list_database();
+        let repository = AgentSessionRepository::new(&database);
+        insert_session_list_row(
+            &database,
+            420,
+            Some(50),
+            Some("Active issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        repository
+            .update_turn_running(420, true, 95_000)
+            .expect("start turn");
+        repository
+            .update_turn_started_at(420, 95_000)
+            .expect("set turn start");
+        // 运行中但 Turn 不在跑：Turn 之间的用户等待不计入。
+        insert_session_list_row(
+            &database,
+            421,
+            Some(51),
+            Some("Idle turn issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        // 已停止：心跳不再累加。
+        insert_session_list_row(
+            &database,
+            422,
+            Some(52),
+            Some("Stopped issue"),
+            Some("running"),
+            AgentSessionStatus::Stopped,
+            1_000,
+            Some(90_000),
+        );
+        force_session_turn_running(&database, 422, 95_000);
+        // 已软删除：心跳不再累加。
+        insert_session_list_row(
+            &database,
+            423,
+            Some(53),
+            Some("Deleted issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        force_session_turn_running(&database, 423, 95_000);
+        database
+            .execute("UPDATE agent_sessions SET del = 1 WHERE id = 423", [])
+            .expect("soft delete session");
+
+        repository
+            .accumulate_active_time_ms(5_000, 100_000)
+            .expect("accumulate active time");
+
+        assert_eq!(active_time_processing_ms(&database, 420), 5_000);
+        assert_eq!(active_time_processing_ms(&database, 421), 0);
+        assert_eq!(active_time_processing_ms(&database, 422), 0);
+        assert_eq!(active_time_processing_ms(&database, 423), 0);
+    }
+
+    #[test]
+    fn active_time_heartbeat_clamps_accumulation_to_turn_start() {
+        let database = setup_session_list_database();
+        let repository = AgentSessionRepository::new(&database);
+        insert_session_list_row(
+            &database,
+            424,
+            Some(54),
+            Some("Clamped issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        // Turn 只跑了 1 秒：本次 5 秒活跃增量里，Turn 开始前的 4 秒被夹掉。
+        repository
+            .update_turn_running(424, true, 99_000)
+            .expect("start turn");
+        repository
+            .update_turn_started_at(424, 99_000)
+            .expect("set turn start");
+
+        repository
+            .accumulate_active_time_ms(5_000, 100_000)
+            .expect("accumulate active time");
+
+        assert_eq!(active_time_processing_ms(&database, 424), 1_000);
+    }
+
+    #[test]
+    fn active_time_heartbeat_accumulates_nothing_without_turn_start() {
+        let database = setup_session_list_database();
+        let repository = AgentSessionRepository::new(&database);
+        insert_session_list_row(
+            &database,
+            425,
+            Some(55),
+            Some("Missing turn start issue"),
+            Some("running"),
+            AgentSessionStatus::Running,
+            1_000,
+            None,
+        );
+        repository
+            .update_turn_running(425, true, 95_000)
+            .expect("start turn without started_at");
+
+        repository
+            .accumulate_active_time_ms(5_000, 100_000)
+            .expect("accumulate active time");
+
+        assert_eq!(active_time_processing_ms(&database, 425), 0);
     }
 
     #[test]
@@ -3957,11 +4108,14 @@ mod tests {
         );
         let repository = AgentSessionRepository::new(&database);
         repository
-            .update_turn_started_at(413, 1_000)
-            .expect("set started");
+            .update_turn_running(413, true, 1_000)
+            .expect("start turn");
         repository
-            .record_turn_completed(413, 4_200)
-            .expect("complete turn");
+            .update_turn_started_at(413, 1_000)
+            .expect("set turn start");
+        repository
+            .accumulate_active_time_ms(3_000, 4_000)
+            .expect("accumulate active time");
 
         // 模拟 crashed 收尾（mark_terminated SQL）：清 turn_started_at，processing_ms 保留。
         database
@@ -3979,7 +4133,7 @@ mod tests {
             )
             .expect("read columns");
         assert_eq!(turn_started_at, None);
-        assert_eq!(processing_ms, 3_200);
+        assert_eq!(processing_ms, 3_000);
     }
 
     #[test]
