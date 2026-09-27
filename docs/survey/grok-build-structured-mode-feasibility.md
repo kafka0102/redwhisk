@@ -4,7 +4,10 @@
 > 上游项目：https://github.com/xai-org/grok-build（Apache-2.0，Rust）
 > 本机 CLI：`grok 1.0.41 (4220f3b224a6)`，路径 `/Users/yujianjia/.local/bin/grok`
 > 目标：判定能否把 Grok 从 **TUI-only** 升级为 **Codex app-server 式结构化接入**（JSON 化渲染，不走 TUI），并核实 token 用量 / 精确耗时等统计信息可得性。
-> 姊妹文档：[agent-output-format-survey.md](./agent-output-format-survey.md)（跨 Agent 清单）、[opencode-json-mode-feasibility.md](./opencode-json-mode-feasibility.md)（上一轮同构调研）
+> 姊妹文档：
+> - [grok-build-acp-protocol-notes.md](./grok-build-acp-protocol-notes.md)：`agent stdio` / ACP **源码级**协议事实（`xai-org/grok-build@036a5d83`）
+> - [grok-build-cli-probe-notes.md](./grok-build-cli-probe-notes.md)：`grok 1.0.41` 的 CLI **运行时实测**记录（含复现脚本）
+> - [agent-output-format-survey.md](./agent-output-format-survey.md)（跨 Agent 清单）、[opencode-json-mode-feasibility.md](./opencode-json-mode-feasibility.md)（上一轮同构调研）
 > 事实源优先级：`docs/**` > `AGENTS.md` > 代码与实测；RedWhisk 侧结论均给 `文件:行号`。
 
 ## 0. 结论
@@ -17,15 +20,16 @@
 | JSON 化渲染 | 可达成。前端 `message-stream-reducer` 与 timeline 渲染 **provider 无关**，Grok 产出合规 `AgentStreamEvent` 即可零改动切换（§6.4） |
 | token 统计 | **可拿到且比 headless 更全**：本轮 + session 累计双口径（input/output/cached-read/cache-creation/reasoning/modelCalls/numTurns），可归一到 ADR-0039 现成三项（§4） |
 | 精确执行时间 | Turn 级现成承接位可直接用；**更细的 API 耗时 / 端到端耗时 / 首 token 延迟均可从 ACP 事件算得**，但 TTFT 与每步耗时在 RedWhisk 侧无落库位，需扩模型（§4.3） |
-| 明确缺口 | **cost / 金额**：所有结构化输出均无该字段（当前第三方端点下；未在 xAI 官方端点验证） |
+| cost / 金额 | **协议支持、运行时常缺**：源码有 `costUsdTicks` / `costIsPartial`（1 USD = 1e10 ticks），但本机（第三方 `base_url`）所有结构化输出都未出现该字段，推断是端点未提供价格表；未用 xAI 官方端点验证（§4.4） |
+| 审批可回复 | **源码确证支持**：ACP 阻塞式反向请求 `request_permission`（另统一 ask_user_question / exit_plan_mode / MCP elicitation），运行时因 `always-approve` 未捕获，实现前建议补测一次（§8） |
 | 主要风险 | 客户端状态机复杂度（长驻进程不退出、9 条 setup 进度、MCP 冷启动 5s+、`available_commands` 重复推送、工具增量走私有通知）；闭源二进制字段漂移 |
 | 工作量（粗估） | 约 **2.5–4 人周**、17–26 个文件（§7.3） |
 
 ### 0.1 给后续 session 的接手指引
 
-1. 先读 §1–§4 建立「Grok 端有什么」的事实底座，再读 §6 的 RedWhisk 改动清单。
+1. 先读两份姊妹文档建立事实底座：[grok-build-acp-protocol-notes.md](./grok-build-acp-protocol-notes.md)（源码侧协议与字段）+ [grok-build-cli-probe-notes.md](./grok-build-cli-probe-notes.md)（运行时实测报文）；本文件 §1–§4 是二者的收口摘要。
 2. §6.2 是可直接开票的最小改动清单；§6.3 给出 Grok 事件 → `AgentStreamEvent` 的映射表。
-3. §8 列出尚未验证的 8 项，其中「权限请求实数方法」与「`session/load` 跨进程恢复」建议在实现前补测一次（各 1 次最小调用）。
+3. §8 列出尚未验证的 8 项；其中只有「权限请求的 wire 细节」与「`session/load` 跨进程恢复」需要运行时补测（源码已有明确实现），其余为可选。
 4. 若只做最小可用版本：`grok agent stdio` + 文本/推理/工具三类事件 + token 三项 + resume，即可对标现有 OpenCode json 能力。
 
 ---
@@ -34,7 +38,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 仓库 | `xai-org/grok-build`，默认分支 `main`，Apache-2.0，主语言 Rust |
+| 仓库 | `xai-org/grok-build`，默认分支 `main`，Apache-2.0，主语言 Rust（**开源可读**，调研基线 `SOURCE_REV=036a5d83`） |
 | 项目自述 | 「coding agent harness and TUI. Fullscreen, mouse interactive, extensible.」 |
 | 本机版本 | `grok 1.0.41 (4220f3b224a6)`（与调研时 `main` 同代） |
 | 配置 | `~/.grok/config.toml`（本机 `[ui] permission_mode = "always-approve"`，`endpoints.models_base_url` 指向第三方端点，非 xAI 官方） |
@@ -65,7 +69,7 @@
 | 权限交互 | 有事件（`pending_interaction` / `interaction_resolved`） | 无 | 无 |
 | token | 本轮 + session 累计双口径 | 本轮口径 | 本轮口径 + `end` 汇总 |
 | **耗时** | ✅ `usage.apiDurationMs`、`turn_completed.elapsed_ms`、事件级 ms 时间戳 | ❌ | ❌ |
-| cost | ❌ | ❌ | ❌ |
+| cost | 协议有字段（`costUsdTicks`）、运行时未返回 | ❌ | ❌ |
 | 建议 | **接入主路径** | 仅探活/回归用 | 不采用（易被误当 ACP 等价物） |
 
 > 关键提示：`streaming-json` 的 help 自述「one ACP session update per line, the agent's native format」，但**实测其 `type` 集合与 ACP `session/update` 结构不同**，不能互相替代（§3.5）。
@@ -163,11 +167,36 @@
 {"method":"_x.ai/session_notification","params":{"update":{"sessionUpdate":"interaction_resolved","tool_call_id":"call-..."}}}
 ```
 
-**未捕获** server→client 带 `id` 的权限请求（ACP 标准方法为 `session/request_permission`），也**未验证** `ask_user_question` 是否复用同一通道。要做「可回复审批」必须先补测（§8）。
+**未捕获** server→client 带 `id` 的权限请求（ACP 标准方法为 `session/request_permission`），也**未验证** `ask_user_question` 是否复用同一通道。
+
+**源码侧已确证**：审批是**阻塞式 ACP 反向请求** `request_permission`，并统一覆盖 `ask_user_question`、`exit_plan_mode`、MCP elicitation，同时广播 `pending_interaction` / `interaction_resolved`（`crates/codegen/xai-grok-shell/src/session/pending_interaction.rs:1-13,24-32,69-93`）。因此「可回复审批」在协议上成立，运行时 wire 细节仍需补测一次（§8）。
 
 ### 3.7 进程生命周期
 
 `grok agent stdio` 完成 `session/prompt` 后**保持存活**，等下一轮或新 session，**不自动退出** —— 客户端必须显式关 stdin / kill；这与「每轮子进程」的 Claude/OpenCode 模型不同，adapter 需要长驻 handle。
+
+### 3.8 源码级复核（上游仓库证据）
+
+以下为对 `xai-org/grok-build@036a5d83` 阅读所得的硬证据（完整清单见 [grok-build-acp-protocol-notes.md](./grok-build-acp-protocol-notes.md)）：
+
+| 事实 | 证据 |
+| --- | --- |
+| `agent stdio` 子命令存在（另有 `headless` / `serve` / `leader`） | `crates/codegen/xai-grok-pager/src/app/cli.rs:330-338` |
+| 协议是**标准 ACP**（crate `agent-client-protocol 0.10.4`，features `["unstable"]`），非私造协议 | `Cargo.toml:118`；`Cargo.lock:43-45` |
+| method 注册表：`initialize` / `authenticate` / `session/new` / `session/load` / `session/set_mode` / `session/set_model` / `session/prompt` / `session/cancel`，能力位另有 `session/list` / `session/resume` / `session/close` | `crates/codegen/xai-acp-lib/src/message.rs:356-383`；`crates/codegen/xai-grok-shell/src/agent/mvp_agent/acp_agent.rs:94-97,602,954,967,973,979,985,997,1852,1918,1940,1946` |
+| 服务端实现 `impl acp::Agent for MvpAgent` | `crates/codegen/xai-grok-shell/src/agent/mvp_agent/acp_agent.rs:92` |
+| 扩展事件枚举 `SessionUpdate`（含 `PendingInteraction`/`InteractionResolved`/`TurnCompleted`/`Subagent*`/`Plan*` 等） | `crates/codegen/xai-grok-shell/src/extensions/notification.rs:501` 起 |
+| `_meta` 字段构成（`totalTokens`/`eventId`/`agentTimestampMs`/`promptId`/`streamStartMs`/`turnStartMs`/`updateType`/`chunkId`/`isReplay`） | `crates/codegen/xai-grok-shell/src/session/acp_session_impl/updates.rs:283-313`；客户端类型 `crates/codegen/xai-grok-pager/src/acp/meta.rs:14-36` |
+| 用量结构（`PromptUsage` / `PromptUsageModel` / `ResponseUsage`）与 `apiDurationMs` | `crates/codegen/xai-grok-shell/src/extensions/notification.rs:107-126,207-243,247-258` |
+| 每 turn `elapsed_ms` | `crates/codegen/xai-grok-shell/src/extensions/notification.rs:1103-1122` |
+| cost：`costUsdTicks`（1 USD = 1e10 ticks）+ `costIsPartial` | `crates/codegen/xai-grok-shell/src/extensions/notification.rs:229-235,309` |
+| `--output-format` 枚举 `plain` / `json` / `streaming-json` / `streaming-messages-json` 与其 reducer 映射 | `crates/codegen/xai-grok-pager/src/headless/cli.rs:9-20`；`.../headless/reducer/mod.rs:430-432` |
+| 稳定性：stdio/ACP 路径无 `experimental` / `deprecated` 标注；客户端对 `_meta` 全字段 `Option` + 优雅降级 | `Cargo.toml:118`；`crates/codegen/xai-grok-pager/src/acp/meta.rs:5-6` |
+
+补充事实（源码级，未运行时验证）：
+
+- `--output-format streaming-messages-json`（Anthropic wire format）的终态 result 含 `total_cost_usd` / `duration_api_ms`（`crates/codegen/xai-grok-pager/src/headless/reducer/messages/usage.rs:17-100`）—— 即「headless 完全无耗时」仅对 `json` / `streaming-json` 成立。
+- 用量存在双口径：ACP 的 `inputTokens` 含 cache 读取，headless result 口径为去缓存（`crates/codegen/xai-grok-shell/src/extensions/notification.rs:104,324`）；`session/prompt` 响应 `_meta` 的 sibling token 字段（`inputTokens` 等）**只代表最后一次模型调用**，整轮统计在 `_meta.usage`（`crates/codegen/xai-grok-shell/src/agent/mvp_agent/mod.rs:424-469`）。
 
 ---
 
@@ -188,10 +217,12 @@
 | **端到端耗时**（含工具/MCP/hook） | ❌ | ❌ | ✅ `turn_completed.elapsed_ms`（实测 21162 / 20685 / 7856 ms） | ❌ |
 | 分段/事件级时间戳 | ❌ | ❌ | ✅ `agentTimestampMs` / `streamStartMs` / `turnStartMs` | ➖ |
 | hook / MCP 阶段耗时 | ❌ | ❌ | ✅ `hook_execution.runs[].status.elapsed_ms`、`mcp_initialized.elapsedMs` | ➖ |
-| **cost / 金额** | ❌ | ❌ | ❌ | ❌（help 自称含 cost，实际只有 token） |
+| **cost / 金额** | ❌ | ❌ | ❌（运行时）／ ✅（协议字段） | ❌（`grok usage` 自称含 cost，实际只打印 token） |
 | 工具调用明细 | ❌ | ❌ | ✅ tool_call / tool_call_update（含 `rawOutput`） | ➖ |
 
 **即：token 用量三种格式都有；「精确执行时间」只有 ACP 有。**
+
+> cost 的两处差异需要区分「**协议/字段是否存在**」与「**本机端点是否返回**」：源码明确有 `costUsdTicks` + `costIsPartial`，本机（第三方 `base_url`）实测则完全没出现该字段，推断为端点未提供价格表（详见 §4.4）。
 
 ### 4.2 可自算的延迟指标（ACP）
 
@@ -221,6 +252,16 @@
 2. **Turn 级执行时间零改动**（ADR-0043 自动生效）。
 3. **TTFT / 每步耗时 / cost 无现成位**，需扩 `AgentUsage` + 事件 variant + DB migration + DTO + UI，属新增能力，不是照搬。
 
+### 4.4 cost 的「协议有 vs 运行时没有」
+
+| 视角 | 结论 | 证据 |
+| --- | --- | --- |
+| 协议/字段 | **有**：`costUsdTicks`（1 USD = 1e10 ticks）+ `costIsPartial` 可信度标记，`streaming-messages-json` 终态还提供 `total_cost_usd` | `crates/codegen/xai-grok-shell/src/extensions/notification.rs:229-235,309`；`crates/codegen/xai-grok-pager/src/headless/reducer/messages/usage.rs:17-100` |
+| 本机运行时 | **没有**：`json` / `streaming-json` / ACP 三路实测输出全文 grep 无 cost 字段 | [grok-build-cli-probe-notes.md](./grok-build-cli-probe-notes.md) §0、§5 |
+| 推断 | 本机 `~/.grok/config.toml` 的 `base_url` 指向第三方端点，缺 xAI 价格表 → 字段被省略；**未用官方端点验证** | 同上 |
+
+接入建议：把 cost 视为**可选增益**——adapter 侧按「有则透传、无则留空」处理；RedWhisk 若要展示，需要按 §4.3 第 3 条扩展模型（新增列 + DTO + UI），不建议本期做。
+
 ---
 
 ## 5. 与 Codex app-server 的能力对照
@@ -230,16 +271,18 @@
 | 传输 | JSON-RPC over stdio，长驻 | JSON-RPC 2.0 over stdio，长驻 | 同构 |
 | 会话建立 | `thread/start` → `threadId` | `session/new` → `sessionId` | 同构 |
 | 一轮对话 | `turn/start` + 通知流 | `session/prompt` + 通知流 | 同构 |
-| 恢复会话 | `thread/resume` | `loadSession:true` + `sessionCapabilities.resume`（**未实测**） | 待验证 |
-| 取消 | `turn/interrupt` | `session/cancel`（仅能力声明） | 待验证 |
+| 恢复会话 | `thread/resume` | `session/resume` / `session/load`（`loadSession:true`），源码有实现（`acp_agent.rs:967,979`），**跨进程未实测** | 对应，运行时待验证 |
+| 取消 | `turn/interrupt` | `session/cancel`（可带 `cancelTrigger`：`send_now`/`ctrl_c`/`esc`；`acp_agent.rs:1852`） | 对应 |
 | 增量文本 / 推理 | 有 | `agent_message_chunk` / `agent_thought_chunk` | 同构 |
 | 工具生命周期 | 有 | `tool_call` / `tool_call_update`（含 `rawOutput`） | 同构，Grok 额外有 `rawInput`/`locations` |
-| 审批可回复 | `respond_permission` | `pending_interaction(kind=permission)`（**可回复性未验证**） | 关键待验证 |
+| 审批可回复 | `respond_permission` | **阻塞式反向请求 `request_permission`**（统一 ask_user_question / exit_plan_mode / MCP elicitation）+ `pending_interaction`/`interaction_resolved` | 源码确证对应；wire 细节待补测 |
 | token 用量 | `thread/tokenUsage/updated` | `usage` / `turn_completed` / `response_completed` | 同构，Grok 额外给 `apiDurationMs` |
 | 耗时 | 无 | `apiDurationMs` / `elapsed_ms` / 事件级 ms | **Grok 更强** |
-| cost | 无 | 无 | 平 |
+| cost | 无 | `costUsdTicks` + `costIsPartial`（本机端点未返回） | **Grok 更强（协议层）** |
+| 子代理 / 计划 | 计划事件 | `SubagentSpawned/Progress/Finished`、`PlanExecuting/Kept/Cleared`、`goal`/`workflow` 命令 | Grok 扩展更丰富（无 RedWhisk 承接位，需决策） |
+| 多客户端共享 | 无（每会话一个 stdio） | `agent serve`（WS 2419）/ `agent leader`（unix socket、Windows named pipe） | Grok 多出 leader 拓扑，本期不用 |
 | 长期存活 | 是 | 是（且不自动退出） | 同构 |
-| 协议来源 | 官方文档 + 闭源二进制 | ACP 标准 + xAI 私有扩展（闭源二进制） | 均为「文档/实测」级，非源码可证 |
+| 协议来源 | 官方文档 + 闭源二进制 | **开源仓库可读**（Apache-2.0）+ ACP 标准 crate `agent-client-protocol 0.10.4` + xAI 私有扩展 | Grok 侧已提升到**源码可证**（见 §3.8） |
 
 差异需要 adapter 额外处理的部分：`_x.ai/*` 私有通知、9 条 setup 进度、MCP 冷启动与健康通知、`available_commands` 重复推送。
 
@@ -333,7 +376,7 @@
 
 现有模型里**没有对应位**、需决策的项：
 
-1. 可回复审批（取决于 §8 补测结果）。
+1. 可回复审批：协议侧源码确证为阻塞式反向请求 `request_permission`（`pending_interaction.rs:1-13,24-32,69-93`），现有 `AgentSessionHandle::respond_permission` 承接位可用；运行时 wire 细节待补测（§8 第 1 项）。
 2. TTFT / 每步耗时 / cost（需扩模型，见 §4.3）。
 3. `ToolCallDetail::Edit` 目前仅 `{ path, diff }`（`src-tauri/src/types/agent_session_stream.rs:145-149`）；Grok `rawInput.variant=ReadFile` 这类结构需按 `ToolCallDetail` 二次分发，未知工具落 `Unknown { raw_input, raw_output }`。
 4. 多模态输入：`initialize` 声明 `promptCapabilities.image=false`，本期按「仅文本路径」处理。
@@ -359,8 +402,9 @@
 | --- | --- | --- |
 | 客户端状态机复杂度：长驻进程不退出、9 条 setup、MCP 冷启动 5s+、`available_commands` 重复、工具增量走私有通知 | **高** | 按 §3 时序建模；幂等覆盖；启动态与 turn 态分离；超时与 kill 兜底 |
 | 协议稳定性（闭源二进制，`_x.ai/*` 私有扩展） | 中 | 解析宽容（忽略未知字段）；fixture 固化 + 版本钉 `grok 1.0.41`；adapter 内做版本探测 |
-| 审批语义未确认 | 中 | 先按 OpenCode 决策（dangerous / full-access → `--always-approve`，其它情形接受限制并文档化）；补测后再决定是否实装审批卡 |
-| 会话恢复（跨进程 `session/load`）未实测 | 中 | 先做「同进程多轮」；resume 按 `WhenPresent`，失败回退新建 |
+| 审批 wire 细节未实测（协议已确证） | 中 | 先按 OpenCode 决策（dangerous / full-access → `--always-approve`）；补测 `request_permission` 后即可实装审批卡（承接位已在） |
+| 会话恢复跨进程未实测（源码有实现） | 中 | 先做「同进程多轮」；resume 按 `WhenPresent`，失败回退新建 |
+| 用量双口径（ACP 含 cache / headless 去 cache；`_meta` sibling 字段只代表最后一次模型调用） | 中 | adapter 统一以 `_meta.usage`（整轮）+ `turn_completed` 为准，落库前归一；不要读 sibling 字段当整轮统计 |
 | 规范条文：`plan_still_rejects_grok` 等既有测试需同步改 | 低 | 同 PR 内改测试与文档 |
 | 跨平台子进程 / PATH | 中 | 复用 `opencode_streaming` 的 spawn 工具与 `command_detector` 探测（`src-tauri/src/agent/command_detector.rs:56`） |
 | `streaming-json` 被误用为 ACP 等价物 | 低 | 在 adapter 注释与文档中显式声明二者不等价（本文件 §2） |
@@ -375,7 +419,7 @@
 | 多轮 | **过** | 同 sessionId 连续 `session/prompt` 实测通过 |
 | token 统计 | **过** | 本轮 + 累计双口径（§4.1） |
 | 精确耗时 | **过（ACP）** | `apiDurationMs` / `elapsed_ms` / 事件级 ms 时间戳 |
-| 可回复审批 | **待补测** | 仅观测到自动放行的 `pending_interaction` |
+| 可回复审批 | **过（源码级）／待运行时复核** | 阻塞式反向请求 `request_permission`（`pending_interaction.rs:1-13,24-32,69-93`）；实测仅捕获到自动放行的 `pending_interaction` |
 | 可复现样例 | **过** | 两次独立进程 trace，stdout 全合法 JSON、stderr 空 |
 
 → **总判定 GO**：可进入结构化最小实现。
@@ -384,7 +428,7 @@
 
 | 阶段 | 内容 | 文件数 | 估时 |
 | --- | --- | --- | --- |
-| P0 补测收口 | 权限请求方法、`session/load`、`session/cancel` | 0 | 0.5 人日 |
+| P0 补测收口 | `request_permission` wire 细节、`session/load`、`session/cancel`（源码实现已知，仅补运行时样本） | 0 | 0.5 人日 |
 | P1 adapter 骨架 | `grok_streaming/` transport + session + argv + `mod.rs` | 5–7 | 0.5–1 人周 |
 | P2 事件映射 | `event_mapper.rs` + `usage.rs` + `tool_detail.rs` | 2–3 | 0.5–1 人周 |
 | P3 descriptor + factory 解锁 | `provider_factory.rs` / `provider_descriptor_grok.rs` / `provider_descriptor_command.rs` | 3–4 | 0.5 人周 |
@@ -396,32 +440,33 @@
 
 - **go**：本期可交付「`grok agent stdio` adapter + descriptor/factory 解锁 + 前端 displayMode 解锁 + token 三项 + Turn 级时长」。
 - **no-go 条件**（出现则退回 TUI-only）：ACP 事件信封在新版本破坏性变更且无兼容余地；无法稳定拿到 session id / 助手文本；`agent stdio` 在目标平台不可用。
-- **可延后**：TTFT / 每步耗时落库、cost（当前不可得）、多模态输入、`session/load` 跨进程恢复。
+- **可延后**：TTFT / 每步耗时落库、cost 展示（协议有字段、本机端点不返回，需官方端点或价格表）、多模态输入、`session/load` 跨进程恢复。
 
 ---
 
 ## 8. 待补测项（实现前建议各跑 1 次最小调用）
 
-| # | 项 | 影响 |
-| --- | --- | --- |
-| 1 | 关闭 `always-approve` 后，server→client 权限请求的真实方法名与字段（`session/request_permission`？）及客户端回复格式 | 决定是否实装审批卡 |
-| 2 | `session/load` 跨进程恢复（新进程内用旧 sessionId） | 决定 resume 实现 |
-| 3 | `session/cancel` / `session/close` 的行为与事件 | 决定取消语义 |
-| 4 | `ask_user_question` 是否复用 `pending_interaction` | 决定是否支持交互式提问 |
-| 5 | `--json-schema` / `streaming-messages-json` / `--include-partial-messages` | 本期不需要，仅记录 |
-| 6 | cost 字段在 xAI 官方端点下是否出现 | 决定「费用展示」是否列一票 |
-| 7 | `grok agent serve`（WebSocket）多客户端语义 | 本期不需要 |
-| 8 | Windows 下 `agent stdio` 行为 | 跨平台支持 |
+| # | 项 | 源码级状态 | 需运行时补测？ | 影响 |
+| --- | --- | --- | --- | --- |
+| 1 | 关闭 `always-approve` 后 server→client 权限请求的报文与回复格式 | 方法为阻塞式反向请求 `request_permission`，统一覆盖 ask_user_question / exit_plan_mode / MCP elicitation（`pending_interaction.rs:1-13,24-32,69-93`） | **是**（wire 细节） | 决定审批卡实现；承接位已在 |
+| 2 | `session/load` 跨进程恢复（新进程用旧 sessionId） | `load_session` 已实现且带 replay（`acp_agent.rs:967`；`_meta.isReplay`） | 是 | 决定 resume 实现 |
+| 3 | `session/cancel` / `session/close` 行为与事件 | `cancel` 已实现，可带 `cancelTrigger`（`acp_agent.rs:1852-1866`；`mod.rs:459-462`） | 是 | 决定取消语义 |
+| 4 | `ask_user_question` 是否复用 `pending_interaction` | **已答**：与 `request_permission` 同一通道族 | 否 | 交互式提问可复用审批通道 |
+| 5 | `--json-schema` / `streaming-messages-json` / `--include-partial-messages` | 枚举与 reducer 已定位（`headless/cli.rs:9-20`、`reducer/mod.rs:430-432`） | 否（本期不需要） | 仅记录 |
+| 6 | cost 字段在 xAI 官方端点下是否出现 | `costUsdTicks` / `costIsPartial` 已确证存在 | 需官方端点（非本机第三方 `base_url`） | 决定「费用展示」是否列一票 |
+| 7 | `grok agent serve`（WebSocket）/ `agent leader` 多客户端语义 | 均已实现（`server.rs:56-60`；`leader/mod.rs:5-31`） | 否（本期不需要） | 可选拓扑 |
+| 8 | Windows 下 `agent stdio` 行为 | 仅 leader IPC 的 named pipe 有源码证据（`leader/transport.rs:1-14`） | 是（若有 Windows 支持计划） | 跨平台支持 |
 
 ---
 
 ## 9. 证据索引
 
-**Grok 端（实测）**
+**Grok 端**
 
+- 源码级协议事实（含逐条 `文件:行号`）：[grok-build-acp-protocol-notes.md](./grok-build-acp-protocol-notes.md)（`xai-org/grok-build@036a5d83`）
+- 运行时实测记录（含报文、时序、复现脚本）：[grok-build-cli-probe-notes.md](./grok-build-cli-probe-notes.md)（`grok 1.0.41`）
 - 命令面：`grok --help` / `grok agent --help` / `grok agent stdio --help`（见 §1、§2）
-- ACP trace：`/tmp/grok-probe/acp-trace.ndjson`（94 行）、`/tmp/grok-probe/acp-trace2.ndjson`（164 行）
-- headless 样本：`grok -p "..." --output-format json` / `streaming-json`（见 §2、§4.1）
+- headless 样本：`grok -p "..." --output-format json` / `streaming-json`（见 §2、§4）
 - 持久化：`grok usage <session-id>` 分轮 token 输出（见 §4.1）
 
 **RedWhisk 侧**
@@ -445,4 +490,4 @@
 - [ADR-0043 会话活跃时长](../adr/0043-session-duration-active-time.md)
 - [Agent Provider 协议](../architecture-design/agent-provider-protocol.md)
 
-> 说明：本文件中的 Grok 端结论来自**实测**（`grok 1.0.41`，两次独立 stdio 进程 + 4 次最小 prompt），非文档转述；RedWhisk 侧结论来自代码阅读，均标 `文件:行号`。
+> 说明：本文件的 Grok 端结论由两类一手证据支撑——**上游源码阅读**（`xai-org/grok-build@036a5d83`）与**运行时实测**（`grok 1.0.41`，两次独立 stdio 进程 + 4 次最小 prompt），二者分别完整保存在 [grok-build-acp-protocol-notes.md](./grok-build-acp-protocol-notes.md) 与 [grok-build-cli-probe-notes.md](./grok-build-cli-probe-notes.md)；RedWhisk 侧结论来自本仓库代码阅读，均标 `文件:行号`。
