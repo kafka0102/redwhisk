@@ -7,6 +7,12 @@
 //! - `tool_call` / `tool_call_update` → `ToolCall`（Pending → running → completed/failed）；
 //! - 无对应位的事件（`available_commands_update` 重复推送、MCP / setup 进度、
 //!   `tool_call_delta_chunk`、`pending_interaction` 等）既不新增事件类型，也不误发为 turn 事件。
+//!
+//! **`tool_call_delta_chunk` 裁决**：实测首个 `tool_call` 事件已携带完整 `rawInput`，
+//! 且该增量帧的 `arguments_delta` 为空串（无信息增量），故**不累积增量**——只按
+//! call id 累积完整入参（对多次 `rawInput` 做浅合并）与 `locations`（见
+//! `ToolCallState`）。裁决依据见
+//! `docs/survey/grok-build-cli-probe-notes.md` §3.5 与 ADR-0047「工具参数增量裁决」。
 
 use std::collections::HashMap;
 
@@ -31,9 +37,23 @@ pub struct GrokStreamMapper {
     assistant_text: String,
     reasoning_text: String,
     message_index: usize,
-    /// 每个 toolCallId 首帧（`tool_call`）登记的工具名；后续 `tool_call_update`
-    /// 只带 kind/title，用它保持同一工具名。
-    tool_names: HashMap<String, String>,
+    /// 每个 toolCallId 跨更新累积的状态（工具名 + 最近一次完整入参 / locations）。
+    tool_calls: HashMap<String, ToolCallState>,
+}
+
+/// 同一 toolCallId 跨更新的累积状态。
+///
+/// 真实报文里首个 `tool_call` 帧带完整 `rawInput`，进行中的 `tool_call_update`
+/// 带 `rawInput.variant` / `locations`，而完成帧（`status:"completed"`）只带
+/// `content` / `rawOutput`、**不再携带** `rawInput` / `locations`（见
+/// `docs/survey/grok-build-cli-probe-notes.md` §3.5）。若每帧只按当前 update
+/// 现算详情，完成帧会退化成空壳（丢 path、未知工具丢 rawInput），故在此按
+/// call id 累积入参（对多次 `rawInput` 做浅合并）与 locations，供后续帧复用。
+#[derive(Default)]
+struct ToolCallState {
+    name: Option<String>,
+    raw_input: Value,
+    locations: Vec<String>,
 }
 
 impl Default for GrokStreamMapper {
@@ -52,7 +72,7 @@ impl GrokStreamMapper {
             assistant_text: String::new(),
             reasoning_text: String::new(),
             message_index: 0,
-            tool_names: HashMap::new(),
+            tool_calls: HashMap::new(),
         }
     }
 
@@ -65,7 +85,7 @@ impl GrokStreamMapper {
         self.assistant_text.clear();
         self.reasoning_text.clear();
         self.message_index = 0;
-        self.tool_names.clear();
+        self.tool_calls.clear();
     }
 
     /// 当前 turn id（服务端 `promptId` 优先，否则本地兜底 id）。
@@ -210,26 +230,40 @@ impl GrokStreamMapper {
                     events.push(AgentStreamEvent::UsageUpdated { usage });
                 }
             }
-            // tool_call_delta_chunk / pending_interaction / interaction_resolved /
-            // hook_* / subagent_* / plan_* 等：仅内部状态，不映射为 turn 事件。
+            // `tool_call_delta_chunk`（工具参数增量）**有意忽略、不累积**：实测
+            // `arguments_delta` 为空串，首个 `tool_call` 已带完整 rawInput，没有信息增量
+            // （裁决见模块文档与 ADR-0047「工具参数增量裁决」）。
+            // pending_interaction / interaction_resolved / hook_* / subagent_* / plan_*
+            // 等同为仅内部状态，不映射为 turn 事件。
             _ => {}
         }
     }
 
     fn map_tool_call(&mut self, update: &Value) -> Option<AgentStreamEvent> {
         let call_id = string_field(update, "toolCallId")?;
-        let tool_name = self
-            .tool_names
-            .get(&call_id)
-            .cloned()
-            .or_else(|| non_empty(&tool_name_from_update(update)))
-            .or_else(|| string_field(update, "kind"))
-            .unwrap_or_default();
-        if !tool_name.is_empty() {
-            self.tool_names.insert(call_id.clone(), tool_name.clone());
-        }
-        let input = update.get("rawInput").cloned().unwrap_or(Value::Null);
-        let locations = location_paths(update);
+        let incoming_input = update
+            .get("rawInput")
+            .filter(|value| !value.is_null())
+            .cloned();
+        let incoming_locations = location_paths(update);
+        let (tool_name, input, locations) = {
+            let state = self.tool_calls.entry(call_id.clone()).or_default();
+            if state.name.is_none() {
+                state.name = non_empty(&tool_name_from_update(update))
+                    .or_else(|| string_field(update, "kind"));
+            }
+            if let Some(input) = incoming_input {
+                state.raw_input = merge_tool_input(&state.raw_input, &input);
+            }
+            if !incoming_locations.is_empty() {
+                state.locations = incoming_locations;
+            }
+            (
+                state.name.clone().unwrap_or_default(),
+                state.raw_input.clone(),
+                state.locations.clone(),
+            )
+        };
         let output = tool_output_text(update);
         let status = tool_status(update.get("status").and_then(Value::as_str));
         let (detail, display_name) =
@@ -312,6 +346,22 @@ fn tool_status(status: Option<&str>) -> ToolCallStatus {
     }
 }
 
+/// 合并同一 toolCallId 的两次 `rawInput`。真实报文里首个 `tool_call` 给完整入参，
+/// 后续 `tool_call_update` 可能只带 `variant` 等子集；整段覆盖会丢字段，故对 JSON
+/// 对象做浅合并（同名字段以新值为准），非对象入参直接取新值。
+fn merge_tool_input(existing: &Value, incoming: &Value) -> Value {
+    match (existing, incoming) {
+        (Value::Object(previous), Value::Object(next)) => {
+            let mut merged = previous.clone();
+            for (key, value) in next {
+                merged.insert(key.clone(), value.clone());
+            }
+            Value::Object(merged)
+        }
+        (_, incoming) => incoming.clone(),
+    }
+}
+
 fn location_paths(update: &Value) -> Vec<String> {
     update
         .get("locations")
@@ -345,3 +395,7 @@ fn non_empty(text: &str) -> Option<String> {
 #[cfg(test)]
 #[path = "event_mapper_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tool_lifecycle_tests.rs"]
+mod tool_lifecycle_tests;

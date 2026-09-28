@@ -52,7 +52,8 @@ Codex / Claude / OpenCode 同档的消息流渲染、turn 状态、用量统计�
    `session/prompt` 结果的 usage → `UsageUpdated` / `TurnCompleted.usage`；`stopReason` →
    `TurnCompleted.stop_reason`。无对应位的通知（`available_commands_update` 重复推送、MCP /
    setup 进度、`tool_call_delta_chunk`、`pending_interaction` 等）既不新增事件类型，也不误发为
-   turn 事件；解析对未知字段宽容，对重复通知幂等。
+   turn 事件；解析对未知字段宽容，对重复通知幂等。（工具参数增量的处理见文末
+   「工具参数增量裁决」。）
 7. **用量口径不新增字段**：把 Grok 的整会话累计 `_meta.usage` 收成既有
    `session_token_input` / `session_token_output` / `session_token_cache` 三项，
    合并策略 `Overwrite`（与 Codex 线程累计一致）；执行时长沿用 ADR-0043 的 json 口径（活跃时长心跳）。
@@ -90,6 +91,30 @@ Codex / Claude / OpenCode 同档的消息流渲染、turn 状态、用量统计�
 | 结构化参数写进命令快照（`-m` / `--always-approve`） | 快照是跨重启的事实源，模型 / 权限策略变化时无法重建；沿用 OpenCode「快照只存基命令、参数 adapter 现算」 |
 | 用字面 cwd 建会话 | Grok 会话落盘 key 取物理路径，符号链接路径会让 TUI 看不到会话（本次硬验收点） |
 | 本期实装可回复审批卡 | ACP `session/request_permission` 的 wire 细节尚未补测，先按危险 / full-access 自动放行收口 |
+
+## 补充：工具参数增量裁决（2026-09-28）
+
+**问题**：既然首个 `tool_call` 事件已带完整 `rawInput`，`tool_call_delta_chunk`
+（工具参数增量）是否还有信息增量？是否需要按增量累积？
+
+**证据**（[grok-build-cli-probe-notes.md](../survey/grok-build-cli-probe-notes.md) §3.5，
+`grok 1.0.41` 实测）：
+
+- 首个 `tool_call` 事件即携带完整 `rawInput`（`{"target_file":"/tmp/grok-probe/hello.txt"}`），
+  无需增量即可拿到完整入参。
+- 随后 `tool_call_delta_chunk`（走 `_x.ai/session_notification`，**不是** `session/update`）
+  实测 `arguments_delta` 为**空串**，`tool_index` / `name` 与首事件重复，没有新信息。
+- 完成帧 `tool_call_update`（`status:"completed"`）只带 `content` / `rawOutput`，
+  **不再携带** `rawInput` / `locations`。
+
+**决定**：`tool_call_delta_chunk` **保持忽略、不做增量累积**；只按 `toolCallId`
+累积完整入参（对多次 `rawInput` 做浅合并，避免后续只带 `variant` 子集的帧丢字段）
+与 `locations`，供完成帧复用以保证详情自洽
+（见 `event_mapper.rs` 的 `ToolCallState`）。若未来实测出现「增量先到、完整参数缺失」
+的真实场景，再按 TDD 改为累积（完成时以 `rawInput` / `rawOutput` 覆盖）。
+
+**理由**：当前样本下增量为空、完整参数已在首帧到达，累积是无信息的额外状态；
+忽略它同时把「完成帧缺 `rawInput` / `locations`」的退化由前端合并前移到 adapter。
 
 ## 代码事实来源
 

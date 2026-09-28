@@ -129,52 +129,8 @@ fn accumulates_assistant_text_across_chunks() {
     }
 }
 
-#[test]
-fn maps_tool_call_lifecycle_to_running_then_completed() {
-    let mut mapper = GrokStreamMapper::new();
-    mapper.begin_turn("t".into());
-
-    let events = mapper.on_notification(
-        "session/update",
-        &json!({
-            "update": {
-                "sessionUpdate": "tool_call",
-                "toolCallId": "call-1",
-                "title": "read_file",
-                "rawInput": {"target_file": "/tmp/hello.txt"},
-                "_meta": {"x.ai/tool": {"name": "read_file", "kind": "read", "label": "Read"}}
-            },
-            "_meta": prompt_meta("p-1")
-        }),
-    );
-    let running = last_tool_call(&events);
-    assert_eq!(running.0, "call-1");
-    assert_eq!(running.1, "read");
-    assert_eq!(running.2, ToolCallStatus::Running);
-
-    let events = mapper.on_notification(
-        "session/update",
-        &json!({
-            "update": {
-                "sessionUpdate": "tool_call_update",
-                "toolCallId": "call-1",
-                "status": "completed",
-                "locations": [{"path": "/tmp/hello.txt"}],
-                "rawOutput": {"type": "ReadFile", "FileContent": {"raw_output": "hello\n", "total_lines": 2}}
-            },
-            "_meta": prompt_meta("p-1")
-        }),
-    );
-    let completed = last_tool_call(&events);
-    assert_eq!(completed.2, ToolCallStatus::Completed);
-    match completed.3 {
-        crate::types::agent_session_stream::ToolCallDetail::Read { path, content } => {
-            assert_eq!(path, "/tmp/hello.txt");
-            assert_eq!(content.as_deref(), Some("hello\n"));
-        }
-        other => panic!("unexpected detail {other:?}"),
-    }
-}
+// 工具调用生命周期 / 增量裁决 / 未知工具兜底的断言见 `tool_lifecycle_tests.rs`，
+// 本文件只保留 turn 级事件序列断言。
 
 #[test]
 fn private_and_unknown_notifications_never_become_turn_events() {
@@ -266,28 +222,4 @@ fn process_exit_fails_an_unfinished_turn() {
         event,
         AgentStreamEvent::TurnFailed { turn_id: Some(id), .. } if id == "t-2"
     ));
-}
-
-fn last_tool_call(
-    events: &[AgentStreamEvent],
-) -> (
-    String,
-    String,
-    ToolCallStatus,
-    crate::types::agent_session_stream::ToolCallDetail,
-) {
-    match events.last() {
-        Some(AgentStreamEvent::Timeline {
-            item:
-                AgentTimelineItem::ToolCall {
-                    call_id,
-                    name,
-                    detail,
-                    status,
-                    ..
-                },
-            ..
-        }) => (call_id.clone(), name.clone(), *status, detail.clone()),
-        other => panic!("unexpected {other:?}"),
-    }
 }
