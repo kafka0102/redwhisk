@@ -5,7 +5,6 @@
 
 use super::*;
 use super::session_test_support::*;
-use crate::agent::grok_streaming::event_mapper::GrokStreamMapper;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
 };
@@ -50,8 +49,8 @@ fn starts_session_and_exposes_session_id_from_session_new() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, _log) = write_fake_grok(temp.path(), "start.log", false);
 
-    let handle =
-        GrokSessionHandle::start(config(&binary, temp.path(), None)).expect("start grok session");
+    let handle = GrokSessionHandle::start(grok_session_config(&binary, temp.path(), None))
+        .expect("start grok session");
 
     assert_eq!(handle.thread_id().as_deref(), Some("grok-fake-1"));
     assert_eq!(handle.session_id().as_deref(), Some("grok-fake-1"));
@@ -64,7 +63,7 @@ fn uses_session_load_for_resume_and_keeps_original_id() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, log) = write_fake_grok(temp.path(), "resume.log", false);
 
-    let handle = GrokSessionHandle::start(config(
+    let handle = GrokSessionHandle::start(grok_session_config(
         &binary,
         temp.path(),
         Some("grok-existing-session"),
@@ -84,8 +83,12 @@ fn resume_falls_back_to_new_session_when_load_fails() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, log) = write_fake_grok(temp.path(), "fallback.log", true);
 
-    let handle = GrokSessionHandle::start(config(&binary, temp.path(), Some("stale-session")))
-        .expect("fallback to session/new");
+    let handle = GrokSessionHandle::start(grok_session_config(
+        &binary,
+        temp.path(),
+        Some("stale-session"),
+    ))
+    .expect("fallback to session/new");
 
     assert_eq!(handle.thread_id().as_deref(), Some("grok-fake-1"));
     let content = wait_for_log(&log, "\"method\":\"session/new\"");
@@ -99,8 +102,8 @@ fn sends_prompt_with_user_text_and_model_argv() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, log) = write_fake_grok(temp.path(), "prompt.log", false);
 
-    let handle =
-        GrokSessionHandle::start(config(&binary, temp.path(), None)).expect("start grok session");
+    let handle = GrokSessionHandle::start(grok_session_config(&binary, temp.path(), None))
+        .expect("start grok session");
     handle
         .send_message("hello from redwhisk".into(), Vec::new())
         .expect("send message");
@@ -124,7 +127,8 @@ fn canonicalizes_cwd_before_session_new() {
     let link = real.clone();
 
     let (binary, log) = write_fake_grok(temp.path(), "cwd.log", false);
-    let handle = GrokSessionHandle::start(config(&binary, &link, None)).expect("start");
+    let handle =
+        GrokSessionHandle::start(grok_session_config(&binary, &link, None)).expect("start");
 
     let expected = fs::canonicalize(&real).expect("canonical");
     let content = wait_for_log(&log, "\"method\":\"session/new\"");
@@ -140,7 +144,8 @@ fn canonicalizes_cwd_before_session_new() {
 fn cancel_without_active_turn_is_not_a_silent_success() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, _log) = write_fake_grok(temp.path(), "cancel.log", false);
-    let handle = GrokSessionHandle::start(config(&binary, temp.path(), None)).expect("start");
+    let handle =
+        GrokSessionHandle::start(grok_session_config(&binary, temp.path(), None)).expect("start");
 
     let as_trait: &dyn AgentSessionHandle = &handle;
     assert!(matches!(
@@ -157,34 +162,13 @@ fn fake_server_drives_assistant_and_reasoning_stream_events() {
     let (binary, _log) = write_fake_grok(temp.path(), "stream.log", false);
 
     // 直接驱动 transport + mapper（与 session 内部装配一致），断言事件序列。
-    let transport = GrokStreamingTransport::spawn(
-        &binary.to_string_lossy(),
-        &["agent".into(), "stdio".into()],
-        Some(&temp.path().to_string_lossy()),
-    )
-    .expect("spawn fake grok");
-    transport
-        .request(INITIALIZE_METHOD, json!({"protocolVersion": 1}))
-        .expect("initialize");
+    let transport = spawn_initialized_fake_transport(&binary, temp.path());
     let session = transport
         .request(SESSION_NEW_METHOD, json!({"cwd": "/tmp", "mcpServers": []}))
         .expect("session/new");
     assert_eq!(session["sessionId"], "grok-fake-1");
 
-    let collected = Arc::new(Mutex::new(Vec::<AgentStreamEvent>::new()));
-    let sink = Arc::clone(&collected);
-    let mapper = Mutex::new({
-        let mut mapper = GrokStreamMapper::new();
-        mapper.begin_turn("local-turn".into());
-        mapper
-    });
-    transport.set_notification_handler(Arc::new(move |method, params| {
-        let events = mapper
-            .lock()
-            .expect("mapper lock")
-            .on_notification(method, params);
-        sink.lock().expect("sink lock").extend(events);
-    }));
+    let collector = collect_events(&transport);
 
     transport
         .request(
@@ -193,7 +177,7 @@ fn fake_server_drives_assistant_and_reasoning_stream_events() {
         )
         .expect("session/prompt");
 
-    let events = collected.lock().expect("events").clone();
+    let events = collector.events.lock().expect("events").clone();
     assert_eq!(summarize(&events), vec![
         "turn_started".to_string(),
         "reasoning".to_string(),
@@ -214,34 +198,8 @@ fn fake_server_replays_real_tool_call_lifecycle() {
         &FAKE_SERVER_TOOL_TEMPLATE.replace("__LOG__", &log.to_string_lossy()),
     );
 
-    let cwd = temp.path().to_string_lossy().into_owned();
-    let transport = GrokStreamingTransport::spawn(
-        &script_path.to_string_lossy(),
-        &["agent".into(), "stdio".into()],
-        Some(&cwd),
-    )
-    .expect("spawn fake grok");
-    transport
-        .request(INITIALIZE_METHOD, json!({"protocolVersion": 1}))
-        .expect("initialize");
-    transport
-        .request(SESSION_NEW_METHOD, json!({"cwd": cwd, "mcpServers": []}))
-        .expect("session/new");
-
-    let collected = Arc::new(Mutex::new(Vec::<AgentStreamEvent>::new()));
-    let sink = Arc::clone(&collected);
-    let mapper = Mutex::new({
-        let mut mapper = GrokStreamMapper::new();
-        mapper.begin_turn("local-turn".into());
-        mapper
-    });
-    transport.set_notification_handler(Arc::new(move |method, params| {
-        let events = mapper
-            .lock()
-            .expect("mapper lock")
-            .on_notification(method, params);
-        sink.lock().expect("sink lock").extend(events);
-    }));
+    let transport = spawn_fake_transport(&script_path, temp.path());
+    let collector = collect_events(&transport);
 
     transport
         .request(
@@ -250,7 +208,7 @@ fn fake_server_replays_real_tool_call_lifecycle() {
         )
         .expect("session/prompt");
 
-    let events = collected.lock().expect("events").clone();
+    let events = collector.events.lock().expect("events").clone();
     // 完整生命周期：TurnStarted → Pending/进行中（同一卡片）→ 完成；随后未知工具
     // （含重复推送）复用同一卡片；最后助手消息。`tool_call_delta_chunk` 被忽略。
     assert_eq!(

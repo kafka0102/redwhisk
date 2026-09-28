@@ -1,11 +1,14 @@
 //! `GrokSessionHandle` 恢复路径集成测试：`session/load` 之后仍是同一个 Grok 会话。
 //!
 //! 用假 `grok` 可执行文件扮演 ACP 服务端；不启真实 grok、不依赖网络与凭据。
-//! 假服务端与事件断言辅助复用 `session_test_support`，不与 `session_tests` 重复样板。
+//!
+//! 事件观测 seam：`AgentEventBroadcaster` 在没有 `AppHandle` 时按设计丢弃事件，
+//! headless 测试拿不到 handle 的 Tauri 广播；因此 handle 层断言「恢复保留原 id，
+//! 且后续轮次仍发给原会话」，事件序列与用量口径则与既有 adapter 事件用例同 seam
+//! （`transport + GrokStreamMapper`，即 `GrokSessionHandle` 内部的同一装配）。
 
 use super::session_test_support::*;
 use super::*;
-use crate::agent::grok_streaming::event_mapper::GrokStreamMapper;
 use crate::types::agent_session_stream::{AgentStreamEvent, SessionTokenMerge};
 
 /// 恢复（`session/load`）后的轮次必须沿用原 session id，不悄悄切到新会话。
@@ -14,9 +17,17 @@ fn resumed_session_prompts_with_the_original_session_id() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, log) = write_fake_grok(temp.path(), "resume-prompt.log", false);
 
-    let handle =
-        GrokSessionHandle::start(config(&binary, temp.path(), Some("grok-existing-session")))
-            .expect("resume grok session");
+    let handle = GrokSessionHandle::start(grok_session_config(
+        &binary,
+        temp.path(),
+        Some("grok-existing-session"),
+    ))
+    .expect("resume grok session");
+    assert_eq!(
+        handle.session_id().as_deref(),
+        Some("grok-existing-session")
+    );
+
     handle
         .send_message("continue the same session".into(), Vec::new())
         .expect("send message");
@@ -27,6 +38,10 @@ fn resumed_session_prompts_with_the_original_session_id() {
         "恢复后的 prompt 未沿用原 session id，log:\n{content}"
     );
     assert!(!content.contains("grok-fake-1"));
+    assert_eq!(
+        handle.session_id().as_deref(),
+        Some("grok-existing-session")
+    );
 
     handle.shutdown();
 }
@@ -37,15 +52,7 @@ fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
     let temp = tempfile::tempdir().expect("temp");
     let (binary, _log) = write_fake_grok(temp.path(), "resume-stream.log", false);
 
-    let transport = GrokStreamingTransport::spawn(
-        &binary.to_string_lossy(),
-        &["agent".into(), "stdio".into()],
-        Some(&temp.path().to_string_lossy()),
-    )
-    .expect("spawn fake grok");
-    transport
-        .request(INITIALIZE_METHOD, json!({"protocolVersion": 1}))
-        .expect("initialize");
+    let transport = spawn_initialized_fake_transport(&binary, temp.path());
     let loaded = transport
         .request(
             SESSION_LOAD_METHOD,
@@ -54,22 +61,7 @@ fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
         .expect("session/load");
     assert_eq!(loaded["sessionId"], "grok-fake-1");
 
-    let collected = Arc::new(Mutex::new(Vec::<AgentStreamEvent>::new()));
-    let sink = Arc::clone(&collected);
-    let mapper = Arc::new(Mutex::new({
-        let mut mapper = GrokStreamMapper::new();
-        mapper.begin_turn("local-turn".into());
-        mapper
-    }));
-    let handler_mapper = Arc::clone(&mapper);
-    transport.set_notification_handler(Arc::new(move |method, params| {
-        let events = handler_mapper
-            .lock()
-            .expect("mapper lock")
-            .on_notification(method, params);
-        sink.lock().expect("sink lock").extend(events);
-    }));
-
+    let collector = collect_events(&transport);
     let result = transport
         .request(
             SESSION_PROMPT_METHOD,
@@ -77,7 +69,7 @@ fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
         )
         .expect("session/prompt");
 
-    let notifications = collected.lock().expect("events").clone();
+    let notifications = collector.events.lock().expect("events").clone();
     assert_eq!(
         summarize(&notifications),
         vec![
@@ -88,7 +80,8 @@ fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
         ]
     );
 
-    let completion = mapper
+    let completion = collector
+        .mapper
         .lock()
         .expect("mapper lock")
         .on_prompt_result(&result);

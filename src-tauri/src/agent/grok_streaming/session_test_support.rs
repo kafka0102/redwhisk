@@ -85,7 +85,7 @@ pub(super) fn summarize(events: &[AgentStreamEvent]) -> Vec<String> {
 }
 
 /// 指向假服务端脚本的会话配置（危险模式 + full-access，与真机 TUI 默认对齐）。
-pub(super) fn config(
+pub(super) fn grok_session_config(
     binary: &Path,
     cwd: &Path,
     resume_session_id: Option<&str>,
@@ -101,6 +101,35 @@ pub(super) fn config(
         broadcaster: AgentEventBroadcaster::new(),
         resume_session_id: resume_session_id.map(str::to_string),
     }
+}
+
+/// 事件采集夹具：与 `GrokSessionHandle` 内部同一装配（transport 通知 → mapper）。
+///
+/// `AgentEventBroadcaster` 在无 `AppHandle` 时按设计丢弃事件，headless 测试观测
+/// 广播事件只能落在这一层，与既有 adapter 事件用例保持同一 seam。
+pub(super) struct EventCollector {
+    pub(super) events: Arc<Mutex<Vec<AgentStreamEvent>>>,
+    pub(super) mapper: Arc<Mutex<GrokStreamMapper>>,
+}
+
+/// 挂上通知处理：把 mapper 归一后的事件累积进 sink；调用方随后发 prompt 再读 `events`。
+pub(super) fn collect_events(transport: &GrokStreamingTransport) -> EventCollector {
+    let events = Arc::new(Mutex::new(Vec::<AgentStreamEvent>::new()));
+    let sink = Arc::clone(&events);
+    let mapper = Arc::new(Mutex::new({
+        let mut mapper = GrokStreamMapper::new();
+        mapper.begin_turn("local-turn".into());
+        mapper
+    }));
+    let handler_mapper = Arc::clone(&mapper);
+    transport.set_notification_handler(Arc::new(move |method, params| {
+        let mapped = handler_mapper
+            .lock()
+            .expect("mapper lock")
+            .on_notification(method, params);
+        sink.lock().expect("sink lock").extend(mapped);
+    }));
+    EventCollector { events, mapper }
 }
 
 /// 轮询等待假服务端日志出现指定内容，避免与写日志线程竞态。
@@ -145,8 +174,11 @@ pub(super) fn write_fake_template(
     (script_path, log_path)
 }
 
-/// spawn 假服务端并完成 `initialize` + `session/new` 握手。
-pub(super) fn spawn_fake_transport(binary: &Path, cwd: &Path) -> GrokStreamingTransport {
+/// spawn 假服务端并完成 `initialize` 握手（新建 / 续接由调用方选择）。
+pub(super) fn spawn_initialized_fake_transport(
+    binary: &Path,
+    cwd: &Path,
+) -> GrokStreamingTransport {
     let transport = GrokStreamingTransport::spawn(
         &binary.to_string_lossy(),
         &["agent".into(), "stdio".into()],
@@ -156,6 +188,12 @@ pub(super) fn spawn_fake_transport(binary: &Path, cwd: &Path) -> GrokStreamingTr
     transport
         .request(INITIALIZE_METHOD, json!({"protocolVersion": 1}))
         .expect("initialize");
+    transport
+}
+
+/// spawn 假服务端并完成 `initialize` + `session/new` 握手。
+pub(super) fn spawn_fake_transport(binary: &Path, cwd: &Path) -> GrokStreamingTransport {
+    let transport = spawn_initialized_fake_transport(binary, cwd);
     transport
         .request(
             SESSION_NEW_METHOD,
