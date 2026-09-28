@@ -86,7 +86,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // 窗口关闭后：先取出该窗口曾归属的项目（移除映射后即不再显示在任何存活窗口），
-            // 再终止其运行态（PTY 装配的项目终端与 TUI Agent 会话共用同一注册路径）。
+            // 再终止其运行态（PTY 装配的项目终端与 TUI Agent 会话 + 结构化 Agent 会话）。
             // 同时清除归属映射，避免切换菜单把已不存在的窗口当作「已打开」而无法新建。
             if let tauri::WindowEvent::Destroyed = event {
                 if let Some(state) = window.try_state::<AppState>() {

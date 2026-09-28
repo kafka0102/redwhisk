@@ -2247,7 +2247,7 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     );
     let registry = AgentSessionRegistry::new();
     let (handle, _sent) = RecordingHandle::new();
-    registry.register(session_id, Arc::new(handle));
+    registry.register(project_id, session_id, Arc::new(handle));
 
     // 推进到 AutoCommitting（注入 commit 指令，但 agent 尚未提交）。
     service
@@ -2324,7 +2324,7 @@ fn detect_agent_commit_completion_returns_blocked_outcome_when_git_operation_sta
     );
     let registry = AgentSessionRegistry::new();
     let (handle, _sent) = RecordingHandle::new();
-    registry.register(session_id, Arc::new(handle));
+    registry.register(project_id, session_id, Arc::new(handle));
 
     // 推进到 AutoCommitting。
     service
@@ -3101,7 +3101,7 @@ fn complete_issue_flow_rebase_conflict_does_not_inject_prompt_before_user_confir
     // 注册活跃 session 句柄，用于断言 rebase 冲突时后端不会自动注入合并 prompt。
     let registry = AgentSessionRegistry::new();
     let (handle, sent) = RecordingHandle::new();
-    registry.register(session_id, Arc::new(handle));
+    registry.register(project_id, session_id, Arc::new(handle));
 
     let result = service
         .complete_issue_flow(
@@ -3157,7 +3157,7 @@ fn complete_issue_flow_auto_commit_injects_detects_and_confirms_completion() {
 
     let registry = AgentSessionRegistry::new();
     let (handle, sent) = RecordingHandle::new();
-    registry.register(session_id, Arc::new(handle));
+    registry.register(project_id, session_id, Arc::new(handle));
 
     // 1) dirty + AutoCommit → 注入 commit 指令，phase AutoCommitting。
     let wait = service
@@ -3271,7 +3271,7 @@ fn complete_issue_flow_auto_commit_confirm_false_cancels() {
     );
     let registry = AgentSessionRegistry::new();
     let (handle, _sent) = RecordingHandle::new();
-    registry.register(session_id, Arc::new(handle));
+    registry.register(project_id, session_id, Arc::new(handle));
 
     // 推进到 ConfirmingContinueAfterCommit。
     service

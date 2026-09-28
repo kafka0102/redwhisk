@@ -97,22 +97,30 @@ impl AppState {
         owned
     }
 
-    /// 终止某项目的全部运行态，返回本次成功终止的 PTY session id（升序）。
+    /// 终止某项目的全部运行态，返回本次终止的 session id（升序）。
     ///
     /// 这是「终止项目运行态」的唯一入口：窗口销毁、主窗口切走项目、应用退出三种触发点共用，
-    /// 保证行为一致。当前覆盖该项目全部 PTY 会话（项目终端与 TUI 模式 Agent 会话共用同一
-    /// 注册路径）；结构化 Agent 会话将在后续 ticket 并入此处。已无运行态时返回空、不报错。
+    /// 保证行为一致。终止对象并列为：该项目全部 PTY 会话（项目终端与 TUI 模式 Agent 会话共用
+    /// 同一注册路径）+ 该项目全部结构化 Agent 会话。已无运行态时返回空、不报错。
     pub fn terminate_project_runtime(&self, project_id: i64) -> Vec<i64> {
-        self.pty_sessions.kill_project(project_id)
+        let mut terminated = self.pty_sessions.kill_project(project_id);
+        terminated.extend(self.agent_sessions.shutdown_project(project_id));
+        terminated.sort_unstable();
+        terminated
     }
 
     /// 终止当前所有仍持有运行态的项目（应用退出路径），返回被终止的项目 id（升序）。
     ///
-    /// 以运行态注册表为准枚举项目，不依赖窗口归属映射（退出时窗口可能已被销毁）；
-    /// 无运行态的项目不会被枚举，因此不存在「已无运行态」导致的错误。
+    /// 以运行态注册表为准枚举项目（PTY 与结构化会话两个注册表取并集），不依赖窗口归属映射
+    /// （退出时窗口可能已被销毁）；覆盖「只有结构化会话、没有 PTY」的项目。无运行态的项目
+    /// 不会被枚举，因此不存在「已无运行态」导致的错误。
     pub fn terminate_all_project_runtimes(&self) -> Vec<i64> {
+        let mut project_ids = self.pty_sessions.registered_project_ids();
+        project_ids.extend(self.agent_sessions.registered_project_ids());
+        project_ids.sort_unstable();
+        project_ids.dedup();
         let mut terminated = Vec::new();
-        for project_id in self.pty_sessions.registered_project_ids() {
+        for project_id in project_ids {
             if !self.terminate_project_runtime(project_id).is_empty() {
                 terminated.push(project_id);
             }
@@ -124,7 +132,10 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::AppState;
+    use crate::agent::session_handle::AgentSessionHandle;
+    use crate::agent::session_registry::test_support::RecordingStubHandle;
     use crate::local_data_service::LocalDataService;
+    use std::sync::Arc;
 
     fn empty_state() -> AppState {
         AppState::new(LocalDataService::new())
@@ -319,5 +330,72 @@ mod tests {
             state.terminate_all_project_runtimes().is_empty(),
             "无任何运行态时退出终止应安全返回、不报错"
         );
+    }
+
+    #[test]
+    fn terminate_project_runtime_closes_structured_sessions_of_target_project() {
+        let state = empty_state();
+        let target = Arc::new(RecordingStubHandle::new());
+        let other = Arc::new(RecordingStubHandle::new());
+        state
+            .agent_sessions
+            .register(7, 11, Arc::clone(&target) as Arc<dyn AgentSessionHandle>);
+        state
+            .agent_sessions
+            .register(9, 22, Arc::clone(&other) as Arc<dyn AgentSessionHandle>);
+
+        let terminated = state.terminate_project_runtime(7);
+
+        assert_eq!(
+            terminated,
+            vec![11],
+            "共享终止入口应关闭目标项目的结构化会话"
+        );
+        assert_eq!(target.shutdown_count(), 1, "目标结构化句柄应被关闭一次");
+        assert!(!state.agent_sessions.contains(11), "关闭后目标句柄应已摘除");
+        assert_eq!(other.shutdown_count(), 0, "不应关闭其它项目的结构化句柄");
+        assert!(state.agent_sessions.contains(22), "其它项目句柄应保留");
+    }
+
+    #[test]
+    fn terminate_project_runtime_closes_both_pty_and_structured_sessions() {
+        let state = empty_state();
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(11, 7, true);
+        let handle = Arc::new(RecordingStubHandle::new());
+        state
+            .agent_sessions
+            .register(7, 44, Arc::clone(&handle) as Arc<dyn AgentSessionHandle>);
+
+        let terminated = state.terminate_project_runtime(7);
+
+        assert_eq!(
+            terminated,
+            vec![11, 44],
+            "终止入口应同时覆盖 PTY 与结构化会话（升序）"
+        );
+        assert_eq!(handle.shutdown_count(), 1, "结构化句柄应被关闭一次");
+    }
+
+    #[test]
+    fn terminate_all_project_runtimes_covers_structured_only_projects() {
+        let state = empty_state();
+        let a = Arc::new(RecordingStubHandle::new());
+        let b = Arc::new(RecordingStubHandle::new());
+        state
+            .agent_sessions
+            .register(7, 11, Arc::clone(&a) as Arc<dyn AgentSessionHandle>);
+        state
+            .agent_sessions
+            .register(9, 22, Arc::clone(&b) as Arc<dyn AgentSessionHandle>);
+
+        assert_eq!(
+            state.terminate_all_project_runtimes(),
+            vec![7, 9],
+            "仅有结构化会话、没有 PTY 的项目也应被退出终止枚举覆盖"
+        );
+        assert_eq!(a.shutdown_count(), 1, "项目 7 的结构化句柄应被关闭");
+        assert_eq!(b.shutdown_count(), 1, "项目 9 的结构化句柄应被关闭");
     }
 }

@@ -19,7 +19,7 @@ pub struct AgentSessionRegistry {
 }
 
 struct AgentSessionStore {
-    sessions: Mutex<HashMap<i64, Arc<dyn AgentSessionHandle>>>,
+    sessions: Mutex<HashMap<i64, RegisteredSession>>,
     /// 已写入 DB（`running`）但尚未 register 真实 handle 的 session id。
     ///
     /// 用于在 `start_agent_session` / `resume_agent_session` 等
@@ -28,6 +28,15 @@ struct AgentSessionStore {
     /// `list_agent_sessions` 触发的 `reconcile_unrecoverable_running_sessions`）
     /// 把刚创建的 session 误判为"重启遗留"并标记 `stopped`。
     starting: Mutex<HashSet<i64>>,
+}
+
+/// 注册表里一条运行中的会话记录：句柄 + 它所属的项目。
+///
+/// 记录 `project_id` 使注册表能按项目关闭会话：项目关闭时，只 shutdown
+/// 归属该项目的结构化句柄，不影响其它项目。
+struct RegisteredSession {
+    project_id: i64,
+    handle: Arc<dyn AgentSessionHandle>,
 }
 
 impl Default for AgentSessionStore {
@@ -49,13 +58,13 @@ impl AgentSessionRegistry {
         }
     }
 
-    /// 注册一个运行中的会话句柄。若同 id 已存在，旧句柄被覆盖
-    /// （调用方负责确保旧句柄已 `shutdown`）。
+    /// 注册一个运行中的会话句柄，并登记其项目归属。若同 id 已存在，旧句柄被
+    /// 覆盖（调用方负责确保旧句柄已 `shutdown`）。
     ///
     /// 注册成功后自动清除 `mark_starting` 留下的启动中标记。
-    pub fn register(&self, session_id: i64, handle: Arc<dyn AgentSessionHandle>) {
+    pub fn register(&self, project_id: i64, session_id: i64, handle: Arc<dyn AgentSessionHandle>) {
         if let Ok(mut sessions) = self.store.sessions.lock() {
-            sessions.insert(session_id, handle);
+            sessions.insert(session_id, RegisteredSession { project_id, handle });
         }
         if let Ok(mut starting) = self.store.starting.lock() {
             starting.remove(&session_id);
@@ -73,16 +82,64 @@ impl AgentSessionRegistry {
             .sessions
             .lock()
             .ok()
-            .and_then(|mut sessions| sessions.remove(&session_id))
+            .and_then(|mut sessions| sessions.remove(&session_id).map(|entry| entry.handle))
     }
 
     /// 取回运行中的会话句柄。
     pub fn get(&self, session_id: i64) -> Option<Arc<dyn AgentSessionHandle>> {
-        self.store
-            .sessions
-            .lock()
-            .ok()
-            .and_then(|sessions| sessions.get(&session_id).cloned())
+        self.store.sessions.lock().ok().and_then(|sessions| {
+            sessions
+                .get(&session_id)
+                .map(|entry| Arc::clone(&entry.handle))
+        })
+    }
+
+    /// 关闭归属指定项目的全部结构化会话：逐个 `shutdown` 并从注册表摘除，
+    /// 复用既有 shutdown 语义。返回本次关闭的 session id（升序）。
+    ///
+    /// 只作用于已 register 真实 handle 的会话；其它项目不受影响。项目无归属句柄
+    /// 时返回空、不报错，因此重复调用安全。
+    pub fn shutdown_project(&self, project_id: i64) -> Vec<i64> {
+        let mut closed: Vec<(i64, Arc<dyn AgentSessionHandle>)> = match self.store.sessions.lock() {
+            Ok(mut sessions) => {
+                let session_ids: Vec<i64> = sessions
+                    .iter()
+                    .filter(|(_, entry)| entry.project_id == project_id)
+                    .map(|(session_id, _)| *session_id)
+                    .collect();
+                session_ids
+                    .into_iter()
+                    .filter_map(|session_id| {
+                        sessions
+                            .remove(&session_id)
+                            .map(|entry| (session_id, entry.handle))
+                    })
+                    .collect()
+            }
+            Err(_) => Vec::new(),
+        };
+        closed.sort_by_key(|(session_id, _)| *session_id);
+        for (_, handle) in &closed {
+            handle.shutdown();
+        }
+        closed
+            .into_iter()
+            .map(|(session_id, _)| session_id)
+            .collect()
+    }
+
+    /// 当前仍持有结构化句柄的项目 id（去重、升序）。
+    ///
+    /// 应用退出时据此枚举需要终止的项目，与 [`AgentSessionRegistry::shutdown_project`]
+    /// 配对使用；覆盖「只有结构化会话、没有 PTY」的项目。
+    pub fn registered_project_ids(&self) -> Vec<i64> {
+        let Ok(sessions) = self.store.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut project_ids: Vec<i64> = sessions.values().map(|entry| entry.project_id).collect();
+        project_ids.sort_unstable();
+        project_ids.dedup();
+        project_ids
     }
 
     /// 判断指定会话是否仍由本注册表管理。
@@ -132,17 +189,33 @@ impl AgentSessionRegistry {
     }
 }
 
+/// 测试支撑：供 registry 自身与 `app_state` 的单元测试复用的句柄替身。
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agent::session_handle::AgentSessionError;
+pub(crate) mod test_support {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
     use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
     use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
 
-    /// 测试用的空句柄实现，仅用于验证注册表的存取语义。
-    struct StubHandle;
+    /// 只记录 `shutdown` 调用次数的句柄替身：其余方法为空实现。
+    pub(crate) struct RecordingStubHandle {
+        shutdown_count: AtomicUsize,
+    }
 
-    impl AgentSessionHandle for StubHandle {
+    impl RecordingStubHandle {
+        pub(crate) fn new() -> Self {
+            Self {
+                shutdown_count: AtomicUsize::new(0),
+            }
+        }
+
+        pub(crate) fn shutdown_count(&self) -> usize {
+            self.shutdown_count.load(Ordering::Acquire)
+        }
+    }
+
+    impl AgentSessionHandle for RecordingStubHandle {
         fn send_message(
             &self,
             _text: String,
@@ -178,11 +251,19 @@ mod tests {
         fn read_timeline(&self) -> Result<Vec<AgentTimelineItem>, AgentSessionError> {
             Ok(Vec::new())
         }
-        fn shutdown(&self) {}
+        fn shutdown(&self) {
+            self.shutdown_count.fetch_add(1, Ordering::AcqRel);
+        }
         fn thread_id(&self) -> Option<String> {
             None
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::session_registry::test_support::RecordingStubHandle;
 
     #[test]
     fn empty_registry_returns_none_and_does_not_contain() {
@@ -195,8 +276,8 @@ mod tests {
     #[test]
     fn register_then_get_and_unregister() {
         let registry = AgentSessionRegistry::new();
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(StubHandle);
-        registry.register(7, Arc::clone(&handle));
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(RecordingStubHandle::new());
+        registry.register(0, 7, Arc::clone(&handle));
 
         assert!(registry.contains(7));
         assert!(registry.get(7).is_some());
@@ -233,8 +314,8 @@ mod tests {
         registry.mark_starting(7);
         assert!(registry.contains(7));
 
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(StubHandle);
-        registry.register(7, Arc::clone(&handle));
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(RecordingStubHandle::new());
+        registry.register(0, 7, Arc::clone(&handle));
         // register 后 starting 标记被清除，但 sessions 里有真实 handle，
         // contains 仍为 true，get 返回真实 handle。
         assert!(registry.contains(7));
@@ -271,8 +352,8 @@ mod tests {
         // starting 的 session 不包含，避免被 cleanup 当作已注册候选。
         let registry = AgentSessionRegistry::new();
         registry.mark_starting(7);
-        let handle: Arc<dyn AgentSessionHandle> = Arc::new(StubHandle);
-        registry.register(9, handle);
+        let handle: Arc<dyn AgentSessionHandle> = Arc::new(RecordingStubHandle::new());
+        registry.register(0, 9, handle);
         let ids = registry.session_ids();
         assert!(ids.contains(&9));
         assert!(!ids.contains(&7));
@@ -287,5 +368,62 @@ mod tests {
         assert!(cloned.contains(7));
         cloned.unmark_starting(7);
         assert!(!registry.contains(7));
+    }
+
+    #[test]
+    fn shutdown_project_closes_only_target_project_handles() {
+        let registry = AgentSessionRegistry::new();
+        let target_a = Arc::new(RecordingStubHandle::new());
+        let target_b = Arc::new(RecordingStubHandle::new());
+        let other = Arc::new(RecordingStubHandle::new());
+        registry.register(7, 11, Arc::clone(&target_a) as Arc<dyn AgentSessionHandle>);
+        registry.register(7, 22, Arc::clone(&target_b) as Arc<dyn AgentSessionHandle>);
+        registry.register(9, 33, Arc::clone(&other) as Arc<dyn AgentSessionHandle>);
+
+        let closed = registry.shutdown_project(7);
+
+        assert_eq!(closed, vec![11, 22], "应关闭目标项目的全部句柄（升序）");
+        assert_eq!(target_a.shutdown_count(), 1, "目标句柄应被 shutdown 一次");
+        assert_eq!(target_b.shutdown_count(), 1, "目标句柄应被 shutdown 一次");
+        assert_eq!(other.shutdown_count(), 0, "不应关闭其它项目的句柄");
+        assert!(!registry.contains(11), "关闭后目标句柄应已摘除");
+        assert!(!registry.contains(22), "关闭后目标句柄应已摘除");
+        assert!(registry.contains(33), "其它项目的句柄应保留");
+        assert!(registry.get(33).is_some(), "其它项目的句柄应仍可取回");
+    }
+
+    #[test]
+    fn shutdown_project_without_handles_is_noop() {
+        let registry = AgentSessionRegistry::new();
+        registry.register(7, 11, Arc::new(RecordingStubHandle::new()));
+
+        assert!(
+            registry.shutdown_project(404).is_empty(),
+            "无归属该项目的句柄时不应关闭任何会话"
+        );
+        assert!(
+            registry.shutdown_project(404).is_empty(),
+            "重复关闭不存在的项目应安全返回"
+        );
+        assert!(registry.contains(11), "无关项目的句柄不受影响");
+    }
+
+    #[test]
+    fn registered_project_ids_lists_each_project_once() {
+        let registry = AgentSessionRegistry::new();
+        assert!(
+            registry.registered_project_ids().is_empty(),
+            "空注册表不应枚举出项目"
+        );
+
+        registry.register(7, 11, Arc::new(RecordingStubHandle::new()));
+        registry.register(7, 22, Arc::new(RecordingStubHandle::new()));
+        registry.register(9, 33, Arc::new(RecordingStubHandle::new()));
+
+        assert_eq!(
+            registry.registered_project_ids(),
+            vec![7, 9],
+            "应返回仍持有结构化句柄的项目 id（去重、升序）"
+        );
     }
 }

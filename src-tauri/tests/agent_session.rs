@@ -6,6 +6,7 @@ use redwhisk_lib::agent::pty_session_manager::{
 };
 use redwhisk_lib::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use redwhisk_lib::agent::session_registry::AgentSessionRegistry;
+use redwhisk_lib::app_state::AppState;
 use redwhisk_lib::db::agent_profile_repository::AgentProfileRepository;
 use redwhisk_lib::db::agent_session_repository::AgentSessionRepository;
 use redwhisk_lib::db::connection::DatabaseConfig;
@@ -19,6 +20,7 @@ use redwhisk_lib::db::project_repository::ProjectRepository;
 use redwhisk_lib::features::agent_session::AgentSessionService;
 use redwhisk_lib::features::issue::IssueService;
 use redwhisk_lib::git::worktree_name::issue_worktree_base_name;
+use redwhisk_lib::local_data_service::LocalDataService;
 use redwhisk_lib::types::agent_profile::{AgentScope, AgentType};
 use redwhisk_lib::types::agent_session::{
     AgentMessageAttachment, AgentPermissionDecision, AgentSessionAttention, AgentSessionPromptKind,
@@ -2808,7 +2810,11 @@ fn list_agent_sessions_runtime_result_reports_pruned_session_ids() {
     );
 
     let agent_registry = AgentSessionRegistry::new();
-    agent_registry.register(broken_session_id, Arc::new(NoopStructuredHandle));
+    agent_registry.register(
+        project_id,
+        broken_session_id,
+        Arc::new(NoopStructuredHandle),
+    );
 
     let result = AgentSessionService::list_agent_sessions_in_data_dir(
         temp_dir.path(),
@@ -2996,7 +3002,7 @@ fn reconcile_unrecoverable_running_sessions_keeps_registered_structured_session_
     let manager = PtySessionManager::new();
     let registry = AgentSessionRegistry::new();
     let handle: Arc<dyn AgentSessionHandle> = Arc::new(NoopStructuredHandle);
-    registry.register(session_id, handle);
+    registry.register(project_id, session_id, handle);
 
     service
         .reconcile_unrecoverable_running_sessions(project_id, &manager, &registry)
@@ -3008,6 +3014,62 @@ fn reconcile_unrecoverable_running_sessions_keeps_registered_structured_session_
         .expect("session exists");
     assert_eq!(session.status, AgentSessionStatus::Running);
     assert!(session.closed_at.is_none());
+}
+
+#[test]
+fn terminating_project_runtime_lets_reconcile_mark_structured_session_stopped() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project(&database.connection, "structured-terminate-reconcile");
+    let issue_id = insert_issue(&database.connection, project_id, "running");
+    let profile_id = insert_agent_profile(&database.connection, AgentScope::Global, None);
+    let session_id = insert_agent_session_row_with_details(
+        &database.connection,
+        issue_id,
+        profile_id,
+        AgentSessionStatus::Running,
+        AgentSessionAttention::None,
+        1_780_628_555_000,
+        None,
+        "/tmp/structured-terminate-reconcile.log",
+    );
+
+    // 运行态：结构化句柄已注册在项目下。
+    let state = AppState::new(LocalDataService::new());
+    let handle: Arc<dyn AgentSessionHandle> = Arc::new(NoopStructuredHandle);
+    state
+        .agent_sessions
+        .register(project_id, session_id, handle);
+
+    // 关闭项目：终止运行态，结构化句柄被 shutdown 并从注册表摘除。
+    state.terminate_project_runtime(project_id);
+
+    // 重开项目：list 触发的 reconcile 应把已关闭的结构化会话标记为 stopped，
+    // 而不是继续显示为运行中。
+    let service = AgentSessionService::new(
+        IssueRepository::new(&database.connection),
+        ProjectRepository::new(&database.connection),
+        AgentProfileRepository::new(&database.connection),
+        AgentSessionRepository::new(&database.connection),
+    );
+    service
+        .reconcile_unrecoverable_running_sessions(
+            project_id,
+            &state.pty_sessions,
+            &state.agent_sessions,
+        )
+        .expect("reconcile running sessions");
+
+    let session = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session exists");
+    assert_eq!(
+        session.status,
+        AgentSessionStatus::Stopped,
+        "关闭项目后重开项目，结构化会话不应仍显示为运行中"
+    );
+    assert!(session.closed_at.is_some());
 }
 
 #[test]
@@ -3725,7 +3787,7 @@ fn inject_session_prompt_sends_message_via_agent_registry_for_structured_session
     let manager = PtySessionManager::new();
     let registry = AgentSessionRegistry::new();
     let handle: Arc<dyn AgentSessionHandle> = Arc::new(RecordingStructuredHandle::default());
-    registry.register(session_id, handle);
+    registry.register(project_id, session_id, handle);
 
     let service = AgentSessionService::new(
         IssueRepository::new(&database.connection),

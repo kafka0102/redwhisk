@@ -3909,7 +3909,7 @@ mod tests {
     fn resolve_actual_execution_path_prefers_user_provided_override() {
         let session = resolver_session("/repo".to_string(), Some("/repo".to_string()));
         let registry = AgentSessionRegistry::new();
-        registry.register(1, Arc::new(CwdHandle(Some("/from-codex".to_string()))));
+        registry.register(1, 1, Arc::new(CwdHandle(Some("/from-codex".to_string()))));
         let input = CompleteIssueFlowInput {
             actual_path: Some("/user-override".to_string()),
             ..empty_input()
@@ -3928,7 +3928,7 @@ mod tests {
         let cwd = repo_dir.to_string_lossy().to_string();
         let session = resolver_session(cwd.clone(), Some(cwd.clone()));
         let registry = AgentSessionRegistry::new();
-        registry.register(1, Arc::new(CwdHandle(Some(cwd.clone()))));
+        registry.register(1, 1, Arc::new(CwdHandle(Some(cwd.clone()))));
         let actual = resolve_actual_execution_path(&empty_input(), &session, &registry);
         assert_eq!(actual.path, cwd);
         assert_eq!(actual.source, ActualPathSource::CodexCwd);
@@ -3967,7 +3967,7 @@ mod tests {
         let cwd = worktree_path.to_string_lossy().to_string();
         let session = resolver_session(startup.clone(), Some(startup.clone()));
         let registry = AgentSessionRegistry::new();
-        registry.register(1, Arc::new(CwdHandle(Some(cwd.clone()))));
+        registry.register(1, 1, Arc::new(CwdHandle(Some(cwd.clone()))));
         let actual = resolve_actual_execution_path(&empty_input(), &session, &registry);
         assert_eq!(actual.path, cwd);
         assert_eq!(actual.source, ActualPathSource::CodexCwd);

@@ -446,7 +446,11 @@ mod tests {
 
         let handle = Arc::new(RecordingHandle::new());
         let registry = AgentSessionRegistry::new();
-        registry.register(session.id, handle.clone() as Arc<dyn AgentSessionHandle>);
+        registry.register(
+            session.project_id,
+            session.id,
+            handle.clone() as Arc<dyn AgentSessionHandle>,
+        );
         let world = world("abc123");
         let ctx = EffectContext {
             repo_path: "/tmp/repo",
@@ -748,7 +752,11 @@ mod tests {
 
         let handle = Arc::new(RecordingHandle::new());
         let registry = AgentSessionRegistry::new();
-        registry.register(session.id, handle.clone() as Arc<dyn AgentSessionHandle>);
+        registry.register(
+            session.project_id,
+            session.id,
+            handle.clone() as Arc<dyn AgentSessionHandle>,
+        );
         let world = world("abc123");
         let ctx = EffectContext {
             repo_path: "/tmp/repo",

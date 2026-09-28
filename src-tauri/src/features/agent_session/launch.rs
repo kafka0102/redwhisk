@@ -85,7 +85,7 @@ impl AgentSessionService<'_> {
             let _ = self.rollback_failed_structured_issue_session(project_id, issue_id, session_id);
             return Err(agent_session_error_to_command_error(error));
         }
-        agent_registry.register(session_id, handle);
+        agent_registry.register(project_id, session_id, handle);
         remove_session_log_file(previous_archive_path);
         Ok(())
     }

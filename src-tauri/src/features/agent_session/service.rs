@@ -1750,7 +1750,7 @@ impl AgentSessionService<'_> {
             return Err(error);
         }
         broadcaster.register_session(session.id);
-        agent_registry.register(session.id, started.handle);
+        agent_registry.register(project_id, session.id, started.handle);
 
         Ok(ResumeAgentSessionResult {
             session_id: session.id,
@@ -6299,6 +6299,7 @@ mod tests {
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
         let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         registry.register(
+            1,
             602,
             Arc::new(ControllableHandle {
                 thread_id: Some("thread-live".into()),
@@ -6347,6 +6348,7 @@ mod tests {
         let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
         let pty = crate::agent::pty_session_manager::PtySessionManager::new();
         registry.register(
+            1,
             601,
             Arc::new(ControllableHandle {
                 thread_id: Some("thread-active".into()),
