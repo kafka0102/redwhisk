@@ -102,7 +102,23 @@ pub async fn open_project(
     .map_err(project_join_error)??;
 
     // 登记该项目当前显示在调用方窗口，切换菜单据此去重聚焦（含 main 原地占用的情况）。
-    state.record_project_window(project.id, window_label);
+    // 同一窗口换项目时，被顶掉的旧项目若已不显示在任何存活窗口，则终止其运行态。
+    for displaced_project_id in state.record_project_window(project.id, window_label) {
+        if project_has_live_window(&app, &state, displaced_project_id) {
+            continue;
+        }
+        let terminated = state.terminate_project_runtime(displaced_project_id);
+        if !terminated.is_empty() {
+            crate::logging::info_kv(
+                "terminate_displaced_project_runtime",
+                "project runtime terminated after window switched away",
+                &[
+                    ("projectId", &displaced_project_id.to_string()),
+                    ("terminatedSessions", &terminated.len().to_string()),
+                ],
+            );
+        }
+    }
 
     // 终端恢复可能包含交互 shell PATH 解析与 PTY 启动（冷启动可达数秒），
     // 不阻塞 open_project 返回，工作台可先渲染。

@@ -760,6 +760,22 @@ impl PtySessionManager {
         session_ids
     }
 
+    /// 当前仍持有运行态的 PTY 会话所属项目 id（去重、升序）。
+    ///
+    /// 应用退出时据此枚举需要终止的项目，与 [`PtySessionManager::kill_project`] 配对使用。
+    pub fn registered_project_ids(&self) -> Vec<i64> {
+        let Ok(sessions) = self.store.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut project_ids: Vec<i64> = sessions
+            .values()
+            .map(|handle| handle.routing.project_id.load(Ordering::Acquire))
+            .collect();
+        project_ids.sort_unstable();
+        project_ids.dedup();
+        project_ids
+    }
+
     pub fn contains(&self, session_id: i64) -> bool {
         self.store
             .sessions
@@ -1985,5 +2001,27 @@ mod tests {
             vec![33],
             "其它项目的会话不应受本次终止影响"
         );
+    }
+
+    #[test]
+    fn registered_project_ids_lists_each_project_once() {
+        let manager = PtySessionManager::new();
+        assert!(
+            manager.registered_project_ids().is_empty(),
+            "无任何会话时不应有持有运行态的项目"
+        );
+
+        manager.insert_capturing_session_for_project_for_test(11, 7, true);
+        manager.insert_capturing_session_for_project_for_test(22, 7, true);
+        manager.insert_capturing_session_for_project_for_test(33, 9, true);
+
+        assert_eq!(
+            manager.registered_project_ids(),
+            vec![7, 9],
+            "应返回仍持有运行态的项目 id（去重、升序）"
+        );
+
+        let _ = manager.kill_project(7);
+        let _ = manager.kill_project(9);
     }
 }

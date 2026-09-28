@@ -33,7 +33,7 @@ struct TerminalOutputEventPayload {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -91,7 +91,7 @@ pub fn run() {
             if let tauri::WindowEvent::Destroyed = event {
                 if let Some(state) = window.try_state::<AppState>() {
                     for project_id in state.take_projects_for_window(window.label()) {
-                        let terminated = state.pty_sessions.kill_project(project_id);
+                        let terminated = state.terminate_project_runtime(project_id);
                         if !terminated.is_empty() {
                             logging::info_kv(
                                 "close_project_window",
@@ -230,6 +230,21 @@ pub fn run() {
             features::code_language::commands::code_language_definition,
             features::code_language::commands::code_language_references
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // 应用退出：对所有仍持有运行态的项目执行同一终止路径，避免 Agent 变成孤儿进程。
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                for project_id in state.terminate_all_project_runtimes() {
+                    logging::info_kv(
+                        "terminate_project_runtime_on_exit",
+                        "project runtime terminated on app exit",
+                        &[("projectId", &project_id.to_string())],
+                    );
+                }
+            }
+        }
+    });
 }

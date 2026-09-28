@@ -39,14 +39,30 @@ impl AppState {
         }
     }
 
-    /// 登记「项目当前显示在哪个窗口」。
+    /// 登记「项目当前显示在哪个窗口」，并返回被本次登记顶掉（displaced）的项目 id（升序）。
     /// - 同一项目重复登记会覆盖旧值；
     /// - 同一窗口先清除其它项目的归属（一窗一项目），避免本窗切换后旧项目仍被标为已开窗。
-    pub fn record_project_window(&self, project_id: i64, window_label: String) {
-        if let Ok(mut windows) = self.project_windows.lock() {
-            windows.retain(|id, label| *id == project_id || label.as_str() != window_label);
-            windows.insert(project_id, window_label);
-        }
+    ///
+    /// 被顶掉的项目按「项目 → 窗口一对一」移除，随即不再显示在任何存活窗口。调用方需再用
+    /// `AppHandle::get_webview_window` 核验其是否仍显示在别处后，才终止其运行态（避免误杀）。
+    pub fn record_project_window(&self, project_id: i64, window_label: String) -> Vec<i64> {
+        let Ok(mut windows) = self.project_windows.lock() else {
+            return Vec::new();
+        };
+        let mut displaced = Vec::new();
+        windows.retain(|id, label| {
+            if *id == project_id {
+                true
+            } else if label.as_str() == window_label {
+                displaced.push(*id);
+                false
+            } else {
+                true
+            }
+        });
+        windows.insert(project_id, window_label);
+        displaced.sort_unstable();
+        displaced
     }
 
     /// 查询项目当前所在窗口 label；调用方需再用 `AppHandle::get_webview_window` 核验窗口仍在。
@@ -79,6 +95,29 @@ impl AppState {
         });
         owned.sort_unstable();
         owned
+    }
+
+    /// 终止某项目的全部运行态，返回本次成功终止的 PTY session id（升序）。
+    ///
+    /// 这是「终止项目运行态」的唯一入口：窗口销毁、主窗口切走项目、应用退出三种触发点共用，
+    /// 保证行为一致。当前覆盖该项目全部 PTY 会话（项目终端与 TUI 模式 Agent 会话共用同一
+    /// 注册路径）；结构化 Agent 会话将在后续 ticket 并入此处。已无运行态时返回空、不报错。
+    pub fn terminate_project_runtime(&self, project_id: i64) -> Vec<i64> {
+        self.pty_sessions.kill_project(project_id)
+    }
+
+    /// 终止当前所有仍持有运行态的项目（应用退出路径），返回被终止的项目 id（升序）。
+    ///
+    /// 以运行态注册表为准枚举项目，不依赖窗口归属映射（退出时窗口可能已被销毁）；
+    /// 无运行态的项目不会被枚举，因此不存在「已无运行态」导致的错误。
+    pub fn terminate_all_project_runtimes(&self) -> Vec<i64> {
+        let mut terminated = Vec::new();
+        for project_id in self.pty_sessions.registered_project_ids() {
+            if !self.terminate_project_runtime(project_id).is_empty() {
+                terminated.push(project_id);
+            }
+        }
+        terminated
     }
 }
 
@@ -130,6 +169,44 @@ mod tests {
             state.find_project_window(9).as_deref(),
             Some("main"),
             "新项目应登记到 main"
+        );
+    }
+
+    #[test]
+    fn record_project_window_reports_displaced_project() {
+        let state = empty_state();
+
+        assert!(
+            state.record_project_window(7, "main".to_string()).is_empty(),
+            "首次登记没有项目被顶掉"
+        );
+        assert_eq!(
+            state.record_project_window(9, "main".to_string()),
+            vec![7],
+            "同一窗口换项目应返回被顶掉的旧项目，供调用方核验其是否仍显示在别处"
+        );
+        assert!(
+            state.record_project_window(9, "main".to_string()).is_empty(),
+            "重复登记同一项目不应产生被顶掉项目"
+        );
+    }
+
+    #[test]
+    fn recording_project_on_one_window_does_not_displace_project_on_another_window() {
+        let state = empty_state();
+        state.record_project_window(7, "main".to_string());
+
+        // 项目 7 显示在 main，项目 9 显示在 project-9：在 project-9 登记不涉及 main 上的 7。
+        assert!(
+            state
+                .record_project_window(9, "project-9".to_string())
+                .is_empty(),
+            "另一窗口的项目不属于本窗，不构成被顶掉"
+        );
+        assert_eq!(
+            state.find_project_window(7).as_deref(),
+            Some("main"),
+            "仍显示在其它窗口的项目不应进入被顶掉集合，也就不会被终止"
         );
     }
 
@@ -189,6 +266,58 @@ mod tests {
             state.find_project_window(9).as_deref(),
             Some("project-9"),
             "其它项目归属应保留"
+        );
+    }
+
+    #[test]
+    fn terminate_project_runtime_terminates_only_target_project_sessions() {
+        let state = empty_state();
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(11, 7, true);
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(22, 9, true);
+
+        assert_eq!(
+            state.terminate_project_runtime(7),
+            vec![11],
+            "共享终止入口应终止目标项目的全部会话"
+        );
+        assert_eq!(
+            state.terminate_project_runtime(9),
+            vec![22],
+            "终止一个项目不应影响其它项目"
+        );
+    }
+
+    #[test]
+    fn terminate_all_project_runtimes_covers_every_project_with_sessions() {
+        let state = empty_state();
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(11, 7, true);
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(22, 7, true);
+        state
+            .pty_sessions
+            .insert_capturing_session_for_project_for_test(33, 9, true);
+
+        assert_eq!(
+            state.terminate_all_project_runtimes(),
+            vec![7, 9],
+            "应用退出应对所有仍持有运行态的项目执行终止"
+        );
+    }
+
+    #[test]
+    fn terminate_all_project_runtimes_without_sessions_is_noop() {
+        let state = empty_state();
+
+        assert!(
+            state.terminate_all_project_runtimes().is_empty(),
+            "无任何运行态时退出终止应安全返回、不报错"
         );
     }
 }
