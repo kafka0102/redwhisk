@@ -42,7 +42,7 @@ pub(super) fn should_attempt_codex_session_capture(command: &str) -> bool {
 }
 
 /// 解析 `CODEX_HOME`，缺省回退到 `$HOME/.codex`。
-pub(super) fn resolve_codex_home() -> Option<PathBuf> {
+pub(crate) fn resolve_codex_home() -> Option<PathBuf> {
     std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex")))

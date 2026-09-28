@@ -6,6 +6,7 @@ use crate::agent::pty_session_manager::read_terminal_snapshot;
 use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvelope};
 use crate::types::errors::CommandError;
 
+use super::codex_tui_archive::{codex_session_archive_text, TuiSessionLogSource};
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
 use super::terminal_archive_clean::{
     extract_tui_archive_conclusion_text, latest_output_from_archive_text,
@@ -117,6 +118,7 @@ pub(crate) fn build_issue_session_archive(
     session_id: i64,
     runtime_log_path: &str,
     display_mode: &str,
+    source: TuiSessionLogSource<'_>,
 ) -> Result<IssueSessionArchive, CommandError> {
     if display_mode == "tui" {
         return build_tui_issue_session_archive(
@@ -125,6 +127,7 @@ pub(crate) fn build_issue_session_archive(
             issue_number,
             session_number,
             runtime_log_path,
+            source,
         );
     }
 
@@ -144,22 +147,29 @@ fn build_tui_issue_session_archive(
     issue_number: i64,
     session_number: i64,
     runtime_log_path: &str,
+    source: TuiSessionLogSource<'_>,
 ) -> Result<IssueSessionArchive, CommandError> {
     let archive_path =
         build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
-    let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
-    let cleaned = extract_tui_archive_text_from_snapshot(&snapshot);
-    let file_content = if cleaned.is_empty() {
+    // TUI + Codex 优先取自 provider session log；解析不到回退既有 PTY 提取路径。
+    let body = match codex_session_archive_text(source) {
+        Some(text) => text,
+        None => {
+            let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
+            extract_tui_archive_text_from_snapshot(&snapshot)
+        }
+    };
+    let file_content = if body.is_empty() {
         String::new()
     } else {
-        format!("{cleaned}\n")
+        format!("{body}\n")
     };
     fs::write(&archive_path, file_content).map_err(agent_session_start_error)?;
 
     Ok(IssueSessionArchive {
         archive_path,
         runtime_path: runtime_log_path.to_string(),
-        latest_output: latest_output_from_archive_text(&cleaned),
+        latest_output: latest_output_from_archive_text(&body),
     })
 }
 
@@ -288,192 +298,5 @@ pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::build_issue_session_archive;
-    use crate::types::agent_session_stream::{
-        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
-        ToolCallStatus,
-    };
-    use std::fs;
-
-    #[test]
-    fn build_issue_session_archive_writes_plain_text_for_tui() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let runtime_log_path = temp_dir.path().join("runtime-tui.log");
-        let runtime = "$ ls\r\nfile.txt\r\n\r\n\u{280b} Working(on it...)\r\n\u{2819}\r\n\r\nDone with archive.\r\n";
-        fs::write(&runtime_log_path, runtime).expect("write runtime log");
-
-        let archive = build_issue_session_archive(
-            temp_dir.path(),
-            2,
-            14,
-            23,
-            99,
-            runtime_log_path.to_string_lossy().as_ref(),
-            "tui",
-        )
-        .expect("build tui archive");
-
-        let content = fs::read_to_string(&archive.archive_path).expect("read archive");
-        assert!(
-            !content.trim_start().starts_with('{'),
-            "tui archive must be plain text, got: {content:?}"
-        );
-        assert!(
-            !content.contains("projectId"),
-            "must not wrap JSON envelope"
-        );
-        assert!(!content.contains("assistant_message"));
-        assert!(!content.contains("Working("));
-        assert!(content.contains("$ ls"));
-        assert!(content.contains("Done with archive."));
-        assert_eq!(archive.latest_output.as_deref(), Some("Done with archive."));
-        assert_eq!(
-            archive.runtime_path,
-            runtime_log_path.to_string_lossy().to_string()
-        );
-    }
-
-    #[test]
-    fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let runtime_log_path = temp_dir.path().join("runtime.jsonl");
-        let events = [
-            AgentStreamEventEnvelope {
-                project_id: 1,
-                session_id: 30,
-                seq: 1,
-                epoch: "epoch-test".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::UserMessage {
-                        text: "请总结".to_string(),
-                        message_id: Some("u1".to_string()),
-                    },
-                    turn_id: None,
-                    seq: 1,
-                    timestamp: 1,
-                },
-            },
-            AgentStreamEventEnvelope {
-                project_id: 1,
-                session_id: 30,
-                seq: 2,
-                epoch: "epoch-test".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::Reasoning {
-                        text: "分析中".to_string(),
-                        duration_ms: Some(10),
-                    },
-                    turn_id: None,
-                    seq: 2,
-                    timestamp: 2,
-                },
-            },
-            AgentStreamEventEnvelope {
-                project_id: 1,
-                session_id: 30,
-                seq: 3,
-                epoch: "epoch-test".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::ToolCall {
-                        call_id: "call-1".to_string(),
-                        name: "shell".to_string(),
-                        detail: ToolCallDetail::Unknown {
-                            raw_input: Some("ls".to_string()),
-                            raw_output: Some("file.txt".to_string()),
-                        },
-                        status: ToolCallStatus::Completed,
-                        error: None,
-                    },
-                    turn_id: None,
-                    seq: 3,
-                    timestamp: 3,
-                },
-            },
-            AgentStreamEventEnvelope {
-                project_id: 1,
-                session_id: 30,
-                seq: 4,
-                epoch: "epoch-test".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::AssistantMessage {
-                        text: "已完成归纳".to_string(),
-                        message_id: Some("a1".to_string()),
-                    },
-                    turn_id: None,
-                    seq: 4,
-                    timestamp: 4,
-                },
-            },
-            AgentStreamEventEnvelope {
-                project_id: 1,
-                session_id: 30,
-                seq: 5,
-                epoch: "epoch-test".to_string(),
-                event: AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::Error {
-                        message: "收尾失败".to_string(),
-                    },
-                    turn_id: None,
-                    seq: 5,
-                    timestamp: 5,
-                },
-            },
-        ];
-        let lines = events
-            .iter()
-            .map(|event| serde_json::to_string(event).expect("serialize event"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs::write(&runtime_log_path, format!("{lines}\n")).expect("write runtime log");
-
-        let archive = build_issue_session_archive(
-            temp_dir.path(),
-            1,
-            16,
-            7,
-            30,
-            runtime_log_path.to_string_lossy().as_ref(),
-            "json",
-        )
-        .expect("build archive");
-
-        assert_eq!(
-            archive.runtime_path,
-            runtime_log_path.to_string_lossy().to_string()
-        );
-        assert_eq!(archive.latest_output.as_deref(), Some("收尾失败"));
-
-        let archived_lines = fs::read_to_string(&archive.archive_path).expect("read archive log");
-        assert!(!archived_lines.contains("tool_call"));
-        assert!(!archived_lines.contains("reasoning"));
-        assert!(archived_lines.contains("user_message"));
-        assert!(archived_lines.contains("assistant_message"));
-        assert!(archived_lines.contains("error"));
-    }
-    #[test]
-    fn build_tui_archive_uses_render_for_fullscreen_paint() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let runtime = temp_dir.path().join("runtime.log");
-        // 全屏 CUP 重绘：简单剥壳无换行；回放后应得到分行正文
-        let raw =
-            "\u{1b}[1;1H\u{1b}[2J\u{1b}[1;1H❯ fix remote detect\u{1b}[2;1Hdone: added 60s fetch";
-        std::fs::write(&runtime, raw).expect("write runtime");
-        let archive = build_issue_session_archive(
-            temp_dir.path(),
-            1,
-            212,
-            259,
-            374,
-            runtime.to_string_lossy().as_ref(),
-            "tui",
-        )
-        .expect("archive");
-        let content = std::fs::read_to_string(&archive.archive_path).expect("read archive");
-        assert!(
-            content.contains("fix remote detect") || content.contains("done: added 60s fetch"),
-            "archive should extract core text, got={content:?}"
-        );
-        assert!(!content.trim().is_empty(), "archive must not be empty");
-    }
-}
+#[path = "log_path_tests.rs"]
+mod tests;

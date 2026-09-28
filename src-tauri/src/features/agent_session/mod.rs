@@ -5,9 +5,8 @@
 mod active_time;
 pub mod active_time_heartbeat;
 mod codex_session_id_capture;
-// 纯函数 seam，本票暂未接线；crate 级 `warnings = "deny"` 会把 dead_code 升级为
-// 硬错误，故先以 pub 模块暴露。接线（归档 / 心跳）后应回落为私有 `mod` + `pub(crate)`。
-pub mod codex_session_log;
+mod codex_session_log;
+mod codex_tui_archive;
 mod command_snapshot;
 pub mod commands;
 mod content_search;
@@ -35,6 +34,8 @@ mod workspace_path_ops;
 mod workspace_remote_ops;
 mod worktree_setup;
 
+pub(crate) use codex_session_id_capture::resolve_codex_home;
+pub(crate) use codex_tui_archive::TuiSessionLogSource;
 #[cfg(test)]
 pub(crate) use log_path::build_issue_archive_log_path;
 pub(crate) use log_path::{

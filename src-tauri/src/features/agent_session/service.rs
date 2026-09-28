@@ -3115,6 +3115,7 @@ mod tests {
             30,
             runtime_log_path.to_string_lossy().as_ref(),
             "json",
+            crate::features::agent_session::TuiSessionLogSource::new(None, None, None),
         )
         .expect("build archive");
 

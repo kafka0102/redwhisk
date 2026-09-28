@@ -6,6 +6,7 @@ use serde_json::json;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
+use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
 use crate::db::event_repository::EventRepository;
@@ -16,7 +17,7 @@ use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::features::agent_session::{
     build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
-    IssueSessionArchive,
+    resolve_codex_home, IssueSessionArchive, TuiSessionLogSource,
 };
 use crate::git::operation_state::{
     format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext,
@@ -2038,6 +2039,12 @@ impl<'connection> IssueService<'connection> {
             return Ok(None);
         }
 
+        // agent_type 不在 Agent Session 记录上，按启动时的 agent_profile_id 回读快照。
+        let agent_type = AgentProfileRepository::new(transaction)
+            .find_profile_by_id(session.agent_profile_id)
+            .map_err(issue_database_error)?
+            .map(|profile| profile.agent_type);
+
         let archive = build_issue_session_archive(
             &self.data_dir,
             issue.project_id,
@@ -2046,6 +2053,11 @@ impl<'connection> IssueService<'connection> {
             session.id,
             &session.log_path,
             &session.display_mode,
+            TuiSessionLogSource::new(
+                agent_type.as_ref(),
+                session.provider_session_id.as_deref(),
+                resolve_codex_home().as_deref(),
+            ),
         )?;
         AgentSessionRepository::update_log_path_and_latest_output_in_transaction(
             transaction,
