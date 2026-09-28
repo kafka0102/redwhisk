@@ -36,6 +36,53 @@ fn grok_tui_does_not_duplicate_always_approve() {
 }
 
 #[test]
+fn grok_launch_snapshot_injects_agent_stdio() {
+    assert_eq!(
+        descriptor_for(&AgentType::Grok).build_launch_command_snapshot("grok"),
+        "grok agent stdio"
+    );
+    assert_eq!(
+        descriptor_for(&AgentType::Grok).build_launch_command_snapshot("  grok  "),
+        "grok agent stdio"
+    );
+}
+
+#[test]
+fn grok_launch_snapshot_does_not_duplicate_or_leak_adapter_args() {
+    let snapshot =
+        descriptor_for(&AgentType::Grok).build_launch_command_snapshot("grok agent stdio");
+    assert_eq!(snapshot, "grok agent stdio");
+    // 结构化参数（模型 / 自动批准 / prompt）由 adapter 重建，不进快照。
+    assert!(!snapshot.contains("-m"));
+    assert!(!snapshot.contains("--always-approve"));
+}
+
+#[test]
+fn grok_launch_snapshot_keeps_agent_before_stdio_when_stdio_present() {
+    assert_eq!(
+        descriptor_for(&AgentType::Grok).build_launch_command_snapshot("grok stdio"),
+        "grok agent stdio"
+    );
+}
+
+#[test]
+fn grok_launch_snapshot_falls_back_when_command_empty() {
+    assert_eq!(
+        descriptor_for(&AgentType::Grok).build_launch_command_snapshot("   "),
+        "grok agent stdio"
+    );
+}
+
+#[test]
+fn grok_tui_snapshot_never_contains_structured_subcommands() {
+    let snapshot =
+        descriptor_for(&AgentType::Grok).build_tui_command_snapshot("grok", "full-access", true);
+    assert!(!snapshot.contains("agent"));
+    assert!(!snapshot.contains("stdio"));
+    assert!(!snapshot.contains("--output-format"));
+}
+
+#[test]
 fn grok_ui_capabilities_show_model_without_switching() {
     let grok = descriptor_for(&AgentType::Grok).ui_capabilities();
     assert_eq!(grok.model_type_label, "Grok");

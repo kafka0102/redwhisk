@@ -1,6 +1,6 @@
 # Agent Provider 协议
 
-RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent provider；其中 codex/claude/opencode 走结构化（json）与交互式（tui）两路，Grok 为 **TUI-only**（交互式 PTY，displayMode 锁定 `tui`，不接结构化 json 路径）。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
+RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent provider；四者都走结构化（json）与交互式（tui）两路。json 路径分别是 Codex `codex app-server`、Claude `claude -p --output-format stream-json`、OpenCode `opencode run --format json`、Grok `grok agent stdio`（ACP）。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
 
 ## 统一边界
 
@@ -13,7 +13,7 @@ RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent 
 Composer / session UI
   → send_agent_message / cancel_agent_turn / respond_agent_permission
   → AgentSessionHandle
-  → Codex app-server 或 Claude stream-json
+  → Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio
   → AgentStreamEventEnvelope
   → message-stream reducer / timeline
 
@@ -32,7 +32,7 @@ Agent TUI 会话视图 (xterm)
 
 | 快照 | 传输 | 命令构造 | 前端主区 | 状态语义 |
 | --- | --- | --- | --- | --- |
-| `json` | 结构化 provider（Codex app-server / Claude stream-json） | `build_launch_command_snapshot` 等 structured 路径 API | 消息流 + composer | turn / 权限 / timeline |
+| `json` | 结构化 provider（Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio） | `build_launch_command_snapshot` 等 structured 路径 API | 消息流 + composer | turn / 权限 / timeline |
 | `tui` | 交互式 PTY（`PtySessionManager`） | `build_tui_command_snapshot(raw, mode, dangerous)` | Agent TUI 会话视图（xterm） | 进程级（exit / 重启 reconcile） |
 
 规则：
@@ -40,7 +40,7 @@ Agent TUI 会话视图 (xterm)
 1. 会话存续期只认 **Session 展示形式快照**，不回读 profile 当前 `displayMode`。
 2. TUI 命令**不得**注入 structured 专属参数（Codex 无 `app-server`；Claude 无 `stream-json` / `-p` / `--print` / `--output-format`）。
 3. mode / dangerous 映射由 descriptor 按 provider 交互式 CLI 语义处理；service / command 不按 `agentType` 散落 match。
-4. codex/claude/opencode 可以 json 与 tui 启动；grok 仅可 tui 启动（displayMode 锁定 `tui`，结构化路径不接，`provider_factory` 对 Grok 保留防御性拒绝）。OpenCode json 使用 `opencode run --format json`。
+4. codex/claude/opencode/grok 都可以 json 与 tui 启动。OpenCode json 使用 `opencode run --format json`；Grok json 使用 `grok agent stdio`（ACP，见 [ADR-0047](../adr/0047-grok-structured-json-mode.md)）。displayMode 默认 `json` 且可切换（ADR-0047 后 Grok 不再锁定 `tui`）。
 5. 运行中不得热切换 displayMode。
 
 ### TUI 命令映射要点（descriptor）
@@ -48,7 +48,7 @@ Agent TUI 会话视图 (xterm)
 - **Codex TUI**：`full-access` / `full-auto` /（未知 mode 且 `dangerous`）→ `--dangerously-bypass-approvals-and-sandbox`；`auto` → `--ask-for-approval on-request --sandbox workspace-write`；`read-only` / `read_only` → `--ask-for-approval on-request --sandbox read-only`；已知 mode 优先于 `dangerous`；不重复已有 flag；trim 路径。
 - **Claude TUI**：已有 `--permission-mode` 则保留；`full-access` 或 `dangerous` → `--permission-mode bypassPermissions`；`plan` / `acceptEdits` / `auto` 映射对应 permission-mode；trim 路径。
 - **OpenCode TUI**：trim；`full-access` 或 `dangerous` → 追加 `--auto`；不注入 `run` / `--format`。
-- **Grok TUI**：trim；`full-access` 或 `dangerous` → 追加 `--always-approve`；不注入 `-p` / `--output-format` / `agent stdio` 等结构化参数。Grok 为 TUI-only，displayMode 锁定 `tui`。
+- **Grok TUI**：trim；`full-access` 或 `dangerous` → 追加 `--always-approve`；不注入 `-p` / `--output-format` / `agent stdio` 等结构化参数。
 - **TUI 首条 prompt**：codex/claude/grok 以位置参数注入；opencode 用 `--prompt`；其它/未知回退为 PTY register 后 stdin + `\r`（ADR-0022）。
 
 ## Session 生命周期 seam（displayMode）
@@ -67,13 +67,13 @@ Agent TUI 会话视图 (xterm)
 
 ## Provider 差异（structured / json）
 
-| 项目      | Codex                                                         | Claude                                                  |
-| --------- | ------------------------------------------------------------- | ------------------------------------------------------- |
-| 进程协议  | `codex app-server`，stdio 上 NDJSON JSON-RPC                  | `claude -p --output-format stream-json`，NDJSON 单向流  |
-| 会话模型  | 持久 app-server session，维护 `threadId` / 当前 turn          | 单轮子进程；后续消息用 `--resume <session_id>` 续接     |
-| 权限      | server→client request；前端经 `respond_agent_permission` 回复 | stream-json 没有等价 request/response 审批通道          |
-| 模型/模式 | 通过 provider 请求与通知同步                                  | 由 Claude provider 能力与配置决定；第三方模型列表可只读 |
-| 输出      | JSON-RPC notification 映射 timeline                           | SDKMessage 流映射 timeline                              |
+| 项目      | Codex                                                         | Claude                                                  | Grok                                                             |
+| --------- | ------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| 进程协议  | `codex app-server`，stdio 上 NDJSON JSON-RPC                  | `claude -p --output-format stream-json`，NDJSON 单向流  | `grok agent stdio`，stdio 上 ACP JSON-RPC 2.0（长驻）            |
+| 会话模型  | 持久 app-server session，维护 `threadId` / 当前 turn          | 单轮子进程；后续消息用 `--resume <session_id>` 续接     | 持久 ACP session，`sessionID` 经 `ThreadStarted` 回流             |
+| 权限      | server→client request；前端经 `respond_agent_permission` 回复 | stream-json 没有等价 request/response 审批通道          | ACP `session/request_permission`（本期不实装审批卡）             |
+| 模型/模式 | 通过 provider 请求与通知同步                                  | 由 Claude provider 能力与配置决定；第三方模型列表可只读 | 仅启动期 `agent -m` 透传；会话内切换未启用                        |
+| 输出      | JSON-RPC notification 映射 timeline                           | SDKMessage 流映射 timeline                              | ACP `session/update` 映射 timeline                                |
 
 因此，不能把 Codex 的 JSON-RPC、权限卡片、thread 字段或 effort 假定为所有 provider 都具备。**json 快照**不得为 Claude/Codex 回退重建 xterm 渲染链路；**tui 快照**则必须使用交互式终端主区，不得混用 structured composer / 权限卡。
 
@@ -93,6 +93,7 @@ Agent TUI 会话视图 (xterm)
   - **Codex**：图片编码为 app-server `localImage` 输入块（真实视觉输入）；非图片仍为文本路径引用。
   - **Claude**：图片读盘后以 base64 `image` content block 经 `--input-format stream-json` 写入 stdin；非图片为文本路径。
   - **OpenCode**：当前仅支持文本路径说明（无原生多模态输入块）。
+  - **Grok**：本期仅文本路径说明（ACP `initialize` 声明不支持图片/音频输入块）。
 - provider 新能力必须明确：持久化字段、事件映射、取消语义、权限语义、恢复语义及 unsupported 情形。
 - TUI 路径下 mode/dangerous 须落到交互式 CLI 参数，避免与 profile 权限策略脱节。
 

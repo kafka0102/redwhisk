@@ -154,7 +154,6 @@
     "displayMode": "Display mode",
     "displayModeJson": "JSON",
     "displayModeTui": "TUI",
-    "displayModeTuiLocked": "TUI (parser not integrated yet, not switchable)",
     "enabled": "Enabled",
     "enabledYes": "Yes",
     "enabledNo": "No",

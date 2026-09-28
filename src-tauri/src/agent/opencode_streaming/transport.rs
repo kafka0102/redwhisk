@@ -6,20 +6,15 @@
 //!
 //! PATH/alias 探测复用 `command_detector`（与 Claude/Codex 一致）。
 
-use std::env;
-use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::{
-    resolve_interactive_shell_path, run_command_lookup_with_path, CommandLookupResult,
-};
+use crate::agent::provider_spawn::{build_provider_command, split_command_line};
 
 const STDERR_BUFFER_LIMIT: usize = 8192;
 
@@ -68,21 +63,18 @@ impl OpenCodeTransport {
         args: &[String],
         cwd: Option<&str>,
     ) -> Result<Self, OpenCodeStreamingError> {
-        let (program, preset_args) = split_command_line(binary)?;
-        let resolved = resolve_spawn_program(program);
-        let mut command = if resolved.requires_shell {
-            shell_command(binary, args)
-        } else {
-            let mut command = Command::new(&resolved.program);
-            command.args(preset_args).args(args);
-            apply_spawn_environment(
-                &mut command,
-                resolved.lookup_path.as_deref(),
-                &resolved.lookup_environment,
-                &resolved.path_entries,
-            );
-            command
-        };
+        let (program, preset_args) = split_command_line(binary);
+        if program.is_empty() {
+            return Err(OpenCodeStreamingError::SpawnFailed(
+                "opencode binary 不能为空".to_string(),
+            ));
+        }
+        let mut all_args = preset_args
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        all_args.extend(args.iter().cloned());
+        let mut command = build_provider_command(program, &all_args);
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -183,176 +175,6 @@ impl Drop for OpenCodeTransport {
     }
 }
 
-fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), OpenCodeStreamingError> {
-    let mut parts = command.split_whitespace();
-    let program = parts.next().ok_or_else(|| {
-        OpenCodeStreamingError::SpawnFailed("opencode binary 不能为空".to_string())
-    })?;
-    Ok((program, parts.collect()))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ResolvedSpawnProgram {
-    program: String,
-    lookup_path: Option<OsString>,
-    lookup_environment: Vec<(OsString, OsString)>,
-    path_entries: Vec<PathBuf>,
-    requires_shell: bool,
-}
-
-fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
-    let lookup_result = if Path::new(program).components().count() > 1 {
-        None
-    } else {
-        run_command_lookup_with_path(program).ok()
-    };
-    resolve_spawn_program_from_lookup(program, lookup_result)
-}
-
-fn resolve_spawn_program_from_lookup(
-    program: &str,
-    lookup_result: Option<CommandLookupResult>,
-) -> ResolvedSpawnProgram {
-    if Path::new(program).components().count() > 1 {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: None,
-            lookup_environment: Vec::new(),
-            path_entries: spawn_path_entries_for_program(program),
-            requires_shell: false,
-        };
-    }
-
-    let requires_shell = lookup_result
-        .as_ref()
-        .is_some_and(|result| !is_direct_executable_lookup(&result.command));
-    if requires_shell {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: lookup_result
-                .as_ref()
-                .and_then(|result| result.path.clone()),
-            lookup_environment: lookup_result
-                .as_ref()
-                .map(|result| result.environment.clone())
-                .unwrap_or_default(),
-            path_entries: Vec::new(),
-            requires_shell: true,
-        };
-    }
-
-    let resolved_program = lookup_result
-        .as_ref()
-        .map(|result| result.command.as_str())
-        .unwrap_or(program);
-    let path_entries = if resolved_program == program {
-        Vec::new()
-    } else {
-        spawn_path_entries_for_program(resolved_program)
-    };
-
-    ResolvedSpawnProgram {
-        program: resolved_program.to_string(),
-        lookup_path: lookup_result
-            .as_ref()
-            .and_then(|result| result.path.clone()),
-        lookup_environment: lookup_result
-            .as_ref()
-            .map(|result| result.environment.clone())
-            .unwrap_or_default(),
-        path_entries,
-        requires_shell: false,
-    }
-}
-
-fn is_direct_executable_lookup(command: &str) -> bool {
-    let trimmed = command.trim();
-    !trimmed.chars().any(char::is_whitespace) && Path::new(trimmed).components().count() > 1
-}
-
-fn build_shell_command_line(binary: &str, args: &[String]) -> String {
-    let mut line = binary.trim().to_string();
-    for arg in args {
-        line.push(' ');
-        if arg.contains(' ') || arg.contains('"') {
-            line.push('"');
-            line.push_str(&arg.replace('\\', "\\\\").replace('"', "\\\""));
-            line.push('"');
-        } else {
-            line.push_str(arg);
-        }
-    }
-    line
-}
-
-#[cfg(unix)]
-fn shell_command(binary: &str, args: &[String]) -> Command {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let mut command = Command::new(shell);
-    let line = build_shell_command_line(binary, args);
-    command.args(["-lic", &line]);
-    command
-}
-
-#[cfg(not(unix))]
-fn shell_command(binary: &str, args: &[String]) -> Command {
-    let mut command = Command::new("cmd");
-    let line = build_shell_command_line(binary, args);
-    command.args(["/C", &line]);
-    command
-}
-
-fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
-    Path::new(program)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| vec![parent.to_path_buf()])
-        .unwrap_or_default()
-}
-
-fn apply_spawn_environment(
-    command: &mut Command,
-    lookup_path: Option<&OsStr>,
-    lookup_environment: &[(OsString, OsString)],
-    path_entries: &[PathBuf],
-) {
-    // GUI 启动时进程 PATH 不含 .zshrc 里的 nvm 目录；lookup 失败时才注入
-    // 交互式 PATH，才能找到 `codex` 以及其 shebang 依赖的 `node`。
-    let fallback_path = if lookup_path.is_some() {
-        None
-    } else {
-        resolve_interactive_shell_path().or_else(|| env::var_os("PATH"))
-    };
-    let current_path = lookup_path.or(fallback_path.as_deref());
-    if let Some(path) = build_spawn_path(current_path, path_entries) {
-        command.env("PATH", path);
-    }
-    for (key, value) in lookup_environment {
-        if is_shell_runtime_variable(key.as_os_str()) {
-            continue;
-        }
-        command.env(key, value);
-    }
-}
-
-fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
-    let mut paths: Vec<PathBuf> = path_entries.to_vec();
-    if let Some(current_path) = current_path {
-        paths.extend(env::split_paths(current_path));
-    }
-    if paths.is_empty() {
-        return None;
-    }
-    env::join_paths(paths).ok()
-}
-
-fn is_shell_runtime_variable(key: &OsStr) -> bool {
-    matches!(
-        key.to_str(),
-        Some("PATH" | "PWD" | "OLDPWD" | "SHLVL" | "_")
-    )
-}
-
 fn spawn_stdout_reader(
     stdout: ChildStdout,
     state: Arc<TransportState>,
@@ -428,23 +250,8 @@ mod tests {
 
     #[test]
     fn split_command_line_preserves_program_and_args() {
-        let (program, args) = split_command_line("opencode --foo").unwrap();
+        let (program, args) = split_command_line("opencode --foo");
         assert_eq!(program, "opencode");
         assert_eq!(args, vec!["--foo"]);
-    }
-
-    #[test]
-    fn build_shell_command_line_quotes_prompt_with_spaces() {
-        let line = build_shell_command_line(
-            "opencode",
-            &[
-                "run".into(),
-                "--format".into(),
-                "json".into(),
-                "hello world".into(),
-            ],
-        );
-        assert!(line.contains("\"hello world\""));
-        assert!(line.starts_with("opencode run --format json "));
     }
 }

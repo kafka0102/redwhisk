@@ -14,6 +14,7 @@ use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::grok_streaming::{GrokSessionConfig, GrokSessionHandle};
 use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_profile::AgentType;
@@ -85,6 +86,7 @@ impl AgentSessionProviderFactory for DefaultAgentSessionProviderFactory {
             }
             ProviderStartPlan::Claude { backfill } => start_claude_session(request, backfill),
             ProviderStartPlan::OpenCode { backfill } => start_opencode_session(request, backfill),
+            ProviderStartPlan::Grok { backfill } => start_grok_session(request, backfill),
         }
     }
 }
@@ -100,6 +102,9 @@ pub enum ProviderStartPlan {
         backfill: ThreadIdBackfill,
     },
     OpenCode {
+        backfill: ThreadIdBackfill,
+    },
+    Grok {
         backfill: ThreadIdBackfill,
     },
 }
@@ -156,9 +161,16 @@ pub fn plan_provider_start(
             };
             Ok(ProviderStartPlan::OpenCode { backfill })
         }
-        AgentType::Grok => Err(AgentSessionError::Other(
-            "暂不支持启动 Grok 类型的 Agent 会话。".to_string(),
-        )),
+        AgentType::Grok => {
+            // 与 Claude / OpenCode 同构：新建 defer 到 ThreadStarted 事件；
+            // resume 时 handle 已持有 sessionId → WhenPresent。
+            let backfill = if request.resume_thread_id.is_some() {
+                ThreadIdBackfill::WhenPresent
+            } else {
+                ThreadIdBackfill::DeferToStream
+            };
+            Ok(ProviderStartPlan::Grok { backfill })
+        }
     }
 }
 
@@ -266,6 +278,33 @@ fn start_opencode_session(
     let _ = request.config_home;
 
     let handle = OpenCodeSessionHandle::start(config).map_err(AgentSessionError::from)?;
+    let thread_id = handle.thread_id();
+    Ok(StartedSession {
+        handle: Arc::new(handle),
+        thread_id,
+        backfill,
+    })
+}
+
+fn start_grok_session(
+    request: AgentSessionStartRequest,
+    backfill: ThreadIdBackfill,
+) -> Result<StartedSession, AgentSessionError> {
+    let config = GrokSessionConfig {
+        project_id: request.project_id,
+        session_id: request.session_id,
+        binary: request.binary,
+        cwd: request.cwd,
+        model: request.model,
+        dangerous: request.dangerous,
+        mode_id: request.mode_id,
+        broadcaster: request.broadcaster,
+        resume_session_id: request.resume_thread_id,
+    };
+    let _ = request.effort;
+    let _ = request.config_home;
+
+    let handle = GrokSessionHandle::start(config).map_err(AgentSessionError::from)?;
     let thread_id = handle.thread_id();
     Ok(StartedSession {
         handle: Arc::new(handle),
@@ -590,10 +629,28 @@ mod tests {
     }
 
     #[test]
-    fn plan_still_rejects_grok() {
+    fn plan_routes_grok_new_with_defer_backfill() {
         let request = base_request(AgentType::Grok);
-        let err = plan_provider_start(&request).expect_err("grok");
-        assert!(matches!(err, AgentSessionError::Other(ref m) if m.contains("Grok")));
+        let plan = plan_provider_start(&request).expect("plan");
+        assert_eq!(
+            plan,
+            ProviderStartPlan::Grok {
+                backfill: ThreadIdBackfill::DeferToStream,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_routes_grok_resume_with_when_present_backfill() {
+        let mut request = base_request(AgentType::Grok);
+        request.resume_thread_id = Some("grok-session-1".into());
+        let plan = plan_provider_start(&request).expect("plan");
+        assert_eq!(
+            plan,
+            ProviderStartPlan::Grok {
+                backfill: ThreadIdBackfill::WhenPresent,
+            }
+        );
     }
 
     #[test]

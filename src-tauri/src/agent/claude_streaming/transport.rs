@@ -14,20 +14,15 @@
 //! PATH/alias 探测复用 `command_detector`（与 codex 一致），保证从 Tauri
 //! 启动时能找到用户 `.zshrc` 里配置的 `claude` 路径。
 
-use std::env;
-use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::{
-    resolve_interactive_shell_path, run_command_lookup_with_path, CommandLookupResult,
-};
+use crate::agent::provider_spawn::{build_provider_command, split_command_line};
 
 /// stderr 缓冲上限，避免内存膨胀；保留尾部用于诊断。
 const STDERR_BUFFER_LIMIT: usize = 8192;
@@ -92,21 +87,18 @@ impl ClaudeTransport {
         args: &[String],
         cwd: Option<&str>,
     ) -> Result<Self, ClaudeStreamingError> {
-        let (program, preset_args) = split_command_line(binary)?;
-        let resolved_program = resolve_spawn_program(program);
-        let mut command = if resolved_program.requires_shell {
-            shell_command(binary, args)
-        } else {
-            let mut command = Command::new(&resolved_program.program);
-            command.args(preset_args).args(args);
-            apply_spawn_environment(
-                &mut command,
-                resolved_program.lookup_path.as_deref(),
-                &resolved_program.lookup_environment,
-                &resolved_program.path_entries,
-            );
-            command
-        };
+        let (program, preset_args) = split_command_line(binary);
+        if program.is_empty() {
+            return Err(ClaudeStreamingError::SpawnFailed(
+                "claude binary 不能为空".to_string(),
+            ));
+        }
+        let mut all_args = preset_args
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        all_args.extend(args.iter().cloned());
+        let mut command = build_provider_command(program, &all_args);
         // 放开 claude 后台子代理 10 分钟等待 cap，避免长任务子代理被静默
         // 中断（见 CLAUDE_PRINT_BG_WAIT_CEILING_ENV 注释）。
         command.env(CLAUDE_PRINT_BG_WAIT_CEILING_ENV, "0");
@@ -247,181 +239,6 @@ impl Drop for ClaudeTransport {
     }
 }
 
-fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), ClaudeStreamingError> {
-    let mut parts = command.split_whitespace();
-    let program = parts
-        .next()
-        .ok_or_else(|| ClaudeStreamingError::SpawnFailed("claude binary 不能为空".to_string()))?;
-    Ok((program, parts.collect()))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ResolvedSpawnProgram {
-    program: String,
-    lookup_path: Option<OsString>,
-    lookup_environment: Vec<(OsString, OsString)>,
-    path_entries: Vec<PathBuf>,
-    requires_shell: bool,
-}
-
-fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
-    let lookup_result = if Path::new(program).components().count() > 1 {
-        None
-    } else {
-        run_command_lookup_with_path(program).ok()
-    };
-    resolve_spawn_program_from_lookup(program, lookup_result)
-}
-
-fn resolve_spawn_program_from_lookup(
-    program: &str,
-    lookup_result: Option<CommandLookupResult>,
-) -> ResolvedSpawnProgram {
-    if Path::new(program).components().count() > 1 {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: None,
-            lookup_environment: Vec::new(),
-            path_entries: spawn_path_entries_for_program(program),
-            requires_shell: false,
-        };
-    }
-
-    let requires_shell = lookup_result
-        .as_ref()
-        .is_some_and(|result| !is_direct_executable_lookup(&result.command));
-    if requires_shell {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: lookup_result
-                .as_ref()
-                .and_then(|result| result.path.clone()),
-            lookup_environment: lookup_result
-                .as_ref()
-                .map(|result| result.environment.clone())
-                .unwrap_or_default(),
-            path_entries: Vec::new(),
-            requires_shell: true,
-        };
-    }
-
-    let resolved_program = lookup_result
-        .as_ref()
-        .map(|result| result.command.as_str())
-        .unwrap_or(program);
-    let path_entries = if resolved_program == program {
-        Vec::new()
-    } else {
-        spawn_path_entries_for_program(resolved_program)
-    };
-
-    ResolvedSpawnProgram {
-        program: resolved_program.to_string(),
-        lookup_path: lookup_result
-            .as_ref()
-            .and_then(|result| result.path.clone()),
-        lookup_environment: lookup_result
-            .as_ref()
-            .map(|result| result.environment.clone())
-            .unwrap_or_default(),
-        path_entries,
-        requires_shell: false,
-    }
-}
-
-fn is_direct_executable_lookup(command: &str) -> bool {
-    let trimmed = command.trim();
-    !trimmed.chars().any(char::is_whitespace) && Path::new(trimmed).components().count() > 1
-}
-
-/// 构造走 shell 的 claude 命令行（保留 alias 与额外参数）。
-fn build_shell_command_line(binary: &str, args: &[String]) -> String {
-    let mut line = binary.trim().to_string();
-    for arg in args {
-        line.push(' ');
-        // 简单参数直接拼接；含空格的参数（如 prompt）需引用。
-        if arg.contains(' ') || arg.contains('"') {
-            line.push('"');
-            line.push_str(&arg.replace('\\', "\\\\").replace('"', "\\\""));
-            line.push('"');
-        } else {
-            line.push_str(arg);
-        }
-    }
-    line
-}
-
-#[cfg(unix)]
-fn shell_command(binary: &str, args: &[String]) -> Command {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let mut command = Command::new(shell);
-    let line = build_shell_command_line(binary, args);
-    command.args(["-lic", &line]);
-    command
-}
-
-#[cfg(not(unix))]
-fn shell_command(binary: &str, args: &[String]) -> Command {
-    let mut command = Command::new("cmd");
-    let line = build_shell_command_line(binary, args);
-    command.args(["/C", &line]);
-    command
-}
-
-fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
-    Path::new(program)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| vec![parent.to_path_buf()])
-        .unwrap_or_default()
-}
-
-fn apply_spawn_environment(
-    command: &mut Command,
-    lookup_path: Option<&OsStr>,
-    lookup_environment: &[(OsString, OsString)],
-    path_entries: &[PathBuf],
-) {
-    // GUI 启动时进程 PATH 不含 .zshrc 里的 nvm 目录；lookup 失败时才注入
-    // 交互式 PATH，才能找到 `codex` 以及其 shebang 依赖的 `node`。
-    let fallback_path = if lookup_path.is_some() {
-        None
-    } else {
-        resolve_interactive_shell_path().or_else(|| env::var_os("PATH"))
-    };
-    let current_path = lookup_path.or(fallback_path.as_deref());
-    if let Some(path) = build_spawn_path(current_path, path_entries) {
-        command.env("PATH", path);
-    }
-
-    for (key, value) in lookup_environment {
-        if is_shell_runtime_variable(key.as_os_str()) {
-            continue;
-        }
-        command.env(key, value);
-    }
-}
-
-fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
-    let mut paths: Vec<PathBuf> = path_entries.to_vec();
-    if let Some(current_path) = current_path {
-        paths.extend(env::split_paths(current_path));
-    }
-
-    if paths.is_empty() {
-        return None;
-    }
-
-    env::join_paths(paths).ok()
-}
-
-fn is_shell_runtime_variable(key: &OsStr) -> bool {
-    matches!(
-        key.to_str(),
-        Some("PATH" | "PWD" | "OLDPWD" | "SHLVL" | "_")
-    )
-}
-
 fn spawn_stdout_reader(
     stdout: ChildStdout,
     state: Arc<TransportState>,
@@ -510,68 +327,9 @@ mod tests {
 
     #[test]
     fn split_command_line_preserves_program_and_args() {
-        let (program, args) = split_command_line("claude --some-flag").unwrap();
+        let (program, args) = split_command_line("claude --some-flag");
         assert_eq!(program, "claude");
         assert_eq!(args, vec!["--some-flag"]);
-    }
-
-    #[test]
-    fn resolve_spawn_program_keeps_path_commands() {
-        assert_eq!(
-            resolve_spawn_program("/opt/claude/bin/claude").program,
-            "/opt/claude/bin/claude"
-        );
-        assert_eq!(resolve_spawn_program("./claude").program, "./claude");
-    }
-
-    #[test]
-    fn resolve_spawn_program_adds_program_parent_to_child_path() {
-        assert_eq!(
-            resolve_spawn_program("/opt/claude/bin/claude").path_entries,
-            vec![PathBuf::from("/opt/claude/bin")]
-        );
-    }
-
-    #[test]
-    fn apply_spawn_environment_skips_shell_runtime_variables() {
-        let mut command = Command::new("/usr/bin/env");
-        apply_spawn_environment(
-            &mut command,
-            Some(OsStr::new("/opt/node/bin:/usr/bin:/bin")),
-            &[
-                (
-                    OsString::from("GVM_ROOT"),
-                    OsString::from("/tmp/redwhisk-gvm"),
-                ),
-                (
-                    OsString::from("PWD"),
-                    OsString::from("/tmp/should-not-leak"),
-                ),
-            ],
-            &[PathBuf::from("/opt/claude/bin")],
-        );
-
-        let envs: Vec<_> = command
-            .get_envs()
-            .map(|(key, value)| (key.to_os_string(), value.map(|entry| entry.to_os_string())))
-            .collect();
-        assert!(envs.iter().any(|(key, value)| {
-            key == &OsString::from("GVM_ROOT")
-                && value.as_ref() == Some(&OsString::from("/tmp/redwhisk-gvm"))
-        }));
-        assert!(envs.iter().all(|(key, _)| key != &OsString::from("PWD")));
-        assert!(envs.iter().any(|(key, value)| {
-            key == &OsString::from("PATH")
-                && value.as_ref().is_some_and(|path| {
-                    env::split_paths(path).collect::<Vec<_>>()
-                        == vec![
-                            PathBuf::from("/opt/claude/bin"),
-                            PathBuf::from("/opt/node/bin"),
-                            PathBuf::from("/usr/bin"),
-                            PathBuf::from("/bin"),
-                        ]
-                })
-        }));
     }
 
     #[test]

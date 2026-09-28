@@ -209,6 +209,37 @@ pub(super) fn build_opencode_structured_command_snapshot(raw_command: &str) -> S
     command
 }
 
+/// Grok structured/json launch snapshot：确保含 `agent ... stdio` 子命令序列。
+///
+/// **不**注入 `-m` / `--always-approve` / prompt：结构化参数由
+/// `grok_streaming::session` 按 profile 重建（沿用 OpenCode 既有做法），
+/// 快照只用于记录基命令与取可执行首段。
+pub(super) fn build_grok_structured_command_snapshot(raw_command: &str) -> String {
+    let trimmed = raw_command.trim();
+    if trimmed.is_empty() {
+        return format!("{GROK_FALLBACK_BINARY} agent stdio");
+    }
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    let has_agent = parts.iter().any(|part| *part == "agent");
+    let has_stdio = parts.iter().any(|part| *part == "stdio");
+    match (has_agent, has_stdio) {
+        (true, true) => trimmed.to_string(),
+        (true, false) => append_missing_args(trimmed, &["stdio"]),
+        // 已有 stdio 但缺 agent：把 `agent` 插到 `stdio` 之前，保持子命令顺序。
+        (false, true) => {
+            let mut rebuilt: Vec<&str> = Vec::with_capacity(parts.len() + 1);
+            for part in parts {
+                if part == "stdio" {
+                    rebuilt.push("agent");
+                }
+                rebuilt.push(part);
+            }
+            rebuilt.join(" ")
+        }
+        (false, false) => append_missing_args(trimmed, &["agent", "stdio"]),
+    }
+}
+
 pub(super) fn ensure_claude_bypass_permission_args(command: &str) -> String {
     if command_has_arg(command, CLAUDE_PERMISSION_MODE_ARG) {
         command.trim().to_string()

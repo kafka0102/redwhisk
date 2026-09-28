@@ -11,6 +11,7 @@ use crate::agent::opencode_streaming::argv::{
 };
 use crate::agent::opencode_streaming::event_mapper::{map_ndjson_value, MapContext};
 use crate::agent::opencode_streaming::transport::{OpenCodeStreamingError, OpenCodeTransport};
+use crate::agent::provider_spawn::program_from_command_snapshot;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
@@ -108,7 +109,8 @@ impl OpenCodeSessionHandle {
         );
 
         // snapshot 可能含 run/--format；spawn 只用可执行首段避免重复。
-        let program = program_from_binary(&self.config.binary);
+        let program = program_from_command_snapshot(&self.config.binary);
+        let program = if program.is_empty() { "opencode" } else { program };
         let transport = OpenCodeTransport::spawn(&program, &args, Some(&self.config.cwd))?;
 
         let turn_id = {
@@ -321,15 +323,6 @@ impl From<OpenCodeStreamingError> for AgentSessionError {
     }
 }
 
-fn program_from_binary(binary: &str) -> String {
-    binary
-        .split_whitespace()
-        .next()
-        .filter(|s| !s.is_empty())
-        .unwrap_or("opencode")
-        .into()
-}
-
 fn handle_message(
     state: &Arc<Mutex<SessionState>>,
     config: &OpenCodeSessionConfig,
@@ -432,19 +425,6 @@ fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn program_from_binary_strips_structured_snapshot() {
-        assert_eq!(
-            program_from_binary("opencode run --format json"),
-            "opencode"
-        );
-        assert_eq!(
-            program_from_binary("  /usr/bin/opencode --auto "),
-            "/usr/bin/opencode"
-        );
-        assert_eq!(program_from_binary(""), "opencode");
-    }
 
     #[test]
     fn start_with_resume_exposes_thread_id() {

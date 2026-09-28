@@ -12,11 +12,8 @@
 //! `AgentPermissionRequest`。
 
 use std::collections::HashMap;
-use std::env;
-use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -24,9 +21,7 @@ use std::thread;
 
 use serde_json::Value;
 
-use crate::agent::command_detector::{
-    resolve_interactive_shell_path, run_command_lookup_with_path, CommandLookupResult,
-};
+use crate::agent::provider_spawn::{build_provider_command, split_command_line};
 
 /// 默认请求超时（14 天，等价于不超时，仅兜底死循环）。
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
@@ -96,21 +91,18 @@ impl CodexTransport {
     /// `binary` 为 codex 可执行路径（通常 `codex`）；`cwd` 透传给子进程。
     /// 失败返回 `BinaryNotFound` / `SpawnFailed`。
     pub fn spawn(binary: &str, cwd: Option<&str>) -> Result<Self, CodexAppServerError> {
-        let (program, args) = split_command_line(binary)?;
-        let resolved_program = resolve_spawn_program(program);
-        let mut command = if resolved_program.requires_shell {
-            shell_app_server_command(binary)
-        } else {
-            let mut command = Command::new(&resolved_program.program);
-            command.args(args).arg("app-server");
-            apply_spawn_environment(
-                &mut command,
-                resolved_program.lookup_path.as_deref(),
-                &resolved_program.lookup_environment,
-                &resolved_program.path_entries,
-            );
-            command
-        };
+        let (program, preset_args) = split_command_line(binary);
+        if program.is_empty() {
+            return Err(CodexAppServerError::SpawnFailed(
+                "codex app-server binary 不能为空".to_string(),
+            ));
+        }
+        let mut args = preset_args
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        args.push("app-server".to_string());
+        let mut command = build_provider_command(program, &args);
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -317,166 +309,6 @@ impl Drop for CodexTransport {
     }
 }
 
-fn split_command_line(command: &str) -> Result<(&str, Vec<&str>), CodexAppServerError> {
-    let mut parts = command.split_whitespace();
-    let program = parts.next().ok_or_else(|| {
-        CodexAppServerError::SpawnFailed("codex app-server binary 不能为空".to_string())
-    })?;
-    Ok((program, parts.collect()))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ResolvedSpawnProgram {
-    program: String,
-    lookup_path: Option<OsString>,
-    lookup_environment: Vec<(OsString, OsString)>,
-    path_entries: Vec<PathBuf>,
-    requires_shell: bool,
-}
-
-fn resolve_spawn_program(program: &str) -> ResolvedSpawnProgram {
-    let lookup_result = if Path::new(program).components().count() > 1 {
-        None
-    } else {
-        run_command_lookup_with_path(program).ok()
-    };
-    resolve_spawn_program_from_lookup(program, lookup_result)
-}
-
-fn resolve_spawn_program_from_lookup(
-    program: &str,
-    lookup_result: Option<CommandLookupResult>,
-) -> ResolvedSpawnProgram {
-    if Path::new(program).components().count() > 1 {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: None,
-            lookup_environment: Vec::new(),
-            path_entries: spawn_path_entries_for_program(program),
-            requires_shell: false,
-        };
-    }
-
-    let requires_shell = lookup_result
-        .as_ref()
-        .is_some_and(|result| !is_direct_executable_lookup(&result.command));
-    if requires_shell {
-        return ResolvedSpawnProgram {
-            program: program.to_string(),
-            lookup_path: lookup_result
-                .as_ref()
-                .and_then(|result| result.path.clone()),
-            lookup_environment: lookup_result
-                .as_ref()
-                .map(|result| result.environment.clone())
-                .unwrap_or_default(),
-            path_entries: Vec::new(),
-            requires_shell: true,
-        };
-    }
-
-    let resolved_program = lookup_result
-        .as_ref()
-        .map(|result| result.command.as_str())
-        .unwrap_or(program);
-    let path_entries = if resolved_program == program {
-        Vec::new()
-    } else {
-        spawn_path_entries_for_program(&resolved_program)
-    };
-
-    ResolvedSpawnProgram {
-        program: resolved_program.to_string(),
-        lookup_path: lookup_result
-            .as_ref()
-            .and_then(|result| result.path.clone()),
-        lookup_environment: lookup_result
-            .as_ref()
-            .map(|result| result.environment.clone())
-            .unwrap_or_default(),
-        path_entries,
-        requires_shell: false,
-    }
-}
-
-fn is_direct_executable_lookup(command: &str) -> bool {
-    let trimmed = command.trim();
-    !trimmed.chars().any(char::is_whitespace) && Path::new(trimmed).components().count() > 1
-}
-
-fn build_shell_app_server_command_line(binary: &str) -> String {
-    format!("{} app-server", binary.trim())
-}
-
-#[cfg(unix)]
-fn shell_app_server_command(binary: &str) -> Command {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let mut command = Command::new(shell);
-    command.args(["-lic", &build_shell_app_server_command_line(binary)]);
-    command
-}
-
-#[cfg(not(unix))]
-fn shell_app_server_command(binary: &str) -> Command {
-    let mut command = Command::new("cmd");
-    command.args(["/C", &build_shell_app_server_command_line(binary)]);
-    command
-}
-
-fn spawn_path_entries_for_program(program: &str) -> Vec<PathBuf> {
-    Path::new(program)
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| vec![parent.to_path_buf()])
-        .unwrap_or_default()
-}
-
-fn apply_spawn_environment(
-    command: &mut Command,
-    lookup_path: Option<&OsStr>,
-    lookup_environment: &[(OsString, OsString)],
-    path_entries: &[PathBuf],
-) {
-    // GUI 启动时进程 PATH 不含 .zshrc 里的 nvm 目录；lookup 失败时才注入
-    // 交互式 PATH，才能找到 `codex` 以及其 shebang 依赖的 `node`。
-    let fallback_path = if lookup_path.is_some() {
-        None
-    } else {
-        resolve_interactive_shell_path().or_else(|| env::var_os("PATH"))
-    };
-    let current_path = lookup_path.or(fallback_path.as_deref());
-    if let Some(path) = build_spawn_path(current_path, path_entries) {
-        command.env("PATH", path);
-    }
-
-    for (key, value) in lookup_environment {
-        if is_shell_runtime_variable(key.as_os_str()) {
-            continue;
-        }
-        command.env(key, value);
-    }
-}
-
-fn build_spawn_path(current_path: Option<&OsStr>, path_entries: &[PathBuf]) -> Option<OsString> {
-    let mut paths: Vec<PathBuf> = path_entries.to_vec();
-    if let Some(current_path) = current_path {
-        paths.extend(env::split_paths(current_path));
-    }
-
-    if paths.is_empty() {
-        return None;
-    }
-
-    env::join_paths(paths).ok()
-}
-
-fn is_shell_runtime_variable(key: &OsStr) -> bool {
-    matches!(
-        key.to_str(),
-        Some("PATH" | "PWD" | "OLDPWD" | "SHLVL" | "_")
-    )
-}
-
 fn spawn_stdout_reader(stdout: ChildStdout, state: Arc<TransportState>) {
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
@@ -656,125 +488,10 @@ mod tests {
     #[test]
     fn split_command_line_preserves_program_and_args() {
         let (program, args) =
-            split_command_line("codex --dangerously-bypass-approvals-and-sandbox").unwrap();
+            split_command_line("codex --dangerously-bypass-approvals-and-sandbox");
 
         assert_eq!(program, "codex");
         assert_eq!(args, vec!["--dangerously-bypass-approvals-and-sandbox"]);
-    }
-
-    #[test]
-    fn resolve_spawn_program_keeps_path_commands() {
-        assert_eq!(
-            resolve_spawn_program("/opt/codex/bin/codex").program,
-            "/opt/codex/bin/codex"
-        );
-        assert_eq!(resolve_spawn_program("./codex").program, "./codex");
-    }
-
-    #[test]
-    fn resolve_spawn_program_adds_program_parent_to_child_path() {
-        assert_eq!(
-            resolve_spawn_program("/opt/codex/bin/codex").path_entries,
-            vec![PathBuf::from("/opt/codex/bin")]
-        );
-    }
-
-    #[test]
-    fn resolve_spawn_program_uses_shell_for_alias_lookup() {
-        let resolved = resolve_spawn_program_from_lookup(
-            "cxa_headroom",
-            Some(CommandLookupResult {
-                command: "alias cxa_headroom='codex --model gpt-5'".to_string(),
-                path: None,
-                environment: Vec::new(),
-            }),
-        );
-
-        assert_eq!(resolved.program, "cxa_headroom");
-        assert!(resolved.requires_shell);
-    }
-
-    #[test]
-    fn build_shell_app_server_command_line_keeps_alias_in_command_position() {
-        assert_eq!(
-            build_shell_app_server_command_line("cxa_headroom"),
-            "cxa_headroom app-server"
-        );
-    }
-
-    #[test]
-    fn build_spawn_path_prepends_program_parent_to_existing_path() {
-        let path = build_spawn_path(
-            Some(OsStr::new("/usr/bin:/bin")),
-            &[PathBuf::from("/opt/codex/bin")],
-        )
-        .expect("spawn path");
-
-        assert_eq!(
-            env::split_paths(&path).collect::<Vec<_>>(),
-            vec![
-                PathBuf::from("/opt/codex/bin"),
-                PathBuf::from("/usr/bin"),
-                PathBuf::from("/bin"),
-            ]
-        );
-    }
-
-    #[test]
-    fn build_spawn_path_preserves_lookup_shell_path_without_program_parent() {
-        let path = build_spawn_path(Some(OsStr::new("/opt/node/bin:/usr/bin:/bin")), &[])
-            .expect("spawn path");
-
-        assert_eq!(
-            env::split_paths(&path).collect::<Vec<_>>(),
-            vec![
-                PathBuf::from("/opt/node/bin"),
-                PathBuf::from("/usr/bin"),
-                PathBuf::from("/bin"),
-            ]
-        );
-    }
-
-    #[test]
-    fn apply_spawn_environment_skips_shell_runtime_variables() {
-        let mut command = Command::new("/usr/bin/env");
-        apply_spawn_environment(
-            &mut command,
-            Some(OsStr::new("/opt/node/bin:/usr/bin:/bin")),
-            &[
-                (
-                    OsString::from("GVM_ROOT"),
-                    OsString::from("/tmp/redwhisk-gvm"),
-                ),
-                (
-                    OsString::from("PWD"),
-                    OsString::from("/tmp/should-not-leak"),
-                ),
-            ],
-            &[PathBuf::from("/opt/codex/bin")],
-        );
-
-        let envs: Vec<_> = command
-            .get_envs()
-            .map(|(key, value)| (key.to_os_string(), value.map(|entry| entry.to_os_string())))
-            .collect();
-        assert!(envs.iter().any(|(key, value)| {
-            key == &OsString::from("GVM_ROOT")
-                && value.as_ref() == Some(&OsString::from("/tmp/redwhisk-gvm"))
-        }));
-        assert!(envs.iter().all(|(key, _)| key != &OsString::from("PWD")));
-        assert!(envs.iter().any(|(key, value)| {
-            key == &OsString::from("PATH")
-                && value.as_ref().is_some_and(|path| {
-                    env::split_paths(path).collect::<Vec<_>>()
-                        == vec![
-                            PathBuf::from("/opt/codex/bin"),
-                            PathBuf::from("/opt/node/bin"),
-                            PathBuf::from("/usr/bin"),
-                            PathBuf::from("/bin"),
-                        ]
-                })
-        }));
     }
 
     #[test]

@@ -136,7 +136,7 @@ export function AgentProfileForm({
 
   function handleAgentTypeChange(nextAgentType: AgentType) {
     setAgentType(nextAgentType);
-    // 切 agentType 时同步调整 displayMode（grok 强制 tui；codex/claude/opencode 可保留 tui）。
+    // 切 agentType 时同步调整 displayMode（全部 provider 均可切换，保留已有 tui）。
     setDisplayMode((current) =>
       resolveDisplayModeOnAgentTypeChange(nextAgentType, current),
     );
@@ -363,22 +363,7 @@ export function AgentProfileForm({
                 </SelectContent>
               </Select>
             </div>
-          ) : (
-            <div className="grid gap-1.5">
-              <Label
-                htmlFor="agent-profile-display-mode-locked"
-                className="text-xs text-muted-foreground"
-              >
-                {messages.settings.displayMode}
-              </Label>
-              <Input
-                id="agent-profile-display-mode-locked"
-                aria-label={messages.settings.displayMode}
-                readOnly
-                value={messages.settings.displayModeTuiLocked}
-              />
-            </div>
-          )}
+          ) : null}
 
           <div className="grid gap-1.5">
             <Label

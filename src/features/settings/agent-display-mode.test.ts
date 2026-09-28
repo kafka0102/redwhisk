@@ -7,7 +7,7 @@ import {
 import type { AgentType } from "../agents/agent-session-commands";
 
 describe("getDisplayModeDefaults", () => {
-  it.each(["codex", "claude", "opencode"] as const)(
+  it.each(["codex", "claude", "opencode", "grok"] as const)(
     "returns json default + switchable for %s",
     (agentType: AgentType) => {
       expect(getDisplayModeDefaults(agentType)).toEqual({
@@ -16,13 +16,6 @@ describe("getDisplayModeDefaults", () => {
       });
     },
   );
-
-  it("returns tui default + locked for grok", () => {
-    expect(getDisplayModeDefaults("grok")).toEqual({
-      defaultMode: "tui",
-      canSwitch: false,
-    });
-  });
 });
 
 describe("resolveDisplayModeOnAgentTypeChange", () => {
@@ -36,8 +29,12 @@ describe("resolveDisplayModeOnAgentTypeChange", () => {
     );
   });
 
-  it("forces tui when switching to grok", () => {
-    expect(resolveDisplayModeOnAgentTypeChange("grok", "json")).toBe("tui");
+  it("keeps json when switching to grok with json current", () => {
+    expect(resolveDisplayModeOnAgentTypeChange("grok", "json")).toBe("json");
+  });
+
+  it("preserves tui when switching to grok with tui selected", () => {
+    expect(resolveDisplayModeOnAgentTypeChange("grok", "tui")).toBe("tui");
   });
 
   it("preserves tui when switching to codex/claude with tui selected", () => {

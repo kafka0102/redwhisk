@@ -135,7 +135,6 @@ export interface I18nMessages {
     displayMode: string;
     displayModeJson: string;
     displayModeTui: string;
-    displayModeTuiLocked: string;
     enabled: string;
     enabledYes: string;
     enabledNo: string;

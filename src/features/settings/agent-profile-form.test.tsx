@@ -136,7 +136,7 @@ describe("AgentProfileForm", () => {
       expect(trigger).toHaveTextContent("TUI");
     });
 
-    it("locks tui and hides switch UI when agentType is grok", async () => {
+    it("defaults to json and shows switch UI for grok", async () => {
       const user = userEvent.setup();
       renderForm({
         mode: "create",
@@ -148,8 +148,11 @@ describe("AgentProfileForm", () => {
 
       await selectShadcnOption(user, screen, "智能体类型", "Grok");
 
-      expect(screen.queryByRole("combobox", { name: "展示形式" })).toBeNull();
-      expect(screen.getByLabelText("展示形式")).toHaveAttribute("readonly");
+      const trigger = screen.getByRole("combobox", { name: "展示形式" });
+      expect(trigger).toHaveTextContent("JSON");
+
+      await selectShadcnOption(user, screen, "展示形式", "TUI");
+      expect(trigger).toHaveTextContent("TUI");
     });
 
     it("preserves tui when switching codex→opencode→codex", async () => {
@@ -290,7 +293,7 @@ describe("AgentProfileForm", () => {
       ).toHaveTextContent("否");
     });
 
-    it("prefills locked tui readonly input for grok profile", () => {
+    it("prefills switchable tui display for grok profile", () => {
       renderForm({
         mode: "edit",
         scope: "global",
@@ -303,8 +306,9 @@ describe("AgentProfileForm", () => {
         onSaved: () => {},
       });
 
-      expect(screen.queryByRole("combobox", { name: "展示形式" })).toBeNull();
-      expect(screen.getByLabelText("展示形式")).toHaveAttribute("readonly");
+      expect(
+        screen.getByRole("combobox", { name: "展示形式" }),
+      ).toHaveTextContent("TUI");
     });
   });
 
@@ -398,6 +402,40 @@ describe("AgentProfileForm", () => {
         expect(saveAgentProfileMock).toHaveBeenCalledWith(
           expect.objectContaining({
             agentType: "opencode",
+            displayMode: "tui",
+            enabled: true,
+          }),
+        );
+      });
+    });
+
+    it("can save switched tui displayMode for grok", async () => {
+      const user = userEvent.setup();
+      saveAgentProfileMock.mockResolvedValue(
+        buildProfile({ agentType: "grok", displayMode: "tui" }),
+      );
+
+      renderForm({
+        mode: "create",
+        scope: "global",
+        projectId: null,
+        onCancel: () => {},
+        onSaved: () => {},
+      });
+
+      await user.type(screen.getByLabelText("智能体配置名称"), "Grok");
+      await user.type(screen.getByLabelText("智能体命令"), "grok");
+
+      await selectShadcnOption(user, screen, "智能体类型", "Grok");
+      // 默认 json；可切到 tui 并保存。
+      await selectShadcnOption(user, screen, "展示形式", "TUI");
+
+      await user.click(screen.getByRole("button", { name: "保存" }));
+
+      await waitFor(() => {
+        expect(saveAgentProfileMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agentType: "grok",
             displayMode: "tui",
             enabled: true,
           }),

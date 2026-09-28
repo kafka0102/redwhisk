@@ -8,15 +8,15 @@ use crate::types::agent_session::AgentUiCapabilities;
 use crate::types::agent_session_stream::AgentModel;
 
 use super::command::{
-    append_missing_args, build_grok_tui_command_snapshot, build_grok_tui_resume_command,
-    GROK_ALWAYS_APPROVE_ARG, GROK_FALLBACK_BINARY,
+    append_missing_args, build_grok_structured_command_snapshot, build_grok_tui_command_snapshot,
+    build_grok_tui_resume_command, GROK_ALWAYS_APPROVE_ARG, GROK_FALLBACK_BINARY,
 };
 use super::{AgentProviderDescriptor, RuntimeConfig, TuiInitialPromptDelivery};
 
 /// Grok provider 描述符。
 ///
-/// TUI-only：经交互式 PTY 启动（ADR-0022）；displayMode 锁定 tui，不接结构化 json
-/// 路径（`provider_factory` 对 Grok 保留防御性拒绝）。模型候选读 `~/.grok/config.toml`：
+/// json / tui 双格式：`tui` 经交互式 PTY 启动（ADR-0022），`json` 走
+/// `grok agent stdio`（ACP，ADR-0047）。模型候选读 `~/.grok/config.toml`：
 /// 存在 `[model.<别名>]` 表时逐表枚举（`[models].default` 对应项标默认），否则回退
 /// 单条默认模型；列表不再整体只读，会话内仍因 `supports_model_switching=false` 不可切换。
 #[derive(Debug, Clone, Copy)]
@@ -47,8 +47,8 @@ impl AgentProviderDescriptor for GrokDescriptor {
     }
 
     fn build_launch_command_snapshot(&self, raw_command: &str) -> String {
-        // Grok 仅 TUI 启动；structured launch 路径不可达，保持 trim 不注入结构化参数。
-        raw_command.trim().to_string()
+        // json 启动路径：注入 `agent stdio` 子命令（结构化参数由 adapter 重建）。
+        build_grok_structured_command_snapshot(raw_command)
     }
 
     fn build_tui_command_snapshot(&self, raw_command: &str, mode: &str, dangerous: bool) -> String {
