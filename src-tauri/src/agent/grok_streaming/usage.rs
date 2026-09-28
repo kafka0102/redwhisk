@@ -41,11 +41,13 @@ pub fn agent_usage_from_value(usage: &Value) -> Option<AgentUsage> {
     })
 }
 
-/// 从任意 JSON（`_meta.usage` / `update.usage`）取并归一。
+/// 从 `_meta` / `update` 取**整会话累计**用量（`usage` 子对象）并归一。
+///
+/// 注意：`_meta` 顶层 `inputTokens` / `outputTokens` 等只代表**最后一次模型调用**
+/// （本轮），不是会话累计（见 `docs/survey/grok-build-cli-probe-notes.md` §3.4）。
+/// 因此缺 `usage` 子对象时返回 `None`，绝不用顶层本轮值冒充会话累计。
 pub fn agent_usage_from_meta(meta: &Value) -> Option<AgentUsage> {
-    meta.get("usage")
-        .and_then(agent_usage_from_value)
-        .or_else(|| agent_usage_from_value(meta))
+    meta.get("usage").and_then(agent_usage_from_value)
 }
 
 fn u64_field(object: &Value, key: &str) -> Option<u64> {
@@ -144,5 +146,19 @@ mod tests {
         let agent = agent_usage_from_meta(&meta).expect("usage");
         assert_eq!(agent.session_token_input, Some(10));
         assert_eq!(agent.session_token_output, Some(7));
+    }
+
+    #[test]
+    fn ignores_per_turn_top_level_tokens_without_session_usage() {
+        // `_meta` 顶层 token 只代表最后一次模型调用（本轮），不是整会话累计；
+        // 缺 `usage` 时不得把它当成会话累计写库（见
+        // `docs/survey/grok-build-cli-probe-notes.md` §3.4）。
+        let meta = json!({
+            "inputTokens": 30047,
+            "outputTokens": 21,
+            "totalTokens": 30068,
+            "cachedReadTokens": 29952
+        });
+        assert!(agent_usage_from_meta(&meta).is_none());
     }
 }

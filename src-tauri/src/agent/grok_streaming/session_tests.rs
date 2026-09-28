@@ -4,6 +4,7 @@
 //! 原样写入日志文件，便于断言 adapter 真实下发的握手 / prompt 参数。
 
 use super::*;
+use super::session_test_support::*;
 use crate::agent::grok_streaming::event_mapper::GrokStreamMapper;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
@@ -93,18 +94,6 @@ fn write_fake_grok(dir: &Path, log_name: &str, fail_load: bool) -> (PathBuf, Pat
         .replace("__FAIL_LOAD__", if fail_load { "1" } else { "0" });
     write_script(&script_path, &script);
     (script_path, log_path)
-}
-
-/// 写入可执行脚本并置 0o755（POSIX）。
-fn write_script(script_path: &Path, script: &str) {
-    fs::write(&script_path, script).expect("write fake grok");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(&script_path).expect("meta").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script_path, permissions).expect("chmod");
-    }
 }
 
 fn config(

@@ -9,6 +9,11 @@
 //! - `tool_detail` / `usage`：工具调用与用量归一（纯函数）
 //! - `argv`：结构化启动参数 `agent [--always-approve] [-m model] stdio`
 //! - `session`：`GrokSessionHandle`（实现 `AgentSessionHandle`）
+//!
+//! 用量口径：只认整会话累计（`_meta.usage`），归一为既有会话 token 三项 + `Overwrite`。
+//! 执行时长：沿用 ADR-0043 的 json 活跃时长心跳（`is_turn_running` 由本模块广播的
+//! `TurnStarted` / `TurnCompleted` / `TurnFailed` / `TurnCanceled` 驱动），Grok 不新增
+//! 字段、不旁路。
 
 pub mod argv;
 pub mod event_mapper;

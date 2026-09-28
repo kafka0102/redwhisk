@@ -142,6 +142,10 @@ impl GrokStreamMapper {
         if let Some(event) = self.ensure_turn_started(&Value::Null) {
             events.push(event);
         }
+        // 幂等：取消 / 进程退出 / 已收尾后再到达的错误不重复收尾。
+        if self.turn_finalized {
+            return events;
+        }
         events.push(AgentStreamEvent::TurnFailed {
             turn_id: self.turn_id.clone(),
             error,

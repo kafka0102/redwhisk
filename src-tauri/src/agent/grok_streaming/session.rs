@@ -164,7 +164,10 @@ impl GrokSessionHandle {
                 .lock()
                 .map(|mut guard| match result {
                     Ok(value) => guard.mapper.on_prompt_result(&value),
-                    Err(error) => guard.mapper.on_prompt_error(error.to_string()),
+                    Err(error) => {
+                        let message = prompt_failure_message(&error, &transport);
+                        guard.mapper.on_prompt_error(message)
+                    }
                 })
                 .unwrap_or_default();
             emit_all(&config, events);
@@ -411,11 +414,30 @@ fn canonical_cwd(cwd: &str) -> String {
 }
 
 fn format_unexpected_exit_error(reason: &str, stderr_tail: &str) -> String {
+    append_stderr_tail(format!("grok 进程退出：{reason}"), stderr_tail)
+}
+
+/// 轮次请求失败时的诊断信息：通道 / 进程异常（`Closed`）附上 stderr 尾巴，
+/// 便于区分协议错误与进程崩溃；其余错误保持原样。
+fn prompt_failure_message(
+    error: &GrokStreamingError,
+    transport: &GrokStreamingTransport,
+) -> String {
+    match error {
+        GrokStreamingError::Closed(_) => {
+            append_stderr_tail(error.to_string(), &transport.stderr_tail())
+        }
+        _ => error.to_string(),
+    }
+}
+
+/// 在诊断信息末尾追加 stderr 尾巴（空白则原样返回）。
+fn append_stderr_tail(message: String, stderr_tail: &str) -> String {
     let stderr = stderr_tail.trim();
     if stderr.is_empty() {
-        format!("grok 进程退出：{reason}")
+        message
     } else {
-        format!("grok 进程退出：{reason}\nstderr:\n{stderr}")
+        format!("{message}\nstderr:\n{stderr}")
     }
 }
 
@@ -436,5 +458,13 @@ fn now_ms() -> i64 {
 }
 
 #[cfg(test)]
+#[path = "session_test_support.rs"]
+mod session_test_support;
+
+#[cfg(test)]
 #[path = "session_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "session_failure_tests.rs"]
+mod failure_tests;
