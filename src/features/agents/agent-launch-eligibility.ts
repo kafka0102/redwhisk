@@ -3,7 +3,7 @@ import type { AgentProfileRecord } from "../settings/settings-commands";
 // 会话入口（Issue Run 等）选择列表的可见性与可选择性判定。
 // 抽纯函数便于单元测试，多入口共用，避免 UI 层散落分支。规则：
 // - enabled=false → 完全隐藏（前端过滤；后端不校验）。
-// - enabled=true → 正常可选（含 Codex / Claude / OpenCode / Grok，Grok 为 TUI-only）。
+// - enabled=true → 正常可选（含 Codex / Claude / OpenCode / Grok）。
 export interface AgentProfileLaunchEligibility {
   /** 是否在选择列表中可见（enabled=false 时前端隐藏）。 */
   visible: boolean;

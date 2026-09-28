@@ -128,5 +128,7 @@ Codex / Claude / OpenCode 同档的消息流渲染、turn 状态、用量统计�
 - 上游证据：[grok-build-structured-mode-feasibility.md](../survey/grok-build-structured-mode-feasibility.md)、
   [grok-build-acp-protocol-notes.md](../survey/grok-build-acp-protocol-notes.md)、
   [grok-build-cli-probe-notes.md](../survey/grok-build-cli-probe-notes.md)
-- 相关 ADR：[0011](./0011-agent-session-provider-factory.md)、[0022](./0022-display-mode-runtime-transport.md)、
+- 相关 ADR：[0011](./0011-agent-session-provider-factory.md)、[0020](./0020-builtin-agent-autoseed-and-display-fields.md)、[0022](./0022-display-mode-runtime-transport.md)、
   [0039](./0039-session-token-usage-snapshot.md)、[0043](./0043-session-duration-active-time.md)
+- 取代：本文取代 [0020](./0020-builtin-agent-autoseed-and-display-fields.md) 中「Grok 锁定 tui / 不可启动」的结论，与
+  [0022](./0022-display-mode-runtime-transport.md) §3 中「grok 仍不可启动」的结论；历史 ADR 不回写。

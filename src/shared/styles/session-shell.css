@@ -241,7 +241,7 @@
   outline: none;
 }
 
-/* ADR-0020：opencode/grok 在会话入口置灰不可选（disabled button）。 */
+/* 会话工具栏菜单项禁用态（如删除进行中）。 */
 .agents-session-toolbar__menu-item:disabled,
 .agents-session-toolbar__menu-item[aria-disabled="true"] {
   opacity: 0.5;
