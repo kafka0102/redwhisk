@@ -466,5 +466,9 @@ mod session_test_support;
 mod tests;
 
 #[cfg(test)]
+#[path = "session_resume_tests.rs"]
+mod resume_tests;
+
+#[cfg(test)]
 #[path = "session_failure_tests.rs"]
 mod failure_tests;
