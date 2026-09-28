@@ -32,9 +32,26 @@ describe("shouldAutoResumeTuiSession", () => {
     );
   });
 
-  it("returns false when session is closed", () => {
+  it("returns true when session is closed but issue is still running", () => {
     expect(
       shouldAutoResumeTuiSession({ ...base, sessionStatus: "closed" }),
+    ).toBe(true);
+  });
+
+  it("returns false when session is closed and issue is completed or backlog", () => {
+    expect(
+      shouldAutoResumeTuiSession({
+        ...base,
+        sessionStatus: "closed",
+        issueStatus: "completed",
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoResumeTuiSession({
+        ...base,
+        sessionStatus: "closed",
+        issueStatus: "backlog",
+      }),
     ).toBe(false);
   });
 

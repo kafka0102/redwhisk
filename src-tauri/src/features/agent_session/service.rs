@@ -1614,16 +1614,6 @@ impl AgentSessionService<'_> {
             }
         }
 
-        // closed 会话不自动/不手动复活（ADR-0033）。
-        if session.status == AgentSessionStatus::Closed {
-            return Err(CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "已正常关闭的 Session 不能续接。",
-            )
-            .with_reason("closedSessionCannotResume")
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
-        }
-
         // 幂等：structured live handle / TUI 活跃 PTY / mark_starting 均 short-circuit。
         if let Some(handle) = agent_registry.get(session.id) {
             let active_thread_id = handle

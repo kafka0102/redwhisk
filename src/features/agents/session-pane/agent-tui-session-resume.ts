@@ -36,9 +36,6 @@ export function shouldAutoResumeTuiSession(input: {
   if (!input.isActive) {
     return false;
   }
-  if (input.sessionStatus === "closed") {
-    return false;
-  }
   if (input.issueStatus !== "running" && input.issueStatus !== "review") {
     return false;
   }

@@ -103,7 +103,56 @@ fn resume_tui_rejects_missing_provider_session_id() {
 }
 
 #[test]
-fn resume_tui_rejects_closed_session() {
+fn resume_tui_allows_closed_session_for_incomplete_issue() {
+    let temp_dir = tempdir().expect("temp");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let script = temp_dir.path().join("fake-tui.sh");
+    write_sleep_script(&script);
+
+    let database = open_db(temp_dir.path());
+    let session_id = seed_stopped_tui_session(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        &script.to_string_lossy(),
+        Some("thread-closed"),
+        "closed",
+        "running",
+    );
+
+    let service = service(&database.connection);
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let result = service
+        .resume_agent_session(
+            temp_dir.path(),
+            ResumeAgentSessionInput {
+                project_id: 1,
+                session_id,
+            },
+            &registry,
+            &broadcaster,
+            &pty,
+        )
+        .expect("closed session with incomplete issue can resume");
+
+    assert_eq!(result.session_id, session_id);
+    assert_eq!(result.thread_id, "thread-closed");
+    assert!(pty.contains(session_id), "must register PTY");
+
+    let record = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find")
+        .expect("session");
+    assert_eq!(record.status, AgentSessionStatus::Running);
+
+    let _ = pty.kill(session_id);
+}
+
+#[test]
+fn resume_tui_rejects_closed_session_for_backlog_issue() {
     let temp_dir = tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     create_git_repo(&repo_dir);
@@ -112,9 +161,9 @@ fn resume_tui_rejects_closed_session() {
         &database.connection,
         &repo_dir.to_string_lossy(),
         "codex",
-        Some("thread-closed"),
+        Some("thread-closed-backlog"),
         "closed",
-        "running",
+        "backlog",
     );
 
     let service = service(&database.connection);
@@ -133,10 +182,54 @@ fn resume_tui_rejects_closed_session() {
             &broadcaster,
             &pty,
         )
-        .expect_err("closed session cannot resume");
+        .expect_err("closed session with backlog issue cannot resume");
 
     assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
-    assert_eq!(error.reason.as_deref(), Some("closedSessionCannotResume"));
+    assert_eq!(
+        error.reason.as_deref(),
+        Some("backlogIssueSessionCannotRun")
+    );
+    assert!(!pty.contains(session_id));
+}
+
+#[test]
+fn resume_tui_rejects_closed_session_for_completed_issue() {
+    let temp_dir = tempdir().expect("temp");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let database = open_db(temp_dir.path());
+    let session_id = seed_stopped_tui_session(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        "codex",
+        Some("thread-closed-completed"),
+        "closed",
+        "completed",
+    );
+
+    let service = service(&database.connection);
+    let pty = PtySessionManager::new();
+    let registry = AgentSessionRegistry::new();
+    let broadcaster = AgentEventBroadcaster::new();
+
+    let error = service
+        .resume_agent_session(
+            temp_dir.path(),
+            ResumeAgentSessionInput {
+                project_id: 1,
+                session_id,
+            },
+            &registry,
+            &broadcaster,
+            &pty,
+        )
+        .expect_err("closed session with completed issue cannot resume");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionValidationFailed);
+    assert_eq!(
+        error.reason.as_deref(),
+        Some("completedIssueSessionCannotRun")
+    );
     assert!(!pty.contains(session_id));
 }
 

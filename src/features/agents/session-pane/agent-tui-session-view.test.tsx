@@ -398,7 +398,7 @@ describe("AgentTuiSessionView", () => {
     expect(commandMocks.resumeAgentSession).not.toHaveBeenCalled();
   });
 
-  it("issue 非 running/review 或 session closed 时不自动 resume", async () => {
+  it("issue 非 running/review 时不自动 resume；closed + running issue 仍自动 resume", async () => {
     mockInactivePty();
 
     const { rerender } = render(
@@ -424,10 +424,9 @@ describe("AgentTuiSessionView", () => {
         isActive
       />,
     );
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(commandMocks.resumeAgentSession).toHaveBeenCalledTimes(1);
     });
-    expect(commandMocks.resumeAgentSession).not.toHaveBeenCalled();
   });
 
   it("resume 失败时显示详细错误；可重试 reason 显示重试按钮", async () => {
