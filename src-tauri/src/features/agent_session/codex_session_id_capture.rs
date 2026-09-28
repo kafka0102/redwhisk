@@ -19,6 +19,15 @@ const CODEX_SESSION_CAPTURE_TOTAL_MS: u64 = 5_000;
 const CODEX_SESSION_CAPTURE_INTERVAL_MS: u64 = 250;
 const SESSION_CAPTURE_WINDOW_MS: i64 = 60_000;
 
+const ROLLOUT_FILE_PREFIX: &str = "rollout-";
+const ROLLOUT_FILE_SUFFIX: &str = ".jsonl";
+
+/// 一个 `rollout-*.jsonl` 候选文件及其最近修改时间。
+pub(super) struct RolloutCandidate {
+    pub(super) modified_at: i64,
+    pub(super) path: PathBuf,
+}
+
 /// 启动命令是否为 codex 二进制（决定是否尝试捕获 session_id）。
 pub(super) fn should_attempt_codex_session_capture(command: &str) -> bool {
     let Some(program) = command.split_whitespace().next() else {
@@ -134,14 +143,15 @@ fn detect_from_rollout_files(
 ) -> Option<String> {
     let mut candidates = Vec::new();
     for root in collect_session_roots(codex_home) {
-        collect_rollout_candidates(&root, started_at, &mut candidates);
+        collect_rollout_candidates(&root, &mut candidates);
     }
 
     // 按 mtime 倒序遍历，最近写入的会话优先，且避免全量读取内容。
-    candidates.sort_by_key(|(modified_at, _)| std::cmp::Reverse(*modified_at));
+    candidates.retain(|candidate| is_within_capture_window(candidate.modified_at, started_at));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.modified_at));
 
-    for (_, path) in candidates {
-        if let Some(session_id) = rollout_matches_working_dir(&path, working_dir) {
+    for candidate in candidates {
+        if let Some(session_id) = rollout_matches_working_dir(&candidate.path, working_dir) {
             return Some(session_id);
         }
     }
@@ -149,7 +159,11 @@ fn detect_from_rollout_files(
     None
 }
 
-fn collect_rollout_candidates(dir: &Path, started_at: i64, candidates: &mut Vec<(i64, PathBuf)>) {
+/// 递归收集 `rollout-*.jsonl` 候选（文件路径 + 最近修改时间）。
+///
+/// 会话标识捕获与 session log 读取共用本函数，保证 `sessions/` 与
+/// `profiles/*/sessions/` 的扫描事实只有一套。
+pub(super) fn collect_rollout_candidates(dir: &Path, candidates: &mut Vec<RolloutCandidate>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -157,21 +171,20 @@ fn collect_rollout_candidates(dir: &Path, started_at: i64, candidates: &mut Vec<
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            collect_rollout_candidates(&path, started_at, candidates);
+            collect_rollout_candidates(&path, candidates);
             continue;
         }
 
         let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        if !file_name.starts_with("rollout-") || !file_name.ends_with(".jsonl") {
+        if !file_name.starts_with(ROLLOUT_FILE_PREFIX) || !file_name.ends_with(ROLLOUT_FILE_SUFFIX)
+        {
             continue;
         }
 
         if let Some(modified_at) = file_mtime_millis(&path) {
-            if is_within_capture_window(modified_at, started_at) {
-                candidates.push((modified_at, path));
-            }
+            candidates.push(RolloutCandidate { modified_at, path });
         }
     }
 }
@@ -189,7 +202,7 @@ fn rollout_matches_working_dir(path: &Path, working_dir: &str) -> Option<String>
         .map(str::to_string)
 }
 
-fn collect_session_roots(codex_home: &Path) -> Vec<PathBuf> {
+pub(super) fn collect_session_roots(codex_home: &Path) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let top_level_sessions = codex_home.join("sessions");
     if top_level_sessions.is_dir() {
@@ -249,7 +262,7 @@ fn is_within_capture_window(modified_at: i64, started_at: i64) -> bool {
     modified_at >= started_at.saturating_sub(SESSION_CAPTURE_WINDOW_MS)
 }
 
-fn file_mtime_millis(path: &Path) -> Option<i64> {
+pub(super) fn file_mtime_millis(path: &Path) -> Option<i64> {
     fs::metadata(path)
         .ok()
         .and_then(|metadata| metadata.modified().ok())

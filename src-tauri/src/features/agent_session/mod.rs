@@ -5,6 +5,9 @@
 mod active_time;
 pub mod active_time_heartbeat;
 mod codex_session_id_capture;
+// 纯函数 seam，本票暂未接线；crate 级 `warnings = "deny"` 会把 dead_code 升级为
+// 硬错误，故先以 pub 模块暴露。接线（归档 / 心跳）后应回落为私有 `mod` + `pub(crate)`。
+pub mod codex_session_log;
 mod command_snapshot;
 pub mod commands;
 mod content_search;
