@@ -19,6 +19,7 @@ mod startup_model;
 mod terminal_archive_clean;
 mod terminal_archive_render;
 mod timeline;
+mod tui_session_metrics_sync;
 mod tui_terminal;
 pub mod tui_terminal_commands;
 mod validation;

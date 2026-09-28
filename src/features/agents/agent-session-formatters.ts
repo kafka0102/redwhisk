@@ -195,19 +195,19 @@ function getSessionElapsedMs(
 }
 
 /**
- * 累计活跃处理时长：只有 json（结构化传输）会话能逐 Turn 统计，由后端心跳独占写入；
- * tui（PTY）没有 Turn 事件，累计值缺失或为 0 的存量会话也走回退。
+ * 累计处理时长：json 由活跃时长心跳独占写入，TUI Codex 由 session log 同步写入；
+ * 累计值缺失或为 0 的存量会话走墙钟回退。
  */
 function getAccumulatedProcessingMs(
   session: AgentSessionListItem,
 ): number | null {
-  if (session.displayMode !== "json" || session.processingMs <= 0) {
+  if (session.processingMs <= 0) {
     return null;
   }
   return session.processingMs;
 }
 
-// 详情区执行时长：json 会话取后端累计处理时长，其余回退墙钟差（开始 → 结束/当前）。
+// 详情区执行时长：累计处理时长 > 0 即取用，否则回退墙钟差（开始 → 结束/当前）。
 export function formatProcessingDuration(
   session: AgentSessionListItem | null,
   locale: string,

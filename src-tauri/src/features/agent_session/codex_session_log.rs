@@ -8,7 +8,8 @@
 //! 或跳过对应行，不 panic、不报错中断。
 
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -83,12 +84,78 @@ fn locate_session_log(codex_home: &Path, provider_session_id: &str) -> Option<Pa
 
 fn parse_session_log<'a>(lines: impl Iterator<Item = &'a str>) -> Option<CodexSessionSummary> {
     let mut builder = SessionSummaryBuilder::default();
-    for line in lines {
-        if let Ok(value) = serde_json::from_str::<Value>(line) {
-            builder.ingest(&value);
-        }
-    }
+    builder.ingest_lines(lines);
     builder.finish()
+}
+
+/// Codex session log 增量读取器：按字节偏移只消费新增的完整行，累计摘要。
+///
+/// 供运行期后台心跳复用同一套定位与解析：定位失败、IO / 编码错误一律静默跳过，
+/// 不 panic。进程重启后从零重读一次即可——累计值可幂等重建。
+#[derive(Default)]
+pub(crate) struct CodexSessionLogTail {
+    path: Option<PathBuf>,
+    offset: u64,
+    builder: SessionSummaryBuilder,
+}
+
+impl CodexSessionLogTail {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// 定位（首次或文件丢失后）并追加读取尚未消费的完整行。
+    pub(crate) fn poll(&mut self, codex_home: &Path, provider_session_id: &str) {
+        if self.path.is_none() {
+            self.path = locate_session_log(codex_home, provider_session_id);
+        }
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+
+        let Ok(mut file) = File::open(&path) else {
+            // 文件被移动 / 删除：下个 tick 重新定位。
+            self.path = None;
+            return;
+        };
+        let Ok(length) = file.metadata().map(|metadata| metadata.len()) else {
+            return;
+        };
+        // 文件被截断 / 轮转：偏移与已累计值都作废，从头重建（累计可幂等重建）。
+        if length < self.offset {
+            self.offset = 0;
+            self.builder = SessionSummaryBuilder::default();
+        }
+        if length == self.offset {
+            return;
+        }
+        if file.seek(SeekFrom::Start(self.offset)).is_err() {
+            return;
+        }
+        let mut buffer = Vec::new();
+        if file.read_to_end(&mut buffer).is_err() {
+            return;
+        }
+        // 只消费到最后一个换行：末尾不完整行留待下个 tick 补齐后再解析。
+        let Some(last_newline) = buffer.iter().rposition(|byte| *byte == b'\n') else {
+            return;
+        };
+        let consumed = last_newline + 1;
+        if let Ok(text) = std::str::from_utf8(&buffer[..consumed]) {
+            self.builder.ingest_lines(text.lines());
+        }
+        self.offset += consumed as u64;
+    }
+
+    /// 当前线程累计 Token 用量（最后一次 `token_count` 快照）。
+    pub(crate) fn token_usage(&self) -> Option<SessionTokenUsage> {
+        self.builder.token_usage
+    }
+
+    /// 当前累计执行时长（各 turn `duration_ms` 之和）。
+    pub(crate) fn processing_ms(&self) -> u64 {
+        self.builder.processing_ms()
+    }
 }
 
 #[derive(Default)]
@@ -99,6 +166,14 @@ struct SessionSummaryBuilder {
 }
 
 impl SessionSummaryBuilder {
+    fn ingest_lines<'a>(&mut self, lines: impl Iterator<Item = &'a str>) {
+        for line in lines {
+            if let Ok(value) = serde_json::from_str::<Value>(line) {
+                self.ingest(&value);
+            }
+        }
+    }
+
     fn ingest(&mut self, value: &Value) {
         if value.get("type").and_then(Value::as_str) != Some("event_msg") {
             return;
@@ -192,12 +267,16 @@ impl SessionSummaryBuilder {
             return None;
         }
 
-        let processing_ms = self.turns.iter().filter_map(|turn| turn.duration_ms).sum();
+        let processing_ms = self.processing_ms();
         Some(CodexSessionSummary {
             turns: self.turns,
             token_usage: self.token_usage,
             processing_ms,
         })
+    }
+
+    fn processing_ms(&self) -> u64 {
+        self.turns.iter().filter_map(|turn| turn.duration_ms).sum()
     }
 }
 

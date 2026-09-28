@@ -172,6 +172,28 @@ describe("formatProcessingDuration", () => {
     ).toBe("3m 4s");
   });
 
+  it("shows the accumulated processing duration for a tui session when available", () => {
+    const startedAt = 1_789_352_695_333;
+    const session = {
+      ...base,
+      displayMode: "tui",
+      status: "running",
+      startedAt,
+      closedAt: null,
+      processingMs: 90_000,
+    } satisfies AgentSessionListItem;
+    expect(
+      formatProcessingDuration(session, "zh", startedAt + 24_797_314),
+    ).toBe("1分30秒");
+    expect(
+      formatProcessingDuration(
+        { ...session, status: "closed", closedAt: startedAt + 185_000 },
+        "zh",
+        startedAt + 999_999_999,
+      ),
+    ).toBe("1分30秒");
+  });
+
   it("falls back to wall-clock when the accumulated duration is zero", () => {
     expect(
       formatProcessingDuration(

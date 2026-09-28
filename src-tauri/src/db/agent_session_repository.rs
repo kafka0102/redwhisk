@@ -47,6 +47,14 @@ pub struct AgentSessionListRow {
     pub token_cache: Option<i64>,
 }
 
+/// 运行中 TUI 会话及其 session log 用量同步所需的最小元信息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunningTuiSession {
+    pub session_id: i64,
+    pub agent_type: AgentType,
+    pub provider_session_id: String,
+}
+
 pub struct AgentSessionRepository<'connection> {
     connection: &'connection Connection,
 }
@@ -345,6 +353,37 @@ impl<'connection> AgentSessionRepository<'connection> {
         id: i64,
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         find_by_id_on_connection(transaction, id)
+    }
+
+    /// 列出运行中、`display_mode=tui`、且已捕获 `provider_session_id` 的会话。
+    ///
+    /// 供运行期 session log 用量同步使用。仅返回 `tui`，与活跃时长心跳（只累加
+    /// `json`）按 `display_mode` 互斥；`agent_type` 由 agent profile 关联回读。
+    pub fn list_running_tui_sessions(&self) -> rusqlite::Result<Vec<RunningTuiSession>> {
+        let mut statement = self.connection.prepare(
+            "SELECT agent_sessions.id,
+                    agent_profiles.agent_type,
+                    agent_sessions.provider_session_id
+             FROM agent_sessions
+             INNER JOIN agent_profiles ON agent_profiles.id = agent_sessions.agent_profile_id
+             WHERE agent_sessions.status = 'running'
+               AND agent_sessions.display_mode = 'tui'
+               AND agent_sessions.del = 0
+               AND COALESCE(TRIM(agent_sessions.provider_session_id), '') <> ''",
+        )?;
+
+        let sessions = statement
+            .query_map([], |row| {
+                Ok(RunningTuiSession {
+                    session_id: row.get(0)?,
+                    agent_type: AgentType::from_db_str(&row.get::<_, String>(1)?)
+                        .ok_or(rusqlite::Error::InvalidQuery)?,
+                    provider_session_id: row.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        Ok(sessions)
     }
 
     pub fn insert_in_transaction(
@@ -853,6 +892,24 @@ impl<'connection> AgentSessionRepository<'connection> {
              SET processing_ms = processing_ms + MIN(?1, MAX(0, ?2 - COALESCE(turn_started_at, ?2)))
              WHERE status = 'running' AND is_turn_running = 1 AND del = 0",
             params![active_ms, now],
+        )
+    }
+
+    /// 覆盖写入 TUI 会话的累计执行时长（取自 provider session log 各 turn 处理耗时之和）。
+    ///
+    /// 与 [`Self::accumulate_active_time_ms`] 按 `display_mode` 互斥：本方法只命中
+    /// `tui`；活跃时长心跳只累加 `is_turn_running=1` 的会话（TUI 无结构化 Turn 事件，
+    /// 不会命中），两条路径不互相覆盖。
+    pub fn overwrite_tui_processing_ms(
+        &self,
+        session_id: i64,
+        processing_ms: i64,
+    ) -> rusqlite::Result<usize> {
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET processing_ms = ?1
+             WHERE id = ?2 AND status = 'running' AND display_mode = 'tui' AND del = 0",
+            params![processing_ms, session_id],
         )
     }
 
