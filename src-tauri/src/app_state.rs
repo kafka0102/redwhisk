@@ -61,11 +61,24 @@ impl AppState {
         }
     }
 
-    /// 窗口销毁时清除所有指向该 label 的映射（同一窗口不会同时显示多个项目，retain 足够）。
-    pub fn forget_window(&self, window_label: &str) {
-        if let Ok(mut windows) = self.project_windows.lock() {
-            windows.retain(|_, label| label != window_label);
-        }
+    /// 窗口销毁时清除该窗口的全部归属，并返回其曾归属的项目 id 集合（升序）。
+    ///
+    /// 项目 → 窗口是一对一映射（`record_project_window` 保证同一项目只登记一个窗口），
+    /// 因此被移除的项目随之不再显示在任何存活窗口 —— 调用方据此终止其运行态。
+    pub fn take_projects_for_window(&self, window_label: &str) -> Vec<i64> {
+        let Ok(mut windows) = self.project_windows.lock() else {
+            return Vec::new();
+        };
+        let mut owned = Vec::new();
+        windows.retain(|project_id, label| {
+            let belongs_to_window = label.as_str() == window_label;
+            if belongs_to_window {
+                owned.push(*project_id);
+            }
+            !belongs_to_window
+        });
+        owned.sort_unstable();
+        owned
     }
 }
 
@@ -121,13 +134,18 @@ mod tests {
     }
 
     #[test]
-    fn forget_window_clears_only_matching_entries() {
+    fn take_projects_for_window_returns_owned_and_leaves_other_windows() {
         let state = empty_state();
         state.record_project_window(7, "main".to_string());
         state.record_project_window(9, "project-9".to_string());
 
-        state.forget_window("main");
+        let orphaned = state.take_projects_for_window("main");
 
+        assert_eq!(
+            orphaned,
+            vec![7],
+            "窗口销毁后应返回其曾归属的项目；其它窗口的项目不应进入集合"
+        );
         assert!(
             state.find_project_window(7).is_none(),
             "main 销毁后项目 7 的归属应清除"
@@ -136,6 +154,22 @@ mod tests {
             state.find_project_window(9).as_deref(),
             Some("project-9"),
             "其它窗口的归属不应受影响"
+        );
+    }
+
+    #[test]
+    fn take_projects_for_window_without_projects_is_empty() {
+        let state = empty_state();
+        state.record_project_window(7, "main".to_string());
+
+        assert!(
+            state.take_projects_for_window("empty-window").is_empty(),
+            "未归属任何项目的窗口不应产生待终止项目"
+        );
+        assert_eq!(
+            state.find_project_window(7).as_deref(),
+            Some("main"),
+            "无关窗口的清理不应影响既有归属"
         );
     }
 

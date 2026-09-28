@@ -85,10 +85,24 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 窗口关闭后清除其项目归属，避免切换菜单把已不存在的窗口当作「已打开」而无法新建。
+            // 窗口关闭后：先取出该窗口曾归属的项目（移除映射后即不再显示在任何存活窗口），
+            // 再终止其运行态（PTY 装配的项目终端与 TUI Agent 会话共用同一注册路径）。
+            // 同时清除归属映射，避免切换菜单把已不存在的窗口当作「已打开」而无法新建。
             if let tauri::WindowEvent::Destroyed = event {
                 if let Some(state) = window.try_state::<AppState>() {
-                    state.forget_window(window.label());
+                    for project_id in state.take_projects_for_window(window.label()) {
+                        let terminated = state.pty_sessions.kill_project(project_id);
+                        if !terminated.is_empty() {
+                            logging::info_kv(
+                                "close_project_window",
+                                "project runtime terminated on window close",
+                                &[
+                                    ("projectId", &project_id.to_string()),
+                                    ("terminatedSessions", &terminated.len().to_string()),
+                                ],
+                            );
+                        }
+                    }
                 }
             }
         })

@@ -258,12 +258,33 @@ impl PtySessionManager {
         session_id: i64,
         accepts_proactive_theme_osc: bool,
     ) -> Arc<Mutex<Vec<u8>>> {
+        self.insert_capturing_session_for_project_for_test(
+            session_id,
+            0,
+            accepts_proactive_theme_osc,
+        )
+    }
+
+    /// 注入归属指定项目的捕获 session（真实 master/killer，写路径可观测）。
+    /// 供「按 projectId 终止」测试构造多项目注册表。
+    #[cfg(test)]
+    pub(crate) fn insert_capturing_session_for_project_for_test(
+        &self,
+        session_id: i64,
+        project_id: i64,
+        accepts_proactive_theme_osc: bool,
+    ) -> Arc<Mutex<Vec<u8>>> {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let writer: Box<dyn Write + Send> = Box::new(CapturingWriter {
             buffer: Arc::clone(&buffer),
             fail: false,
         });
-        self.insert_session_with_writer_for_test(session_id, writer, accepts_proactive_theme_osc);
+        self.insert_session_with_writer_for_test(
+            session_id,
+            project_id,
+            writer,
+            accepts_proactive_theme_osc,
+        );
         buffer
     }
 
@@ -274,13 +295,14 @@ impl PtySessionManager {
             buffer: Arc::new(Mutex::new(Vec::new())),
             fail: true,
         });
-        self.insert_session_with_writer_for_test(session_id, writer, true);
+        self.insert_session_with_writer_for_test(session_id, 0, writer, true);
     }
 
     #[cfg(test)]
     fn insert_session_with_writer_for_test(
         &self,
         session_id: i64,
+        project_id: i64,
         writer: Box<dyn Write + Send>,
         accepts_proactive_theme_osc: bool,
     ) {
@@ -323,7 +345,7 @@ impl PtySessionManager {
                 bytes_since_trim_check: 0,
             }),
             routing: Arc::new(PtySessionRouting {
-                project_id: AtomicI64::new(0),
+                project_id: AtomicI64::new(project_id),
                 session_id: AtomicI64::new(session_id),
                 registered: AtomicBool::new(true),
             }),
@@ -706,6 +728,36 @@ impl PtySessionManager {
             .kill()
             .map_err(|error| error.to_string());
         result
+    }
+
+    /// 终止某项目当前注册的全部 PTY 会话（项目终端与 TUI Agent 会话共用同一注册路径）。
+    ///
+    /// 复用 [`PtySessionManager::kill`] 的强杀语义，逐个终止该项目归属的会话；项目归属取自
+    /// 注册时写入的 `projectId`。已退出 / 从未注册的会话不在注册表中，因此重复调用天然安全，
+    /// 不会报错或 panic。单个会话 kill 失败不阻断其余会话（窗口关闭 / 应用退出的终止路径是
+    /// 尽力而为），返回本次成功终止的 session id（升序）。
+    pub fn kill_project(&self, project_id: i64) -> Vec<i64> {
+        let mut killed = Vec::new();
+        for session_id in self.session_ids_for_project(project_id) {
+            if self.kill(session_id).is_ok() {
+                killed.push(session_id);
+            }
+        }
+        killed
+    }
+
+    /// 枚举当前注册表中归属指定项目的会话 id（升序）。
+    fn session_ids_for_project(&self, project_id: i64) -> Vec<i64> {
+        let Ok(sessions) = self.store.sessions.lock() else {
+            return Vec::new();
+        };
+        let mut session_ids: Vec<i64> = sessions
+            .values()
+            .filter(|handle| handle.routing.project_id.load(Ordering::Acquire) == project_id)
+            .map(|handle| handle.routing.session_id.load(Ordering::Acquire))
+            .collect();
+        session_ids.sort_unstable();
+        session_ids
     }
 
     pub fn contains(&self, session_id: i64) -> bool {
@@ -1880,5 +1932,58 @@ mod tests {
 
         let _ = manager.kill(1);
         let _ = manager.kill(2);
+    }
+
+    #[test]
+    fn kill_project_terminates_only_target_project_sessions() {
+        let manager = PtySessionManager::new();
+        manager.insert_capturing_session_for_project_for_test(11, 7, true);
+        manager.insert_capturing_session_for_project_for_test(22, 9, true);
+
+        let killed = manager.kill_project(7);
+
+        assert_eq!(killed, vec![11], "只应终止目标项目的全部会话");
+        // 重复终止（模拟已退出会话尚未从注册表摘除）不报错、不 panic。
+        assert_eq!(
+            manager.kill_project(7),
+            vec![11],
+            "重复终止应安全返回相同会话，不误伤其它项目"
+        );
+        // 其它项目不受影响：终止项目 9 仍能命中其唯一会话。
+        assert_eq!(
+            manager.kill_project(9),
+            vec![22],
+            "其它项目的会话应保持可终止"
+        );
+    }
+
+    #[test]
+    fn kill_project_without_registered_sessions_is_noop() {
+        let manager = PtySessionManager::new();
+        manager.insert_capturing_session_for_project_for_test(11, 7, true);
+
+        // 未归属该项目的会话不应被终止；已退出 / 不存在会话时重复调用也不报错、不 panic。
+        assert!(manager.kill_project(404).is_empty());
+        assert!(manager.kill_project(404).is_empty());
+    }
+
+    #[test]
+    fn kill_project_tolerates_failing_kill_without_blocking_others() {
+        let manager = PtySessionManager::new();
+        manager.insert_capturing_session_for_project_for_test(11, 7, true);
+        manager.insert_capturing_session_for_project_for_test(22, 7, true);
+        manager.insert_capturing_session_for_project_for_test(33, 9, true);
+        manager.fail_kill_for_session_for_test(11);
+
+        assert_eq!(
+            manager.kill_project(7),
+            vec![22],
+            "单个会话 kill 失败不应中断该项目其余会话的终止"
+        );
+        assert_eq!(
+            manager.kill_project(9),
+            vec![33],
+            "其它项目的会话不应受本次终止影响"
+        );
     }
 }
