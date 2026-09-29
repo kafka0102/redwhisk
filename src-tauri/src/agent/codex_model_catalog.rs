@@ -133,6 +133,7 @@ fn catalog_entry_model(entry: &Value) -> Option<(i64, AgentModel)> {
     if non_empty_string(entry.get("visibility")).as_deref() != Some(LISTED_VISIBILITY) {
         return None;
     }
+    let wire_model = non_empty_string(entry.get("model")).filter(|wire| wire != &model_id);
     let priority = entry
         .get("priority")
         .and_then(Value::as_i64)
@@ -141,6 +142,7 @@ fn catalog_entry_model(entry: &Value) -> Option<(i64, AgentModel)> {
         priority,
         AgentModel {
             model_id,
+            wire_model,
             display_name: non_empty_string(entry.get("display_name")),
             is_default: None,
             default_reasoning_effort: non_empty_string(entry.get("default_reasoning_level")),
@@ -171,6 +173,7 @@ fn builtin_models() -> Vec<AgentModel> {
         .map(
             |(model_id, display_name, default_effort, supported_efforts)| AgentModel {
                 model_id: (*model_id).into(),
+                wire_model: None,
                 display_name: Some((*display_name).into()),
                 is_default: None,
                 default_reasoning_effort: Some((*default_effort).into()),
@@ -211,6 +214,7 @@ fn mark_selected(models: &mut Vec<AgentModel>, selected_model_id: Option<&str>) 
             0,
             AgentModel {
                 model_id: selected_model_id.to_string(),
+                wire_model: None,
                 display_name: Some(selected_model_id.to_string()),
                 is_default: Some(true),
                 default_reasoning_effort: Some(INSERTED_MODEL_DEFAULT_EFFORT.into()),

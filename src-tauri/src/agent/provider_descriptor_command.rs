@@ -301,6 +301,7 @@ pub(super) fn claude_models_from_home(home_dir: &Path) -> Vec<AgentModel> {
         let model_id = current.clone().unwrap_or_else(|| "claude".to_string());
         return vec![AgentModel {
             model_id,
+            wire_model: None,
             display_name: current,
             is_default: Some(true),
             default_reasoning_effort: None,
@@ -313,6 +314,7 @@ pub(super) fn claude_models_from_home(home_dir: &Path) -> Vec<AgentModel> {
         .iter()
         .map(|(model_id, display_name)| AgentModel {
             model_id: (*model_id).to_string(),
+            wire_model: None,
             display_name: Some((*display_name).to_string()),
             // 当前 settings.json 的 model 字段匹配则标默认（兼容 "sonnet[1m]" 等带后缀别名）。
             is_default: Some(current.is_some_and(|c| c == *model_id || c.starts_with(model_id))),

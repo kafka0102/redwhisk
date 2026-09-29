@@ -534,6 +534,7 @@ fn map_model_entries(entries: Vec<super::client::CodexModelEntry>) -> Vec<AgentM
         .into_iter()
         .map(|entry| AgentModel {
             model_id: entry.id,
+            wire_model: None,
             display_name: entry.display_name,
             is_default: entry.is_default,
             default_reasoning_effort: entry.default_reasoning_effort,
@@ -1960,6 +1961,7 @@ done
             models,
             vec![AgentModel {
                 model_id: "gpt-5".into(),
+                wire_model: None,
                 display_name: Some("GPT-5".into()),
                 is_default: Some(true),
                 default_reasoning_effort: None,

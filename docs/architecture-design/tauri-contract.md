@@ -38,7 +38,7 @@
 >
 > `list_agent_sessions`：出参 `AgentSessionListItem` 含 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍；Claude 按 turn 增量累加（同一 turn 的 assistant 分片与 result 总额不双计，cache 写入计入输入、读取计入缓存），能解析同口径字段的其它 Agent 同样累计，否则三项保持 `null`（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
 
-> `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。
+> `list_agent_profile_models`：入参 `ListAgentProfileModelsInput`（`projectId` + `agentProfileId`），返回与会话内 `list_agent_models` 相同的 `ListAgentModelsResult`（候选 + 只读标记 + 能力投影）；内部经同一 descriptor 解析（ADR-0036 第 7 条），Profile 不存在/不属于该项目/home 不可解析时返回既有风格命令错误（`profileNotFound` / `profileDeleted` / `profileNotInProject` / `<provider>ConfigReadFailed`）。`AgentModel.wireModel` 是发给 LLM 的模型参数（Grok 别名表的 `model`、Codex 目录条目的 `model`）；缺省时展示层回退 `modelId`。`startupModel` 按同一口径落库。
 
 > `ensure_code_language_host`：进程拉起后即返回 `CodeLanguageHostStatus`，不在命令路径上等待 LSP initialize 或语义项目加载。`status = "unavailable"` 时 `reason` 取值 `nodeNotFound`（本机缺 Node）、`bundledRuntimeUnavailable`（安装包内置语言运行时缺失或不完整）、`spawnFailed`（进程无法启动）。三类原因须在 `src-tauri/src/types/code_language.rs`、`features/code/code-language-commands.ts` 与 `codeLanguage.unavailable.*` locale（zh/en）之间一一对应，并由 `src/shared/commands/__parity__` 快照守住跨边界同步。握手在后台完成；失败时宿主随后退出，下次 ensure 再拉起。
 

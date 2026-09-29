@@ -82,6 +82,7 @@ impl AgentProviderDescriptor for GrokDescriptor {
             return grok_config::read_default_model_from_home(home_dir)
                 .map(|model| AgentModel {
                     model_id: model.clone(),
+                    wire_model: None,
                     display_name: Some(model),
                     is_default: Some(true),
                     default_reasoning_effort: None,
@@ -94,10 +95,12 @@ impl AgentProviderDescriptor for GrokDescriptor {
         aliases
             .into_iter()
             .map(|alias| {
-                let is_default = default_model.as_deref() == Some(alias.as_str());
+                let is_default = default_model.as_deref() == Some(alias.alias.as_str());
+                let wire_model = alias.wire_model.filter(|wire| wire != &alias.alias);
                 AgentModel {
-                    model_id: alias.clone(),
-                    display_name: Some(alias),
+                    model_id: alias.alias,
+                    wire_model,
+                    display_name: None,
                     is_default: Some(is_default),
                     default_reasoning_effort: None,
                     supported_reasoning_efforts: Vec::new(),

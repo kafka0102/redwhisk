@@ -5648,6 +5648,54 @@ mod tests {
     }
 
     #[test]
+    fn structured_issue_start_stores_grok_wire_model_not_alias() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp.path().join("redwhisk-data");
+        fs::create_dir_all(&data_dir).expect("data dir");
+        let grok_dir = temp.path().join(".grok");
+        fs::create_dir_all(&grok_dir).expect("grok dir");
+        fs::write(
+            grok_dir.join("config.toml"),
+            "[model.my-model]\nmodel = \"grok-4.7\"\n\n[models]\ndefault = \"my-model\"\n",
+        )
+        .expect("write grok config");
+        let connection = setup_session_list_database();
+        insert_backlog_issue(&connection, 60);
+        let service = test_agent_session_service(&connection);
+        let registry = crate::agent::session_registry::AgentSessionRegistry::new();
+        let broadcaster = crate::agent::agent_event_broadcaster::AgentEventBroadcaster::new();
+        let factory = RecordingProviderFactory {
+            captured: std::sync::Mutex::new(None),
+        };
+        let mut launch = issue_launch_context();
+        launch.profile = test_agent_profile(AgentType::Grok, "grok");
+
+        service
+            .start_structured_issue_agent_session(
+                &data_dir,
+                structured_start_input(Some("my-model")),
+                launch,
+                &registry,
+                &broadcaster,
+                &factory,
+            )
+            .expect("structured start");
+
+        let listed = service.list_agent_sessions(1).expect("list sessions");
+        assert_eq!(
+            listed.sessions[0].startup_model.as_deref(),
+            Some("grok-4.7")
+        );
+        let captured = factory
+            .captured
+            .lock()
+            .expect("lock")
+            .take()
+            .expect("provider 应收到启动请求");
+        assert_eq!(captured.model.as_deref(), Some("my-model"));
+    }
+
+    #[test]
     fn structured_issue_start_without_model_or_catalog_default_lists_empty_startup_model() {
         let temp = tempfile::tempdir().expect("temp dir");
         let data_dir = temp.path().join("redwhisk-data");

@@ -11,6 +11,7 @@ import {
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { AgentUiCapabilities } from "../agent-stream-types";
 import { ComposerContextMeter } from "./composer-context-meter";
+import { modelWireLabel } from "../agent-model-utils";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
 import type { ComposerEffort } from "./composer-types";
 
@@ -86,9 +87,10 @@ export function ComposerControls({
     capabilities.canShowModel &&
     (isModelReadOnly || !capabilities.supportsModelSwitching);
   const showThinkSelect = capabilities.supportsReasoningEffort && !isReadOnly;
-  // 展示口径（ADR-0042）：标签一律展示模型 id（目录条目 slug / 别名 / 真实模型名）
-  // 原文，不用 `display_name`，也不做任何大小写改写。
-  const modelLabel = selectedModelId ?? fallbackModelLabel(capabilities);
+  // 展示发给 LLM 的模型参数（wireModel）；没有单独参数时回退模型 id。
+  const modelLabel =
+    modelWireLabel(currentModel, selectedModelId) ??
+    fallbackModelLabel(capabilities);
   const modelPlaceholder =
     modelsError ??
     (isLoadingModels ? messages.settings.loading : messages.settings.none);
@@ -131,8 +133,10 @@ export function ComposerControls({
                 {models.map((model) => (
                   <SelectItem key={model.modelId} value={model.modelId}>
                     {model.isDefault
-                      ? messages.agentsFeature.defaultModelOption(model.modelId)
-                      : model.modelId}
+                      ? messages.agentsFeature.defaultModelOption(
+                          modelWireLabel(model, model.modelId) ?? model.modelId,
+                        )
+                      : (modelWireLabel(model, model.modelId) ?? model.modelId)}
                   </SelectItem>
                 ))}
               </SelectContent>

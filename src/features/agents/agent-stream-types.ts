@@ -166,6 +166,8 @@ export interface AgentMode {
 
 export interface AgentModel {
   modelId: string;
+  /** 发给 LLM 的模型参数；缺省时与 modelId 相同。 */
+  wireModel?: string;
   displayName?: string;
   isDefault?: boolean;
   defaultReasoningEffort?: string;

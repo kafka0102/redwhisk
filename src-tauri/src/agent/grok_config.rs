@@ -10,11 +10,12 @@
 //!
 //! 来源：xAI 官方文档 https://docs.x.ai/build/settings 。
 //!
-//! 模型候选还包含配置里的模型别名表（每个 `[model.<别名>]` 表名即一个候选）：
+//! 模型候选还包含配置里的模型别名表（每个 `[model.<别名>]` 表名即一个候选）。
+//! 表内 `model` 是发给 LLM 的模型参数，与别名不同时单独下发：
 //!
 //! ```toml
-//! [model.grok-4]
-//! [model.grok-4-fast]
+//! [model.my-model]
+//! model = "grok-4.7"
 //! ```
 
 use std::fs;
@@ -34,10 +35,18 @@ pub fn read_default_model_from_home(home_dir: &Path) -> Option<String> {
     parse_default_model(&content)
 }
 
-/// 从 home 目录读取 `~/.grok/config.toml` 的全部模型别名表名。
+/// 一条 Grok 模型别名：配置表名，以及该表 `model` 键上发给 LLM 的模型参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrokModelAlias {
+    pub alias: String,
+    /// `[model.<别名>]` 表内 `model = "..."`；缺省时与别名相同。
+    pub wire_model: Option<String>,
+}
+
+/// 从 home 目录读取 `~/.grok/config.toml` 的全部模型别名表。
 ///
 /// 文件不可读时返回空列表（best-effort，不阻断列表加载）。
-pub fn read_model_aliases_from_home(home_dir: &Path) -> Vec<String> {
+pub fn read_model_aliases_from_home(home_dir: &Path) -> Vec<GrokModelAlias> {
     let Ok(content) = fs::read_to_string(grok_config_path(home_dir)) else {
         return Vec::new();
     };
@@ -74,28 +83,43 @@ pub(crate) fn parse_default_model(content: &str) -> Option<String> {
     None
 }
 
-/// 解析 config.toml 文本中的 `[model.<别名>]` 表名（纯函数，便于单测）。
+/// 解析 config.toml 文本中的 `[model.<别名>]` 表（纯函数，便于单测）。
 ///
 /// 按文件出现顺序返回、重复别名只保留首次；`[models]` 与缺别名的 `[model.]`
-/// 不计入；表头空白与注释行沿用 `parse_table_header` 的容错。
-pub(crate) fn parse_model_aliases(content: &str) -> Vec<String> {
-    let mut aliases: Vec<String> = Vec::new();
+/// 不计入。表内 `model = "..."` 记为发给 LLM 的模型参数。
+pub(crate) fn parse_model_aliases(content: &str) -> Vec<GrokModelAlias> {
+    let mut aliases: Vec<GrokModelAlias> = Vec::new();
+    let mut current_alias: Option<usize> = None;
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let Some(table_name) = parse_table_header(trimmed) else {
-            continue;
-        };
-        let Some(alias) = table_name.strip_prefix(MODEL_ALIAS_TABLE_PREFIX) else {
-            continue;
-        };
-        let alias = alias.trim();
-        if alias.is_empty() || aliases.iter().any(|existing| existing == alias) {
+        if let Some(table_name) = parse_table_header(trimmed) {
+            current_alias = None;
+            let Some(alias) = table_name.strip_prefix(MODEL_ALIAS_TABLE_PREFIX) else {
+                continue;
+            };
+            let alias = alias.trim();
+            if alias.is_empty() || aliases.iter().any(|existing| existing.alias == alias) {
+                continue;
+            }
+            aliases.push(GrokModelAlias {
+                alias: alias.to_string(),
+                wire_model: None,
+            });
+            current_alias = Some(aliases.len() - 1);
             continue;
         }
-        aliases.push(alias.to_string());
+        let Some(index) = current_alias else {
+            continue;
+        };
+        if aliases[index].wire_model.is_some() {
+            continue;
+        }
+        if let Some(wire_model) = parse_string_assignment(trimmed, "model") {
+            aliases[index].wire_model = Some(wire_model);
+        }
     }
     aliases
 }

@@ -7,3 +7,15 @@ export function deriveDefaultModelId(models: AgentModel[]): string | null {
   const defaultModel = models.find((model) => model.isDefault);
   return defaultModel?.modelId ?? models[0]?.modelId ?? null;
 }
+
+/** 展示发给 LLM 的模型参数；目录没有单独 wire 时回退配置名 / 模型 id。 */
+export function modelWireLabel(
+  model: Pick<AgentModel, "modelId" | "wireModel"> | null | undefined,
+  fallbackId: string | null,
+): string | null {
+  const wire = model?.wireModel?.trim();
+  if (wire) {
+    return wire;
+  }
+  return fallbackId;
+}

@@ -305,6 +305,9 @@ pub struct AgentMode {
 #[serde(rename_all = "camelCase")]
 pub struct AgentModel {
     pub model_id: String,
+    /// 发给 LLM 的模型参数。与配置别名不同时才下发；缺省时展示层回退 `model_id`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wire_model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -448,6 +451,7 @@ mod tests {
     fn agent_model_serializes_efforts() {
         let model = AgentModel {
             model_id: "gpt-5".into(),
+            wire_model: None,
             display_name: Some("GPT-5".into()),
             is_default: Some(true),
             default_reasoning_effort: Some("medium".into()),

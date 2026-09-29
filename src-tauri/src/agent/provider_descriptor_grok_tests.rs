@@ -123,8 +123,7 @@ fn grok_list_models_empty_when_config_has_no_relevant_content() {
     let temp = tempfile::tempdir().expect("temp");
     let grok_dir = temp.path().join(".grok");
     fs::create_dir_all(&grok_dir).expect("grok dir");
-    fs::write(grok_dir.join("config.toml"), "[auth]\ntoken = \"abc\"\n")
-        .expect("write config");
+    fs::write(grok_dir.join("config.toml"), "[auth]\ntoken = \"abc\"\n").expect("write config");
 
     assert!(descriptor_for(&AgentType::Grok)
         .list_models(temp.path(), "grok")
@@ -145,7 +144,7 @@ fn grok_list_models_enumerates_alias_tables_with_default_marked() {
     let models = descriptor_for(&AgentType::Grok).list_models(temp.path(), "grok");
     let ids: Vec<&str> = models.iter().map(|model| model.model_id.as_str()).collect();
     assert_eq!(ids, vec!["grok-4", "grok-4-fast"]);
-    assert_eq!(models[0].display_name.as_deref(), Some("grok-4"));
+    assert_eq!(models[0].wire_model, None);
     assert_eq!(models[0].is_default, Some(true));
     assert_eq!(models[1].is_default, Some(false));
 }
@@ -206,4 +205,22 @@ fn grok_list_models_degrades_on_malformed_aliases_and_default() {
     assert_eq!(ids, vec!["grok-4"]);
     // 默认值非字符串时降级为不标默认（列表仍是可用子集）。
     assert_eq!(models[0].is_default, Some(false));
+}
+
+#[test]
+fn grok_list_models_exposes_alias_table_model_as_wire_model() {
+    let temp = tempfile::tempdir().expect("temp");
+    let grok_dir = temp.path().join(".grok");
+    fs::create_dir_all(&grok_dir).expect("grok dir");
+    fs::write(
+        grok_dir.join("config.toml"),
+        "[model.my-model]\nmodel = \"grok-4.7\"\nbase_url = \"https://example.invalid/v1\"\n\n[models]\ndefault = \"my-model\"\n",
+    )
+    .expect("write config");
+
+    let models = descriptor_for(&AgentType::Grok).list_models(temp.path(), "grok");
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].model_id, "my-model");
+    assert_eq!(models[0].wire_model.as_deref(), Some("grok-4.7"));
+    assert_eq!(models[0].is_default, Some(true));
 }

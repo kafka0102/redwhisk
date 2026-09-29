@@ -49,7 +49,8 @@
         "displayName": "optional",
         "isDefault": "optional",
         "modelId": "required",
-        "supportedReasoningEfforts": "required"
+        "supportedReasoningEfforts": "required",
+        "wireModel": "optional"
       }
     },
     "AgentPermissionAction": {

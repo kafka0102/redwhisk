@@ -507,6 +507,34 @@ describe("AgentComposer", () => {
     ).toHaveTextContent("gpt-5");
   });
 
+  it("模型选中值展示发给 LLM 的模型参数而不是配置名", async () => {
+    listAgentModelsMock.mockResolvedValueOnce({
+      capabilities: {
+        modelTypeLabel: "Grok",
+        canShowModel: true,
+        supportsModelSwitching: true,
+        supportsReasoningEffort: false,
+        supportsModes: false,
+        supportsTuiResume: false,
+      },
+      models: [
+        {
+          modelId: "my-model",
+          wireModel: "grok-4.7",
+          isDefault: true,
+          supportedReasoningEfforts: [],
+        },
+      ],
+    });
+
+    await renderComposer({ currentModelId: "my-model" });
+
+    expect(
+      screen.getByRole("combobox", { name: "Select model" }),
+    ).toHaveTextContent("grok-4.7");
+    expect(screen.queryByText("my-model")).not.toBeInTheDocument();
+  });
+
   it("只读模型标签展示真实模型名原文（第三方网关）", async () => {
     listAgentModelsMock.mockResolvedValueOnce({
       isReadOnly: true,
