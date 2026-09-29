@@ -276,6 +276,45 @@ describe("messageStreamReducer", () => {
       expect(state.entries[1].id).toBe("a2");
     });
 
+    it("同一 messageId 在 reasoning 之后继续增长时，正文跟到思考后面", () => {
+      // Grok 整轮共用一个 messageId。思考插在正文中间后，后续 delta 仍是
+      // 同一条累积文本；原地替换会把后写的问题留在思考前面。
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "先说明事实。",
+          messageId: "grok-msg-1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "reasoning",
+          text: "核对过滤条件后再提问。",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "先说明事实。\n\n候选电子书的分析模式收哪一档？",
+          messageId: "grok-msg-1",
+        }),
+      });
+
+      expect(state.entries.map((entry) => entry.kind)).toEqual([
+        "reasoning",
+        "assistant_message",
+      ]);
+      expect(state.entries[1].item).toEqual({
+        type: "assistant_message",
+        text: "先说明事实。\n\n候选电子书的分析模式收哪一档？",
+        messageId: "grok-msg-1",
+      });
+    });
+
     it("EVENT_BATCH 按顺序折叠同一帧内的 assistant_message", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "EVENT_BATCH",

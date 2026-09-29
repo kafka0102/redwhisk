@@ -5,7 +5,8 @@
 //
 // 增量合并语义（与后端 `codex_app_server/session.rs` 的广播策略对齐）：
 // - assistant_message 带 messageId：每个 delta 携带完整累积文本 → 按 messageId
-//   幂等 upsert（找到同 messageId 的尾项则替换文本，否则 append）。
+//   幂等 upsert。同 id 仍是时间线尾项时原地替换；若中间已插入 reasoning 等
+//   条目，则把正文条目挪到尾部再替换，保持「先思考、后提问」的到达顺序。
 // - reasoning 无 id：后端每次发完整最新文本 → 合并到上一条 reasoning（若尾项是
 //   reasoning 则替换，否则 append），保证只剩最终完整推理。
 // - tool_call：按 callId upsert；item/started→running，item/completed→终态。
@@ -330,11 +331,21 @@ function applyTimelineItem(
             entry.kind === "assistant_message" && entry.id === messageId,
         );
         if (index >= 0) {
-          return replaceAt(entries, index, {
+          const next = {
             id: messageId,
             kind: item.type,
             item,
-          });
+          };
+          // Grok 整轮共用一个 messageId，reasoning 会插在同一条正文中间。
+          // 原地替换会让后写的问题留在思考前面；中间已有别的条目时挪到尾部。
+          if (index === entries.length - 1) {
+            return replaceAt(entries, index, next);
+          }
+          return [
+            ...entries.slice(0, index),
+            ...entries.slice(index + 1),
+            next,
+          ];
         }
       }
       return [...entries, toEntry(item, nextLocalId(entries))];
