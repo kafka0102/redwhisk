@@ -30,7 +30,10 @@ pub enum CodexNotification {
         error_message: Option<String>,
     },
     /// `thread/tokenUsage/updated`：token / 上下文窗口用量。
-    TokenUsageUpdated { token_usage: Value },
+    TokenUsageUpdated {
+        token_usage: Value,
+        thread_id: Option<String>,
+    },
     /// `thread/compacted`：上下文已压缩。
     ContextCompacted {
         thread_id: String,
@@ -92,6 +95,7 @@ pub fn parse_notification(method: &str, params: &Value) -> CodexNotification {
         "turn/completed" => parse_turn_completed(params),
         "thread/tokenUsage/updated" => CodexNotification::TokenUsageUpdated {
             token_usage: params.get("tokenUsage").cloned().unwrap_or(Value::Null),
+            thread_id: str_field(params, "threadId"),
         },
         "thread/compacted" => CodexNotification::ContextCompacted {
             thread_id: str_field(params, "threadId").unwrap_or_default(),
@@ -281,11 +285,18 @@ mod tests {
     fn parses_token_usage_updated() {
         let notification = parse_notification(
             "thread/tokenUsage/updated",
-            &json!({ "tokenUsage": { "model_context_window": 200000 } }),
+            &json!({
+                "threadId": "thr_1",
+                "tokenUsage": { "model_context_window": 200000 }
+            }),
         );
         match notification {
-            CodexNotification::TokenUsageUpdated { token_usage } => {
+            CodexNotification::TokenUsageUpdated {
+                token_usage,
+                thread_id,
+            } => {
                 assert_eq!(token_usage["model_context_window"], 200_000);
+                assert_eq!(thread_id.as_deref(), Some("thr_1"));
             }
             other => panic!("期望 TokenUsageUpdated，实际 {other:?}"),
         }

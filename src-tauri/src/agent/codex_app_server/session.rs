@@ -782,7 +782,20 @@ fn build_events(
             }
             events
         }
-        CodexNotification::TokenUsageUpdated { token_usage } => {
+        CodexNotification::TokenUsageUpdated {
+            token_usage,
+            thread_id,
+        } => {
+            let is_user_thread = state
+                .lock()
+                .ok()
+                .map(|session| {
+                    is_session_user_thread(session.thread_id.as_deref(), thread_id.as_deref())
+                })
+                .unwrap_or(true);
+            if !is_user_thread {
+                return Vec::new();
+            }
             let snapshot = normalize_codex_token_usage(&token_usage);
             let composer = extract_usage(&token_usage);
             let usage = match (composer, snapshot) {
@@ -1421,12 +1434,80 @@ mod tests {
                     "model_context_window": 200_000,
                     "last": { "total_tokens": 500, "inputTokens": 400, "outputTokens": 100 },
                 }),
+                thread_id: None,
             },
         );
         assert_eq!(events.len(), 1);
         let usage = state.lock().unwrap().latest_usage.clone().unwrap();
         assert_eq!(usage.context_window_max_tokens, Some(200_000));
         assert_eq!(usage.context_window_used_tokens, Some(500));
+    }
+
+    #[test]
+    fn build_events_ignores_subagent_token_usage() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        state.lock().unwrap().thread_id = Some("thr_parent".into());
+
+        let parent_events = build_events(
+            &state,
+            CodexNotification::TokenUsageUpdated {
+                token_usage: json!({
+                    "model_context_window": 996_147,
+                    "last": {
+                        "input_tokens": 220_515,
+                        "cached_input_tokens": 212_992,
+                        "output_tokens": 11,
+                        "total_tokens": 220_526,
+                    },
+                    "total": {
+                        "input_tokens": 54_021_094,
+                        "cached_input_tokens": 50_056_576,
+                        "output_tokens": 54_341,
+                    },
+                }),
+                thread_id: Some("thr_parent".into()),
+            },
+        );
+        assert_eq!(parent_events.len(), 1);
+        match &parent_events[0] {
+            AgentStreamEvent::UsageUpdated { usage } => {
+                assert_eq!(usage.session_token_input, Some(3_964_518));
+                assert_eq!(usage.session_token_output, Some(54_341));
+                assert_eq!(usage.session_token_cache, Some(50_056_576));
+                assert_eq!(usage.context_window_used_tokens, Some(220_526));
+            }
+            other => panic!("期望 UsageUpdated，实际 {other:?}"),
+        }
+
+        let child_events = build_events(
+            &state,
+            CodexNotification::TokenUsageUpdated {
+                token_usage: json!({
+                    "model_context_window": 996_147,
+                    "last": {
+                        "input_tokens": 279_749,
+                        "cached_input_tokens": 270_336,
+                        "output_tokens": 121,
+                        "total_tokens": 279_870,
+                    },
+                    "total": {
+                        "input_tokens": 14_621_316,
+                        "cached_input_tokens": 13_646_592,
+                        "output_tokens": 69_794,
+                    },
+                }),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+        assert!(
+            child_events.is_empty(),
+            "子代理 thread/tokenUsage/updated 不得覆盖父 Session Token 消耗"
+        );
+        let usage = state.lock().unwrap().latest_usage.clone().unwrap();
+        assert_eq!(usage.session_token_input, Some(3_964_518));
+        assert_eq!(usage.session_token_output, Some(54_341));
+        assert_eq!(usage.session_token_cache, Some(50_056_576));
+        assert_eq!(usage.context_window_used_tokens, Some(220_526));
     }
 
     #[test]
