@@ -341,7 +341,8 @@
   width: fit-content;
   padding: 2px 0;
   color: var(--color-text-muted);
-  font-size: var(--content-font-size);
+  /* 过程信息，不跟随内容字号；与工具行标题同为 12.5px。 */
+  font-size: 12.5px;
   cursor: pointer;
   list-style: none;
 }
@@ -355,7 +356,8 @@
   padding: 6px 0 0 19px;
   border-left: 1px solid var(--color-border);
   color: var(--color-text-muted);
-  font-size: var(--content-font-size);
+  /* 展开后的思考正文保持设计系统 Body 13px，不跟随内容字号。 */
+  font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -488,7 +490,8 @@ details[open] > summary .agents-message__summary-chevron {
   background: transparent;
   color: var(--color-text-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--content-font-size);
+  /* 工具命令与路径是 Mono，固定 12px。 */
+  font-size: 12px;
   line-height: 1.5;
   word-break: break-all;
 }
@@ -506,7 +509,8 @@ details[open] > summary .agents-message__summary-chevron {
   background: var(--color-surface-panel);
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--content-font-size);
+  /* 工具输出是 Mono，固定 12px。 */
+  font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
