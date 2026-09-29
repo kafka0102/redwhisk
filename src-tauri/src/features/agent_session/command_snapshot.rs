@@ -11,12 +11,12 @@ pub(super) fn build_tui_command_snapshot_for_profile(
     requested_model: Option<&str>,
 ) -> String {
     let descriptor = descriptor_for(&profile.agent_type);
-    let snapshot = descriptor.build_tui_command_snapshot(
-        &profile.command,
-        &profile.mode,
-        profile.dangerous,
-    );
-    match requested_model.map(str::trim).filter(|model| !model.is_empty()) {
+    let snapshot =
+        descriptor.build_tui_command_snapshot(&profile.command, &profile.mode, profile.dangerous);
+    match requested_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+    {
         Some(model) => append_model_arg_if_missing(&snapshot, descriptor.tui_model_flag(), model),
         None => snapshot,
     }
@@ -27,7 +27,12 @@ mod tests {
     use super::*;
     use crate::types::agent_profile::{AgentScope, AgentType};
 
-    fn tui_profile(agent_type: AgentType, command: &str, mode: &str, dangerous: bool) -> AgentProfileRow {
+    fn tui_profile(
+        agent_type: AgentType,
+        command: &str,
+        mode: &str,
+        dangerous: bool,
+    ) -> AgentProfileRow {
         AgentProfileRow {
             id: 101,
             name: "TUI Test".to_string(),

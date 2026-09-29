@@ -17,8 +17,9 @@ pub fn map_grok_tool_detail(
     locations: &[String],
 ) -> (ToolCallDetail, String) {
     // 先按工具名分类，再退到 rawInput.variant；两者都不命中即兜底 Unknown。
-    let category = classify(&tool_name.to_ascii_lowercase())
-        .or_else(|| string_field(input, &["variant"]).and_then(|variant| classify_variant(&variant)));
+    let category = classify(&tool_name.to_ascii_lowercase()).or_else(|| {
+        string_field(input, &["variant"]).and_then(|variant| classify_variant(&variant))
+    });
     let Some(category) = category else {
         return (
             ToolCallDetail::Unknown {
@@ -259,8 +260,12 @@ mod tests {
     #[test]
     fn variant_matches_whole_tokens_not_substrings() {
         // `Spreadsheet` 含子串 "read"，但 variant 走 camelCase 整词匹配，不应误判为 Read。
-        let (detail, name) =
-            map_grok_tool_detail("", &json!({"variant": "Spreadsheet", "sheet_id": "s1"}), None, &[]);
+        let (detail, name) = map_grok_tool_detail(
+            "",
+            &json!({"variant": "Spreadsheet", "sheet_id": "s1"}),
+            None,
+            &[],
+        );
         assert_eq!(name, "tool");
         assert!(matches!(detail, ToolCallDetail::Unknown { .. }));
     }
@@ -312,7 +317,13 @@ mod tests {
     fn unknown_tool_falls_back_to_unknown_with_raw_input() {
         let (detail, name) = map_grok_tool_detail("custom_tool", &json!({"x": 1}), None, &[]);
         assert_eq!(name, "custom_tool");
-        assert!(matches!(detail, ToolCallDetail::Unknown { raw_input: Some(_), .. }));
+        assert!(matches!(
+            detail,
+            ToolCallDetail::Unknown {
+                raw_input: Some(_),
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -323,7 +334,10 @@ mod tests {
             ),
             "read_file"
         );
-        assert_eq!(tool_name_from_update(&json!({"title": "Read `x`"})), "Read `x`");
+        assert_eq!(
+            tool_name_from_update(&json!({"title": "Read `x`"})),
+            "Read `x`"
+        );
         assert_eq!(tool_name_from_update(&json!({})), "");
     }
 

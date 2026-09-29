@@ -171,7 +171,10 @@ pub fn descriptor_for(agent_type: &AgentType) -> &'static dyn AgentProviderDescr
 pub fn append_model_arg_if_missing(command: &str, arg: &str, model: &str) -> String {
     let trimmed = command.trim();
     let has_arg = trimmed.split_whitespace().any(|part| {
-        part == arg || part.strip_prefix(arg).is_some_and(|suffix| suffix.starts_with('='))
+        part == arg
+            || part
+                .strip_prefix(arg)
+                .is_some_and(|suffix| suffix.starts_with('='))
     });
     if has_arg {
         return trimmed.to_string();

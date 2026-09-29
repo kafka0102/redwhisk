@@ -188,7 +188,9 @@ mod tests {
         let state = empty_state();
 
         assert!(
-            state.record_project_window(7, "main".to_string()).is_empty(),
+            state
+                .record_project_window(7, "main".to_string())
+                .is_empty(),
             "首次登记没有项目被顶掉"
         );
         assert_eq!(
@@ -197,7 +199,9 @@ mod tests {
             "同一窗口换项目应返回被顶掉的旧项目，供调用方核验其是否仍显示在别处"
         );
         assert!(
-            state.record_project_window(9, "main".to_string()).is_empty(),
+            state
+                .record_project_window(9, "main".to_string())
+                .is_empty(),
             "重复登记同一项目不应产生被顶掉项目"
         );
     }

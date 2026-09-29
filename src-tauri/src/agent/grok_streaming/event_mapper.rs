@@ -22,9 +22,7 @@ use crate::agent::grok_streaming::tool_detail::{
     map_grok_tool_detail, tool_name_from_update, tool_output_text,
 };
 use crate::agent::grok_streaming::usage;
-use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentTimelineItem, ToolCallStatus,
-};
+use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem, ToolCallStatus};
 
 pub const METHOD_SESSION_UPDATE: &str = "session/update";
 pub const METHOD_SESSION_NOTIFICATION: &str = "_x.ai/session_notification";
@@ -197,10 +195,8 @@ impl GrokStreamMapper {
             Some("agent_message_chunk") => {
                 if let Some(delta) = content_text(update) {
                     self.assistant_text.push_str(&delta);
-                    let message_id = format!(
-                        "grok-msg-{}",
-                        self.turn_id.as_deref().unwrap_or("turn")
-                    );
+                    let message_id =
+                        format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn"));
                     events.push(self.timeline(AgentTimelineItem::AssistantMessage {
                         text: self.assistant_text.clone(),
                         message_id: Some(message_id),
@@ -326,10 +322,12 @@ pub fn content_text(update: &Value) -> Option<String> {
         let joined: String = blocks
             .iter()
             .filter_map(|block| {
-                block
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .or_else(|| block.get("content").and_then(|c| c.get("text")).and_then(Value::as_str))
+                block.get("text").and_then(Value::as_str).or_else(|| {
+                    block
+                        .get("content")
+                        .and_then(|c| c.get("text"))
+                        .and_then(Value::as_str)
+                })
             })
             .collect();
         return non_empty(&joined);

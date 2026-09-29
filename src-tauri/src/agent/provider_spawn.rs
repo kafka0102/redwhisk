@@ -235,10 +235,7 @@ mod tests {
 
     #[test]
     fn program_from_command_snapshot_strips_structured_args() {
-        assert_eq!(
-            program_from_command_snapshot("grok agent stdio"),
-            "grok"
-        );
+        assert_eq!(program_from_command_snapshot("grok agent stdio"), "grok");
         assert_eq!(
             program_from_command_snapshot("opencode run --format json"),
             "opencode"

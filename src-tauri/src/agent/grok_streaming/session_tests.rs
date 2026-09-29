@@ -3,8 +3,8 @@
 //! 不启真实 grok、不依赖网络与凭据。假服务端把收到的每一行 JSON-RPC 请求
 //! 原样写入日志文件，便于断言 adapter 真实下发的握手 / prompt 参数。
 
-use super::*;
 use super::session_test_support::*;
+use super::*;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
 };
@@ -178,12 +178,15 @@ fn fake_server_drives_assistant_and_reasoning_stream_events() {
         .expect("session/prompt");
 
     let events = collector.events.lock().expect("events").clone();
-    assert_eq!(summarize(&events), vec![
-        "turn_started".to_string(),
-        "reasoning".to_string(),
-        "assistant_message".to_string(),
-        "usage_updated".to_string(),
-    ]);
+    assert_eq!(
+        summarize(&events),
+        vec![
+            "turn_started".to_string(),
+            "reasoning".to_string(),
+            "assistant_message".to_string(),
+            "usage_updated".to_string(),
+        ]
+    );
 
     transport.shutdown();
 }
@@ -269,8 +272,14 @@ fn fake_server_replays_real_tool_call_lifecycle() {
     let (_, unknown_status, unknown_detail) = unknown_calls.last().expect("unknown tool").clone();
     assert_eq!(unknown_status, ToolCallStatus::Completed);
     match unknown_detail {
-        ToolCallDetail::Unknown { raw_input, raw_output } => {
-            assert!(raw_input.as_deref().unwrap_or_default().contains("\"arg\":1"));
+        ToolCallDetail::Unknown {
+            raw_input,
+            raw_output,
+        } => {
+            assert!(raw_input
+                .as_deref()
+                .unwrap_or_default()
+                .contains("\"arg\":1"));
             assert!(raw_output.as_deref().unwrap_or_default().contains("done"));
         }
         other => panic!("unexpected detail {other:?}"),

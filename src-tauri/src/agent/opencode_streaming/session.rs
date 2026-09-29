@@ -110,7 +110,11 @@ impl OpenCodeSessionHandle {
 
         // snapshot 可能含 run/--format；spawn 只用可执行首段避免重复。
         let program = program_from_command_snapshot(&self.config.binary);
-        let program = if program.is_empty() { "opencode" } else { program };
+        let program = if program.is_empty() {
+            "opencode"
+        } else {
+            program
+        };
         let transport = OpenCodeTransport::spawn(&program, &args, Some(&self.config.cwd))?;
 
         let turn_id = {

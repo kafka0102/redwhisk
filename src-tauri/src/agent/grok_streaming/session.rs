@@ -82,8 +82,7 @@ impl GrokSessionHandle {
         let transport = GrokStreamingTransport::spawn(&program, &args, Some(&cwd))?;
 
         transport.request(INITIALIZE_METHOD, initialize_params())?;
-        let session_id =
-            start_session(&transport, &cwd, config.resume_session_id.as_deref())?;
+        let session_id = start_session(&transport, &cwd, config.resume_session_id.as_deref())?;
 
         let state = Arc::new(Mutex::new(SessionState {
             session_id: Some(session_id.clone()),
@@ -316,7 +315,10 @@ impl From<GrokStreamingError> for AgentSessionError {
             E::Protocol(message) if message == NO_INTERRUPTIBLE_TURN => {
                 AgentSessionError::NoInterruptibleTurn
             }
-            E::Protocol(_) | E::RequestTimeout { .. } | E::ServerError { .. } | E::Serialize(_)
+            E::Protocol(_)
+            | E::RequestTimeout { .. }
+            | E::ServerError { .. }
+            | E::Serialize(_)
             | E::Io(_) => AgentSessionError::Protocol(error.to_string()),
         }
     }
@@ -337,18 +339,13 @@ fn start_session(
             return Ok(session_id.to_string());
         }
     }
-    let result = transport.request(
-        SESSION_NEW_METHOD,
-        json!({ "cwd": cwd, "mcpServers": [] }),
-    )?;
+    let result = transport.request(SESSION_NEW_METHOD, json!({ "cwd": cwd, "mcpServers": [] }))?;
     result
         .get("sessionId")
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| {
-            GrokStreamingError::Protocol("session/new 响应缺少 sessionId".into())
-        })
+        .ok_or_else(|| GrokStreamingError::Protocol("session/new 响应缺少 sessionId".into()))
 }
 
 fn initialize_params() -> Value {

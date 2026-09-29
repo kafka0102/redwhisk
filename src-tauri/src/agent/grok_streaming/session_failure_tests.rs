@@ -83,13 +83,12 @@ fn prompt_protocol_error_maps_to_turn_failure_with_diagnostic() {
 
     let events = mapper.on_prompt_error(error.to_string());
     match events.as_slice() {
-        [
-            AgentStreamEvent::TurnStarted { .. },
-            AgentStreamEvent::TurnFailed { error, .. },
-        ] => assert!(
-            error.contains("model overloaded"),
-            "turn failure must carry the server error, got {error:?}"
-        ),
+        [AgentStreamEvent::TurnStarted { .. }, AgentStreamEvent::TurnFailed { error, .. }] => {
+            assert!(
+                error.contains("model overloaded"),
+                "turn failure must carry the server error, got {error:?}"
+            )
+        }
         other => panic!("unexpected {other:?}"),
     }
 

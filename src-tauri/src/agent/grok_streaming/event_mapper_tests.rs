@@ -24,7 +24,10 @@ fn maps_prompt_stream_to_event_sequence() {
             .is_empty());
     }
     assert!(mapper
-        .on_notification("_x.ai/mcp/init_progress", &json!({"total": 3, "connected": 1}))
+        .on_notification(
+            "_x.ai/mcp/init_progress",
+            &json!({"total": 3, "connected": 1})
+        )
         .is_empty());
     assert!(mapper
         .on_notification("_x.ai/session/setup", &json!({"phase": "auth"}))
@@ -96,7 +99,12 @@ fn maps_prompt_stream_to_event_sequence() {
         "_meta": {"promptId": "p-1", "usage": {"inputTokens":100,"outputTokens":10,"totalTokens":110,"cachedReadTokens":40,"cacheCreationTokens":0}}
     }));
     match events.as_slice() {
-        [AgentStreamEvent::TurnCompleted { turn_id, usage, stop_reason, .. }] => {
+        [AgentStreamEvent::TurnCompleted {
+            turn_id,
+            usage,
+            stop_reason,
+            ..
+        }] => {
             assert_eq!(turn_id.as_deref(), Some("p-1"));
             assert_eq!(stop_reason.as_deref(), Some("end_turn"));
             assert_eq!(usage.as_ref().and_then(|u| u.session_token_cache), Some(40));
@@ -152,7 +160,10 @@ fn private_and_unknown_notifications_never_become_turn_events() {
             "_x.ai/session_notification",
             json!({"update":{"sessionUpdate":"hook_run_started","event_name":"user_prompt_submit"}}),
         ),
-        ("session/update", json!({"update":{"sessionUpdate":"session_info_update"}})),
+        (
+            "session/update",
+            json!({"update":{"sessionUpdate":"session_info_update"}}),
+        ),
         ("_x.ai/sessions/changed", json!({"upserted":[]})),
         ("totally/unknown", json!({"whatever": true})),
     ] {
@@ -218,7 +229,9 @@ fn cancel_and_process_exit_finalize_turn_once() {
 fn process_exit_fails_an_unfinished_turn() {
     let mut mapper = GrokStreamMapper::new();
     mapper.begin_turn("t-2".into());
-    let event = mapper.on_process_exit("grok 进程退出".into()).expect("failure");
+    let event = mapper
+        .on_process_exit("grok 进程退出".into())
+        .expect("failure");
     assert!(matches!(
         event,
         AgentStreamEvent::TurnFailed { turn_id: Some(id), .. } if id == "t-2"
@@ -254,10 +267,12 @@ fn prompt_result_uses_session_cumulative_usage_not_per_turn_tokens() {
         }
     }));
     match events.as_slice() {
-        [
-            AgentStreamEvent::TurnStarted { .. },
-            AgentStreamEvent::TurnCompleted { usage, .. },
-        ] => assert!(usage.is_none(), "per-turn tokens leaked into session usage: {usage:?}"),
+        [AgentStreamEvent::TurnStarted { .. }, AgentStreamEvent::TurnCompleted { usage, .. }] => {
+            assert!(
+                usage.is_none(),
+                "per-turn tokens leaked into session usage: {usage:?}"
+            )
+        }
         other => panic!("unexpected {other:?}"),
     }
 }
@@ -278,7 +293,10 @@ fn consecutive_turn_results_overwrite_session_cumulative_usage_without_accumulat
     assert_eq!(first_usage.session_token_input, Some(29_971 - 1_152));
     assert_eq!(first_usage.session_token_output, Some(398));
     assert_eq!(first_usage.session_token_cache, Some(1_152));
-    assert_eq!(first_usage.session_token_merge, SessionTokenMerge::Overwrite);
+    assert_eq!(
+        first_usage.session_token_merge,
+        SessionTokenMerge::Overwrite
+    );
 
     // 第二轮：`_meta.usage` 已是整会话累计（numTurns=2），不是本轮 30047/21/29952。
     mapper.begin_turn("t2".into());
@@ -293,7 +311,10 @@ fn consecutive_turn_results_overwrite_session_cumulative_usage_without_accumulat
     assert_eq!(second_usage.session_token_input, Some(60_063 - 59_904));
     assert_eq!(second_usage.session_token_output, Some(67));
     assert_eq!(second_usage.session_token_cache, Some(59_904));
-    assert_eq!(second_usage.session_token_merge, SessionTokenMerge::Overwrite);
+    assert_eq!(
+        second_usage.session_token_merge,
+        SessionTokenMerge::Overwrite
+    );
     // Overwrite：第二轮取累计覆盖，不是两轮相加。
     assert_ne!(
         second_usage.session_token_cache,
@@ -378,7 +399,10 @@ fn prompt_complete_and_unmapped_notifications_never_finalize_or_start_turn() {
             "session/update",
             json!({"update":{"sessionUpdate":"available_commands_update","commands":[]}}),
         ),
-        ("_x.ai/mcp/init_progress", json!({"total": 3, "connected": 1})),
+        (
+            "_x.ai/mcp/init_progress",
+            json!({"total": 3, "connected": 1}),
+        ),
         ("_x.ai/session/setup", json!({"phase": "auth"})),
         (
             "_x.ai/session_notification",

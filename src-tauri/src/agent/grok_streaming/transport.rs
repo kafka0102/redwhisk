@@ -330,7 +330,9 @@ fn mark_closed(state: &TransportState) {
         if closed.is_none() {
             *closed = Some(STDOUT_EOF_REASON.to_string());
         }
-        closed.clone().unwrap_or_else(|| STDOUT_EOF_REASON.to_string())
+        closed
+            .clone()
+            .unwrap_or_else(|| STDOUT_EOF_REASON.to_string())
     };
     if let Ok(mut pending) = state.pending.lock() {
         for (_, mut entry) in pending.drain() {
@@ -455,11 +457,13 @@ mod tests {
         let sink = Arc::clone(&received);
         let state = TransportState {
             pending: Mutex::new(HashMap::new()),
-            notification_handler: Mutex::new(Some(Arc::new(move |method: &str, params: &Value| {
-                sink.lock()
-                    .unwrap()
-                    .push((method.to_string(), params.clone()));
-            }))),
+            notification_handler: Mutex::new(Some(Arc::new(
+                move |method: &str, params: &Value| {
+                    sink.lock()
+                        .unwrap()
+                        .push((method.to_string(), params.clone()));
+                },
+            ))),
             stderr_buffer: Mutex::new(String::new()),
             closed: Mutex::new(None),
             eof_sender: Mutex::new(None),

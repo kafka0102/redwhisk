@@ -254,7 +254,10 @@ fn unknown_tool_falls_back_and_preserves_raw_input_output() {
     assert_eq!(created.name, "acme_mcp__do_thing");
     match created.detail {
         ToolCallDetail::Unknown { raw_input, .. } => {
-            assert!(raw_input.as_deref().unwrap_or_default().contains("\"arg\":1"));
+            assert!(raw_input
+                .as_deref()
+                .unwrap_or_default()
+                .contains("\"arg\":1"));
         }
         other => panic!("unexpected detail {other:?}"),
     }
@@ -274,8 +277,14 @@ fn unknown_tool_falls_back_and_preserves_raw_input_output() {
     let completed = last_tool_call(&events);
     assert_eq!(completed.status, ToolCallStatus::Completed);
     match completed.detail {
-        ToolCallDetail::Unknown { raw_input, raw_output } => {
-            assert!(raw_input.as_deref().unwrap_or_default().contains("\"arg\":1"));
+        ToolCallDetail::Unknown {
+            raw_input,
+            raw_output,
+        } => {
+            assert!(raw_input
+                .as_deref()
+                .unwrap_or_default()
+                .contains("\"arg\":1"));
             assert!(raw_output
                 .as_deref()
                 .unwrap_or_default()

@@ -20,7 +20,9 @@ pub fn session_usage_from_value(usage: &Value) -> Option<SessionTokenUsage> {
     let cache_write = u64_field(usage, "cacheCreationTokens").unwrap_or(0);
     let output = u64_field(usage, "outputTokens")?;
     Some(SessionTokenUsage {
-        input: input_tokens.saturating_sub(cache).saturating_add(cache_write),
+        input: input_tokens
+            .saturating_sub(cache)
+            .saturating_add(cache_write),
         output,
         cache,
     })
