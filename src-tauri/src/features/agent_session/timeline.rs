@@ -209,7 +209,16 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                     } if existing_id == message_id
                 )
             }) {
-                items[index] = item;
+                // Grok 整轮共用一个 messageId，工具和 reasoning 会插在同一条正文中间。
+                // 原地覆盖会把后写的结论留在这些条目前面；重新打开会话时末条又变成
+                // 已完成的 tool_call，turn_completed(end_turn) 会被误判成异常中断。
+                // 与前端 reducer 一致：仍是尾项时原地替换，中间已有别的条目则挪到尾部。
+                if index + 1 == items.len() {
+                    items[index] = item;
+                } else {
+                    items.remove(index);
+                    items.push(item);
+                }
                 return;
             }
         }

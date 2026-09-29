@@ -315,6 +315,57 @@ describe("messageStreamReducer", () => {
       });
     });
 
+    it("同一 messageId 在 tool_call 之后继续增长时，正文跟到工具后面且 end_turn 不误报异常中断", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "我先对照电子书列表。",
+          messageId: "grok-msg-1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call-1",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "pnpm test",
+            output: "33 passed",
+            exitCode: 0,
+          },
+          status: "completed",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "我先对照电子书列表。\n\n对应接口：GET /queue/status",
+          messageId: "grok-msg-1",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t1",
+          usage: null,
+          stopReason: "end_turn",
+        },
+      });
+
+      expect(state.entries.map((entry) => entry.kind)).toEqual([
+        "tool_call",
+        "assistant_message",
+      ]);
+      expect(state.turnInterrupted).toBe(false);
+      expect(state.interruptedStopReason).toBeNull();
+    });
+
     it("EVENT_BATCH 按顺序折叠同一帧内的 assistant_message", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "EVENT_BATCH",

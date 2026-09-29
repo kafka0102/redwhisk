@@ -48,4 +48,6 @@ pub use service::AgentSessionService;
 pub(crate) use timeline::read_assistant_texts_for_turn;
 
 #[cfg(test)]
+mod timeline_tests;
+#[cfg(test)]
 mod tui_start_tests;
