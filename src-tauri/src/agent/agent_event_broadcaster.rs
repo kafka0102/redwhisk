@@ -530,11 +530,14 @@ fn latest_output_from_timeline_item(
             | ToolCallDetail::Write { path, .. } => Some(path.as_str()),
             ToolCallDetail::Search { query, .. } => Some(query.as_str()),
             ToolCallDetail::Plan { text } => Some(text.as_str()),
-            ToolCallDetail::SubAgent { .. } | ToolCallDetail::Unknown { .. } => Some(name.as_str()),
+            ToolCallDetail::SubAgent { .. }
+            | ToolCallDetail::Unknown { .. }
+            | ToolCallDetail::CollabAgent { .. } => Some(name.as_str()),
         },
         AgentTimelineItem::Todo { .. } => Some("Plan updated"),
         AgentTimelineItem::Error { message } => Some(message.as_str()),
         AgentTimelineItem::Compaction { .. } => Some("Context compacted"),
+        AgentTimelineItem::SubagentRoster { .. } => None,
     }
 }
 

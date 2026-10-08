@@ -284,6 +284,7 @@ function ToolCallIcon({
     case "write":
       return <FilePlus aria-hidden="true" size={13} strokeWidth={1.8} />;
     case "sub_agent":
+    case "collab_agent":
       return <GitBranch aria-hidden="true" size={13} strokeWidth={1.8} />;
     case "unknown":
       return extractTaskUpdateInfo(name, detail) ? (
@@ -492,6 +493,13 @@ function ToolCallDetail({
           )}
         </div>
       );
+
+    case "collab_agent":
+      return detail.prompt ? (
+        <div className="agents-message__tool-body">
+          <p className="agents-message__plan">{detail.prompt}</p>
+        </div>
+      ) : null;
     case "plan":
       return (
         <div className="agents-message__tool-body">
@@ -627,6 +635,11 @@ function buildToolCallPresentation(
         summary: detail.childSessionId
           ? copy.subSession(detail.childSessionId)
           : undefined,
+      };
+    case "collab_agent":
+      return {
+        displayName: copy.toolCollab,
+        summary: detail.prompt,
       };
     case "plan":
       return { displayName: copy.toolPlan };

@@ -53,6 +53,7 @@ function createMessageStreamState(
     turnInterrupted: false,
     interruptedStopReason: null,
     subagentInterrupted: false,
+    subagents: [],
     isInitialized: true,
     ...overrides,
   };

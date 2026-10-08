@@ -5,6 +5,7 @@ import type { AgentTimelineItem } from "../agent-stream-types";
 import type {
   MessageStreamEntry,
   MessageStreamState,
+  SubagentRosterEntry,
 } from "./message-stream-types";
 
 /** 全部、主智能体，或某一个子智能体 thread id。 */
@@ -14,7 +15,8 @@ export interface OutputSourceOption {
   value: OutputSourceSelection;
   kind: "all" | "main" | "subagent";
   ordinal?: number;
-  status?: "running";
+  status?: "running" | "ended";
+  name?: string;
 }
 
 export interface OutputSourceLabels {
@@ -22,6 +24,7 @@ export interface OutputSourceLabels {
   main: string;
   subagentName: (ordinal: number) => string;
   running: string;
+  ended: string;
 }
 
 export interface MessageStreamOutputView {
@@ -44,6 +47,28 @@ export function outputSourceId(item: AgentTimelineItem): string | null {
   return id ? id : null;
 }
 
+export function foldSubagentRoster(
+  roster: SubagentRosterEntry[],
+  item: AgentTimelineItem,
+): SubagentRosterEntry[] {
+  let next = roster;
+  if (item.type === "tool_call" && item.detail.type === "collab_agent") {
+    for (const id of item.detail.receiverThreadIds) {
+      next = upsertSubagent(next, id, { prompt: item.detail.prompt });
+    }
+  }
+  if (item.type === "subagent_roster") {
+    return upsertSubagent(next, item.subagentId, {
+      ended: item.status === "ended",
+    });
+  }
+  const source = outputSourceId(item);
+  if (source) {
+    next = upsertSubagent(next, source, {});
+  }
+  return next;
+}
+
 export function formatOutputSourceOption(
   option: OutputSourceOption,
   labels: OutputSourceLabels,
@@ -54,20 +79,27 @@ export function formatOutputSourceOption(
   if (option.kind === "main") {
     return labels.main;
   }
-  const name = labels.subagentName(option.ordinal ?? 1);
-  return `${name} · ${labels.running}`;
+  const name = option.name ?? labels.subagentName(option.ordinal ?? 1);
+  const status = option.status === "ended" ? labels.ended : labels.running;
+  return `${name} · ${status}`;
 }
 
 export function projectMessageStream(
   state: MessageStreamState,
   selection: OutputSourceSelection,
+  turnRunning = state.turnStatus === "running",
 ): MessageStreamOutputView {
-  const options = outputSourceOptions(state.entries);
+  const options = outputSourceOptions(state.subagents ?? [], turnRunning);
+  const entries = state.entries.some(
+    (entry) => entry.item.type === "subagent_roster",
+  )
+    ? state.entries.filter((entry) => entry.item.type !== "subagent_roster")
+    : state.entries;
   return {
     entries:
       selection === "all"
-        ? state.entries
-        : state.entries.filter((entry) => entryVisible(entry, selection)),
+        ? entries
+        : entries.filter((entry) => entryVisible(entry, selection)),
     pendingPermissions: state.pendingPermissions,
     showSourceSelect: options.length > 0,
     options,
@@ -75,31 +107,67 @@ export function projectMessageStream(
 }
 
 function outputSourceOptions(
-  entries: MessageStreamEntry[],
+  roster: readonly SubagentRosterEntry[],
+  turnRunning: boolean,
 ): OutputSourceOption[] {
-  const roster: OutputSourceOption[] = [];
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    const id = outputSourceId(entry.item);
-    if (!id || seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    roster.push({
-      value: id,
-      kind: "subagent",
-      ordinal: roster.length + 1,
-      status: "running",
-    });
-  }
   if (roster.length === 0) {
     return [];
   }
   return [
     { value: "all", kind: "all" },
     { value: "main", kind: "main" },
-    ...roster,
+    ...roster.map((entry, index) => {
+      const status: "running" | "ended" =
+        turnRunning && !entry.ended ? "running" : "ended";
+      return {
+        value: entry.id,
+        kind: "subagent" as const,
+        ordinal: index + 1,
+        status,
+        name: subagentOptionName(entry, index, roster),
+      };
+    }),
   ];
+}
+
+function subagentOptionName(
+  entry: SubagentRosterEntry,
+  index: number,
+  roster: readonly SubagentRosterEntry[],
+): string | undefined {
+  const prompt = entry.prompt?.trim() ?? "";
+  if (!prompt) {
+    return undefined;
+  }
+  const prior = roster
+    .slice(0, index)
+    .filter((other) => (other.prompt?.trim() ?? "") === prompt).length;
+  return prior === 0 ? prompt : `${prompt} ${prior + 1}`;
+}
+
+function upsertSubagent(
+  roster: readonly SubagentRosterEntry[],
+  id: string,
+  patch: { prompt?: string; ended?: boolean },
+): SubagentRosterEntry[] {
+  const trimmed = id.trim();
+  if (!trimmed) {
+    return [...roster];
+  }
+  const prompt = patch.prompt?.trim() ? patch.prompt.trim() : null;
+  const index = roster.findIndex((entry) => entry.id === trimmed);
+  if (index < 0) {
+    return [...roster, { id: trimmed, prompt, ended: patch.ended ?? false }];
+  }
+  const current = roster[index];
+  const nextPrompt = current.prompt ?? prompt;
+  const nextEnded = patch.ended ?? current.ended;
+  if (nextPrompt === current.prompt && nextEnded === current.ended) {
+    return [...roster];
+  }
+  const copy = [...roster];
+  copy[index] = { id: current.id, prompt: nextPrompt, ended: nextEnded };
+  return copy;
 }
 
 function entryVisible(

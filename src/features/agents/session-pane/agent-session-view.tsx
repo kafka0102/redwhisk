@@ -77,10 +77,6 @@ export const AgentSessionView = memo(function AgentSessionView({
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const [outputSource, setOutputSource] =
     useState<OutputSourceSelection>("all");
-  const outputView = useMemo(
-    () => projectMessageStream(state, outputSource),
-    [outputSource, state],
-  );
   const canUseExternalTurnRunning =
     sessionStatus === "running" && issueStatus !== "completed";
 
@@ -93,6 +89,15 @@ export const AgentSessionView = memo(function AgentSessionView({
         canUseExternalTurnRunning,
       ),
     [canUseExternalTurnRunning, isTurnRunning, state.turnStatus],
+  );
+  const outputView = useMemo(
+    () =>
+      projectMessageStream(
+        state,
+        outputSource,
+        effectiveTurnStatus === "running",
+      ),
+    [effectiveTurnStatus, outputSource, state],
   );
 
   const isReadOnly = issueStatus === "completed";

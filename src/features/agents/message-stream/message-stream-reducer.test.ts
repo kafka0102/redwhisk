@@ -1442,6 +1442,7 @@ const outputSourceLabels = {
   main: "主智能体",
   subagentName: (ordinal: number) => `子智能体 ${ordinal}`,
   running: "运行中",
+  ended: "已结束",
 };
 
 describe("输出来源", () => {
@@ -1491,7 +1492,7 @@ describe("输出来源", () => {
     });
   }
 
-  it("hydrate 后能按来源筛选，并用子智能体 N 标运行中", () => {
+  it("会话不在运行中的 Turn 时，子智能体显示已结束", () => {
     const state = messageStreamReducer(createInitialState(), {
       type: "HYDRATE",
       items,
@@ -1506,8 +1507,8 @@ describe("输出来源", () => {
     ).toEqual([
       "全部",
       "主智能体",
-      "子智能体 1 · 运行中",
-      "子智能体 2 · 运行中",
+      "子智能体 1 · 已结束",
+      "子智能体 2 · 已结束",
     ]);
     expect(texts(state, "all")).toEqual([
       "你好",
@@ -1557,6 +1558,129 @@ describe("输出来源", () => {
       "ls",
       "第二路",
     ]);
+  });
+
+  it("拉起描述、同名序号和没有描述的补位能从日志重建", () => {
+    const state = messageStreamReducer(createInitialState(), {
+      type: "HYDRATE",
+      items: [
+        { type: "user_message", text: "你好", messageId: "u1" },
+        {
+          type: "tool_call",
+          callId: "spawn",
+          name: "collabAgentToolCall",
+          status: "completed",
+          detail: {
+            type: "collab_agent",
+            prompt: "检查日志",
+            receiverThreadIds: ["thr_a", "thr_b"],
+            senderThreadId: "thr_parent",
+          },
+        },
+        {
+          type: "tool_call",
+          callId: "spawn_nested",
+          name: "collabAgentToolCall",
+          status: "completed",
+          detail: {
+            type: "collab_agent",
+            prompt: "检查日志",
+            receiverThreadIds: ["thr_c"],
+            senderThreadId: "thr_a",
+          },
+        },
+        {
+          type: "assistant_message",
+          text: "没有描述",
+          messageId: "m-d",
+          subagentId: "thr_d",
+        },
+        {
+          type: "assistant_message",
+          text: "第一路",
+          messageId: "m-a",
+          subagentId: "thr_a",
+        },
+        { type: "subagent_roster", subagentId: "thr_a", status: "ended" },
+        {
+          type: "assistant_message",
+          text: "孙子",
+          messageId: "m-c",
+          subagentId: "thr_c",
+        },
+      ],
+    });
+    const idle = projectMessageStream(state, "all");
+    expect(
+      idle.options.map((option) =>
+        formatOutputSourceOption(option, outputSourceLabels),
+      ),
+    ).toEqual([
+      "全部",
+      "主智能体",
+      "检查日志 · 已结束",
+      "检查日志 2 · 已结束",
+      "检查日志 3 · 已结束",
+      "子智能体 4 · 已结束",
+    ]);
+    expect(texts(state, "main")).toEqual(["你好", "tool_call", "tool_call"]);
+    expect(texts(state, "thr_a")).toEqual(["第一路"]);
+    expect(texts(state, "thr_c")).toEqual(["孙子"]);
+    expect(
+      texts(state, "all").filter((text) => text === "subagent_roster"),
+    ).toEqual([]);
+
+    const running = projectMessageStream(state, "all", true);
+    expect(
+      running.options.map((option) =>
+        formatOutputSourceOption(option, outputSourceLabels),
+      ),
+    ).toEqual([
+      "全部",
+      "主智能体",
+      "检查日志 · 已结束",
+      "检查日志 2 · 运行中",
+      "检查日志 3 · 运行中",
+      "子智能体 4 · 运行中",
+    ]);
+    expect(state.turnStatus).toBe("idle");
+    expect(state).not.toHaveProperty("outputSource");
+  });
+
+  it("子 thread 结束只标记这一路，主 Turn 仍在运行", () => {
+    let state = messageStreamReducer(createInitialState(), {
+      type: "EVENT",
+      event: { type: "turn_started", turnId: "turn_parent" },
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "tool_call",
+        callId: "spawn",
+        name: "collabAgentToolCall",
+        status: "completed",
+        detail: {
+          type: "collab_agent",
+          prompt: "检查日志",
+          receiverThreadIds: ["thr_a", "thr_b"],
+        },
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "subagent_roster",
+        subagentId: "thr_a",
+        status: "ended",
+      }),
+    });
+    expect(state.turnStatus).toBe("running");
+    expect(
+      projectMessageStream(state, "all").options.map((option) =>
+        formatOutputSourceOption(option, outputSourceLabels),
+      ),
+    ).toEqual(["全部", "主智能体", "检查日志 · 已结束", "检查日志 2 · 运行中"]);
+    expect(texts(state, "thr_a")).toEqual([]);
   });
 
   it("没有来源的旧项不出现 select", () => {

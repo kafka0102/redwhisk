@@ -102,6 +102,11 @@ export type AgentTimelineItem =
       status: CompactionStatus;
       /** 子智能体 thread id。缺省表示主智能体。 */
       subagentId?: string;
+    }
+  | {
+      type: "subagent_roster";
+      subagentId: string;
+      status: SubagentRosterStatus;
     };
 
 export type ToolCallDetail =
@@ -121,12 +126,19 @@ export type ToolCallDetail =
       matches: string[];
     }
   | { type: "sub_agent"; childSessionId?: string }
+  | {
+      type: "collab_agent";
+      prompt?: string;
+      receiverThreadIds: string[];
+      senderThreadId?: string;
+    }
   | { type: "plan"; text: string }
   | { type: "unknown"; rawInput?: string; rawOutput?: string };
 
 export type ToolCallStatus = "running" | "completed" | "failed" | "canceled";
 export type SearchMode = "content" | "files_with_matches" | "count";
 export type CompactionStatus = "loading" | "completed";
+export type SubagentRosterStatus = "running" | "ended";
 
 export interface TodoItem {
   text: string;

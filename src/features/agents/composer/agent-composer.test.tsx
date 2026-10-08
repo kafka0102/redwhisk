@@ -116,6 +116,7 @@ async function renderComposer(
     usage?: AgentUsage | null;
     currentModelId?: string | null;
     outputSourceOptions?: OutputSourceOption[];
+    selectedOutputSource?: string;
   } = {},
 ) {
   const result = render(
@@ -126,6 +127,7 @@ async function renderComposer(
       usage={overrides.usage ?? null}
       currentModelId={overrides.currentModelId}
       outputSourceOptions={overrides.outputSourceOptions}
+      selectedOutputSource={overrides.selectedOutputSource}
     />,
   );
   // list_agent_models 始终拉取（capabilities 一并返回）。
@@ -157,6 +159,44 @@ describe("AgentComposer", () => {
     expect(
       document.getElementById("agent-composer-output-source"),
     ).toHaveTextContent("All");
+  });
+
+  it("过长来源描述在合上的 select 里截断，发送按钮仍在", async () => {
+    const longName = "检查日志".repeat(12);
+    await renderComposer({
+      outputSourceOptions: [
+        { value: "all", kind: "all" },
+        { value: "main", kind: "main" },
+        {
+          value: "thr_a",
+          kind: "subagent",
+          ordinal: 1,
+          status: "running",
+          name: longName,
+        },
+      ],
+      selectedOutputSource: "thr_a",
+    });
+    const source = document.getElementById("agent-composer-output-source");
+    expect(source).not.toBeNull();
+    expect(source).toHaveClass("agents-composer__output-source");
+    expect(source).toHaveTextContent(longName);
+    expect(
+      screen.getByRole("button", { name: "Send message" }),
+    ).toBeInTheDocument();
+    const css = readFileSync(
+      resolve(process.cwd(), "src/shared/styles/composer.css"),
+      "utf8",
+    );
+    const rule = css.match(/\.agents-composer__output-source\s*\{[^}]+\}/)?.[0];
+    expect(rule).toMatch(/max-width:\s*160px/);
+    expect(rule).toMatch(/overflow:\s*hidden/);
+    const valueRule = css.match(
+      /\.agents-composer__output-source \[data-slot="select-value"\]\s*\{[^}]+\}/,
+    )?.[0];
+    expect(valueRule).toMatch(/text-overflow:\s*ellipsis/);
+    const actions = css.match(/\.agents-composer__actions\s*\{[^}]+\}/)?.[0];
+    expect(actions).toMatch(/flex-shrink:\s*0/);
   });
 
   it("渲染输入框、附件按钮与发送按钮（默认禁用）", async () => {

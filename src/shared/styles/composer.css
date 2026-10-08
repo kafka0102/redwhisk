@@ -223,10 +223,13 @@
 .agents-composer__output-source {
   max-width: 160px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .agents-composer__output-source [data-slot="select-value"] {
   display: block;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -263,6 +266,7 @@
 
 .agents-composer__actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 10px;
 }

@@ -18,7 +18,6 @@ src-tauri/src/db/issue_repository.rs # 1029 lines, registered 2026-07-18
 src-tauri/src/db/migrations.rs # 573 lines, registered 2026-07-18
 src-tauri/src/features/agent_session/commands.rs # 914 lines, registered 2026-07-18
 src-tauri/src/features/agent_session/service.rs # 5860 lines, registered 2026-07-18
-src-tauri/src/features/agent_session/timeline.rs # 605 lines, registered 2026-07-18
 src-tauri/src/features/agent_session/workspace.rs # 1737 lines, registered 2026-07-18
 src-tauri/src/features/issue/completion/effect_interpreter.rs # 881 lines, registered 2026-07-18
 src-tauri/src/features/issue/completion/state_machine.rs # 784 lines, registered 2026-07-18

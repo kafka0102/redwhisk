@@ -78,7 +78,7 @@
 
 ## 结构化消息流的稳定部分
 
-`AgentStreamEvent` 的顶层事件包含 thread/turn 生命周期、timeline、usage、permission、mode/model/effort 更新。`timeline` 是可判别 union，含用户/助手消息、reasoning、tool call、todo、error 与 compaction。完整枚举在 `src-tauri/src/types/agent_session_stream.rs`；前端 reducer 与卡片渲染必须为未知 provider 细节保留安全降级，而非假设只会出现 Codex 私有字段。
+`AgentStreamEvent` 的顶层事件包含 thread/turn 生命周期、timeline、usage、permission、mode/model/effort 更新。`timeline` 是可判别 union，含用户/助手消息、reasoning、tool call、todo、error、compaction，以及只用于重建花名册的 `subagent_roster`。完整枚举在 `src-tauri/src/types/agent_session_stream.rs`；前端 reducer 与卡片渲染必须为未知 provider 细节保留安全降级，而非假设只会出现 Codex 私有字段。
 
 ## 错误码边界
 

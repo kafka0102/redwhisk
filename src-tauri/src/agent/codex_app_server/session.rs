@@ -33,7 +33,8 @@ use crate::agent::session_token_usage::normalize_codex_token_usage;
 use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecision};
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent,
-    AgentTimelineItem, AgentUsage, PermissionBehavior, PermissionKind, ToolCallStatus,
+    AgentTimelineItem, AgentUsage, PermissionBehavior, PermissionKind, SubagentRosterStatus,
+    ToolCallStatus,
 };
 
 const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
@@ -694,6 +695,27 @@ struct DeltaBufferKey {
     item_id: String,
 }
 
+fn subagent_id_from_state(
+    state: &Arc<Mutex<SessionState>>,
+    notification_thread_id: Option<&str>,
+) -> Option<String> {
+    state.lock().ok().and_then(|session| {
+        subagent_id_for_thread(session.thread_id.as_deref(), notification_thread_id)
+    })
+}
+
+fn subagent_roster_event(subagent_id: String, status: SubagentRosterStatus) -> AgentStreamEvent {
+    AgentStreamEvent::Timeline {
+        item: AgentTimelineItem::SubagentRoster {
+            subagent_id,
+            status,
+        },
+        turn_id: None,
+        seq: next_seq(),
+        timestamp: now_ms(),
+    }
+}
+
 fn subagent_id_for_thread(
     session_thread_id: Option<&str>,
     notification_thread_id: Option<&str>,
@@ -736,6 +758,11 @@ fn stamp_output_source(item: AgentTimelineItem, subagent_id: Option<String>) -> 
             duration_ms,
             subagent_id: Some(subagent_id),
         },
+        // 拉起记录本身属于主智能体，即使这条通知来自子 thread。
+        AgentTimelineItem::ToolCall {
+            detail: crate::types::agent_session_stream::ToolCallDetail::CollabAgent { .. },
+            ..
+        } => item,
         AgentTimelineItem::ToolCall {
             call_id,
             name,
@@ -799,6 +826,12 @@ fn build_events(
             }
         }
         CodexNotification::TurnStarted { turn_id, thread_id } => {
+            if let Some(subagent_id) = subagent_id_from_state(state, thread_id.as_deref()) {
+                return vec![subagent_roster_event(
+                    subagent_id,
+                    SubagentRosterStatus::Running,
+                )];
+            }
             let applied = if let Ok(mut session) = state.lock() {
                 if is_session_user_thread(session.thread_id.as_deref(), thread_id.as_deref()) {
                     session.current_turn_id = Some(turn_id.clone());
@@ -831,7 +864,15 @@ fn build_events(
                 })
                 .unwrap_or(true);
             if !is_user_turn {
-                return Vec::new();
+                let subagent_id = subagent_id_from_state(state, thread_id.as_deref());
+                return subagent_id
+                    .map(|subagent_id| {
+                        vec![subagent_roster_event(
+                            subagent_id,
+                            SubagentRosterStatus::Ended,
+                        )]
+                    })
+                    .unwrap_or_default();
             }
             let mut events = flush_all_pending_deltas(state);
             let usage = state.lock().ok().and_then(|mut state| {
@@ -1782,7 +1823,9 @@ mod tests {
         );
 
         assert!(
-            events.is_empty(),
+            events
+                .iter()
+                .all(|event| !matches!(event, AgentStreamEvent::TurnStarted { .. })),
             "子代理 turn/started 不得让前端以为新开用户 Turn"
         );
         assert_eq!(
@@ -2142,7 +2185,7 @@ mod tests {
         ));
     }
 
-    fn empty_state() -> SessionState {
+    pub(super) fn empty_state() -> SessionState {
         SessionState {
             thread_id: None,
             current_turn_id: None,
@@ -2343,3 +2386,7 @@ done
         handle.shutdown();
     }
 }
+
+#[cfg(test)]
+#[path = "session_subagent_roster_tests.rs"]
+mod session_subagent_roster_tests;

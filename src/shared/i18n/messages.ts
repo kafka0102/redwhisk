@@ -627,6 +627,7 @@ export interface I18nMessages {
     toolWrite: string;
     toolRead: string;
     toolSearch: string;
+    toolCollab: string;
     toolTask: string;
     toolPlan: string;
     taskStatusLabel: (status: string) => string;

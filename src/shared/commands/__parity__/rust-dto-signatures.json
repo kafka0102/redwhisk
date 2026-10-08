@@ -1768,7 +1768,8 @@
         "tool_call",
         "todo",
         "error",
-        "compaction"
+        "compaction",
+        "subagent_roster"
       ]
     },
     "AgentType": {
@@ -2038,6 +2039,13 @@
         "session_attention_cleared"
       ]
     },
+    "SubagentRosterStatus": {
+      "rename": "snake_case",
+      "variants": [
+        "running",
+        "ended"
+      ]
+    },
     "TerminalBackgroundTheme": {
       "rename": "camelCase",
       "variants": [
@@ -2062,6 +2070,7 @@
         "write",
         "search",
         "sub_agent",
+        "collab_agent",
         "plan",
         "unknown"
       ]

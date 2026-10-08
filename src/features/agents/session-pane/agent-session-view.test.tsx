@@ -652,3 +652,99 @@ describe("AgentSessionView", () => {
     });
   });
 });
+
+describe("AgentSessionView 输出来源", () => {
+  const rosterItems = [
+    {
+      type: "tool_call",
+      callId: "spawn",
+      name: "collabAgentToolCall",
+      status: "completed",
+      detail: {
+        type: "collab_agent",
+        prompt: "检查日志",
+        receiverThreadIds: ["thr_a"],
+        senderThreadId: "thr_parent",
+      },
+    },
+    {
+      type: "assistant_message",
+      text: "子路正文",
+      messageId: "m1",
+      subagentId: "thr_a",
+    },
+  ] as never[];
+
+  it("重新挂载后选中档回到全部，会话不在运行时显示已结束", async () => {
+    setupTimeline(rosterItems);
+    const user = userEvent.setup();
+    const first = render(
+      <AgentSessionView projectId={1} sessionId={10} agentType="codex" />,
+    );
+    const source = await screen.findByRole("combobox", {
+      name: "Output source",
+    });
+    expect(source).toHaveTextContent("All");
+    await user.click(source);
+    await user.click(
+      await screen.findByRole("option", { name: /检查日志 · Ended/ }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Output source" }),
+    ).toHaveTextContent("检查日志 · Ended");
+
+    first.unmount();
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="codex" />);
+    expect(
+      await screen.findByRole("combobox", { name: "Output source" }),
+    ).toHaveTextContent("All");
+  });
+
+  it("运行中的 Turn 显示运行中，子智能体结束后仍停在这一档", async () => {
+    setupTimeline(rosterItems);
+    const user = userEvent.setup();
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        isTurnRunning
+      />,
+    );
+    const source = await screen.findByRole("combobox", {
+      name: "Output source",
+    });
+    expect(source).toHaveTextContent("All");
+    await user.click(source);
+    await user.click(
+      await screen.findByRole("option", { name: /检查日志 · Running/ }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Output source" }),
+    ).toHaveTextContent("检查日志 · Running");
+
+    emitEvent({
+      projectId: 1,
+      sessionId: 10,
+      seq: 1,
+      epoch: "epoch-1",
+      event: {
+        type: "timeline",
+        seq: 1,
+        timestamp: 1,
+        item: { type: "subagent_roster", subagentId: "thr_a", status: "ended" },
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Output source" }),
+      ).toHaveTextContent("检查日志 · Ended");
+    });
+    expect(
+      screen.getByRole("combobox", { name: "Output source" }),
+    ).not.toHaveTextContent("All");
+    expect(screen.getByText("子路正文")).toBeInTheDocument();
+  });
+});

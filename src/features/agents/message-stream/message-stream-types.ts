@@ -13,6 +13,13 @@ import type {
 /** 轮次运行状态。 */
 export type TurnStatus = "idle" | "running" | "failed" | "canceled";
 
+/** 从日志重建的一条子智能体。prompt 为空时界面用「子智能体 N」。 */
+export interface SubagentRosterEntry {
+  id: string;
+  prompt: string | null;
+  ended: boolean;
+}
+
 /**
  * 视图模型：把 timeline item 扁平成带稳定 key 的渲染条目。
  *
@@ -42,6 +49,8 @@ export interface MessageStreamState {
   interruptedStopReason: string | null;
   /** 异步子代理是否被中断（task_notification status 异常）：工作流可能因此暂停。 */
   subagentInterrupted: boolean;
+  /** 从已保存日志重建的子智能体花名册。选中档不在这里。 */
+  subagents: SubagentRosterEntry[];
   /** readAgentTimeline 完成前为 false，完成后为 true。 */
   isInitialized: boolean;
 }

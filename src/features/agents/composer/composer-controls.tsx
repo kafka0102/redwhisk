@@ -87,6 +87,7 @@ export function ComposerControls({
     subagentName: (ordinal: number) =>
       t("agentsFeature.outputSourceSubagent", { ordinal }),
     running: t("agentsFeature.outputSourceRunning"),
+    ended: t("agentsFeature.outputSourceEnded"),
   };
   const showOutputSource =
     outputSourceOptions !== undefined && outputSourceOptions.length > 0;

@@ -5,11 +5,16 @@ use std::path::Path;
 
 use crate::agent::pty_session_manager::read_terminal_snapshot;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail,
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
+
+#[path = "timeline_tool_merge.rs"]
+mod timeline_tool_merge;
+
+use timeline_tool_merge::merge_tool_call_timeline_item;
 
 const TIMELINE_LOG_SNAPSHOT_MAX_BYTES: usize = 262_144;
 const LATEST_OUTPUT_MAX_CHARS: usize = 500;
@@ -318,165 +323,6 @@ fn merge_reasoning_timeline_item(
     }
 }
 
-fn merge_tool_call_timeline_item(
-    previous: AgentTimelineItem,
-    incoming: AgentTimelineItem,
-) -> AgentTimelineItem {
-    match (previous, incoming) {
-        (
-            AgentTimelineItem::ToolCall {
-                call_id,
-                name: previous_name,
-                detail: previous_detail,
-                status: _,
-                error: _,
-                subagent_id,
-            },
-            AgentTimelineItem::ToolCall {
-                name,
-                detail,
-                status,
-                error,
-                ..
-            },
-        ) => AgentTimelineItem::ToolCall {
-            call_id,
-            name: if should_preserve_existing_tool_name(&previous_name, &name) {
-                previous_name
-            } else {
-                name
-            },
-            detail: merge_tool_call_detail(previous_detail, detail),
-            status,
-            error,
-            subagent_id,
-        },
-        (_, incoming) => incoming,
-    }
-}
-
-fn should_preserve_existing_tool_name(previous: &str, incoming: &str) -> bool {
-    !is_generic_tool_name(previous)
-        && (incoming.trim().is_empty() || is_generic_tool_name(incoming))
-}
-
-fn is_generic_tool_name(name: &str) -> bool {
-    name.trim().eq_ignore_ascii_case("tool")
-}
-
-fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) -> ToolCallDetail {
-    if std::mem::discriminant(&previous) != std::mem::discriminant(&incoming) {
-        return incoming;
-    }
-
-    match (previous, incoming) {
-        (
-            ToolCallDetail::Shell {
-                command: previous_command,
-                output: previous_output,
-                exit_code: previous_exit_code,
-            },
-            ToolCallDetail::Shell {
-                command,
-                output,
-                exit_code,
-            },
-        ) => ToolCallDetail::Shell {
-            command: if command.is_empty() {
-                previous_command
-            } else {
-                command
-            },
-            output: output.or(previous_output),
-            exit_code: exit_code.or(previous_exit_code),
-        },
-        (
-            ToolCallDetail::Read {
-                path: previous_path,
-                content: previous_content,
-            },
-            ToolCallDetail::Read { path, content },
-        ) => ToolCallDetail::Read {
-            path: if path.is_empty() { previous_path } else { path },
-            content: content.or(previous_content),
-        },
-        (
-            ToolCallDetail::Edit {
-                path: previous_path,
-                diff: previous_diff,
-            },
-            ToolCallDetail::Edit { path, diff },
-        ) => ToolCallDetail::Edit {
-            path: if path.is_empty() { previous_path } else { path },
-            diff: diff.or(previous_diff),
-        },
-        (
-            ToolCallDetail::Write {
-                path: previous_path,
-                content: previous_content,
-            },
-            ToolCallDetail::Write { path, content },
-        ) => ToolCallDetail::Write {
-            path: if path.is_empty() { previous_path } else { path },
-            content: content.or(previous_content),
-        },
-        (
-            ToolCallDetail::Search {
-                query: previous_query,
-                mode: _previous_mode,
-                matches: previous_matches,
-            },
-            ToolCallDetail::Search {
-                query,
-                mode,
-                matches,
-            },
-        ) => ToolCallDetail::Search {
-            query: if query.is_empty() {
-                previous_query
-            } else {
-                query
-            },
-            mode,
-            matches: if matches.is_empty() {
-                previous_matches
-            } else {
-                matches
-            },
-        },
-        (
-            ToolCallDetail::SubAgent {
-                child_session_id: previous_child_session_id,
-            },
-            ToolCallDetail::SubAgent { child_session_id },
-        ) => ToolCallDetail::SubAgent {
-            child_session_id: child_session_id.or(previous_child_session_id),
-        },
-        (
-            ToolCallDetail::Plan {
-                text: previous_text,
-            },
-            ToolCallDetail::Plan { text },
-        ) => ToolCallDetail::Plan {
-            text: if text.is_empty() { previous_text } else { text },
-        },
-        (
-            ToolCallDetail::Unknown {
-                raw_input: previous_raw_input,
-                raw_output: previous_raw_output,
-            },
-            ToolCallDetail::Unknown {
-                raw_input,
-                raw_output,
-            },
-        ) => ToolCallDetail::Unknown {
-            raw_input: raw_input.or(previous_raw_input),
-            raw_output: raw_output.or(previous_raw_output),
-        },
-        (_, incoming) => incoming,
-    }
-}
-
 fn stream_event_from_log_value(value: Value) -> Option<AgentStreamEvent> {
     if let Ok(envelope) = serde_json::from_value::<AgentStreamEventEnvelope>(value.clone()) {
         return Some(envelope.event);
@@ -599,11 +445,14 @@ pub(super) fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Opti
             | ToolCallDetail::Write { path, .. } => path.as_str(),
             ToolCallDetail::Search { query, .. } => query.as_str(),
             ToolCallDetail::Plan { text } => text.as_str(),
-            ToolCallDetail::SubAgent { .. } | ToolCallDetail::Unknown { .. } => name.as_str(),
+            ToolCallDetail::SubAgent { .. }
+            | ToolCallDetail::Unknown { .. }
+            | ToolCallDetail::CollabAgent { .. } => name.as_str(),
         },
         AgentTimelineItem::Todo { .. } => "Plan updated",
         AgentTimelineItem::Error { message } => message.as_str(),
         AgentTimelineItem::Compaction { .. } => "Context compacted",
+        AgentTimelineItem::SubagentRoster { .. } => return None,
     };
 
     latest_output_from_text(text)

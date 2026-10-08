@@ -5,7 +5,7 @@
 //!
 //! 首版覆盖 codex 0.x 常见 item 类型：userMessage / agentMessage / reasoning /
 //! plan / commandExecution / fileChange / webSearch / contextCompaction。其余类型
-//! （mcpToolCall / collabAgentToolCall / image*）暂归 `unknown` 或 `error`，
+//! （mcpToolCall / image*）暂归 `unknown` 或 `error`，
 //! 保留原始 JSON 便于诊断，待后续 PR 补齐。
 
 use serde_json::Value;
@@ -88,9 +88,8 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
             status: CompactionStatus::Completed,
             subagent_id: None,
         }),
-        "mcpToolCall" | "collabAgentToolCall" | "imageView" | "imageGeneration" => {
-            map_unknown_tool_call(item, item_type)
-        }
+        "collabAgentToolCall" => super::collab_item::map_collab_agent_tool_call(item),
+        "mcpToolCall" | "imageView" | "imageGeneration" => map_unknown_tool_call(item, item_type),
         _ => None,
     }
 }

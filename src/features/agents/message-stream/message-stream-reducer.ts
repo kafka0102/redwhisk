@@ -22,10 +22,12 @@ import type {
   AgentUsage,
   ToolCallDetail,
 } from "../agent-stream-types";
+import { foldSubagentRoster } from "./output-source";
 import type {
   MessageStreamAction,
   MessageStreamEntry,
   MessageStreamState,
+  SubagentRosterEntry,
   TurnStatus,
 } from "./message-stream-types";
 
@@ -44,6 +46,7 @@ export function createInitialState(): MessageStreamState {
     turnInterrupted: false,
     interruptedStopReason: null,
     subagentInterrupted: false,
+    subagents: [],
     isInitialized: false,
   };
 }
@@ -100,13 +103,23 @@ export function messageStreamReducer(
       return action.state;
 
     case "HYDRATE": {
-      const entries = action.items.reduce<MessageStreamEntry[]>(
-        (currentEntries, item) => applyTimelineItem(currentEntries, item),
-        [],
+      const folded = action.items.reduce<{
+        entries: MessageStreamEntry[];
+        subagents: SubagentRosterEntry[];
+      }>(
+        (current, item) => ({
+          entries:
+            item.type === "subagent_roster"
+              ? current.entries
+              : applyTimelineItem(current.entries, item),
+          subagents: foldSubagentRoster(current.subagents, item),
+        }),
+        { entries: [], subagents: [] },
       );
       return {
         ...createInitialState(),
-        entries,
+        entries: folded.entries,
+        subagents: folded.subagents,
         effort: action.effort ?? null,
         model: action.model ?? null,
         isInitialized: true,
@@ -225,6 +238,7 @@ function applyEvent(
       return { ...state, turnStatus: "canceled" };
 
     case "timeline": {
+      const subagents = foldSubagentRoster(state.subagents, event.item);
       // 收到「有产出」事件说明 turn 实际仍在跑。若此前被 spurious turn_completed
       // 误置异常中断态（含子代理被取消留下的 subagentInterrupted 横幅），恢复
       // running 并清红条，避免活动进行中却挂着「异常中断 / 工作流可能已暂停」。
@@ -244,10 +258,15 @@ function applyEvent(
               | "subagentInterrupted"
             >)
           : {};
+      if (event.item.type === "subagent_roster") {
+        const lastSeq =
+          event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
+        return { ...state, subagents, lastSeq };
+      }
       if (shouldSkipTimelineItem(event.item, state.entries)) {
         const lastSeq =
           event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
-        return { ...state, ...turnPatch, lastSeq };
+        return { ...state, ...turnPatch, subagents, lastSeq };
       }
       const entries = applyTimelineItem(state.entries, event.item);
       const lastSeq =
@@ -262,6 +281,7 @@ function applyEvent(
         ...state,
         ...turnPatch,
         entries,
+        subagents,
         lastSeq,
         ...(subagentInterrupted ? { subagentInterrupted: true } : {}),
       };
@@ -488,6 +508,9 @@ function applyTimelineItem(
     case "error":
     case "compaction":
       return [...entries, toEntry(item, nextLocalId(entries))];
+
+    case "subagent_roster":
+      return entries;
 
     default:
       return entries;
@@ -720,6 +743,21 @@ function mergeToolCallDetail(
       return {
         type: "sub_agent",
         childSessionId: incoming.childSessionId ?? prev.childSessionId,
+      };
+    }
+    case "collab_agent": {
+      const prev = existing as Extract<
+        ToolCallDetail,
+        { type: "collab_agent" }
+      >;
+      return {
+        type: "collab_agent",
+        prompt: incoming.prompt?.trim() ? incoming.prompt : prev.prompt,
+        receiverThreadIds:
+          incoming.receiverThreadIds.length > 0
+            ? incoming.receiverThreadIds
+            : prev.receiverThreadIds,
+        senderThreadId: incoming.senderThreadId ?? prev.senderThreadId,
       };
     }
     case "plan": {

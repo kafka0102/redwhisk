@@ -2,7 +2,8 @@ use std::fs;
 
 use crate::features::agent_session::timeline::read_timeline_from_log_path;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, SubagentRosterStatus,
+    ToolCallDetail, ToolCallStatus,
 };
 
 fn envelope(seq: u64, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
@@ -139,5 +140,77 @@ fn subagent_output_source_survives_log_reread() {
             {"type":"tool_call","callId":"c1","name":"shell","status":"completed","subagentId":"thr_child","detail":{"type":"shell","command":"ls"}},
             {"type":"reasoning","text":"子线程在想","subagentId":"thr_child"},
         ])
+    );
+}
+
+#[test]
+fn read_timeline_replays_collab_prompt_and_ended_roster() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("roster.jsonl");
+    let events = [
+        envelope(
+            1,
+            AgentTimelineItem::ToolCall {
+                call_id: "call_spawn".to_string(),
+                name: "collabAgentToolCall".to_string(),
+                detail: ToolCallDetail::CollabAgent {
+                    prompt: Some("检查日志".to_string()),
+                    receiver_thread_ids: vec!["thr_child".to_string()],
+                    sender_thread_id: Some("thr_parent".to_string()),
+                },
+                status: ToolCallStatus::Completed,
+                error: None,
+                subagent_id: None,
+            },
+        ),
+        envelope(
+            2,
+            AgentTimelineItem::SubagentRoster {
+                subagent_id: "thr_child".to_string(),
+                status: SubagentRosterStatus::Ended,
+            },
+        ),
+        envelope(
+            3,
+            AgentTimelineItem::AssistantMessage {
+                text: "查完了".to_string(),
+                message_id: Some("m1".to_string()),
+                subagent_id: Some("thr_child".to_string()),
+            },
+        ),
+    ];
+    let lines = events
+        .iter()
+        .map(|event| serde_json::to_string(event).expect("serialize"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&log_path, format!("{lines}\n")).expect("write log");
+
+    let history = read_timeline_from_log_path(log_path.to_str().expect("path")).expect("read");
+    assert_eq!(
+        history.items,
+        vec![
+            AgentTimelineItem::ToolCall {
+                call_id: "call_spawn".to_string(),
+                name: "collabAgentToolCall".to_string(),
+                detail: ToolCallDetail::CollabAgent {
+                    prompt: Some("检查日志".to_string()),
+                    receiver_thread_ids: vec!["thr_child".to_string()],
+                    sender_thread_id: Some("thr_parent".to_string()),
+                },
+                status: ToolCallStatus::Completed,
+                error: None,
+                subagent_id: None,
+            },
+            AgentTimelineItem::SubagentRoster {
+                subagent_id: "thr_child".to_string(),
+                status: SubagentRosterStatus::Ended,
+            },
+            AgentTimelineItem::AssistantMessage {
+                text: "查完了".to_string(),
+                message_id: Some("m1".to_string()),
+                subagent_id: Some("thr_child".to_string()),
+            },
+        ]
     );
 }
