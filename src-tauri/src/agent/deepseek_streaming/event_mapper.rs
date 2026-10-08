@@ -97,6 +97,12 @@ impl DeepSeekStreamMapper {
             .get("stopReason")
             .and_then(Value::as_str)
             .map(str::to_string);
+        if stop_reason.as_deref() == Some("cancelled") {
+            return vec![AgentStreamEvent::TurnCanceled {
+                turn_id: self.turn_id.clone(),
+                reason: "cancelled".into(),
+            }];
+        }
         vec![AgentStreamEvent::TurnCompleted {
             turn_id: self.turn_id.clone(),
             usage: None,

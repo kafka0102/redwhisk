@@ -16,3 +16,7 @@ mod session_tests;
 #[cfg(test)]
 #[path = "session_tool_tests.rs"]
 mod session_tool_tests;
+
+#[cfg(test)]
+#[path = "session_cancel_tests.rs"]
+mod session_cancel_tests;

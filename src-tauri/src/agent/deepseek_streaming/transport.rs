@@ -176,6 +176,20 @@ impl DeepSeekStreamingTransport {
         }
     }
 
+    /// 发送 JSON-RPC 通知（无 id，不等待响应）。ACP `session/cancel` 是通知。
+    pub fn notify(&self, method: &str, params: Value) -> Result<(), DeepSeekStreamingError> {
+        if self.is_closed() {
+            return Err(DeepSeekStreamingError::Closed(
+                "dsh ACP 已关闭，notify 被丢弃".into(),
+            ));
+        }
+        self.write_line(&json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
+    }
+
     pub fn shutdown(&self) {
         if let Ok(mut closed) = self.state.closed.lock() {
             if closed.is_none() {

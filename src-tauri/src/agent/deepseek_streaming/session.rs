@@ -1,7 +1,7 @@
 //! DeepSeek 结构化会话：`initialize` → `session/new` → 每轮 `session/prompt`。
 //!
 //! 已提交的正文、思考和通用工具卡经 mapper 进入既有 `AgentStreamEvent`。
-//! 取消、权限、续接和图片仍未接入。
+//! 权限、续接和图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
 
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,6 +24,7 @@ use crate::types::agent_session_stream::{
 const INITIALIZE_METHOD: &str = "initialize";
 const SESSION_NEW_METHOD: &str = "session/new";
 const SESSION_PROMPT_METHOD: &str = "session/prompt";
+const SESSION_CANCEL_METHOD: &str = "session/cancel";
 
 /// DeepSeek 结构化会话配置。
 #[derive(Clone)]
@@ -187,15 +188,23 @@ impl AgentSessionHandle for DeepSeekSessionHandle {
     }
 
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {
-        let active = self
-            .state
-            .lock()
-            .map(|state| state.mapper.is_turn_active())
-            .unwrap_or(false);
-        if !active {
-            return Err(AgentSessionError::NoInterruptibleTurn);
-        }
-        Err(AgentSessionError::Protocol("deepseek 取消尚未接入".into()))
+        let transport = self.current_transport().map_err(AgentSessionError::from)?;
+        let session_id = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| AgentSessionError::Protocol("session 锁中毒".into()))?;
+            if !state.mapper.is_turn_active() {
+                return Err(AgentSessionError::NoInterruptibleTurn);
+            }
+            state
+                .session_id
+                .clone()
+                .ok_or_else(|| AgentSessionError::Protocol("deepseek 会话缺少 sessionId".into()))?
+        };
+        transport
+            .notify(SESSION_CANCEL_METHOD, json!({ "sessionId": session_id }))
+            .map_err(AgentSessionError::from)
     }
 
     fn respond_permission(
