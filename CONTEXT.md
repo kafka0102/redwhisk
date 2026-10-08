@@ -194,6 +194,10 @@ _Avoid_: 把子智能体的子轮次当成可停止的当前 Turn
 同一条 Codex json Agent Session 里，由主智能体拉起、用另一条 thread 产出输出的协作方。不是另一条 Agent Session，也不是用户发起的 Turn。
 _Avoid_: 协作子代理、子 Session、子 Turn
 
+**主智能体**：
+同一条 Agent Session 里拉起子智能体的那一方。
+_Avoid_: 父 Turn、主线程
+
 **输出来源**：
 一条结构化输出所属的说话方，要么是主智能体，要么是某一个子智能体。
 _Avoid_: 筛选档、当前视图
