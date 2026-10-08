@@ -37,6 +37,10 @@ fn descriptor_for_returns_matching_descriptor() {
         descriptor_for(&AgentType::Grok).agent_type(),
         AgentType::Grok
     );
+    assert_eq!(
+        descriptor_for(&AgentType::DeepSeek).agent_type(),
+        AgentType::DeepSeek
+    );
 }
 
 #[test]

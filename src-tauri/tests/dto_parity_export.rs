@@ -379,7 +379,8 @@ fn export_dto_signatures_writes_snapshot() {
             "codex".to_string(),
             "claude".to_string(),
             "opencode".to_string(),
-            "grok".to_string()
+            "grok".to_string(),
+            "deepseek".to_string()
         ]
     );
 

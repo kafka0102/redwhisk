@@ -6,6 +6,7 @@ pub mod codex_config;
 pub mod codex_model_catalog;
 pub mod command_detector;
 pub(crate) mod command_lookup_process;
+pub mod deepseek_streaming;
 pub mod grok_config;
 pub mod grok_streaming;
 pub mod latest_output_writer;

@@ -59,11 +59,12 @@ where
             .map_err(agent_command_error)
     }
 
-    /// 启动时异步检测 + 幂等播种四内置 agent（ADR-0020）。
+    /// 启动时异步检测 + 幂等播种内置 agent（ADR-0020 / ADR-0048）。
     ///
-    /// 按 `[codex, claude, opencode, grok]` 顺序逐个探测命令；探测成功且库中**无任何
+    /// 按 `[codex, claude, opencode, grok, deepseek]` 顺序逐个探测命令；探测成功且库中**无任何
     /// 记录（含软删 `del=1`）**则按内置默认值表插入一条 global profile。探测失败（未装）
     /// 或已存在记录则静默跳过。单条 profile 写入失败会记 stderr 但不阻断其余 agent 播种。
+    /// deepseek 探测命令名是 `dsh`，不是字面量 `deepseek`。
     pub fn seed_builtin_agents(&self) -> Result<(), CommandError> {
         for agent_type in BUILTIN_AGENT_SEED_ORDER {
             // 先查是否已播种：命令探测要拉起 login/interactive shell（.zshrc 带 nvm 等
@@ -210,6 +211,16 @@ where
             .test_command(&command)
             .map_err(agent_command_error)?;
 
+        let display_mode = descriptor_for(&input.agent_type)
+            .accepted_display_mode(&input.display_mode)
+            .map_err(|_| {
+                CommandError::new(
+                    CommandErrorCode::AgentProfileValidationFailed,
+                    "该智能体的展示形式只能是 json。",
+                )
+                .with_reason("displayModeLocked")
+                .with_detail(ErrorDetail::new("Field").with_value("name", "displayMode"))
+            })?;
         let row = self
             .repository
             .save_profile(
@@ -223,7 +234,7 @@ where
                 input.dangerous,
                 input.default_skill.trim(),
                 input.prompt_template.trim(),
-                &input.display_mode,
+                &display_mode,
                 input.enabled,
             )
             .map_err(settings_database_error)?;
@@ -868,15 +879,19 @@ fn settings_database_error(error: rusqlite::Error) -> CommandError {
 }
 
 /// 内置 agent 播种顺序与默认值（ADR-0020 决策清单 #1 与「内置 Agent 默认值表」）。
-const BUILTIN_AGENT_SEED_ORDER: [AgentType; 4] = [
+const BUILTIN_AGENT_SEED_ORDER: [AgentType; 5] = [
     AgentType::Codex,
     AgentType::Claude,
     AgentType::OpenCode,
     AgentType::Grok,
+    AgentType::DeepSeek,
 ];
 
 fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
-    agent_type.as_db_str()
+    match agent_type {
+        AgentType::DeepSeek => "dsh",
+        _ => agent_type.as_db_str(),
+    }
 }
 
 /// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。
@@ -889,6 +904,7 @@ fn default_builtin_profile_input(
         AgentType::Claude => ("Claude Code", "json"),
         AgentType::OpenCode => ("OpenCode", "json"),
         AgentType::Grok => ("Grok", "tui"),
+        AgentType::DeepSeek => ("DeepSeek", "json"),
     };
     SaveAgentProfileInput {
         id: None,
@@ -913,3 +929,7 @@ mod label_tests;
 #[cfg(test)]
 #[path = "service_seed_preview_tests.rs"]
 mod seed_preview_tests;
+
+#[cfg(test)]
+#[path = "service_seed_deepseek_tests.rs"]
+mod seed_deepseek_tests;

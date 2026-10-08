@@ -2,7 +2,8 @@ use super::*;
 use crate::agent::command_detector::AgentCommandDetector;
 use crate::db::migrations::MigrationRunner;
 use crate::types::agent_profile::{
-    AgentScope, AgentType, PreviewAgentCommandArgsInput, SaveAgentProfileInput,
+    AgentScope, AgentType, DeleteAgentProfileInput, PreviewAgentCommandArgsInput,
+    SaveAgentProfileInput,
 };
 use rusqlite::Connection;
 
@@ -10,13 +11,13 @@ use rusqlite::Connection;
 ///
 /// seed_builtin_agents 的顺序与是否播种由探测结果驱动，本 stub 让测试完全可控。
 #[derive(Default, Clone)]
-struct SeedTestDetector {
+pub(super) struct SeedTestDetector {
     detect_results: std::collections::HashMap<String, Result<String, String>>,
     detect_calls: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl SeedTestDetector {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self::default()
     }
 
@@ -25,7 +26,7 @@ impl SeedTestDetector {
         self.detect_calls.clone()
     }
 
-    fn with_detect_result(command: &str, result: Result<&str, &str>) -> Self {
+    pub(super) fn with_detect_result(command: &str, result: Result<&str, &str>) -> Self {
         let mut detector = Self::new();
         detector.detect_results.insert(
             command.to_string(),
@@ -78,6 +79,7 @@ fn seed_builtin_agents_skips_command_detection_for_already_seeded_agents() {
         (AgentType::Claude, "Claude"),
         (AgentType::OpenCode, "OpenCode"),
         (AgentType::Grok, "Grok"),
+        (AgentType::DeepSeek, "DeepSeek"),
     ] {
         service
             .save_agent_profile(SaveAgentProfileInput {
@@ -239,7 +241,7 @@ fn seed_builtin_agents_skips_when_detection_fails() {
 
 #[test]
 fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
-    // 全部已装：应按固定顺序播种 4 条；list 按 id 升序返回，顺序与播种顺序一致。
+    // 全部已装：应按固定顺序播种；list 按 id 升序返回，顺序与播种顺序一致。
     let connection = migrated_in_memory_connection();
     let service = test_settings_service(
         &connection,
@@ -248,6 +250,7 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
             ("claude", Ok("claude")),
             ("opencode", Ok("opencode")),
             ("grok", Ok("grok")),
+            ("dsh", Ok("dsh")),
         ]),
     );
 
@@ -270,8 +273,18 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
             AgentType::Claude,
             AgentType::OpenCode,
             AgentType::Grok,
+            AgentType::DeepSeek,
         ]
     );
+    let deepseek = profiles
+        .iter()
+        .find(|profile| profile.agent_type == AgentType::DeepSeek)
+        .expect("deepseek profile");
+    assert_eq!(deepseek.name, "DeepSeek");
+    assert_eq!(deepseek.command, "dsh");
+    assert_eq!(deepseek.display_mode, "json");
+    assert!(deepseek.enabled);
+    assert_eq!(deepseek.scope, AgentScope::Global);
     let claude = profiles
         .iter()
         .find(|p| p.agent_type == AgentType::Claude)
@@ -455,7 +468,7 @@ fn preview_agent_command_args_rejects_empty_command() {
     assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
 }
 
-fn migrated_in_memory_connection() -> Connection {
+pub(super) fn migrated_in_memory_connection() -> Connection {
     // lib 测试 binary 在本机对文件库写 agent_profiles 会触发 SQLite IOERR_BEGIN_ATOMIC；
     // :memory: 规避该环境问题。参考 db/agent_profile_repository_tests.rs。
     let connection = Connection::open_in_memory().expect("in-memory db");
@@ -468,7 +481,7 @@ fn migrated_in_memory_connection() -> Connection {
     connection
 }
 
-fn test_settings_service<'a>(
+pub(super) fn test_settings_service<'a>(
     connection: &'a Connection,
     detector: SeedTestDetector,
 ) -> SettingsService<'a, SeedTestDetector> {

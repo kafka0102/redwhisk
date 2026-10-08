@@ -143,6 +143,17 @@ impl AgentSessionService<'_> {
 
         validate_profile_not_deleted(&profile)?;
         validate_profile_scope(&profile, input.project_id)?;
+        let mut profile = profile;
+        profile.display_mode = descriptor_for(&profile.agent_type)
+            .accepted_display_mode(&profile.display_mode)
+            .map_err(|_| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "该智能体的展示形式只能是 json。",
+                )
+                .with_reason("displayModeLocked")
+                .with_detail(ErrorDetail::new("Field").with_value("name", "displayMode"))
+            })?;
 
         let started_at = current_epoch_millis()?;
         let log_path = build_log_path(

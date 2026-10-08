@@ -114,6 +114,7 @@ fn agent_type_rank(agent_type: &AgentType) -> u8 {
         AgentType::Claude => 1,
         AgentType::OpenCode => 2,
         AgentType::Grok => 3,
+        AgentType::DeepSeek => 4,
     }
 }
 

@@ -31,6 +31,10 @@ describe("formatAgentTypeLabel", () => {
     expect(formatAgentTypeLabel("grok")).toBe("Grok");
   });
 
+  it("returns DeepSeek for deepseek", () => {
+    expect(formatAgentTypeLabel("deepseek")).toBe("DeepSeek");
+  });
+
   it("falls back to raw agentType for unknown values", () => {
     expect(formatAgentTypeLabel("foo")).toBe("foo");
   });

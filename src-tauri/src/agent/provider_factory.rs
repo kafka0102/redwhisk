@@ -14,6 +14,7 @@ use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::deepseek_streaming::{DeepSeekSessionConfig, DeepSeekSessionHandle};
 use crate::agent::grok_streaming::{GrokSessionConfig, GrokSessionHandle};
 use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
@@ -87,6 +88,7 @@ impl AgentSessionProviderFactory for DefaultAgentSessionProviderFactory {
             ProviderStartPlan::Claude { backfill } => start_claude_session(request, backfill),
             ProviderStartPlan::OpenCode { backfill } => start_opencode_session(request, backfill),
             ProviderStartPlan::Grok { backfill } => start_grok_session(request, backfill),
+            ProviderStartPlan::DeepSeek { backfill } => start_deepseek_session(request, backfill),
         }
     }
 }
@@ -105,6 +107,9 @@ pub enum ProviderStartPlan {
         backfill: ThreadIdBackfill,
     },
     Grok {
+        backfill: ThreadIdBackfill,
+    },
+    DeepSeek {
         backfill: ThreadIdBackfill,
     },
 }
@@ -171,6 +176,9 @@ pub fn plan_provider_start(
             };
             Ok(ProviderStartPlan::Grok { backfill })
         }
+        AgentType::DeepSeek => Ok(ProviderStartPlan::DeepSeek {
+            backfill: ThreadIdBackfill::DeferToStream,
+        }),
     }
 }
 
@@ -305,6 +313,34 @@ fn start_grok_session(
     let _ = request.config_home;
 
     let handle = GrokSessionHandle::start(config).map_err(AgentSessionError::from)?;
+    let thread_id = handle.thread_id();
+    Ok(StartedSession {
+        handle: Arc::new(handle),
+        thread_id,
+        backfill,
+    })
+}
+
+fn start_deepseek_session(
+    request: AgentSessionStartRequest,
+    backfill: ThreadIdBackfill,
+) -> Result<StartedSession, AgentSessionError> {
+    let _ = request.mode_id;
+    let _ = request.dangerous;
+    let _ = request.model;
+    let _ = request.effort;
+    let _ = request.config_home;
+    let _ = request.resume_thread_id;
+    let config = DeepSeekSessionConfig {
+        project_id: request.project_id,
+        session_id: request.session_id,
+        binary: request.binary,
+        cwd: request.cwd,
+        broadcaster: request.broadcaster,
+        #[cfg(test)]
+        event_log: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+    };
+    let handle = DeepSeekSessionHandle::start(config).map_err(AgentSessionError::from)?;
     let thread_id = handle.thread_id();
     Ok(StartedSession {
         handle: Arc::new(handle),
@@ -635,6 +671,18 @@ mod tests {
         assert_eq!(
             plan,
             ProviderStartPlan::Grok {
+                backfill: ThreadIdBackfill::DeferToStream,
+            }
+        );
+    }
+
+    #[test]
+    fn plan_routes_deepseek_new_with_defer_backfill() {
+        let request = base_request(AgentType::DeepSeek);
+        let plan = plan_provider_start(&request).expect("plan");
+        assert_eq!(
+            plan,
+            ProviderStartPlan::DeepSeek {
                 backfill: ThreadIdBackfill::DeferToStream,
             }
         );

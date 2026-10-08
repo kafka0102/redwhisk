@@ -8,6 +8,8 @@ pub enum AgentType {
     #[serde(rename = "opencode")]
     OpenCode,
     Grok,
+    #[serde(rename = "deepseek")]
+    DeepSeek,
 }
 
 impl AgentType {
@@ -22,6 +24,7 @@ impl AgentType {
             Self::Claude => "claude",
             Self::OpenCode => "opencode",
             Self::Grok => "grok",
+            Self::DeepSeek => "deepseek",
         }
     }
 
@@ -32,6 +35,7 @@ impl AgentType {
             "claude" => Some(Self::Claude),
             "opencode" => Some(Self::OpenCode),
             "grok" => Some(Self::Grok),
+            "deepseek" => Some(Self::DeepSeek),
             _ => None,
         }
     }
@@ -132,6 +136,7 @@ mod tests {
             AgentType::Claude,
             AgentType::OpenCode,
             AgentType::Grok,
+            AgentType::DeepSeek,
         ];
         for agent_type in variants {
             let literal = agent_type.as_db_str();

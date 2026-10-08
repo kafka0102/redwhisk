@@ -326,6 +326,22 @@ fn agent_skill_scanner_keeps_same_name_paths_across_roots_for_same_agent() {
     );
 }
 
+#[test]
+fn deepseek_is_not_treated_as_a_skill_root_agent() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let home = temp_dir.path();
+    write_skill(&home.join(".agents/skills/shared"), "shared");
+    write_skill(&home.join(".deepseek/skills/dsh-skill"), "not a skill root");
+
+    let skills = scan_global_skills(Some(home));
+
+    assert!(skills.iter().any(|skill| skill.name == "shared"));
+    assert!(skills
+        .iter()
+        .all(|skill| skill.agent_type != AgentType::DeepSeek));
+    assert!(!skills.iter().any(|skill| skill.name == "dsh-skill"));
+}
+
 fn assert_agent_types_for_name(
     skills: &[crate::types::agent_skill::AgentSkillRecord],
     name: &str,

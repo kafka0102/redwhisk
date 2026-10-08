@@ -1885,4 +1885,40 @@ mod tests {
         );
         assert!(types.contains(&AgentType::Grok), "grok missing: {types:?}");
     }
+
+    #[test]
+    fn list_by_project_id_accepts_deepseek_agent_type() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        connection
+            .execute(
+                "INSERT INTO agent_profiles (
+                   id, name, agent_type, command, scope, project_id, mode, dangerous,
+                   default_skill, prompt_template, del, display_mode, enabled
+                 ) VALUES
+                   (103, 'DeepSeek', 'deepseek', 'dsh', 'global', NULL, 'full-access', 1, '', '', 0, 'json', 1)",
+                [],
+            )
+            .expect("insert deepseek profile");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   id, project_id, number, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   last_active_at, started_at, del, display_mode
+                 ) VALUES (
+                   803, 1, 1, 103, 'running', 'none',
+                   '/tmp/repo', 'dsh --profile acp', '', '/tmp/s.log',
+                   10, 10, 0, 'json'
+                 )",
+                [],
+            )
+            .expect("insert deepseek session");
+
+        let rows = AgentSessionRepository::new(&connection)
+            .list_by_project_id(1)
+            .expect("list sessions with deepseek");
+        assert_eq!(rows[0].agent_type, AgentType::DeepSeek);
+        assert_eq!(rows[0].display_mode, "json");
+    }
 }

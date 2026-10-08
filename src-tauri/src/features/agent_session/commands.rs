@@ -724,6 +724,7 @@ fn agent_home_dir(
             AgentType::Claude => ("claudeConfigReadFailed", "读取 Claude 配置失败。"),
             AgentType::OpenCode => ("opencodeConfigReadFailed", "读取 OpenCode 配置失败。"),
             AgentType::Grok => ("grokConfigReadFailed", "读取 Grok 配置失败。"),
+            AgentType::DeepSeek => ("deepseekConfigReadFailed", "读取 DeepSeek 配置失败。"),
         };
         CommandError::new(CommandErrorCode::AgentSessionPersistenceFailed, message)
             .with_reason(reason)

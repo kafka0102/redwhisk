@@ -28,13 +28,14 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
 
-// ADR-0020：表单可选 agentType 固定为 codex/claude/opencode/grok 四项。
+// ADR-0020 / ADR-0048：表单可选 agentType。
 // claude_code 是前端 UI 别名（agent-visuals 视作 Claude），不在新建表单暴露。
 const AGENT_TYPE_OPTIONS: ReadonlyArray<{ value: AgentType; label: string }> = [
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude Code" },
   { value: "opencode", label: "OpenCode" },
   { value: "grok", label: "Grok" },
+  { value: "deepseek", label: "DeepSeek" },
 ];
 
 // ADR-0020 决策 10：name 上限 20 字符（label 是 15，别混淆）。

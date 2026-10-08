@@ -1,6 +1,6 @@
 # Agent Provider 协议
 
-RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent provider；四者都走结构化（json）与交互式（tui）两路。json 路径分别是 Codex `codex app-server`、Claude `claude -p --output-format stream-json`、OpenCode `opencode run --format json`、Grok `grok agent stdio`（ACP）。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
+RedWhisk 当前正式支持 `codex`、`claude`、OpenCode、Grok 与 DeepSeek Harness 五种 Agent provider。前四者都走结构化（json）与交互式（tui）两路；DeepSeek Harness 只有 json。json 路径分别是 Codex `codex app-server`、Claude `claude -p --output-format stream-json`、OpenCode `opencode run --format json`、Grok `grok agent stdio`（ACP）、DeepSeek Harness `dsh --profile acp`（ACP）。前端只消费统一的 session command 与（json 路径下的）`AgentStreamEvent`；provider 私有协议必须在 Rust `agent/` 层归一化或在 tui 路径下以交互式 PTY 呈现。
 
 ## 统一边界
 
@@ -13,7 +13,7 @@ RedWhisk 当前正式支持 `codex`、`claude`、OpenCode 与 Grok 四种 Agent 
 Composer / session UI
   → send_agent_message / cancel_agent_turn / respond_agent_permission
   → AgentSessionHandle
-  → Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio
+  → Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio / DeepSeek dsh --profile acp
   → AgentStreamEventEnvelope
   → message-stream reducer / timeline
 
@@ -32,7 +32,7 @@ Agent TUI 会话视图 (xterm)
 
 | 快照 | 传输 | 命令构造 | 前端主区 | 状态语义 |
 | --- | --- | --- | --- | --- |
-| `json` | 结构化 provider（Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio） | `build_launch_command_snapshot` 等 structured 路径 API | 消息流 + composer | turn / 权限 / timeline |
+| `json` | 结构化 provider（Codex app-server / Claude stream-json / OpenCode run --format json / Grok agent stdio / DeepSeek `dsh --profile acp`） | `build_launch_command_snapshot` 等 structured 路径 API | 消息流 + composer | turn / 权限 / timeline |
 | `tui` | 交互式 PTY（`PtySessionManager`） | `build_tui_command_snapshot(raw, mode, dangerous)` | Agent TUI 会话视图（xterm） | 进程级（exit / 重启 reconcile） |
 
 规则：
@@ -40,7 +40,7 @@ Agent TUI 会话视图 (xterm)
 1. 会话存续期只认 **Session 展示形式快照**，不回读 profile 当前 `displayMode`。
 2. TUI 命令**不得**注入 structured 专属参数（Codex 无 `app-server`；Claude 无 `stream-json` / `-p` / `--print` / `--output-format`）。
 3. mode / dangerous 映射由 descriptor 按 provider 交互式 CLI 语义处理；service / command 不按 `agentType` 散落 match。
-4. codex/claude/opencode/grok 都可以 json 与 tui 启动。OpenCode json 使用 `opencode run --format json`；Grok json 使用 `grok agent stdio`（ACP，见 [ADR-0047](../adr/0047-grok-structured-json-mode.md)）。displayMode 默认 `json` 且可切换（ADR-0047 后 Grok 不再锁定 `tui`）。
+4. codex/claude/opencode/grok 都可以 json 与 tui 启动。OpenCode json 使用 `opencode run --format json`；Grok json 使用 `grok agent stdio`（ACP，见 [ADR-0047](../adr/0047-grok-structured-json-mode.md)）。displayMode 默认 `json` 且可切换（ADR-0047 后 Grok 不再锁定 `tui`）。DeepSeek Harness 只有 json，不能切到 tui；结构化进程是 `dsh --profile acp`（见 [ADR-0048](../adr/0048-deepseek-harness-acp-not-sdk.md)）。它的 `agent_message_chunk` / `agent_thought_chunk` 是已提交块，不提供逐字增量。`usage_update` 的 `used` / `size` 是上下文窗口占用，没有输入/输出/缓存数据时不写入 Session Token 消耗。
 5. 运行中不得热切换 displayMode。
 
 ### TUI 命令映射要点（descriptor）
@@ -76,6 +76,15 @@ Agent TUI 会话视图 (xterm)
 | 输出      | JSON-RPC notification 映射 timeline                           | SDKMessage 流映射 timeline                              | ACP `session/update` 映射 timeline                                |
 
 因此，不能把 Codex 的 JSON-RPC、权限卡片、thread 字段或 effort 假定为所有 provider 都具备。**json 快照**不得为 Claude/Codex 回退重建 xterm 渲染链路；**tui 快照**则必须使用交互式终端主区，不得混用 structured composer / 权限卡。
+
+### DeepSeek Harness
+
+DeepSeek Harness 走 ACP，不走 SDK，也不启动 `dsh web`。
+
+- 进程是长驻 `dsh --profile acp`。stdout 只承载 ACP JSON-RPC。握手后 `session/new`，每条用户消息是一次 `session/prompt`。
+- `session/update` 的 `agent_message_chunk` 按 `messageId` 合并成一条助手消息；`agent_thought_chunk` 单独成为推理块。这些 chunk 是已提交内容，不是生成过程中的逐字增量。
+- `usage_update` 的 `used` / `size` 表示上下文窗口占用。协议没有输入、输出、缓存三分量时，不发送 Session Token 用量事件。
+- 不展示模型切换、推理强度和 mode，也没有技能根。未知 ACP 字段保持忽略，不因此中断会话。
 
 ## 生命周期规则
 

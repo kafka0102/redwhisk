@@ -1,9 +1,9 @@
 import type { AgentDisplayMode } from "./settings-commands";
 import type { AgentType } from "../agents/agent-session-commands";
 
-// ADR-0020 / ADR-0047：displayMode 按 RedWhisk 是否已接入 JSON 解析器决定。
+// ADR-0020 / ADR-0047 / ADR-0048：displayMode 按 RedWhisk 是否已接入 JSON 解析器决定。
 // codex/claude/opencode/grok 均已接入结构化（json）解析 → 默认 json 且可在
-// json/tui 间切换（表单展示切换控件）。
+// json/tui 间切换（表单展示切换控件）。deepseek 只有 json，不能切到 tui。
 export interface DisplayModeDefaults {
   defaultMode: AgentDisplayMode;
   canSwitch: boolean;
@@ -19,6 +19,8 @@ export function getDisplayModeDefaults(
     case "opencode":
     case "grok":
       return { defaultMode: "json", canSwitch: true };
+    case "deepseek":
+      return { defaultMode: "json", canSwitch: false };
   }
 }
 

@@ -172,6 +172,9 @@ const AGENT_SESSIONS_SESSION_TOKEN_USAGE_MIGRATION_VERSION: &str =
     "0052_agent_sessions_session_token_usage";
 const AGENT_SESSIONS_SESSION_TOKEN_USAGE_MIGRATION_SQL: &str =
     include_str!("../../migrations/0052_agent_sessions_session_token_usage.sql");
+const AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION: &str = "0053_agent_profiles_deepseek";
+const AGENT_PROFILES_DEEPSEEK_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0053_agent_profiles_deepseek.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -468,6 +471,10 @@ fn default_migrations() -> Vec<Migration> {
             version: AGENT_SESSIONS_SESSION_TOKEN_USAGE_MIGRATION_VERSION,
             sql: AGENT_SESSIONS_SESSION_TOKEN_USAGE_MIGRATION_SQL,
         },
+        Migration {
+            version: AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION,
+            sql: AGENT_PROFILES_DEEPSEEK_MIGRATION_SQL,
+        },
     ]
 }
 
@@ -503,6 +510,7 @@ fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite
 
     if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION
         && migration.version != AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION
+        && migration.version != AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION
     {
         return connection.execute_batch(migration.sql);
     }

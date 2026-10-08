@@ -15,6 +15,10 @@ use crate::types::agent_session_stream::AgentModel;
 mod grok_descriptor;
 pub use grok_descriptor::GrokDescriptor;
 
+#[path = "provider_descriptor_deepseek.rs"]
+mod deepseek_descriptor;
+pub use deepseek_descriptor::DeepSeekDescriptor;
+
 #[path = "provider_descriptor_command.rs"]
 mod command;
 use command::{
@@ -144,22 +148,29 @@ pub trait AgentProviderDescriptor: Send + Sync {
 
     /// UI 能力投影（模型展示 / Think / modes 等），由 list_agent_models 下发前端。
     fn ui_capabilities(&self) -> crate::types::agent_session::AgentUiCapabilities;
+
+    /// 校验展示形式。默认原样接受。不支持的组合必须由调用方失败，不能静默改写。
+    fn accepted_display_mode(&self, raw: &str) -> Result<String, &'static str> {
+        Ok(raw.to_string())
+    }
 }
 
 /// 按 agent 类型查表获取 descriptor。
 ///
-/// 4 种 provider 用 `match` 查表即可（编译期穷尽性是优点）；若未来需动态注册再换
+/// 各 provider 用 `match` 查表（编译期穷尽性是优点）；若未来需动态注册再换
 /// `HashMap`（见 ADR-0015）。
 pub fn descriptor_for(agent_type: &AgentType) -> &'static dyn AgentProviderDescriptor {
     static CODEX: CodexDescriptor = CodexDescriptor;
     static CLAUDE: ClaudeDescriptor = ClaudeDescriptor;
     static OPENCODE: OpenCodeDescriptor = OpenCodeDescriptor;
     static GROK: GrokDescriptor = GrokDescriptor;
+    static DEEPSEEK: DeepSeekDescriptor = DeepSeekDescriptor;
     match agent_type {
         AgentType::Codex => &CODEX,
         AgentType::Claude => &CLAUDE,
         AgentType::OpenCode => &OPENCODE,
         AgentType::Grok => &GROK,
+        AgentType::DeepSeek => &DEEPSEEK,
     }
 }
 

@@ -9,6 +9,7 @@ export type VisualAgentType =
   | "claude_code"
   | "opencode"
   | "grok"
+  | "deepseek"
   | string;
 
 // 展示文案映射。未登记的 agentType 回退为原值，便于排查未覆盖的枚举。
@@ -18,6 +19,7 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   claude_code: "Claude",
   opencode: "OpenCode",
   grok: "Grok",
+  deepseek: "DeepSeek",
 };
 
 // Logo 映射。未登记的 agentType 回退到 codex logo（既有默认行为，避免渲染空白）。

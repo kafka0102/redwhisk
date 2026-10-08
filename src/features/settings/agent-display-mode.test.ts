@@ -46,4 +46,15 @@ describe("resolveDisplayModeOnAgentTypeChange", () => {
     expect(resolveDisplayModeOnAgentTypeChange("codex", "json")).toBe("json");
     expect(resolveDisplayModeOnAgentTypeChange("claude", "json")).toBe("json");
   });
+
+  it("locks deepseek to json and drops a previous tui choice", () => {
+    expect(getDisplayModeDefaults("deepseek")).toEqual({
+      defaultMode: "json",
+      canSwitch: false,
+    });
+    expect(resolveDisplayModeOnAgentTypeChange("deepseek", "tui")).toBe("json");
+    expect(resolveDisplayModeOnAgentTypeChange("deepseek", "json")).toBe(
+      "json",
+    );
+  });
 });
