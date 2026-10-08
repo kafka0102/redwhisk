@@ -524,7 +524,7 @@ fn project_scope_agent_only_visible_to_target_project() {
 }
 
 #[test]
-fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
+fn save_global_project_label_allows_same_name_from_project_scope() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let database = migrated_database(temp_dir.path());
     let service = settings_service(
@@ -544,7 +544,7 @@ fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
         })
         .expect("project label");
 
-    let error = service
+    let global_label = service
         .save_project_label(SaveProjectLabelInput {
             id: None,
             name: "ops".to_string(),
@@ -553,9 +553,10 @@ fn save_global_project_label_rejects_duplicate_name_from_project_scope() {
             color: "#445566".to_string(),
             workflow_skill: None,
         })
-        .expect_err("global duplicate should fail");
+        .expect("global label should coexist with project label");
 
-    assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+    assert_eq!(global_label.scope, ProjectLabelScope::Global);
+    assert_eq!(global_label.name, "ops");
 }
 
 #[test]

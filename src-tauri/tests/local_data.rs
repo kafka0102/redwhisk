@@ -67,11 +67,17 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0046_issues_status_changed_at",
             // ADR-0020：display_mode/enabled 列与 opencode/grok 枚举由 0047 引入。
             "0047_agent_display_mode_enabled_and_opencode_grok",
+            "0048_agent_sessions_display_mode",
+            "0049_projects_removed_at",
+            "0050_agent_sessions_provider_session_id",
+            "0051_agent_sessions_startup_model",
+            "0052_agent_sessions_session_token_usage",
+            "0053_agent_profiles_deepseek",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0047_agent_display_mode_enabled_and_opencode_grok".to_string())
+        Some("0053_agent_profiles_deepseek".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -147,12 +153,18 @@ fn migrations_are_idempotent_after_first_run() {
             "0046_issues_status_changed_at",
             // ADR-0020：display_mode/enabled 列与 opencode/grok 枚举由 0047 引入。
             "0047_agent_display_mode_enabled_and_opencode_grok",
+            "0048_agent_sessions_display_mode",
+            "0049_projects_removed_at",
+            "0050_agent_sessions_provider_session_id",
+            "0051_agent_sessions_startup_model",
+            "0052_agent_sessions_session_token_usage",
+            "0053_agent_profiles_deepseek",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0047_agent_display_mode_enabled_and_opencode_grok".to_string())
+        Some("0053_agent_profiles_deepseek".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -161,7 +173,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 47);
+    assert_eq!(schema_migrations_count, 53);
 }
 
 #[test]

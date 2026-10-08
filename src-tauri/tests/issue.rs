@@ -166,7 +166,9 @@ fn issue_action_migration_creates_issue_actions_schema_with_issue_index() {
             "payload_json",
             "created_at",
             "actor_kind",
-            "actor_user_profile_id"
+            "actor_user_profile_id",
+            "actor_agent_profile_id",
+            "actor_agent_name_snapshot",
         ],
     );
     assert_eq!(
@@ -330,7 +332,7 @@ fn issue_timeline_returns_created_entries_in_ascending_order_without_payload_jso
         .execute(
             "INSERT INTO issue_actions (
                 issue_id, action_type, payload_json, created_at, actor_kind, actor_user_profile_id
-             ) VALUES (?1, 'issue_created', 'not json', ?2, 'user', 1)",
+             ) VALUES (?1, 'issue_created', '{}', ?2, 'user', 1)",
             rusqlite::params![issue.id, issue.created_at - 1],
         )
         .expect("insert legacy action");
