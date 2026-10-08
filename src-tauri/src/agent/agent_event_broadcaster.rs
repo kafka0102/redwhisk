@@ -599,6 +599,7 @@ mod tests {
             item: crate::types::agent_session_stream::AgentTimelineItem::AssistantMessage {
                 text: "hello".into(),
                 message_id: Some("a1".into()),
+                subagent_id: None,
             },
             turn_id: None,
             seq: 0,
@@ -715,6 +716,7 @@ mod tests {
                 item: AgentTimelineItem::Reasoning {
                     text: "thinking".into(),
                     duration_ms: None,
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 0,
@@ -727,6 +729,7 @@ mod tests {
                 item: AgentTimelineItem::AssistantMessage {
                     text: "hi".into(),
                     message_id: None,
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 0,
@@ -776,6 +779,7 @@ mod tests {
                 },
                 status,
                 error: None,
+                subagent_id: None,
             },
             turn_id: None,
             seq: 0,

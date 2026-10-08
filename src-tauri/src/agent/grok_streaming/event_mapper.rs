@@ -234,6 +234,7 @@ impl GrokStreamMapper {
                     events.push(self.timeline(AgentTimelineItem::AssistantMessage {
                         text: self.assistant_text.clone(),
                         message_id: Some(message_id),
+                        subagent_id: None,
                     }));
                 }
             }
@@ -244,6 +245,7 @@ impl GrokStreamMapper {
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
                         text: self.reasoning_text.clone(),
                         duration_ms: None,
+                        subagent_id: None,
                     }));
                 }
             }
@@ -328,6 +330,7 @@ impl GrokStreamMapper {
             detail,
             status,
             error,
+            subagent_id: None,
         }))
     }
 

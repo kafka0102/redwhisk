@@ -13,6 +13,10 @@ import type { AgentUiCapabilities } from "../agent-stream-types";
 import { ComposerContextMeter } from "./composer-context-meter";
 import { modelWireLabel } from "../agent-model-utils";
 import type { AgentUsage, AgentModel } from "../agent-stream-types";
+import {
+  formatOutputSourceOption,
+  type OutputSourceOption,
+} from "../message-stream/output-source";
 import type { ComposerEffort } from "./composer-types";
 
 interface ComposerControlsProps {
@@ -36,6 +40,9 @@ interface ComposerControlsProps {
   onSubmit: () => void;
   onCancel: () => void;
   usage: AgentUsage | null;
+  outputSourceOptions?: OutputSourceOption[];
+  selectedOutputSource?: string;
+  onSelectOutputSource?: (value: string) => void;
 }
 
 const EFFORT_KEY: Record<string, string> = {
@@ -67,10 +74,26 @@ export function ComposerControls({
   onSubmit,
   onCancel,
   usage,
+  outputSourceOptions,
+  selectedOutputSource = "all",
+  onSelectOutputSource,
 }: ComposerControlsProps) {
   const { messages, t } = useI18n();
   const effortLabel = (value: string): string =>
     EFFORT_KEY[value] ? t(EFFORT_KEY[value]) : value;
+  const outputSourceLabels = {
+    all: t("agentsFeature.outputSourceAll"),
+    main: t("agentsFeature.outputSourceMain"),
+    subagentName: (ordinal: number) =>
+      t("agentsFeature.outputSourceSubagent", { ordinal }),
+    running: t("agentsFeature.outputSourceRunning"),
+  };
+  const showOutputSource =
+    outputSourceOptions !== undefined && outputSourceOptions.length > 0;
+  const selectedOutputOption =
+    outputSourceOptions?.find(
+      (option) => option.value === selectedOutputSource,
+    ) ?? outputSourceOptions?.[0];
   const currentModel = models.find(
     (model) => model.modelId === selectedModelId,
   );
@@ -179,6 +202,39 @@ export function ComposerControls({
               </SelectContent>
             </Select>
           )}
+
+          {showOutputSource && selectedOutputOption ? (
+            <Select
+              value={selectedOutputOption.value}
+              onValueChange={(value) => {
+                if (typeof value === "string" && value !== "") {
+                  onSelectOutputSource?.(value);
+                }
+              }}
+              disabled={isReadOnly}
+            >
+              <SelectTrigger
+                id="agent-composer-output-source"
+                aria-label={t("agentsFeature.outputSource")}
+                className="agents-composer__select agents-composer__output-source"
+                size="sm"
+              >
+                <span data-slot="select-value">
+                  {formatOutputSourceOption(
+                    selectedOutputOption,
+                    outputSourceLabels,
+                  )}
+                </span>
+              </SelectTrigger>
+              <SelectContent align="start" className="agents-composer__menu">
+                {outputSourceOptions?.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {formatOutputSourceOption(option, outputSourceLabels)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
         </div>
       </div>
 

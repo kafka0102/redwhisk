@@ -6,6 +6,7 @@
 
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import type { AgentUsage } from "../agent-stream-types";
+import type { OutputSourceOption } from "../message-stream/output-source";
 import type { TurnStatus } from "../message-stream/message-stream-types";
 
 /**
@@ -63,4 +64,8 @@ export interface AgentComposerProps {
    * 可选：发送成功回调，供父组件做乐观用户消息合并（任务 6 用）。
    */
   onMessageSent?: (message: string) => void;
+  /** 有子智能体时才传。选中档由父视图持有，不进消息流缓存。 */
+  outputSourceOptions?: OutputSourceOption[];
+  selectedOutputSource?: string;
+  onSelectOutputSource?: (value: string) => void;
 }

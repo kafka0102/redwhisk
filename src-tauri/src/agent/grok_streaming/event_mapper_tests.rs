@@ -70,7 +70,12 @@ fn maps_prompt_stream_to_event_sequence() {
     );
     match events.as_slice() {
         [AgentStreamEvent::Timeline {
-            item: AgentTimelineItem::AssistantMessage { text, message_id },
+            item:
+                AgentTimelineItem::AssistantMessage {
+                    text,
+                    message_id,
+                    subagent_id: _,
+                },
             ..
         }] => {
             assert_eq!(text, "hi");
@@ -128,7 +133,12 @@ fn accumulates_assistant_text_across_chunks() {
     );
     match events.as_slice() {
         [AgentStreamEvent::Timeline {
-            item: AgentTimelineItem::AssistantMessage { text, message_id },
+            item:
+                AgentTimelineItem::AssistantMessage {
+                    text,
+                    message_id,
+                    subagent_id: _,
+                },
             ..
         }] => {
             assert_eq!(text, "Hello");

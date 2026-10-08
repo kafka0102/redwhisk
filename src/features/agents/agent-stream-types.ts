@@ -75,8 +75,16 @@ export type AgentTimelineItem =
       type: "assistant_message";
       text: string;
       messageId?: string;
+      /** 子智能体 thread id。缺省表示主智能体。 */
+      subagentId?: string;
     }
-  | { type: "reasoning"; text: string; durationMs?: number }
+  | {
+      type: "reasoning";
+      text: string;
+      durationMs?: number;
+      /** 子智能体 thread id。缺省表示主智能体。 */
+      subagentId?: string;
+    }
   | {
       type: "tool_call";
       callId: string;
@@ -84,10 +92,17 @@ export type AgentTimelineItem =
       detail: ToolCallDetail;
       status: ToolCallStatus;
       error?: string;
+      /** 子智能体 thread id。缺省表示主智能体。 */
+      subagentId?: string;
     }
   | { type: "todo"; items: TodoItem[] }
   | { type: "error"; message: string }
-  | { type: "compaction"; status: CompactionStatus };
+  | {
+      type: "compaction";
+      status: CompactionStatus;
+      /** 子智能体 thread id。缺省表示主智能体。 */
+      subagentId?: string;
+    };
 
 export type ToolCallDetail =
   | {

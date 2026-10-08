@@ -2957,6 +2957,7 @@ mod tests {
                 item: AgentTimelineItem::AssistantMessage {
                     text: "历史回答".to_string(),
                     message_id: Some("msg-1".to_string()),
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 0,
@@ -2990,6 +2991,7 @@ mod tests {
             vec![AgentTimelineItem::AssistantMessage {
                 text: "历史回答".to_string(),
                 message_id: Some("msg-1".to_string()),
+                subagent_id: None,
             }]
         );
         assert_eq!(history.effort, None);
@@ -3043,6 +3045,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析中".to_string(),
                         duration_ms: Some(10),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 2,
@@ -3064,6 +3067,7 @@ mod tests {
                         },
                         status: ToolCallStatus::Completed,
                         error: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 3,
@@ -3079,6 +3083,7 @@ mod tests {
                     item: AgentTimelineItem::AssistantMessage {
                         text: "已完成归纳".to_string(),
                         message_id: Some("a1".to_string()),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 4,
@@ -3147,6 +3152,7 @@ mod tests {
                     item: AgentTimelineItem::AssistantMessage {
                         text: "你".to_string(),
                         message_id: Some("msg-1".to_string()),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3162,6 +3168,7 @@ mod tests {
                     item: AgentTimelineItem::AssistantMessage {
                         text: "你好".to_string(),
                         message_id: Some("msg-1".to_string()),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3177,6 +3184,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析一步".to_string(),
                         duration_ms: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3192,6 +3200,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析完成".to_string(),
                         duration_ms: Some(4200),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3207,6 +3216,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析完成".to_string(),
                         duration_ms: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3228,6 +3238,7 @@ mod tests {
                         },
                         status: ToolCallStatus::Running,
                         error: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3249,6 +3260,7 @@ mod tests {
                         },
                         status: ToolCallStatus::Completed,
                         error: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3272,10 +3284,12 @@ mod tests {
                 AgentTimelineItem::AssistantMessage {
                     text: "你好".to_string(),
                     message_id: Some("msg-1".to_string()),
+                    subagent_id: None,
                 },
                 AgentTimelineItem::Reasoning {
                     text: "分析完成".to_string(),
                     duration_ms: Some(4200),
+                    subagent_id: None,
                 },
                 AgentTimelineItem::ToolCall {
                     call_id: "call-1".to_string(),
@@ -3286,6 +3300,7 @@ mod tests {
                     },
                     status: ToolCallStatus::Completed,
                     error: None,
+                    subagent_id: None,
                 },
             ]
         );
@@ -3305,6 +3320,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析中".to_string(),
                         duration_ms: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3320,6 +3336,7 @@ mod tests {
                     item: AgentTimelineItem::Reasoning {
                         text: "分析完成".to_string(),
                         duration_ms: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3335,6 +3352,7 @@ mod tests {
                     item: AgentTimelineItem::AssistantMessage {
                         text: "结论".to_string(),
                         message_id: Some("msg-1".to_string()),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 0,
@@ -3358,10 +3376,12 @@ mod tests {
                 AgentTimelineItem::Reasoning {
                     text: "分析完成".to_string(),
                     duration_ms: Some(4_000),
+                    subagent_id: None,
                 },
                 AgentTimelineItem::AssistantMessage {
                     text: "结论".to_string(),
                     message_id: Some("msg-1".to_string()),
+                    subagent_id: None,
                 },
             ]
         );
@@ -3394,6 +3414,7 @@ mod tests {
                 AgentTimelineItem::AssistantMessage {
                     text: "我会查询北京天气。".to_string(),
                     message_id: Some("a1".to_string()),
+                    subagent_id: None,
                 },
             ]
         );
@@ -3486,7 +3507,11 @@ mod tests {
         assert_eq!(history.items.len(), 1);
         assert_eq!(history.effort, None);
         match &history.items[0] {
-            AgentTimelineItem::AssistantMessage { text, message_id } => {
+            AgentTimelineItem::AssistantMessage {
+                text,
+                message_id,
+                subagent_id: _,
+            } => {
                 assert_eq!(message_id.as_deref(), Some("session-log"));
                 assert!(text.contains("Thinking..."));
                 assert!(text.contains("最终输出"));
@@ -3513,6 +3538,7 @@ mod tests {
                 item: AgentTimelineItem::AssistantMessage {
                     text: "本地历史".to_string(),
                     message_id: Some("msg-local".to_string()),
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 0,
@@ -3560,6 +3586,7 @@ mod tests {
             vec![AgentTimelineItem::AssistantMessage {
                 text: "本地历史".to_string(),
                 message_id: Some("msg-local".to_string()),
+                subagent_id: None,
             }]
         );
     }

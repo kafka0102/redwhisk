@@ -130,18 +130,18 @@ struct SessionState {
     current_mode: CodexMode,
     model: Option<String>,
     effort: Option<String>,
-    /// 增量累积的 assistant 文本：item_id → 已累积文本。
-    agent_message_buffer: HashMap<String, String>,
-    /// assistant 文本上次广播时间：item_id → flush 时间。
-    agent_message_last_flush_at: HashMap<String, Instant>,
-    /// assistant 文本上次广播字节长度：item_id → 已广播长度。
-    agent_message_flushed_len: HashMap<String, usize>,
-    /// 增量累积的 reasoning 文本：item_id → 已累积文本。
-    reasoning_buffer: HashMap<String, String>,
-    /// reasoning 文本上次广播时间：item_id → flush 时间。
-    reasoning_last_flush_at: HashMap<String, Instant>,
-    /// reasoning 文本上次广播字节长度：item_id → 已广播长度。
-    reasoning_flushed_len: HashMap<String, usize>,
+    /// 增量累积的 assistant 文本。键按主智能体 / 子智能体分开，避免同名 item 拼到一起。
+    agent_message_buffer: HashMap<DeltaBufferKey, String>,
+    /// assistant 文本上次广播时间。
+    agent_message_last_flush_at: HashMap<DeltaBufferKey, Instant>,
+    /// assistant 文本上次广播字节长度。
+    agent_message_flushed_len: HashMap<DeltaBufferKey, usize>,
+    /// 增量累积的 reasoning 文本。键按主智能体 / 子智能体分开。
+    reasoning_buffer: HashMap<DeltaBufferKey, String>,
+    /// reasoning 文本上次广播时间。
+    reasoning_last_flush_at: HashMap<DeltaBufferKey, Instant>,
+    /// reasoning 文本上次广播字节长度。
+    reasoning_flushed_len: HashMap<DeltaBufferKey, usize>,
     /// 挂起的权限请求：request_id → 决策 oneshot sender。
     pending_permissions: HashMap<String, PendingPermission>,
     /// 最新一次 token 用量，供前端 context meter 复用。
@@ -687,6 +687,78 @@ fn is_session_user_thread(
     }
 }
 
+/// 增量缓冲键。子智能体与主智能体即使 item id 相同也不共用缓冲。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DeltaBufferKey {
+    subagent_id: Option<String>,
+    item_id: String,
+}
+
+fn subagent_id_for_thread(
+    session_thread_id: Option<&str>,
+    notification_thread_id: Option<&str>,
+) -> Option<String> {
+    let notification_thread_id = notification_thread_id.filter(|value| !value.is_empty())?;
+    if is_session_user_thread(session_thread_id, Some(notification_thread_id)) {
+        None
+    } else {
+        Some(notification_thread_id.to_string())
+    }
+}
+
+fn delta_buffer_key(
+    session_thread_id: Option<&str>,
+    notification_thread_id: Option<&str>,
+    item_id: &str,
+) -> DeltaBufferKey {
+    DeltaBufferKey {
+        subagent_id: subagent_id_for_thread(session_thread_id, notification_thread_id),
+        item_id: item_id.to_string(),
+    }
+}
+
+fn stamp_output_source(item: AgentTimelineItem, subagent_id: Option<String>) -> AgentTimelineItem {
+    let Some(subagent_id) = subagent_id else {
+        return item;
+    };
+    match item {
+        AgentTimelineItem::AssistantMessage {
+            text, message_id, ..
+        } => AgentTimelineItem::AssistantMessage {
+            text,
+            message_id,
+            subagent_id: Some(subagent_id),
+        },
+        AgentTimelineItem::Reasoning {
+            text, duration_ms, ..
+        } => AgentTimelineItem::Reasoning {
+            text,
+            duration_ms,
+            subagent_id: Some(subagent_id),
+        },
+        AgentTimelineItem::ToolCall {
+            call_id,
+            name,
+            detail,
+            status,
+            error,
+            ..
+        } => AgentTimelineItem::ToolCall {
+            call_id,
+            name,
+            detail,
+            status,
+            error,
+            subagent_id: Some(subagent_id),
+        },
+        AgentTimelineItem::Compaction { status, .. } => AgentTimelineItem::Compaction {
+            status,
+            subagent_id: Some(subagent_id),
+        },
+        other => other,
+    }
+}
+
 fn handle_notification(
     state: &Arc<Mutex<SessionState>>,
     config: &CodexSessionConfig,
@@ -836,13 +908,20 @@ fn build_events(
             }
         }
         CodexNotification::ContextCompacted {
-            thread_id: _,
+            thread_id,
             turn_id: _,
         } => {
+            let subagent_id = state.lock().ok().and_then(|session| {
+                subagent_id_for_thread(session.thread_id.as_deref(), Some(thread_id.as_str()))
+            });
             vec![AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::Compaction {
-                    status: crate::types::agent_session_stream::CompactionStatus::Completed,
-                },
+                item: stamp_output_source(
+                    AgentTimelineItem::Compaction {
+                        status: crate::types::agent_session_stream::CompactionStatus::Completed,
+                        subagent_id: None,
+                    },
+                    subagent_id,
+                ),
                 turn_id: None,
                 seq: next_seq(),
                 timestamp: now_ms(),
@@ -851,46 +930,55 @@ fn build_events(
         CodexNotification::AgentMessageDelta {
             item_id,
             delta,
-            thread_id: _,
+            thread_id,
         } => {
-            {
+            let key = {
                 let mut state = match state.lock() {
                     Ok(state) => state,
                     Err(_) => return Vec::new(),
                 };
-                let buffer = state
+                let key =
+                    delta_buffer_key(state.thread_id.as_deref(), thread_id.as_deref(), &item_id);
+                state
                     .agent_message_buffer
-                    .entry(item_id.clone())
-                    .or_default();
-                buffer.push_str(&delta);
-            }
+                    .entry(key.clone())
+                    .or_default()
+                    .push_str(&delta);
+                key
+            };
             // 先冲出其他 item 的节流尾巴，避免拖到 turn_completed 出现在最终揭露后。
-            let mut events = flush_pending_deltas_except(state, Some(&item_id));
-            events.extend(flush_agent_message_delta(state, &item_id, false));
+            let mut events = flush_pending_deltas_except(state, Some(&key));
+            events.extend(flush_agent_message_delta(state, &key, false));
             events
         }
         CodexNotification::ReasoningDelta {
             item_id,
             delta,
-            thread_id: _,
+            thread_id,
         } => {
-            {
+            let key = {
                 let mut state = match state.lock() {
                     Ok(state) => state,
                     Err(_) => return Vec::new(),
                 };
-                let buffer = state.reasoning_buffer.entry(item_id.clone()).or_default();
-                buffer.push_str(&delta);
-            }
-            let mut events = flush_pending_deltas_except(state, Some(&item_id));
-            events.extend(flush_reasoning_delta(state, &item_id, false));
+                let key =
+                    delta_buffer_key(state.thread_id.as_deref(), thread_id.as_deref(), &item_id);
+                state
+                    .reasoning_buffer
+                    .entry(key.clone())
+                    .or_default()
+                    .push_str(&delta);
+                key
+            };
+            let mut events = flush_pending_deltas_except(state, Some(&key));
+            events.extend(flush_reasoning_delta(state, &key, false));
             events
         }
-        CodexNotification::ItemStarted { item, thread_id: _ } => {
-            build_item_event(state, &item, true)
+        CodexNotification::ItemStarted { item, thread_id } => {
+            build_item_event(state, &item, thread_id.as_deref(), true)
         }
-        CodexNotification::ItemCompleted { item, thread_id: _ } => {
-            build_item_event(state, &item, false)
+        CodexNotification::ItemCompleted { item, thread_id } => {
+            build_item_event(state, &item, thread_id.as_deref(), false)
         }
         CodexNotification::TerminalInteraction {
             item_id: _,
@@ -931,27 +1019,35 @@ fn update_last_known_cwd(state: &Arc<Mutex<SessionState>>, item: &Value) {
 fn build_item_event(
     state: &Arc<Mutex<SessionState>>,
     item: &Value,
+    thread_id: Option<&str>,
     is_started: bool,
 ) -> Vec<AgentStreamEvent> {
     // commandExecution item 下发 cwd：捕获为「最近已知 cwd」，供完成流程解析
     // session 实际执行路径。best-effort，纯文件编辑轮次无 cwd 则不改写。
     update_last_known_cwd(state, item);
     let item_id = item.get("id").and_then(Value::as_str);
+    let buffer_key = item_id.map(|item_id| {
+        let session_thread_id = state
+            .lock()
+            .ok()
+            .and_then(|session| session.thread_id.clone());
+        delta_buffer_key(session_thread_id.as_deref(), thread_id, item_id)
+    });
     // 新 item 开始或完成时，先冲出其他 item 未刷完的节流尾巴。
-    let mut events = flush_pending_deltas_except(state, item_id);
+    let mut events = flush_pending_deltas_except(state, buffer_key.as_ref());
 
     if !is_started {
         // item/completed 后清掉对应增量缓冲；映射失败也要清，避免残留拖到 turn 结束。
-        if let Some(item_id) = item_id {
-            events.extend(flush_agent_message_delta(state, item_id, true));
-            events.extend(flush_reasoning_delta(state, item_id, true));
+        if let Some(key) = buffer_key.as_ref() {
+            events.extend(flush_agent_message_delta(state, key, true));
+            events.extend(flush_reasoning_delta(state, key, true));
             if let Ok(mut session) = state.lock() {
-                session.agent_message_buffer.remove(item_id);
-                session.agent_message_last_flush_at.remove(item_id);
-                session.agent_message_flushed_len.remove(item_id);
-                session.reasoning_buffer.remove(item_id);
-                session.reasoning_last_flush_at.remove(item_id);
-                session.reasoning_flushed_len.remove(item_id);
+                session.agent_message_buffer.remove(key);
+                session.agent_message_last_flush_at.remove(key);
+                session.agent_message_flushed_len.remove(key);
+                session.reasoning_buffer.remove(key);
+                session.reasoning_last_flush_at.remove(key);
+                session.reasoning_flushed_len.remove(key);
             }
         }
     }
@@ -973,12 +1069,14 @@ fn build_item_event(
         }
     }
 
-    let turn_id = state
-        .lock()
-        .ok()
-        .and_then(|state| state.current_turn_id.clone());
+    let (turn_id, subagent_id) = state.lock().ok().map_or((None, None), |session| {
+        (
+            session.current_turn_id.clone(),
+            subagent_id_for_thread(session.thread_id.as_deref(), thread_id),
+        )
+    });
     events.push(AgentStreamEvent::Timeline {
-        item: timeline_item,
+        item: stamp_output_source(timeline_item, subagent_id),
         turn_id,
         seq: next_seq(),
         timestamp: now_ms(),
@@ -988,16 +1086,16 @@ fn build_item_event(
 
 fn flush_agent_message_delta(
     state: &Arc<Mutex<SessionState>>,
-    item_id: &str,
+    key: &DeltaBufferKey,
     force: bool,
 ) -> Vec<AgentStreamEvent> {
     let now = Instant::now();
-    let (text, turn_id) = {
+    let (text, turn_id, subagent_id) = {
         let mut state = match state.lock() {
             Ok(state) => state,
             Err(_) => return Vec::new(),
         };
-        let Some(text) = state.agent_message_buffer.get(item_id).cloned() else {
+        let Some(text) = state.agent_message_buffer.get(key).cloned() else {
             return Vec::new();
         };
         if text.is_empty() {
@@ -1005,33 +1103,35 @@ fn flush_agent_message_delta(
         }
         let flushed_len = state
             .agent_message_flushed_len
-            .get(item_id)
+            .get(key)
             .copied()
             .unwrap_or(0);
         if text.len() == flushed_len {
             return Vec::new();
         }
         let should_flush = force
-            || match state.agent_message_last_flush_at.get(item_id) {
+            || match state.agent_message_last_flush_at.get(key) {
                 Some(last_flush) => now.duration_since(*last_flush) >= DELTA_FLUSH_INTERVAL,
                 None => true,
             };
         if !should_flush {
             return Vec::new();
         }
-        state
-            .agent_message_last_flush_at
-            .insert(item_id.to_string(), now);
+        state.agent_message_last_flush_at.insert(key.clone(), now);
         state
             .agent_message_flushed_len
-            .insert(item_id.to_string(), text.len());
-        (text, state.current_turn_id.clone())
+            .insert(key.clone(), text.len());
+        (text, state.current_turn_id.clone(), key.subagent_id.clone())
     };
     vec![AgentStreamEvent::Timeline {
-        item: AgentTimelineItem::AssistantMessage {
-            text,
-            message_id: Some(item_id.to_string()),
-        },
+        item: stamp_output_source(
+            AgentTimelineItem::AssistantMessage {
+                text,
+                message_id: Some(key.item_id.clone()),
+                subagent_id: None,
+            },
+            subagent_id,
+        ),
         turn_id,
         seq: next_seq(),
         timestamp: now_ms(),
@@ -1040,51 +1140,47 @@ fn flush_agent_message_delta(
 
 fn flush_reasoning_delta(
     state: &Arc<Mutex<SessionState>>,
-    item_id: &str,
+    key: &DeltaBufferKey,
     force: bool,
 ) -> Vec<AgentStreamEvent> {
     let now = Instant::now();
-    let (text, turn_id) = {
+    let (text, turn_id, subagent_id) = {
         let mut state = match state.lock() {
             Ok(state) => state,
             Err(_) => return Vec::new(),
         };
-        let Some(text) = state.reasoning_buffer.get(item_id).cloned() else {
+        let Some(text) = state.reasoning_buffer.get(key).cloned() else {
             return Vec::new();
         };
         if text.is_empty() {
             return Vec::new();
         }
-        let flushed_len = state
-            .reasoning_flushed_len
-            .get(item_id)
-            .copied()
-            .unwrap_or(0);
+        let flushed_len = state.reasoning_flushed_len.get(key).copied().unwrap_or(0);
         if text.len() == flushed_len {
             return Vec::new();
         }
         let should_flush = force
-            || match state.reasoning_last_flush_at.get(item_id) {
+            || match state.reasoning_last_flush_at.get(key) {
                 Some(last_flush) => now.duration_since(*last_flush) >= DELTA_FLUSH_INTERVAL,
                 None => true,
             };
         if !should_flush {
             return Vec::new();
         }
-        state
-            .reasoning_last_flush_at
-            .insert(item_id.to_string(), now);
-        state
-            .reasoning_flushed_len
-            .insert(item_id.to_string(), text.len());
-        (text, state.current_turn_id.clone())
+        state.reasoning_last_flush_at.insert(key.clone(), now);
+        state.reasoning_flushed_len.insert(key.clone(), text.len());
+        (text, state.current_turn_id.clone(), key.subagent_id.clone())
     };
     vec![AgentStreamEvent::Timeline {
         // Codex 的 reasoning 不携带 per-block 计时（仅 Claude 支持），duration_ms 留 None。
-        item: AgentTimelineItem::Reasoning {
-            text,
-            duration_ms: None,
-        },
+        item: stamp_output_source(
+            AgentTimelineItem::Reasoning {
+                text,
+                duration_ms: None,
+                subagent_id: None,
+            },
+            subagent_id,
+        ),
         turn_id,
         seq: next_seq(),
         timestamp: now_ms(),
@@ -1097,9 +1193,9 @@ fn flush_all_pending_deltas(state: &Arc<Mutex<SessionState>>) -> Vec<AgentStream
 
 fn flush_pending_deltas_except(
     state: &Arc<Mutex<SessionState>>,
-    except_item_id: Option<&str>,
+    except: Option<&DeltaBufferKey>,
 ) -> Vec<AgentStreamEvent> {
-    let (agent_message_ids, reasoning_ids) = match state.lock() {
+    let (agent_message_keys, reasoning_keys) = match state.lock() {
         Ok(state) => (
             state
                 .agent_message_buffer
@@ -1111,17 +1207,17 @@ fn flush_pending_deltas_except(
         Err(_) => return Vec::new(),
     };
     let mut events = Vec::new();
-    for item_id in agent_message_ids {
-        if except_item_id == Some(item_id.as_str()) {
+    for key in agent_message_keys {
+        if except == Some(&key) {
             continue;
         }
-        events.extend(flush_agent_message_delta(state, &item_id, true));
+        events.extend(flush_agent_message_delta(state, &key, true));
     }
-    for item_id in reasoning_ids {
-        if except_item_id == Some(item_id.as_str()) {
+    for key in reasoning_keys {
+        if except == Some(&key) {
             continue;
         }
-        events.extend(flush_reasoning_delta(state, &item_id, true));
+        events.extend(flush_reasoning_delta(state, &key, true));
     }
     events
 }
@@ -1564,6 +1660,111 @@ mod tests {
     }
 
     #[test]
+    fn build_events_subagent_message_carries_output_source_and_parent_does_not() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        state.lock().unwrap().thread_id = Some("thr_parent".into());
+
+        let child = build_events(
+            &state,
+            CodexNotification::AgentMessageDelta {
+                item_id: "m1".into(),
+                delta: "子线程正文".into(),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+        let child_json = serde_json::to_value(&child[0]).expect("子 thread 事件可序列化");
+        assert_eq!(
+            child_json["item"]["type"], "assistant_message",
+            "子 thread 正文仍是助手消息"
+        );
+        assert_eq!(
+            child_json["item"]["text"], "子线程正文",
+            "子 thread 正文按原样进入消息流"
+        );
+        assert_eq!(
+            child_json["item"]["subagentId"], "thr_child",
+            "子 thread 正文的输出来源必须写在 timeline 项上"
+        );
+
+        let parent = build_events(
+            &state,
+            CodexNotification::AgentMessageDelta {
+                item_id: "m1".into(),
+                delta: "主线程正文".into(),
+                thread_id: Some("thr_parent".into()),
+            },
+        );
+        let parent_json = serde_json::to_value(&parent[0]).expect("主 thread 事件可序列化");
+        assert_eq!(parent_json["item"]["text"], "主线程正文");
+        assert!(
+            parent_json["item"].get("subagentId").is_none(),
+            "主 thread 的项没有输出来源 id"
+        );
+    }
+
+    #[test]
+    fn build_events_subagent_reasoning_and_tool_carry_output_source() {
+        let state = Arc::new(Mutex::new(empty_state()));
+        state.lock().unwrap().thread_id = Some("thr_parent".into());
+
+        let reasoning = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "子线程在想".into(),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+        let reasoning_json = serde_json::to_value(&reasoning[0]).expect("reasoning");
+        assert_eq!(reasoning_json["item"]["type"], "reasoning");
+        assert_eq!(reasoning_json["item"]["text"], "子线程在想");
+        assert_eq!(reasoning_json["item"]["subagentId"], "thr_child");
+
+        let parent_reasoning = build_events(
+            &state,
+            CodexNotification::ReasoningDelta {
+                item_id: "r1".into(),
+                delta: "主线程在想".into(),
+                thread_id: Some("thr_parent".into()),
+            },
+        );
+        let parent_reasoning_json =
+            serde_json::to_value(&parent_reasoning[0]).expect("parent reasoning");
+        assert_eq!(parent_reasoning_json["item"]["text"], "主线程在想");
+        assert!(parent_reasoning_json["item"].get("subagentId").is_none());
+
+        let tool = build_events(
+            &state,
+            CodexNotification::ItemStarted {
+                item: json!({
+                    "id": "c1",
+                    "type": "commandExecution",
+                    "command": "ls",
+                }),
+                thread_id: Some("thr_child".into()),
+            },
+        );
+        let tool_json = serde_json::to_value(&tool[0]).expect("tool");
+        assert_eq!(tool_json["item"]["type"], "tool_call");
+        assert_eq!(tool_json["item"]["subagentId"], "thr_child");
+
+        let parent_tool = build_events(
+            &state,
+            CodexNotification::ItemStarted {
+                item: json!({
+                    "id": "c1",
+                    "type": "commandExecution",
+                    "command": "pwd",
+                }),
+                thread_id: Some("thr_parent".into()),
+            },
+        );
+        let parent_tool_json = serde_json::to_value(&parent_tool[0]).expect("parent tool");
+        assert_eq!(parent_tool_json["item"]["detail"]["command"], "pwd");
+        assert!(parent_tool_json["item"].get("subagentId").is_none());
+    }
+
+    #[test]
     fn build_events_subagent_turn_started_does_not_replace_parent_turn() {
         let state = Arc::new(Mutex::new(empty_state()));
         {
@@ -1678,7 +1879,14 @@ mod tests {
         assert_eq!(events1.len(), 1);
         assert_eq!(events2.len(), 0);
 
-        let events3 = flush_agent_message_delta(&state, "i1", true);
+        let events3 = flush_agent_message_delta(
+            &state,
+            &DeltaBufferKey {
+                subagent_id: None,
+                item_id: "i1".into(),
+            },
+            true,
+        );
         assert_eq!(events3.len(), 1);
         match &events3[0] {
             AgentStreamEvent::Timeline {

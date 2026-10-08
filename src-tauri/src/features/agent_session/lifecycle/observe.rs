@@ -142,6 +142,7 @@ mod tests {
                 item: AgentTimelineItem::AssistantMessage {
                     text: "本地历史".to_string(),
                     message_id: Some("msg-local".to_string()),
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 0,
@@ -164,6 +165,7 @@ mod tests {
             vec![AgentTimelineItem::AssistantMessage {
                 text: "本地历史".to_string(),
                 message_id: Some("msg-local".to_string()),
+                subagent_id: None,
             }]
         );
         assert!(result.effort.is_none());

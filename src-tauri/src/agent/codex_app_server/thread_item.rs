@@ -35,7 +35,11 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
         "agentMessage" => {
             let text = str_field(item, "text").unwrap_or_default();
             let message_id = str_field(item, "id");
-            Some(AgentTimelineItem::AssistantMessage { text, message_id })
+            Some(AgentTimelineItem::AssistantMessage {
+                text,
+                message_id,
+                subagent_id: None,
+            })
         }
         "reasoning" => {
             let summary = item.get("summary").and_then(Value::as_array).map(|parts| {
@@ -57,6 +61,7 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
             Some(AgentTimelineItem::Reasoning {
                 text,
                 duration_ms: None,
+                subagent_id: None,
             })
         }
         "plan" => {
@@ -73,6 +78,7 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
                 detail: ToolCallDetail::Plan { text },
                 status: ToolCallStatus::Completed,
                 error: None,
+                subagent_id: None,
             })
         }
         "commandExecution" => map_command_execution(item),
@@ -80,6 +86,7 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
         "webSearch" => map_web_search(item),
         "contextCompaction" => Some(AgentTimelineItem::Compaction {
             status: CompactionStatus::Completed,
+            subagent_id: None,
         }),
         "mcpToolCall" | "collabAgentToolCall" | "imageView" | "imageGeneration" => {
             map_unknown_tool_call(item, item_type)
@@ -133,6 +140,7 @@ fn map_command_execution(item: &Value) -> Option<AgentTimelineItem> {
         },
         status,
         error,
+        subagent_id: None,
     })
 }
 
@@ -181,6 +189,7 @@ fn map_file_change(item: &Value) -> Option<AgentTimelineItem> {
         },
         status,
         error,
+        subagent_id: None,
     })
 }
 
@@ -221,6 +230,7 @@ fn map_web_search(item: &Value) -> Option<AgentTimelineItem> {
         },
         status,
         error,
+        subagent_id: None,
     })
 }
 
@@ -239,6 +249,7 @@ fn map_unknown_tool_call(item: &Value, name: &str) -> Option<AgentTimelineItem> 
         },
         status: ToolCallStatus::Completed,
         error: None,
+        subagent_id: None,
     })
 }
 
@@ -548,6 +559,7 @@ mod tests {
             Some(AgentTimelineItem::AssistantMessage {
                 text: "hello".into(),
                 message_id: Some("m1".into()),
+                subagent_id: None,
             })
         );
     }
@@ -797,6 +809,7 @@ mod tests {
             item,
             Some(AgentTimelineItem::Compaction {
                 status: CompactionStatus::Completed,
+                subagent_id: None,
             })
         );
     }

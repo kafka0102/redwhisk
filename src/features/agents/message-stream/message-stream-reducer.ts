@@ -325,14 +325,14 @@ function applyTimelineItem(
     case "assistant_message": {
       const messageId = item.messageId;
       if (messageId) {
+        const entryId = scopedTimelineId(messageId, item.subagentId);
         const index = findLastIndex(
           entries,
-          (entry) =>
-            entry.kind === "assistant_message" && entry.id === messageId,
+          (entry) => entry.kind === "assistant_message" && entry.id === entryId,
         );
         if (index >= 0) {
           const next = {
-            id: messageId,
+            id: entryId,
             kind: item.type,
             item,
           };
@@ -403,10 +403,15 @@ function applyTimelineItem(
     }
 
     case "reasoning": {
-      // 后端每次发完整最新文本且无 id：合并到上一条 reasoning。
+      // 后端每次发完整最新文本且无 id：合并到同一来源的上一条 reasoning。
       const lastIndex = entries.length - 1;
       const last = entries[lastIndex];
-      if (last && last.kind === "reasoning") {
+      if (
+        last &&
+        last.kind === "reasoning" &&
+        last.item.type === "reasoning" &&
+        (last.item.subagentId ?? undefined) === item.subagentId
+      ) {
         // 流式 flush 与 assistant 完整消息阶段的 reasoning 文本可能存在空白/换行
         // 差异（trim、\r\n 等）。用 normalizeMessageText 归一化比较，避免因细微
         // 差异用 durationMs=null 的 incoming 覆盖掉已带 duration 的 last 条目，
@@ -429,7 +434,7 @@ function applyTimelineItem(
     }
 
     case "tool_call": {
-      const callId = item.callId;
+      const callId = scopedTimelineId(item.callId, item.subagentId);
       const index = findLastIndex(
         entries,
         (entry) => entry.kind === "tool_call" && entry.id === callId,
@@ -497,7 +502,9 @@ function shouldSkipTimelineItem(
     item.type === "tool_call" &&
     item.status !== "running" &&
     entries.some(
-      (entry) => entry.kind === "tool_call" && entry.id === item.callId,
+      (entry) =>
+        entry.kind === "tool_call" &&
+        entry.id === scopedTimelineId(item.callId, item.subagentId),
     )
   ) {
     return false;
@@ -587,13 +594,20 @@ function toEntry(item: AgentTimelineItem, localId: number): MessageStreamEntry {
 function deriveEntryId(item: AgentTimelineItem, localId: number): string {
   switch (item.type) {
     case "assistant_message":
+      return item.messageId
+        ? scopedTimelineId(item.messageId, item.subagentId)
+        : `local-${localId}`;
     case "user_message":
       return item.messageId ?? `local-${localId}`;
     case "tool_call":
-      return item.callId ?? `local-${localId}`;
+      return scopedTimelineId(item.callId, item.subagentId);
     default:
       return `local-${localId}`;
   }
+}
+
+function scopedTimelineId(id: string, subagentId: string | undefined): string {
+  return subagentId ? `${subagentId}:${id}` : id;
 }
 
 function normalizeMessageText(text: string): string {

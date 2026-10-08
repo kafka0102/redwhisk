@@ -601,6 +601,7 @@ fn build_events(
                         AgentTimelineItem::AssistantMessage {
                             text,
                             message_id: Some(message_id),
+                            subagent_id: _,
                         },
                     ..
                 } = &event
@@ -671,6 +672,7 @@ fn build_events(
                                 AgentTimelineItem::AssistantMessage {
                                     text,
                                     message_id: Some(message_id),
+                                    subagent_id: None,
                                 },
                             ));
                         }
@@ -686,6 +688,7 @@ fn build_events(
                                     text,
                                     // 完整 assistant 消息无 per-block 计时上下文，不填充 duration。
                                     duration_ms: None,
+                                    subagent_id: None,
                                 },
                             ));
                         }
@@ -704,6 +707,7 @@ fn build_events(
                                 detail,
                                 status,
                                 error: None,
+                                subagent_id: None,
                             },
                         ));
                     }
@@ -742,6 +746,7 @@ fn build_events(
                         detail: patch_detail(update.patch),
                         status: update.status,
                         error: None,
+                        subagent_id: None,
                     },
                 ));
             }
@@ -895,6 +900,7 @@ fn handle_task_notification(
             },
             status: tool_status,
             error,
+            subagent_id: None,
         },
     )]
 }
@@ -1000,6 +1006,7 @@ fn handle_stream_event(
                             detail,
                             status: ToolCallStatus::Running,
                             error: None,
+                            subagent_id: None,
                         },
                     ));
                 }
@@ -1100,6 +1107,7 @@ fn try_flush_text_delta(
         item: AgentTimelineItem::AssistantMessage {
             text,
             message_id: Some(message_id),
+            subagent_id: None,
         },
         turn_id: event_turn_id,
         seq: 0,
@@ -1182,7 +1190,11 @@ fn try_flush_reasoning_delta(
     }
     let turn_id = guard.current_turn_id.clone();
     Some(AgentStreamEvent::Timeline {
-        item: AgentTimelineItem::Reasoning { text, duration_ms },
+        item: AgentTimelineItem::Reasoning {
+            text,
+            duration_ms,
+            subagent_id: None,
+        },
         turn_id,
         seq: 0,
         timestamp: now_ms(),
@@ -1268,6 +1280,7 @@ fn finalize_pending_tool_calls(
                     detail: patch_detail(patch),
                     status,
                     error: None,
+                    subagent_id: None,
                 },
             )
         })
@@ -1752,7 +1765,7 @@ mod tests {
         assert!(
             matches!(
                 assistant_texts[0],
-                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
+                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) , subagent_id: _}
                     if text == "first block" && id == "claude-text-t1-0-0"
             ),
             "第一条 text block 应携带 claude-text-t1-0-0，实际 {:?}",
@@ -1761,7 +1774,7 @@ mod tests {
         assert!(
             matches!(
                 assistant_texts[1],
-                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) }
+                AgentTimelineItem::AssistantMessage { text, message_id: Some(id) , subagent_id: _}
                     if text == "second block" && id == "claude-text-t1-0-1"
             ),
             "第二条 text block 应携带 claude-text-t1-0-1，实际 {:?}",
@@ -2137,6 +2150,7 @@ mod tests {
                         AgentTimelineItem::AssistantMessage {
                             text,
                             message_id: Some(message_id),
+                            subagent_id: _,
                         },
                     ..
                 } => Some((message_id.clone(), text.clone())),
@@ -2212,6 +2226,7 @@ mod tests {
                         AgentTimelineItem::AssistantMessage {
                             text,
                             message_id: Some(message_id),
+                            subagent_id: _,
                         },
                     ..
                 } => Some((message_id.clone(), text.clone())),
@@ -2359,7 +2374,12 @@ mod tests {
             .iter()
             .filter_map(|e| match e {
                 AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::Reasoning { text, duration_ms },
+                    item:
+                        AgentTimelineItem::Reasoning {
+                            text,
+                            duration_ms,
+                            subagent_id: _,
+                        },
                     ..
                 } => Some((text.clone(), *duration_ms)),
                 _ => None,
@@ -2386,7 +2406,12 @@ mod tests {
             .iter()
             .filter_map(|e| match e {
                 AgentStreamEvent::Timeline {
-                    item: AgentTimelineItem::Reasoning { text, duration_ms },
+                    item:
+                        AgentTimelineItem::Reasoning {
+                            text,
+                            duration_ms,
+                            subagent_id: _,
+                        },
                     ..
                 } => Some((text.clone(), *duration_ms)),
                 _ => None,

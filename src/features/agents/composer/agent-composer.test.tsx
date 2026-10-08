@@ -26,6 +26,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentComposer } from "./agent-composer";
 import { clearComposerDraftCacheForTest } from "./use-agent-composer";
 import type { AgentUsage } from "../agent-stream-types";
+import type { OutputSourceOption } from "../message-stream/output-source";
 
 const dialogMocks = vi.hoisted(() => ({
   open: vi.fn(),
@@ -103,11 +104,18 @@ beforeEach(() => {
   });
 });
 
+const SUBAGENT_OUTPUT_SOURCES: OutputSourceOption[] = [
+  { value: "all", kind: "all" },
+  { value: "main", kind: "main" },
+  { value: "thr_a", kind: "subagent", ordinal: 1, status: "running" },
+];
+
 async function renderComposer(
   overrides: {
     turnStatus?: "idle" | "running" | "failed" | "canceled";
     usage?: AgentUsage | null;
     currentModelId?: string | null;
+    outputSourceOptions?: OutputSourceOption[];
   } = {},
 ) {
   const result = render(
@@ -117,6 +125,7 @@ async function renderComposer(
       turnStatus={overrides.turnStatus ?? "idle"}
       usage={overrides.usage ?? null}
       currentModelId={overrides.currentModelId}
+      outputSourceOptions={overrides.outputSourceOptions}
     />,
   );
   // list_agent_models 始终拉取（capabilities 一并返回）。
@@ -131,6 +140,25 @@ async function renderComposer(
 }
 
 describe("AgentComposer", () => {
+  it("有子智能体时来源 select 在 effort 右边，没有时不出现", async () => {
+    const withoutSubagents = await renderComposer();
+    expect(document.getElementById("agent-composer-output-source")).toBeNull();
+    withoutSubagents.unmount();
+
+    await renderComposer({ outputSourceOptions: SUBAGENT_OUTPUT_SOURCES });
+    const selects = document.querySelector(".agents-composer__selects");
+    const ids = [...(selects?.querySelectorAll("[id]") ?? [])].map(
+      (element) => element.id,
+    );
+    const effortIndex = ids.indexOf("agent-composer-effort");
+    const sourceIndex = ids.indexOf("agent-composer-output-source");
+    expect(effortIndex).toBeGreaterThanOrEqual(0);
+    expect(sourceIndex).toBeGreaterThan(effortIndex);
+    expect(
+      document.getElementById("agent-composer-output-source"),
+    ).toHaveTextContent("All");
+  });
+
   it("渲染输入框、附件按钮与发送按钮（默认禁用）", async () => {
     await renderComposer();
     expect(

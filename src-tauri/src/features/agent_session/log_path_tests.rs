@@ -87,6 +87,7 @@ fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
                 item: AgentTimelineItem::Reasoning {
                     text: "分析中".to_string(),
                     duration_ms: Some(10),
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 2,
@@ -108,6 +109,7 @@ fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
                     },
                     status: ToolCallStatus::Completed,
                     error: None,
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 3,
@@ -123,6 +125,7 @@ fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
                 item: AgentTimelineItem::AssistantMessage {
                     text: "已完成归纳".to_string(),
                     message_id: Some("a1".to_string()),
+                    subagent_id: None,
                 },
                 turn_id: None,
                 seq: 4,

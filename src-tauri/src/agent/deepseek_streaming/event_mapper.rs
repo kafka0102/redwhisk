@@ -140,6 +140,7 @@ impl DeepSeekStreamMapper {
         vec![self.timeline(AgentTimelineItem::AssistantMessage {
             text: merged,
             message_id: Some(id),
+            subagent_id: None,
         })]
     }
 
@@ -157,6 +158,7 @@ impl DeepSeekStreamMapper {
             text: merged,
             // 已提交块不是进行中的推理。duration 表示这块已经结束，避免前端停在「正在思考」。
             duration_ms: self.committed_thought_duration_ms(),
+            subagent_id: None,
         })]
     }
 
@@ -189,6 +191,7 @@ impl DeepSeekStreamMapper {
             },
             status: card.status,
             error: None,
+            subagent_id: None,
         });
         self.tools.insert(call_id, card);
         vec![event]
@@ -340,6 +343,7 @@ mod tests {
                     AgentTimelineItem::Reasoning {
                         text,
                         duration_ms: Some(duration),
+                        subagent_id: _,
                     },
                 ..
             } => {

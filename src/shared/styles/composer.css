@@ -220,6 +220,18 @@
   box-shadow: none;
 }
 
+.agents-composer__output-source {
+  max-width: 160px;
+  min-width: 0;
+}
+
+.agents-composer__output-source [data-slot="select-value"] {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agents-composer__model-label {
   display: inline-flex;
   align-items: center;

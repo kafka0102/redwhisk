@@ -62,6 +62,7 @@ pub fn map_ndjson_value(value: &Value, ctx: &MapContext) -> MapOutcome {
                     AgentTimelineItem::AssistantMessage {
                         text,
                         message_id: Some(message_id),
+                        subagent_id: None,
                     },
                 )],
                 session_id,
@@ -80,6 +81,7 @@ pub fn map_ndjson_value(value: &Value, ctx: &MapContext) -> MapOutcome {
                     AgentTimelineItem::Reasoning {
                         text,
                         duration_ms: None,
+                        subagent_id: None,
                     },
                 )],
                 session_id,
@@ -170,6 +172,7 @@ fn map_tool_use(value: &Value, ctx: &MapContext, session_id: Option<String>) -> 
                 detail,
                 status,
                 error,
+                subagent_id: None,
             },
         )],
         session_id,
@@ -332,7 +335,12 @@ mod tests {
         assert_eq!(out.next_message_index, 1);
         match &out.events[0] {
             AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::AssistantMessage { text, message_id },
+                item:
+                    AgentTimelineItem::AssistantMessage {
+                        text,
+                        message_id,
+                        subagent_id: _,
+                    },
                 ..
             } => {
                 assert_eq!(text, "hello world");
@@ -384,6 +392,7 @@ mod tests {
                         detail,
                         status,
                         error,
+                        subagent_id: _,
                     },
                 ..
             } => {

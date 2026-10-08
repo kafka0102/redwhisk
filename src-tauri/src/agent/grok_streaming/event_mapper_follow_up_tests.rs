@@ -24,7 +24,7 @@ fn prompt_result_then_follow_up_stream_closes_on_later_turn_notification() {
         [
             AgentStreamEvent::TurnStarted { .. },
             AgentStreamEvent::Timeline {
-                item: AgentTimelineItem::AssistantMessage { text, message_id },
+                item: AgentTimelineItem::AssistantMessage { text, message_id , subagent_id: _},
                 ..
             },
         ] if text == "hi" && message_id.as_deref() == Some("grok-msg-p-1")
@@ -60,7 +60,12 @@ fn prompt_result_then_follow_up_stream_closes_on_later_turn_notification() {
     );
     match more.as_slice() {
         [AgentStreamEvent::Timeline {
-            item: AgentTimelineItem::AssistantMessage { text, message_id },
+            item:
+                AgentTimelineItem::AssistantMessage {
+                    text,
+                    message_id,
+                    subagent_id: _,
+                },
             ..
         }] => {
             assert_eq!(text, "hi!");

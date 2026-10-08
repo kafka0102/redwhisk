@@ -91,8 +91,11 @@ pub enum AgentTimelineItem {
     },
     AssistantMessage {
         text: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         message_id: Option<String>,
+        /// 子智能体 thread id。缺省表示主智能体。必须在项上，重读日志时广播外壳不会留下。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_id: Option<String>,
     },
     Reasoning {
         text: String,
@@ -100,6 +103,9 @@ pub enum AgentTimelineItem {
         /// 中间节流 flush 为 None。前端据此展示「思考过程 持续了 X 秒」。
         #[serde(skip_serializing_if = "Option::is_none")]
         duration_ms: Option<u64>,
+        /// 子智能体 thread id。缺省表示主智能体。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_id: Option<String>,
     },
     ToolCall {
         call_id: String,
@@ -108,6 +114,9 @@ pub enum AgentTimelineItem {
         status: ToolCallStatus,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// 子智能体 thread id。缺省表示主智能体。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_id: Option<String>,
     },
     Todo {
         items: Vec<TodoItem>,
@@ -117,6 +126,9 @@ pub enum AgentTimelineItem {
     },
     Compaction {
         status: CompactionStatus,
+        /// 子智能体 thread id。缺省表示主智能体；子 thread 的压缩只属于这一路。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent_id: Option<String>,
     },
 }
 
@@ -342,6 +354,7 @@ mod tests {
             item: AgentTimelineItem::AssistantMessage {
                 text: "hello".into(),
                 message_id: Some("m1".into()),
+                subagent_id: None,
             },
             turn_id: None,
             seq: 3,
@@ -369,6 +382,7 @@ mod tests {
                 },
                 status: ToolCallStatus::Completed,
                 error: None,
+                subagent_id: None,
             },
             turn_id: Some("t1".into()),
             seq: 1,

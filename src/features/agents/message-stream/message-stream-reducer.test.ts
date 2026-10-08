@@ -8,6 +8,10 @@ import {
   createInitialState,
   messageStreamReducer,
 } from "./message-stream-reducer";
+import {
+  formatOutputSourceOption,
+  projectMessageStream,
+} from "./output-source";
 import type { MessageStreamState } from "./message-stream-types";
 
 function timelineEvent(item: AgentTimelineItem, seq = 1): AgentStreamEvent {
@@ -1430,5 +1434,143 @@ describe("messageStreamReducer", () => {
       expect(next.subagentInterrupted).toBe(false);
       expect(next.turnStatus).toBe("running");
     });
+  });
+});
+
+const outputSourceLabels = {
+  all: "全部",
+  main: "主智能体",
+  subagentName: (ordinal: number) => `子智能体 ${ordinal}`,
+  running: "运行中",
+};
+
+describe("输出来源", () => {
+  const items: AgentTimelineItem[] = [
+    { type: "user_message", text: "你好", messageId: "u1" },
+    { type: "assistant_message", text: "主智能体", messageId: "m1" },
+    {
+      type: "assistant_message",
+      text: "第一路",
+      messageId: "m1",
+      subagentId: "thr_a",
+    },
+    { type: "reasoning", text: "第一路在想", subagentId: "thr_a" },
+    {
+      type: "tool_call",
+      callId: "c1",
+      name: "shell",
+      status: "running",
+      detail: { type: "shell", command: "ls" },
+      subagentId: "thr_a",
+    },
+    {
+      type: "assistant_message",
+      text: "第二路",
+      messageId: "m2",
+      subagentId: "thr_b",
+    },
+  ];
+
+  function texts(
+    state: MessageStreamState,
+    selection: "all" | "main" | string,
+  ) {
+    return projectMessageStream(state, selection).entries.map((entry) => {
+      const item = entry.item;
+      if (
+        item.type === "user_message" ||
+        item.type === "assistant_message" ||
+        item.type === "reasoning"
+      ) {
+        return item.text;
+      }
+      if (item.type === "tool_call" && item.detail.type === "shell") {
+        return item.detail.command;
+      }
+      return item.type;
+    });
+  }
+
+  it("hydrate 后能按来源筛选，并用子智能体 N 标运行中", () => {
+    const state = messageStreamReducer(createInitialState(), {
+      type: "HYDRATE",
+      items,
+    });
+    const view = projectMessageStream(state, "all");
+
+    expect(view.showSourceSelect).toBe(true);
+    expect(
+      view.options.map((option) =>
+        formatOutputSourceOption(option, outputSourceLabels),
+      ),
+    ).toEqual([
+      "全部",
+      "主智能体",
+      "子智能体 1 · 运行中",
+      "子智能体 2 · 运行中",
+    ]);
+    expect(texts(state, "all")).toEqual([
+      "你好",
+      "主智能体",
+      "第一路",
+      "第一路在想",
+      "ls",
+      "第二路",
+    ]);
+    expect(texts(state, "main")).toEqual(["你好", "主智能体"]);
+    expect(texts(state, "thr_a")).toEqual(["第一路", "第一路在想", "ls"]);
+    expect(texts(state, "thr_b")).toEqual(["第二路"]);
+  });
+
+  it("选中档不进入可恢复状态，权限卡也不随选中档消失", () => {
+    const hydrated = messageStreamReducer(createInitialState(), {
+      type: "HYDRATE",
+      items,
+    });
+    const state = messageStreamReducer(hydrated, {
+      type: "EVENT",
+      event: {
+        type: "permission_requested",
+        request: {
+          id: "perm-1",
+          kind: "tool",
+          actions: [{ id: "accept", label: "Allow", behavior: "allow" }],
+        },
+      },
+    });
+    const viewed = projectMessageStream(state, "thr_a");
+    const recovered = messageStreamReducer(createInitialState(), {
+      type: "RESTORE",
+      state,
+    });
+
+    expect(recovered).toEqual(state);
+    expect(recovered).not.toHaveProperty("outputSource");
+    expect(viewed.pendingPermissions.map((request) => request.id)).toEqual([
+      "perm-1",
+    ]);
+    expect(texts(recovered, "all")).toEqual([
+      "你好",
+      "主智能体",
+      "第一路",
+      "第一路在想",
+      "ls",
+      "第二路",
+    ]);
+  });
+
+  it("没有来源的旧项不出现 select", () => {
+    const state = messageStreamReducer(createInitialState(), {
+      type: "HYDRATE",
+      items: [
+        { type: "user_message", text: "旧消息", messageId: "u1" },
+        { type: "assistant_message", text: "旧回复", messageId: "a1" },
+      ],
+    });
+    const view = projectMessageStream(state, "all");
+
+    expect(view.showSourceSelect).toBe(false);
+    expect(view.options).toEqual([]);
+    expect(texts(state, "main")).toEqual(["旧消息", "旧回复"]);
   });
 });

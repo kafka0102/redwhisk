@@ -198,6 +198,7 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
     match &item {
         AgentTimelineItem::AssistantMessage {
             message_id: Some(message_id),
+            subagent_id,
             ..
         } => {
             if let Some(index) = items.iter().rposition(|existing| {
@@ -205,8 +206,9 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                     existing,
                     AgentTimelineItem::AssistantMessage {
                         message_id: Some(existing_id),
+                        subagent_id: existing_source,
                         ..
-                    } if existing_id == message_id
+                    } if existing_id == message_id && existing_source == subagent_id
                 )
             }) {
                 // Grok 整轮共用一个 messageId，工具和 reasoning 会插在同一条正文中间。
@@ -239,8 +241,15 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                 return;
             }
         }
-        AgentTimelineItem::Reasoning { .. } => {
-            if matches!(items.last(), Some(AgentTimelineItem::Reasoning { .. })) {
+        AgentTimelineItem::Reasoning { subagent_id, .. } => {
+            let same_source = matches!(
+                items.last(),
+                Some(AgentTimelineItem::Reasoning {
+                    subagent_id: existing_source,
+                    ..
+                }) if existing_source == subagent_id
+            );
+            if same_source {
                 if let Some(last) = items.last_mut() {
                     let previous = last.clone();
                     *last = merge_reasoning_timeline_item(previous, item);
@@ -248,14 +257,19 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                 }
             }
         }
-        AgentTimelineItem::ToolCall { call_id, .. } => {
+        AgentTimelineItem::ToolCall {
+            call_id,
+            subagent_id,
+            ..
+        } => {
             if let Some(index) = items.iter().rposition(|existing| {
                 matches!(
                     existing,
                     AgentTimelineItem::ToolCall {
                         call_id: existing_id,
+                        subagent_id: existing_source,
                         ..
-                    } if existing_id == call_id
+                    } if existing_id == call_id && existing_source == subagent_id
                 )
             }) {
                 let previous = items[index].clone();
@@ -286,15 +300,18 @@ fn merge_reasoning_timeline_item(
             AgentTimelineItem::Reasoning {
                 text: previous_text,
                 duration_ms: previous_duration_ms,
+                subagent_id,
             },
             AgentTimelineItem::Reasoning {
                 text,
                 duration_ms: None,
+                ..
             },
         ) if previous_duration_ms.is_some() && previous_text == text => {
             AgentTimelineItem::Reasoning {
                 text,
                 duration_ms: previous_duration_ms,
+                subagent_id,
             }
         }
         (_, incoming) => incoming,
@@ -313,6 +330,7 @@ fn merge_tool_call_timeline_item(
                 detail: previous_detail,
                 status: _,
                 error: _,
+                subagent_id,
             },
             AgentTimelineItem::ToolCall {
                 name,
@@ -331,6 +349,7 @@ fn merge_tool_call_timeline_item(
             detail: merge_tool_call_detail(previous_detail, detail),
             status,
             error,
+            subagent_id,
         },
         (_, incoming) => incoming,
     }
@@ -543,6 +562,7 @@ fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, Com
     Ok(vec![AgentTimelineItem::AssistantMessage {
         text,
         message_id: Some("session-log".to_string()),
+        subagent_id: None,
     }])
 }
 

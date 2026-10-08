@@ -52,6 +52,9 @@ export function AgentComposer({
   onBeforeSelectModel,
   onBeforeSetEffort,
   onMessageSent,
+  outputSourceOptions,
+  selectedOutputSource,
+  onSelectOutputSource,
 }: AgentComposerProps) {
   const { messages, t } = useI18n();
   const {
@@ -225,6 +228,9 @@ export function AgentComposer({
           void handleAddAttachment();
         }}
         usage={usage}
+        outputSourceOptions={outputSourceOptions}
+        selectedOutputSource={selectedOutputSource}
+        onSelectOutputSource={onSelectOutputSource}
       />
     </form>
   );

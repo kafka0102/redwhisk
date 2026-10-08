@@ -14,12 +14,16 @@
 // - L188：composer 是 Codex Session View 底部固定输入框
 // - L214：上下文窗口用量来自 usage_updated 事件 → state.usage
 
-import { useCallback, memo, useMemo } from "react";
+import { useCallback, memo, useMemo, useState } from "react";
 
 import { AgentComposer } from "../composer/agent-composer";
 import { AgentMessageStreamView } from "../message-stream/agent-message-stream";
 import { useAgentMessageStream } from "../message-stream/use-agent-message-stream";
 import { PermissionCard } from "../message-stream/permission-card";
+import {
+  projectMessageStream,
+  type OutputSourceSelection,
+} from "../message-stream/output-source";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
   resumeAgentSession,
@@ -71,6 +75,12 @@ export const AgentSessionView = memo(function AgentSessionView({
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
+  const [outputSource, setOutputSource] =
+    useState<OutputSourceSelection>("all");
+  const outputView = useMemo(
+    () => projectMessageStream(state, outputSource),
+    [outputSource, state],
+  );
   const canUseExternalTurnRunning =
     sessionStatus === "running" && issueStatus !== "completed";
 
@@ -105,7 +115,11 @@ export const AgentSessionView = memo(function AgentSessionView({
     >
       {/* 消息流区域先显示轻量加载态，再恢复缓存或历史 timeline。 */}
       <AgentMessageStreamView
-        state={state}
+        state={
+          outputView.entries === state.entries
+            ? state
+            : { ...state, entries: outputView.entries }
+        }
         isTurnRunning={canUseExternalTurnRunning && isTurnRunning}
         agentType={agentType}
         isActive={isActive}
@@ -140,6 +154,11 @@ export const AgentSessionView = memo(function AgentSessionView({
           onMessageSent={(message) => {
             dispatch({ type: "OPTIMISTIC_USER_MESSAGE", text: message });
           }}
+          outputSourceOptions={
+            outputView.showSourceSelect ? outputView.options : undefined
+          }
+          selectedOutputSource={outputSource}
+          onSelectOutputSource={setOutputSource}
         />
       )}
     </div>

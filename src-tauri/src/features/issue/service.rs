@@ -2758,6 +2758,7 @@ mod tests {
                         },
                         status: ToolCallStatus::Completed,
                         error: None,
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 2,
@@ -2773,6 +2774,7 @@ mod tests {
                     item: AgentTimelineItem::AssistantMessage {
                         text: "归档后的回答".to_string(),
                         message_id: Some("a1".to_string()),
+                        subagent_id: None,
                     },
                     turn_id: None,
                     seq: 3,

@@ -39,6 +39,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
             AgentTimelineItem::AssistantMessage {
                 text: "我先对照电子书列表。".to_string(),
                 message_id: Some("grok-msg-1".to_string()),
+                subagent_id: None,
             },
         ),
         envelope(
@@ -53,6 +54,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
                 },
                 status: ToolCallStatus::Running,
                 error: None,
+                subagent_id: None,
             },
         ),
         envelope(
@@ -67,6 +69,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
                 },
                 status: ToolCallStatus::Completed,
                 error: None,
+                subagent_id: None,
             },
         ),
         envelope(
@@ -74,6 +77,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
             AgentTimelineItem::AssistantMessage {
                 text: "我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string(),
                 message_id: Some("grok-msg-1".to_string()),
+                subagent_id: None,
             },
         ),
     ];
@@ -104,6 +108,36 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
         Some(&AgentTimelineItem::AssistantMessage {
             text: "我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string(),
             message_id: Some("grok-msg-1".to_string()),
+            subagent_id: None,
         })
+    );
+}
+
+#[test]
+fn subagent_output_source_survives_log_reread() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("subagent-source.jsonl");
+    let lines = [
+        r#"{"projectId":8,"sessionId":183,"seq":1,"epoch":"epoch-test","event":{"type":"timeline","seq":1,"timestamp":1,"turnId":"turn-1","item":{"type":"user_message","text":"看一下","messageId":"u1"}}}"#,
+        r#"{"projectId":8,"sessionId":183,"seq":2,"epoch":"epoch-test","event":{"type":"timeline","seq":2,"timestamp":2,"turnId":"turn-1","item":{"type":"assistant_message","text":"主智能体","messageId":"m1"}}}"#,
+        r#"{"projectId":8,"sessionId":183,"seq":3,"epoch":"epoch-test","event":{"type":"timeline","seq":3,"timestamp":3,"turnId":"turn-1","item":{"type":"assistant_message","text":"子智能体第一路","messageId":"m1","subagentId":"thr_child"}}}"#,
+        r#"{"projectId":8,"sessionId":183,"seq":4,"epoch":"epoch-test","event":{"type":"timeline","seq":4,"timestamp":4,"turnId":"turn-1","item":{"type":"assistant_message","text":"子智能体第一路完整","messageId":"m1","subagentId":"thr_child"}}}"#,
+        r#"{"projectId":8,"sessionId":183,"seq":5,"epoch":"epoch-test","event":{"type":"timeline","seq":5,"timestamp":5,"turnId":"turn-1","item":{"type":"tool_call","callId":"c1","name":"shell","status":"completed","subagentId":"thr_child","detail":{"type":"shell","command":"ls"}}}}"#,
+        r#"{"projectId":8,"sessionId":183,"seq":6,"epoch":"epoch-test","event":{"type":"timeline","seq":6,"timestamp":6,"turnId":"turn-1","item":{"type":"reasoning","text":"子线程在想","subagentId":"thr_child"}}}"#,
+    ];
+    fs::write(&log_path, lines.join("\n") + "\n").expect("write log");
+
+    let history =
+        read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
+    let value = serde_json::to_value(&history.items).expect("items");
+    assert_eq!(
+        value,
+        serde_json::json!([
+            {"type":"user_message","text":"看一下","messageId":"u1"},
+            {"type":"assistant_message","text":"主智能体","messageId":"m1"},
+            {"type":"assistant_message","text":"子智能体第一路完整","messageId":"m1","subagentId":"thr_child"},
+            {"type":"tool_call","callId":"c1","name":"shell","status":"completed","subagentId":"thr_child","detail":{"type":"shell","command":"ls"}},
+            {"type":"reasoning","text":"子线程在想","subagentId":"thr_child"},
+        ])
     );
 }
