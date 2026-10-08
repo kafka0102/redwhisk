@@ -1,7 +1,7 @@
 //! DeepSeek 结构化会话：`initialize` → `session/new` 或 `session/resume` → 每轮 `session/prompt`。
 //!
 //! 已提交的正文、思考和通用工具卡经 mapper 进入既有 `AgentStreamEvent`。
-//! 权限请求归一成既有权限卡。图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
+//! 权限请求归一成既有权限卡。受支持图片随同一次 prompt 发出。取消走 ACP 通知，等 prompt 结算后再收尾。
 //! 首次 `session/new` 的 `sessionId` 以 `ThreadStarted` 回流到既有 `provider_session_id`。
 //! 再次启动用该标识调用 `session/resume`，不回放、不重插旧消息。
 
@@ -19,6 +19,7 @@ use crate::agent::deepseek_streaming::permission::{
     auto_allow_outcome, auto_allows, build_permission_request, decision_resolution,
     is_permission_request, outcome_for_decision, parse_options, permission_request_id,
 };
+use crate::agent::deepseek_streaming::prompt::{build_prompt_blocks, declares_image_input};
 use crate::agent::deepseek_streaming::transport::{
     DeepSeekStreamingError, DeepSeekStreamingTransport,
 };
@@ -70,6 +71,7 @@ pub struct DeepSeekSessionHandle {
     transport: Mutex<Option<DeepSeekStreamingTransport>>,
     state: Arc<Mutex<SessionState>>,
     config: DeepSeekSessionConfig,
+    images_supported: bool,
 }
 
 impl DeepSeekSessionHandle {
@@ -84,7 +86,8 @@ impl DeepSeekSessionHandle {
         let cwd = canonical_cwd(&config.cwd);
         let transport =
             DeepSeekStreamingTransport::spawn(program, &build_deepseek_acp_args(), Some(&cwd))?;
-        transport.request(INITIALIZE_METHOD, initialize_params())?;
+        let initialize = transport.request(INITIALIZE_METHOD, initialize_params())?;
+        let images_supported = declares_image_input(&initialize);
         let session_id = match open_session(&transport, &cwd, config.resume_session_id.as_deref()) {
             Ok(session_id) => session_id,
             Err(error) => {
@@ -127,12 +130,22 @@ impl DeepSeekSessionHandle {
             transport: Mutex::new(Some(transport)),
             state,
             config,
+            images_supported,
         })
     }
 
-    /// 发送一条文字 prompt。附件留待后续票。
+    /// 发送一条文字 prompt。
     pub fn send_message(&self, text: String) -> Result<(), DeepSeekStreamingError> {
+        self.send_prompt(text, Vec::new())
+    }
+
+    fn send_prompt(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), DeepSeekStreamingError> {
         let transport = self.current_transport()?;
+        let prompt = build_prompt_blocks(&text, &attachments, self.images_supported)?;
         let local_turn_id = format!("deepseek-turn-{}", now_ms());
         let (session_id, started) = {
             let mut state = self
@@ -166,7 +179,7 @@ impl DeepSeekSessionHandle {
         let config = self.config.clone();
         let params = json!({
             "sessionId": session_id,
-            "prompt": [{ "type": "text", "text": text }],
+            "prompt": prompt,
         });
         std::thread::spawn(move || {
             let result = transport.request(SESSION_PROMPT_METHOD, params);
@@ -227,10 +240,8 @@ impl AgentSessionHandle for DeepSeekSessionHandle {
         text: String,
         attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), AgentSessionError> {
-        if !attachments.is_empty() {
-            return Err(AgentSessionError::Protocol("deepseek 附件尚未接入".into()));
-        }
-        DeepSeekSessionHandle::send_message(self, text).map_err(AgentSessionError::from)
+        self.send_prompt(text, attachments)
+            .map_err(AgentSessionError::from)
     }
 
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {

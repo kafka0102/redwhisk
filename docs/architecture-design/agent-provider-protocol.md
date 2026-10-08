@@ -104,6 +104,7 @@ DeepSeek Harness 走 ACP，不走 SDK，也不启动 `dsh web`。
   - **Claude**：图片读盘后以 base64 `image` content block 经 `--input-format stream-json` 写入 stdin；非图片为文本路径。
   - **OpenCode**：当前仅支持文本路径说明（无原生多模态输入块）。
   - **Grok**：本期仅文本路径说明（ACP `initialize` 声明不支持图片/音频输入块）。
+  - **DeepSeek Harness**：PNG、JPEG、WebP、GIF 读盘后作为同一次 `session/prompt` 的 ACP image 块，`mimeType` 分别为 `image/png`、`image/jpeg`、`image/webp`、`image/gif`，`data` 为 canonical base64。PDF、文本和其它类型只保留路径说明。`initialize` 未把 `promptCapabilities.image` 声明为 true 时，带图片的发送失败，不静默丢图。
 - provider 新能力必须明确：持久化字段、事件映射、取消语义、权限语义、恢复语义及 unsupported 情形。
 - TUI 路径下 mode/dangerous 须落到交互式 CLI 参数，避免与 profile 权限策略脱节。
 

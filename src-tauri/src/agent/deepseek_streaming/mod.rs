@@ -5,6 +5,7 @@
 pub mod argv;
 pub mod event_mapper;
 mod permission;
+mod prompt;
 pub mod session;
 pub mod transport;
 
@@ -29,3 +30,7 @@ mod session_permission_tests;
 #[cfg(test)]
 #[path = "session_resume_tests.rs"]
 mod session_resume_tests;
+
+#[cfg(test)]
+#[path = "session_image_tests.rs"]
+mod session_image_tests;
