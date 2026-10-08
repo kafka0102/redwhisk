@@ -32,6 +32,12 @@ pub struct GrokStreamMapper {
     turn_id: Option<String>,
     turn_started: bool,
     turn_finalized: bool,
+    /// `session/prompt` 已经收尾后，Grok 仍可能换 `promptId` 继续吐正文。
+    /// 冻结 id，避免同一段正文被拆成第二条消息。
+    turn_id_frozen: bool,
+    /// 收尾之后又收到产出。随后的 `turn_completed` / `response_completed`
+    /// 必须再补一次 `TurnCompleted`，否则运行态不再收回，前端停在「正在思考」。
+    follow_up_open: bool,
     assistant_text: String,
     reasoning_text: String,
     message_index: usize,
@@ -67,6 +73,8 @@ impl GrokStreamMapper {
             turn_id: None,
             turn_started: false,
             turn_finalized: true,
+            turn_id_frozen: false,
+            follow_up_open: false,
             assistant_text: String::new(),
             reasoning_text: String::new(),
             message_index: 0,
@@ -80,6 +88,8 @@ impl GrokStreamMapper {
         self.turn_id = Some(local_turn_id);
         self.turn_started = false;
         self.turn_finalized = false;
+        self.turn_id_frozen = false;
+        self.follow_up_open = false;
         self.assistant_text.clear();
         self.reasoning_text.clear();
         self.message_index = 0;
@@ -130,7 +140,7 @@ impl GrokStreamMapper {
             stop_reason,
             subtype: None,
         });
-        self.turn_finalized = true;
+        self.close_turn();
         events
     }
 
@@ -149,13 +159,13 @@ impl GrokStreamMapper {
             error,
             code: None,
         });
-        self.turn_finalized = true;
+        self.close_turn();
         events
     }
 
     /// 用户取消：直接收尾为 `TurnCanceled`。
     pub fn on_cancel(&mut self) -> AgentStreamEvent {
-        self.turn_finalized = true;
+        self.close_turn();
         AgentStreamEvent::TurnCanceled {
             turn_id: self.turn_id.clone(),
             reason: "user_canceled".into(),
@@ -167,7 +177,7 @@ impl GrokStreamMapper {
         if self.turn_finalized {
             return None;
         }
-        self.turn_finalized = true;
+        self.close_turn();
         Some(AgentStreamEvent::TurnFailed {
             turn_id: self.turn_id.clone(),
             error,
@@ -176,9 +186,7 @@ impl GrokStreamMapper {
     }
 
     fn ensure_turn_started(&mut self, params: &Value) -> Option<AgentStreamEvent> {
-        if let Some(prompt_id) = turn_id_from_params(params) {
-            self.turn_id = Some(prompt_id);
-        }
+        self.adopt_turn_id(params);
         if self.turn_finalized || self.turn_started {
             return None;
         }
@@ -189,11 +197,37 @@ impl GrokStreamMapper {
         })
     }
 
+    /// 收尾后不再接受新的服务端 `promptId`。续写帧仍挂在原来的 turn 上。
+    fn adopt_turn_id(&mut self, params: &Value) {
+        if self.turn_id_frozen {
+            return;
+        }
+        if let Some(prompt_id) = turn_id_from_params(params) {
+            self.turn_id = Some(prompt_id);
+        }
+    }
+
+    fn close_turn(&mut self) {
+        self.turn_finalized = true;
+        self.turn_id_frozen = true;
+        self.follow_up_open = false;
+    }
+
+    /// prompt 已经返回后又有正文 / 推理 / 工具，说明这轮还没真正停。
+    fn note_output_while_closed(&mut self) {
+        if !self.turn_finalized {
+            return;
+        }
+        self.turn_finalized = false;
+        self.follow_up_open = true;
+    }
+
     fn map_session_update(&mut self, params: &Value, events: &mut Vec<AgentStreamEvent>) {
         let update = params.get("update").unwrap_or(&Value::Null);
         match string_field(update, "sessionUpdate").as_deref() {
             Some("agent_message_chunk") => {
                 if let Some(delta) = content_text(update) {
+                    self.note_output_while_closed();
                     self.assistant_text.push_str(&delta);
                     let message_id =
                         format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn"));
@@ -205,6 +239,7 @@ impl GrokStreamMapper {
             }
             Some("agent_thought_chunk") => {
                 if let Some(delta) = content_text(update) {
+                    self.note_output_while_closed();
                     self.reasoning_text.push_str(&delta);
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
                         text: self.reasoning_text.clone(),
@@ -226,8 +261,20 @@ impl GrokStreamMapper {
         let update = params.get("update").unwrap_or(&Value::Null);
         match string_field(update, "sessionUpdate").as_deref() {
             Some("turn_completed") | Some("response_completed") => {
-                if let Some(usage) = usage::agent_usage_from_meta(update) {
+                let usage = usage::agent_usage_from_meta(update);
+                if let Some(usage) = usage.clone() {
                     events.push(AgentStreamEvent::UsageUpdated { usage });
+                }
+                // 进行中的 turn 仍以 `session/prompt` 结果为权威收尾。只有 prompt
+                // 已经返回、之后又有续写时，这条通知才是续写的结束信号。
+                if self.follow_up_open {
+                    events.push(AgentStreamEvent::TurnCompleted {
+                        turn_id: self.turn_id.clone(),
+                        usage,
+                        stop_reason: None,
+                        subtype: None,
+                    });
+                    self.close_turn();
                 }
             }
             // `tool_call_delta_chunk`（工具参数增量）**有意忽略、不累积**：实测
@@ -241,6 +288,7 @@ impl GrokStreamMapper {
 
     fn map_tool_call(&mut self, update: &Value) -> Option<AgentStreamEvent> {
         let call_id = string_field(update, "toolCallId")?;
+        self.note_output_while_closed();
         let incoming_input = update
             .get("rawInput")
             .filter(|value| !value.is_null())
@@ -397,6 +445,10 @@ fn non_empty(text: &str) -> Option<String> {
 #[cfg(test)]
 #[path = "event_mapper_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "event_mapper_follow_up_tests.rs"]
+mod follow_up_tests;
 
 #[cfg(test)]
 #[path = "tool_lifecycle_tests.rs"]
