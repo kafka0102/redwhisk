@@ -187,8 +187,16 @@ _Avoid_: 整文件并排对比、语法高亮 diff、后端 hunk 接口、跨文
 _Avoid_: 输入缓存、消息草稿、composer 缓存
 
 **Turn**：
-Agent Session 中一次用户消息触发的回复轮次；停止与运行态只认当前用户轮次，不认协作子代理在同一条流上插入的子轮次。
-_Avoid_: 把 collab/sub-agent 子轮次当成可停止的当前 Turn
+Agent Session 中一次用户消息触发的回复轮次；停止与运行态只认当前用户轮次，不认子智能体在同一条流上插入的子轮次。
+_Avoid_: 把子智能体的子轮次当成可停止的当前 Turn
+
+**子智能体**：
+同一条 Codex json Agent Session 里，由主智能体拉起、用另一条 thread 产出输出的协作方。不是另一条 Agent Session，也不是用户发起的 Turn。
+_Avoid_: 协作子代理、子 Session、子 Turn
+
+**输出来源**：
+一条结构化输出所属的说话方，要么是主智能体，要么是某一个子智能体。
+_Avoid_: 筛选档、当前视图
 
 **执行时长**：
 Agent Session 详情展示的会话实际处理耗时；json 会话按「App 醒着且当前 Turn 在运行」的时间累加，不含系统睡眠、关机与 Turn 之间的用户等待；Codex 的 tui 会话取本机 provider session log 各 turn 处理耗时之和。累计值缺失或为 0（如其它 Agent 的 tui）时回退开始到结束/当前的墙钟差。
