@@ -51,6 +51,7 @@ fn tool_updates_become_generic_cards_with_readable_results() {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })

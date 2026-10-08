@@ -25,3 +25,7 @@ mod session_cancel_tests;
 #[cfg(test)]
 #[path = "session_permission_tests.rs"]
 mod session_permission_tests;
+
+#[cfg(test)]
+#[path = "session_resume_tests.rs"]
+mod session_resume_tests;

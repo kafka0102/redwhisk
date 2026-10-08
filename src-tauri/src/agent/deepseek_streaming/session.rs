@@ -1,7 +1,9 @@
-//! DeepSeek 结构化会话：`initialize` → `session/new` → 每轮 `session/prompt`。
+//! DeepSeek 结构化会话：`initialize` → `session/new` 或 `session/resume` → 每轮 `session/prompt`。
 //!
 //! 已提交的正文、思考和通用工具卡经 mapper 进入既有 `AgentStreamEvent`。
-//! 权限请求归一成既有权限卡；续接和图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
+//! 权限请求归一成既有权限卡。图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
+//! 首次 `session/new` 的 `sessionId` 以 `ThreadStarted` 回流到既有 `provider_session_id`。
+//! 再次启动用该标识调用 `session/resume`，不回放、不重插旧消息。
 
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -34,6 +36,7 @@ struct PendingPermission {
 
 const INITIALIZE_METHOD: &str = "initialize";
 const SESSION_NEW_METHOD: &str = "session/new";
+const SESSION_RESUME_METHOD: &str = "session/resume";
 const SESSION_PROMPT_METHOD: &str = "session/prompt";
 const SESSION_CANCEL_METHOD: &str = "session/cancel";
 
@@ -49,6 +52,8 @@ pub struct DeepSeekSessionConfig {
     pub dangerous: bool,
     /// 启动时冻结的 mode。`full-access` 时自动允许。
     pub mode_id: Option<String>,
+    /// 已保存的 provider 会话标识。有值时续接，而不是再 `session/new`。
+    pub resume_session_id: Option<String>,
     pub broadcaster: AgentEventBroadcaster,
     #[cfg(test)]
     pub event_log: Arc<Mutex<Vec<AgentStreamEvent>>>,
@@ -68,7 +73,7 @@ pub struct DeepSeekSessionHandle {
 }
 
 impl DeepSeekSessionHandle {
-    /// 启动子进程并完成 `initialize` + `session/new`。
+    /// 启动子进程并完成 `initialize`，然后 `session/new` 或 `session/resume`。
     pub fn start(config: DeepSeekSessionConfig) -> Result<Self, DeepSeekStreamingError> {
         let program = program_from_command_snapshot(&config.binary);
         let program = if program.is_empty() {
@@ -80,7 +85,23 @@ impl DeepSeekSessionHandle {
         let transport =
             DeepSeekStreamingTransport::spawn(program, &build_deepseek_acp_args(), Some(&cwd))?;
         transport.request(INITIALIZE_METHOD, initialize_params())?;
-        let session_id = start_session(&transport, &cwd)?;
+        let session_id = match open_session(&transport, &cwd, config.resume_session_id.as_deref()) {
+            Ok(session_id) => session_id,
+            Err(error) => {
+                if resume_session_id_from(config.resume_session_id.as_deref()).is_some() {
+                    emit(
+                        &config,
+                        AgentStreamEvent::TurnFailed {
+                            turn_id: None,
+                            error: resume_failure_fact(&error),
+                            code: None,
+                        },
+                    );
+                    transport.shutdown();
+                }
+                return Err(error);
+            }
+        };
         let state = Arc::new(Mutex::new(SessionState {
             session_id: Some(session_id.clone()),
             mapper: DeepSeekStreamMapper::new(),
@@ -338,6 +359,36 @@ fn start_session(
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| DeepSeekStreamingError::Protocol("session/new 响应缺少 sessionId".into()))
+}
+
+fn open_session(
+    transport: &DeepSeekStreamingTransport,
+    cwd: &str,
+    resume_session_id: Option<&str>,
+) -> Result<String, DeepSeekStreamingError> {
+    if let Some(session_id) = resume_session_id_from(resume_session_id) {
+        // 拒绝时不回退 `session/new`，避免开出一条丢掉历史的空会话。
+        transport.request(
+            SESSION_RESUME_METHOD,
+            json!({ "sessionId": session_id, "cwd": cwd, "mcpServers": [] }),
+        )?;
+        return Ok(session_id.to_string());
+    }
+    start_session(transport, cwd)
+}
+
+/// 空白标识不算续接。factory 的回填判断与这里共用，避免两处规则分叉。
+pub(crate) fn resume_session_id_from(raw: Option<&str>) -> Option<&str> {
+    raw.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn resume_failure_fact(error: &DeepSeekStreamingError) -> String {
+    match error {
+        DeepSeekStreamingError::ServerError { message } if !message.trim().is_empty() => {
+            message.clone()
+        }
+        _ => "session resume rejected".to_string(),
+    }
 }
 
 fn initialize_params() -> Value {

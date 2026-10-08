@@ -14,6 +14,7 @@ use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::claude_streaming::{ClaudeSessionConfig, ClaudeSessionHandle};
 use crate::agent::codex_app_server::session::CodexMode;
 use crate::agent::codex_app_server::{CodexSessionConfig, CodexSessionHandle};
+use crate::agent::deepseek_streaming::session::resume_session_id_from;
 use crate::agent::deepseek_streaming::{DeepSeekSessionConfig, DeepSeekSessionHandle};
 use crate::agent::grok_streaming::{GrokSessionConfig, GrokSessionHandle};
 use crate::agent::opencode_streaming::{OpenCodeSessionConfig, OpenCodeSessionHandle};
@@ -177,7 +178,13 @@ pub fn plan_provider_start(
             Ok(ProviderStartPlan::Grok { backfill })
         }
         AgentType::DeepSeek => Ok(ProviderStartPlan::DeepSeek {
-            backfill: ThreadIdBackfill::DeferToStream,
+            // 新建仍等 ThreadStarted 回流 provider_session_id。
+            // 续接时 handle 已持有原标识，启动结果可直接回填。
+            backfill: if resume_session_id_from(request.resume_thread_id.as_deref()).is_some() {
+                ThreadIdBackfill::WhenPresent
+            } else {
+                ThreadIdBackfill::DeferToStream
+            },
         }),
     }
 }
@@ -328,7 +335,6 @@ fn start_deepseek_session(
     let _ = request.model;
     let _ = request.effort;
     let _ = request.config_home;
-    let _ = request.resume_thread_id;
     let config = DeepSeekSessionConfig {
         project_id: request.project_id,
         session_id: request.session_id,
@@ -336,6 +342,7 @@ fn start_deepseek_session(
         cwd: request.cwd,
         dangerous: request.dangerous,
         mode_id: request.mode_id,
+        resume_session_id: request.resume_thread_id,
         broadcaster: request.broadcaster,
         #[cfg(test)]
         event_log: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),

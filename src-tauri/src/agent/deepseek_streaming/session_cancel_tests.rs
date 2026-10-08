@@ -67,6 +67,7 @@ fn canceling_the_running_turn_notifies_acp_and_stops_as_canceled() {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })
@@ -174,6 +175,7 @@ fn failed_prompt_surfaces_the_reason_and_stops_the_turn() {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })
@@ -236,6 +238,7 @@ fn cancel_without_a_running_turn_does_not_fail_the_session() {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })

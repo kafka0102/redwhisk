@@ -50,6 +50,7 @@ fn committed_chunks_merge_into_one_assistant_message_and_end_the_turn() {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })
@@ -161,6 +162,7 @@ done
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::new(Mutex::new(Vec::new())),
     })

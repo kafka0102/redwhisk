@@ -217,6 +217,7 @@ fn assert_auto_allow(dangerous: bool, mode_id: Option<String>) {
         cwd: temp.path().to_string_lossy().into_owned(),
         dangerous,
         mode_id,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })
@@ -246,6 +247,7 @@ fn start_session(
         cwd: cwd.to_string_lossy().into_owned(),
         dangerous: false,
         mode_id: None,
+        resume_session_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(event_log),
     })
