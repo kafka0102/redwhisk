@@ -1,8 +1,10 @@
 //! DeepSeek 结构化会话：`initialize` → `session/new` → 每轮 `session/prompt`。
 //!
 //! 已提交的正文、思考和通用工具卡经 mapper 进入既有 `AgentStreamEvent`。
-//! 权限、续接和图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
+//! 权限请求归一成既有权限卡；续接和图片仍未接入。取消走 ACP 通知，等 prompt 结算后再收尾。
 
+use std::collections::HashMap;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,6 +13,10 @@ use serde_json::{json, Value};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::deepseek_streaming::argv::{build_deepseek_acp_args, DEEPSEEK_FALLBACK_BINARY};
 use crate::agent::deepseek_streaming::event_mapper::DeepSeekStreamMapper;
+use crate::agent::deepseek_streaming::permission::{
+    auto_allow_outcome, auto_allows, build_permission_request, decision_resolution,
+    is_permission_request, outcome_for_decision, parse_options, permission_request_id,
+};
 use crate::agent::deepseek_streaming::transport::{
     DeepSeekStreamingError, DeepSeekStreamingTransport,
 };
@@ -20,6 +26,11 @@ use crate::types::agent_session::{AgentMessageAttachment, AgentPermissionDecisio
 use crate::types::agent_session_stream::{
     AgentMode, AgentModel, AgentStreamEvent, AgentTimelineItem,
 };
+
+struct PendingPermission {
+    sender: mpsc::Sender<Value>,
+    options: Vec<crate::agent::deepseek_streaming::permission::AcpPermissionOption>,
+}
 
 const INITIALIZE_METHOD: &str = "initialize";
 const SESSION_NEW_METHOD: &str = "session/new";
@@ -34,6 +45,10 @@ pub struct DeepSeekSessionConfig {
     /// 命令快照。spawn 只取可执行首段，参数固定为 `--profile acp`。
     pub binary: String,
     pub cwd: String,
+    /// profile.dangerous。为真时自动允许，不发权限卡。
+    pub dangerous: bool,
+    /// 启动时冻结的 mode。`full-access` 时自动允许。
+    pub mode_id: Option<String>,
     pub broadcaster: AgentEventBroadcaster,
     #[cfg(test)]
     pub event_log: Arc<Mutex<Vec<AgentStreamEvent>>>,
@@ -42,6 +57,7 @@ pub struct DeepSeekSessionConfig {
 struct SessionState {
     session_id: Option<String>,
     mapper: DeepSeekStreamMapper,
+    pending_permissions: HashMap<String, PendingPermission>,
 }
 
 /// 长驻 `dsh --profile acp` 会话。
@@ -68,11 +84,17 @@ impl DeepSeekSessionHandle {
         let state = Arc::new(Mutex::new(SessionState {
             session_id: Some(session_id.clone()),
             mapper: DeepSeekStreamMapper::new(),
+            pending_permissions: HashMap::new(),
         }));
         let handler_state = Arc::clone(&state);
         let handler_config = config.clone();
         transport.set_notification_handler(Arc::new(move |method, params| {
             handle_notification(&handler_state, &handler_config, method, params);
+        }));
+        let request_state = Arc::clone(&state);
+        let request_config = config.clone();
+        transport.set_server_request_handler(Arc::new(move |rpc_id, method, params| {
+            handle_server_request(&request_state, &request_config, rpc_id, method, params)
         }));
         emit(
             &config,
@@ -151,6 +173,9 @@ impl DeepSeekSessionHandle {
     }
 
     pub fn shutdown(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.pending_permissions.clear();
+        }
         if let Ok(mut guard) = self.transport.lock() {
             if let Some(transport) = guard.take() {
                 transport.shutdown();
@@ -209,12 +234,43 @@ impl AgentSessionHandle for DeepSeekSessionHandle {
 
     fn respond_permission(
         &self,
-        _request_id: &str,
-        _decision: AgentPermissionDecision,
+        request_id: &str,
+        decision: AgentPermissionDecision,
     ) -> Result<(), AgentSessionError> {
-        Err(AgentSessionError::Protocol(
-            "deepseek 权限回复尚未接入".into(),
-        ))
+        let (sender, outcome) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| AgentSessionError::Protocol("session 锁中毒".into()))?;
+            let pending = state
+                .pending_permissions
+                .remove(request_id)
+                .ok_or_else(|| {
+                    AgentSessionError::Protocol(format!(
+                        "no pending permission request: {request_id}"
+                    ))
+                })?;
+            match outcome_for_decision(decision, &pending.options) {
+                Ok(outcome) => (pending.sender, outcome),
+                Err(error) => {
+                    state
+                        .pending_permissions
+                        .insert(request_id.to_string(), pending);
+                    return Err(AgentSessionError::from(error));
+                }
+            }
+        };
+        sender.send(outcome).map_err(|_| {
+            AgentSessionError::Protocol("permission decision channel closed".into())
+        })?;
+        emit(
+            &self.config,
+            AgentStreamEvent::PermissionResolved {
+                request_id: request_id.to_string(),
+                resolution: decision_resolution(decision).to_string(),
+            },
+        );
+        Ok(())
     }
 
     fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
@@ -290,6 +346,43 @@ fn initialize_params() -> Value {
         "clientCapabilities": { "fs": { "readTextFile": false, "writeTextFile": false } },
         "clientInfo": { "name": "redwhisk", "version": env!("CARGO_PKG_VERSION") },
     })
+}
+
+fn handle_server_request(
+    state: &Arc<Mutex<SessionState>>,
+    config: &DeepSeekSessionConfig,
+    rpc_id: &Value,
+    method: &str,
+    params: &Value,
+) -> Result<Value, DeepSeekStreamingError> {
+    if !is_permission_request(method) {
+        return Err(DeepSeekStreamingError::Protocol(format!(
+            "unhandled ACP request: {method}"
+        )));
+    }
+    let options = parse_options(params);
+    if auto_allows(config.dangerous, config.mode_id.as_deref()) {
+        return auto_allow_outcome(&options);
+    }
+    let request_id = permission_request_id(rpc_id);
+    let turn_id = state
+        .lock()
+        .ok()
+        .and_then(|guard| guard.mapper.current_turn_id());
+    let request = build_permission_request(request_id.clone(), turn_id, params);
+    let (sender, receiver) = mpsc::channel();
+    {
+        let mut guard = state
+            .lock()
+            .map_err(|_| DeepSeekStreamingError::Protocol("session 锁中毒".into()))?;
+        guard
+            .pending_permissions
+            .insert(request_id, PendingPermission { sender, options });
+    }
+    emit(config, AgentStreamEvent::PermissionRequested { request });
+    receiver
+        .recv()
+        .map_err(|_| DeepSeekStreamingError::Closed("permission decision channel closed".into()))
 }
 
 fn handle_notification(

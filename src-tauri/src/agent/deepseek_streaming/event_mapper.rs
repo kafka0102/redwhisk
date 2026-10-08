@@ -72,6 +72,10 @@ impl DeepSeekStreamMapper {
         self.turn_open && self.turn_id.is_some()
     }
 
+    pub fn current_turn_id(&self) -> Option<String> {
+        self.turn_id.clone().filter(|_| self.turn_open)
+    }
+
     pub fn on_notification(&mut self, method: &str, params: &Value) -> Vec<AgentStreamEvent> {
         if method != METHOD_SESSION_UPDATE {
             return Vec::new();

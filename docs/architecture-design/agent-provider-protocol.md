@@ -84,6 +84,7 @@ DeepSeek Harness 走 ACP，不走 SDK，也不启动 `dsh web`。
 - 进程是长驻 `dsh --profile acp`。stdout 只承载 ACP JSON-RPC。握手后 `session/new`，每条用户消息是一次 `session/prompt`。
 - `session/update` 的 `agent_message_chunk` 按 `messageId` 合并成一条助手消息；`agent_thought_chunk` 单独成为推理块。这些 chunk 是已提交内容，不是生成过程中的逐字增量。
 - `usage_update` 的 `used` / `size` 表示上下文窗口占用。协议没有输入、输出、缓存三分量时，不发送 Session Token 用量事件。
+- `session/request_permission` 归一成既有权限请求。用户允许或拒绝后，按 ACP 一次性选项写回，卡片随既有 `permission_resolved` 消失。profile 为 dangerous，或 mode 为 `full-access` 时，自动选择一次性允许，不发出需要用户处理的权限卡。
 - 不展示模型切换、推理强度和 mode，也没有技能根。未知 ACP 字段保持忽略，不因此中断会话。
 
 ## 生命周期规则

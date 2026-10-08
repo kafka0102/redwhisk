@@ -4,6 +4,7 @@
 
 pub mod argv;
 pub mod event_mapper;
+mod permission;
 pub mod session;
 pub mod transport;
 
@@ -20,3 +21,7 @@ mod session_tool_tests;
 #[cfg(test)]
 #[path = "session_cancel_tests.rs"]
 mod session_cancel_tests;
+
+#[cfg(test)]
+#[path = "session_permission_tests.rs"]
+mod session_permission_tests;

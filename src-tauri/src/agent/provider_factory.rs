@@ -325,8 +325,6 @@ fn start_deepseek_session(
     request: AgentSessionStartRequest,
     backfill: ThreadIdBackfill,
 ) -> Result<StartedSession, AgentSessionError> {
-    let _ = request.mode_id;
-    let _ = request.dangerous;
     let _ = request.model;
     let _ = request.effort;
     let _ = request.config_home;
@@ -336,6 +334,8 @@ fn start_deepseek_session(
         session_id: request.session_id,
         binary: request.binary,
         cwd: request.cwd,
+        dangerous: request.dangerous,
+        mode_id: request.mode_id,
         broadcaster: request.broadcaster,
         #[cfg(test)]
         event_log: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),

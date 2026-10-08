@@ -49,6 +49,8 @@ fn tool_updates_become_generic_cards_with_readable_results() {
         session_id: 4,
         binary: binary.to_string_lossy().into_owned(),
         cwd: temp.path().to_string_lossy().into_owned(),
+        dangerous: false,
+        mode_id: None,
         broadcaster: AgentEventBroadcaster::new(),
         event_log: Arc::clone(&event_log),
     })

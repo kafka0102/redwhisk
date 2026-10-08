@@ -39,6 +39,10 @@ pub enum DeepSeekStreamingError {
 
 pub type NotificationHandler = Arc<dyn Fn(&str, &Value) + Send + Sync>;
 
+/// 回复 agent→client 请求。返回 JSON-RPC `result`；传输负责写回 id。
+pub type ServerRequestHandler =
+    Arc<dyn Fn(&Value, &str, &Value) -> Result<Value, DeepSeekStreamingError> + Send + Sync>;
+
 struct PendingRequest {
     sender: Option<mpsc::Sender<Result<Value, DeepSeekStreamingError>>>,
 }
@@ -46,6 +50,7 @@ struct PendingRequest {
 struct TransportState {
     pending: Mutex<HashMap<i64, PendingRequest>>,
     notification_handler: Mutex<Option<NotificationHandler>>,
+    server_request_handler: Mutex<Option<ServerRequestHandler>>,
     stderr_buffer: Mutex<String>,
     closed: Mutex<Option<String>>,
     next_id: AtomicI64,
@@ -100,6 +105,7 @@ impl DeepSeekStreamingTransport {
         let state = Arc::new(TransportState {
             pending: Mutex::new(HashMap::new()),
             notification_handler: Mutex::new(None),
+            server_request_handler: Mutex::new(None),
             stderr_buffer: Mutex::new(String::new()),
             closed: Mutex::new(None),
             next_id: AtomicI64::new(1),
@@ -113,6 +119,12 @@ impl DeepSeekStreamingTransport {
 
     pub fn set_notification_handler(&self, handler: NotificationHandler) {
         if let Ok(mut guard) = self.state.notification_handler.lock() {
+            *guard = Some(handler);
+        }
+    }
+
+    pub fn set_server_request_handler(&self, handler: ServerRequestHandler) {
+        if let Ok(mut guard) = self.state.server_request_handler.lock() {
             *guard = Some(handler);
         }
     }
@@ -217,19 +229,7 @@ impl DeepSeekStreamingTransport {
     }
 
     fn write_line(&self, value: &Value) -> Result<(), DeepSeekStreamingError> {
-        let mut line = serde_json::to_string(value)?;
-        line.push('\n');
-        let mut stdin_guard = self
-            .state
-            .stdin
-            .lock()
-            .map_err(|_| DeepSeekStreamingError::Protocol("stdin 锁中毒".into()))?;
-        let stdin = stdin_guard
-            .as_mut()
-            .ok_or_else(|| DeepSeekStreamingError::Closed("dsh ACP stdin 已关闭".into()))?;
-        stdin.write_all(line.as_bytes())?;
-        stdin.flush()?;
-        Ok(())
+        write_state_line(&self.state, value)
     }
 
     fn remove_pending(&self, id: i64) {
@@ -309,16 +309,62 @@ fn spawn_stderr_reader(stderr: ChildStderr, state: Arc<TransportState>) {
 
 fn dispatch_message(state: &TransportState, value: Value) {
     let id = value.get("id").and_then(Value::as_i64);
+    let rpc_id = jsonrpc_id(&value);
     let method = value
         .get("method")
         .and_then(Value::as_str)
         .map(str::to_string);
-    match (id, method) {
-        (Some(_), Some(_)) => {}
-        (Some(id), None) => dispatch_response(state, id, value),
-        (None, Some(method)) => dispatch_notification(state, &method, &value),
-        (None, None) => {}
+    match (id, rpc_id, method) {
+        (_, Some(rpc_id), Some(method)) => dispatch_server_request(state, rpc_id, &method, &value),
+        (Some(id), _, None) => dispatch_response(state, id, value),
+        (None, _, Some(method)) => dispatch_notification(state, &method, &value),
+        _ => {}
     }
+}
+
+fn jsonrpc_id(value: &Value) -> Option<Value> {
+    let id = value.get("id")?;
+    if id.is_number() || id.is_string() {
+        Some(id.clone())
+    } else {
+        None
+    }
+}
+
+fn dispatch_server_request(state: &TransportState, id: Value, method: &str, value: &Value) {
+    let handler = state
+        .server_request_handler
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+    let Some(handler) = handler else {
+        return;
+    };
+    let params = value.get("params").cloned().unwrap_or(Value::Null);
+    let payload = match handler(&id, method, &params) {
+        Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+        Err(error) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": { "code": -32603, "message": error.to_string() }
+        }),
+    };
+    let _ = write_state_line(state, &payload);
+}
+
+fn write_state_line(state: &TransportState, value: &Value) -> Result<(), DeepSeekStreamingError> {
+    let mut line = serde_json::to_string(value)?;
+    line.push('\n');
+    let mut stdin_guard = state
+        .stdin
+        .lock()
+        .map_err(|_| DeepSeekStreamingError::Protocol("stdin 锁中毒".into()))?;
+    let stdin = stdin_guard
+        .as_mut()
+        .ok_or_else(|| DeepSeekStreamingError::Closed("dsh ACP stdin 已关闭".into()))?;
+    stdin.write_all(line.as_bytes())?;
+    stdin.flush()?;
+    Ok(())
 }
 
 fn dispatch_response(state: &TransportState, id: i64, value: Value) {
