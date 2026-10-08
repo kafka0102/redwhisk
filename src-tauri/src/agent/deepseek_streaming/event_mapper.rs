@@ -1,15 +1,18 @@
 //! DeepSeek ACP `session/update` → `AgentStreamEvent`。
 //!
 //! `agent_message_chunk` / `agent_thought_chunk` 是已提交块。同一 messageId
-//! 的正文本拼成一条助手消息；思考单独成推理块。`usage_update` 的 used/size
-//! 是上下文窗口占用，不产生用量事件。未知字段与未知 sessionUpdate 忽略。
+//! 的正文本拼成一条助手消息；思考单独成推理块。`tool_call` 打开通用工具卡，
+//! `tool_call_update` 把它收成完成或失败。不解析 shell / edit。`usage_update`
+//! 的 used/size 是上下文窗口占用，不产生用量事件。未知字段与未知 sessionUpdate 忽略。
 
 use std::collections::HashMap;
 use std::time::Instant;
 
 use serde_json::Value;
 
-use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem};
+use crate::types::agent_session_stream::{
+    AgentStreamEvent, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
+};
 
 const METHOD_SESSION_UPDATE: &str = "session/update";
 
@@ -19,8 +22,17 @@ pub struct DeepSeekStreamMapper {
     turn_open: bool,
     messages: HashMap<String, String>,
     thoughts: HashMap<String, String>,
+    tools: HashMap<String, DeepSeekToolCard>,
     seq: u64,
     started_at: Option<Instant>,
+}
+
+/// 同一 toolCallId 的通用工具卡。参数与结果只保留可读文本。
+struct DeepSeekToolCard {
+    name: String,
+    raw_input: Option<String>,
+    raw_output: Option<String>,
+    status: ToolCallStatus,
 }
 
 impl Default for DeepSeekStreamMapper {
@@ -36,6 +48,7 @@ impl DeepSeekStreamMapper {
             turn_open: false,
             messages: HashMap::new(),
             thoughts: HashMap::new(),
+            tools: HashMap::new(),
             seq: 0,
             started_at: None,
         }
@@ -47,6 +60,7 @@ impl DeepSeekStreamMapper {
         self.turn_open = true;
         self.messages.clear();
         self.thoughts.clear();
+        self.tools.clear();
         self.seq = 0;
         self.started_at = Some(Instant::now());
         AgentStreamEvent::TurnStarted {
@@ -66,6 +80,8 @@ impl DeepSeekStreamMapper {
         match string_field(update, "sessionUpdate").as_deref() {
             Some("agent_message_chunk") => self.push_message(update),
             Some("agent_thought_chunk") => self.push_thought(update),
+            Some("tool_call") => self.push_tool(update, true),
+            Some("tool_call_update") => self.push_tool(update, false),
             _ => Vec::new(),
         }
     }
@@ -132,6 +148,40 @@ impl DeepSeekStreamMapper {
             // 已提交块不是进行中的推理。duration 表示这块已经结束，避免前端停在「正在思考」。
             duration_ms: self.committed_thought_duration_ms(),
         })]
+    }
+
+    fn push_tool(&mut self, update: &Value, opening: bool) -> Vec<AgentStreamEvent> {
+        let call_id = string_field(update, "toolCallId")
+            .filter(|id| !id.is_empty())
+            .unwrap_or_else(|| "tool".to_string());
+        let mut card = self.tools.remove(&call_id).unwrap_or(DeepSeekToolCard {
+            name: "tool".into(),
+            raw_input: None,
+            raw_output: None,
+            status: ToolCallStatus::Running,
+        });
+        if let Some(title) = string_field(update, "title").filter(|title| !title.is_empty()) {
+            card.name = title;
+        }
+        if let Some(raw_input) = raw_input_text(update) {
+            card.raw_input = Some(raw_input);
+        }
+        if let Some(raw_output) = content_result_text(update) {
+            card.raw_output = Some(raw_output);
+        }
+        card.status = tool_status(update, opening, card.status);
+        let event = self.timeline(AgentTimelineItem::ToolCall {
+            call_id: call_id.clone(),
+            name: card.name.clone(),
+            detail: ToolCallDetail::Unknown {
+                raw_input: card.raw_input.clone(),
+                raw_output: card.raw_output.clone(),
+            },
+            status: card.status,
+            error: None,
+        });
+        self.tools.insert(call_id, card);
+        vec![event]
     }
 
     fn owns_turn(&self, turn_id: &str) -> bool {
@@ -201,6 +251,63 @@ fn non_empty(text: &str) -> Option<String> {
         None
     } else {
         Some(text.to_string())
+    }
+}
+
+fn raw_input_text(update: &Value) -> Option<String> {
+    let raw = update.get("rawInput")?;
+    match raw {
+        Value::Null => None,
+        Value::String(text) => non_empty(text),
+        other => serde_json::to_string(other)
+            .ok()
+            .as_deref()
+            .and_then(non_empty),
+    }
+}
+
+fn tool_status(update: &Value, opening: bool, previous: ToolCallStatus) -> ToolCallStatus {
+    match update.get("status").and_then(Value::as_str) {
+        Some("completed") => ToolCallStatus::Completed,
+        Some("failed") => ToolCallStatus::Failed,
+        Some("in_progress") | Some("pending") => ToolCallStatus::Running,
+        _ if opening => ToolCallStatus::Running,
+        _ => previous,
+    }
+}
+
+fn content_result_text(update: &Value) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(content) = update.get("content") {
+        collect_result_text(content, &mut parts);
+    }
+    non_empty(&parts.join(""))
+}
+
+fn collect_result_text(value: &Value, parts: &mut Vec<String>) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_result_text(item, parts);
+            }
+        }
+        Value::String(text) => parts.push(text.clone()),
+        Value::Object(fields) => match fields.get("type").and_then(Value::as_str) {
+            Some("diff") | Some("terminal") => {}
+            Some("text") => {
+                if let Some(text) = fields.get("text").and_then(Value::as_str) {
+                    parts.push(text.to_string());
+                }
+            }
+            _ => {
+                if let Some(text) = fields.get("text").and_then(Value::as_str) {
+                    parts.push(text.to_string());
+                } else if let Some(inner) = fields.get("content") {
+                    collect_result_text(inner, parts);
+                }
+            }
+        },
+        _ => {}
     }
 }
 

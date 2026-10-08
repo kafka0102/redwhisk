@@ -12,3 +12,7 @@ pub use session::{DeepSeekSessionConfig, DeepSeekSessionHandle};
 #[cfg(test)]
 #[path = "session_tests.rs"]
 mod session_tests;
+
+#[cfg(test)]
+#[path = "session_tool_tests.rs"]
+mod session_tool_tests;

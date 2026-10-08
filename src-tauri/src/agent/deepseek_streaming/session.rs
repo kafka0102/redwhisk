@@ -1,7 +1,7 @@
 //! DeepSeek 结构化会话：`initialize` → `session/new` → 每轮 `session/prompt`。
 //!
-//! 已提交的正文与思考经 mapper 进入既有 `AgentStreamEvent`。本票不接取消、
-//! 权限、续接和图片。
+//! 已提交的正文、思考和通用工具卡经 mapper 进入既有 `AgentStreamEvent`。
+//! 取消、权限、续接和图片仍未接入。
 
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
