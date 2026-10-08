@@ -214,13 +214,17 @@ _Avoid_: 搜索 Modal、独立搜索 Activity、覆盖主编辑区的搜索页
 某一代码根下按扩展名聚合的文件数量快照，用于搜索包含/排除下拉的常见后缀推荐；与代码根绑定、存于应用运行期内存，随文件树 signature 变化重算。
 _Avoid_: 持久化后缀索引、全盘 watcher、gitignore 派生后缀表
 
+**DeepSeek Harness**：
+DeepSeek 提供的本机智能体运行时，在 RedWhisk 中作为一种 Agent 类型。它的结构化会话只呈现已经提交的助手正文、思考、工具结果和权限请求，不包含生成过程中的逐字增量，也没有 mode 或 plan。
+_Avoid_: DeepSeek SDK、DeepSeek 模型接口、Codex App Server
+
 **内置智能体自动播种**：
-应用启动时异步检测本机是否安装 codex/claude/opencode/grok 命令，对已安装且库中该 agentType 无任何记录（含软删）的，自动插入一条默认开启的全局 Agent profile；软删后因记录留存不再重复播种。检测仅启动时执行，不提供手动刷新。
+应用启动时异步检测本机是否安装 codex/claude/opencode/grok/dsh 命令，对已安装且库中该 agentType 无任何记录（含软删）的，自动插入一条默认开启的全局 Agent profile；软删后因记录留存不再重复播种。检测仅启动时执行，不提供手动刷新。
 _Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
 
 **Agent 展示形式**（displayMode）：
-某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——codex/claude/opencode/grok 均已接入结构化（json）解析，默认 json 且可在 json/tui 间切换。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）。OpenCode 的 json 使用 `opencode run --format json`（每轮子进程 + `-s`/`--continue` 续会话）；TUI 使用交互式 `opencode` CLI。Grok 的 json 走 `grok agent stdio`（ACP，长驻），与 Grok Build TUI 共用 `~/.grok/sessions` 会话存储；TUI 使用交互式 `grok` CLI（`dangerous` 或 `full-access` 时追加 `--always-approve`）。
-_Avoid_: 纯 UI 别名、按 CLI 能力判定、运行中切换呈现方式
+某 Agent profile 声明的输出呈现方式，取值 json 或 tui。判定以 RedWhisk 是否已接入该 agentType 的 JSON 解析器为准——codex/claude/opencode/grok 均已接入结构化（json）解析，默认 json 且可在 json/tui 间切换。DeepSeek Harness 也已接入结构化解析，但只有 json，不能切到 tui。启动会话时按该值分流：json 走结构化 provider（消息流 + composer），tui 走交互式 PTY（xterm 主区）。OpenCode 的 json 使用 `opencode run --format json`（每轮子进程 + `-s`/`--continue` 续会话）；TUI 使用交互式 `opencode` CLI。Grok 的 json 走 `grok agent stdio`（ACP，长驻），与 Grok Build TUI 共用 `~/.grok/sessions` 会话存储；TUI 使用交互式 `grok` CLI（`dangerous` 或 `full-access` 时追加 `--always-approve`）。DeepSeek Harness 的 json 走本机 `dsh --profile acp`（ACP，长驻），只呈现已提交的助手正文、思考与工具结果。
+_Avoid_: 纯 UI 别名、按 CLI 能力判定、运行中切换呈现方式、DeepSeek SDK 会话
 
 **Agent Session**：
 在项目中运行 Agent 的执行会话；**新建**时必须关联某一 Issue，从 Issue 启动，一个 Issue 最多关联一个有效 Session。
