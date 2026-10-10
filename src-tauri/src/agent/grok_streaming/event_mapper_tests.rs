@@ -84,10 +84,9 @@ fn maps_prompt_stream_to_event_sequence() {
         other => panic!("unexpected {other:?}"),
     }
 
-    // turn_completed 携带整会话累计用量。
     let events = mapper.on_notification(
         "_x.ai/session_notification",
-        &json!({"update":{"sessionUpdate":"turn_completed","elapsed_ms":12345,"usage":{"inputTokens":100,"outputTokens":10,"totalTokens":110,"cachedReadTokens":40,"cacheCreationTokens":0,"reasoningTokens":8,"modelCalls":1,"numTurns":1}}}),
+        &json!({"update":{"sessionUpdate":"turn_completed","prompt_id":"p-1","elapsed_ms":12345,"usage":{"inputTokens":100,"outputTokens":10,"totalTokens":110,"cachedReadTokens":40,"cacheCreationTokens":0,"reasoningTokens":8,"modelCalls":1,"numTurns":1}}}),
     );
     match events.as_slice() {
         [AgentStreamEvent::UsageUpdated { usage }] => {
@@ -112,7 +111,10 @@ fn maps_prompt_stream_to_event_sequence() {
         }] => {
             assert_eq!(turn_id.as_deref(), Some("p-1"));
             assert_eq!(stop_reason.as_deref(), Some("end_turn"));
-            assert_eq!(usage.as_ref().and_then(|u| u.session_token_cache), Some(40));
+            assert!(
+                usage.is_none(),
+                "同一 prompt 的用量已在 turn_completed 计入"
+            );
         }
         other => panic!("unexpected {other:?}"),
     }
@@ -305,10 +307,10 @@ fn consecutive_turn_results_overwrite_session_cumulative_usage_without_accumulat
     assert_eq!(first_usage.session_token_cache, Some(1_152));
     assert_eq!(
         first_usage.session_token_merge,
-        SessionTokenMerge::Overwrite
+        SessionTokenMerge::TurnCommit
     );
 
-    // 第二轮：`_meta.usage` 已是整会话累计（numTurns=2），不是本轮 30047/21/29952。
+    // 第二轮也是这一 prompt 自己的用量，事件里不预先加总。
     mapper.begin_turn("t2".into());
     let second = mapper.on_prompt_result(&json!({
         "stopReason": "end_turn",
@@ -323,13 +325,13 @@ fn consecutive_turn_results_overwrite_session_cumulative_usage_without_accumulat
     assert_eq!(second_usage.session_token_cache, Some(59_904));
     assert_eq!(
         second_usage.session_token_merge,
-        SessionTokenMerge::Overwrite
+        SessionTokenMerge::TurnCommit
     );
-    // Overwrite：第二轮取累计覆盖，不是两轮相加。
+    // 事件携带本轮差额；相加发生在 TurnCommit 落库，不写进这一条事件。
     assert_ne!(
         second_usage.session_token_cache,
         Some(1_152 + 59_904),
-        "session cumulative usage must not be added turn over turn"
+        "one event must stay this prompt's usage"
     );
 }
 
@@ -341,7 +343,7 @@ fn usage_notification_does_not_finalize_and_prompt_result_finalizes_once() {
     // `response_completed` 带整会话累计用量：只更新用量，不收尾 turn。
     let events = mapper.on_notification(
         "_x.ai/session_notification",
-        &json!({"update":{"sessionUpdate":"response_completed","usage":{
+        &json!({"update":{"sessionUpdate":"response_completed","prompt_id":"p-1","usage":{
             "inputTokens":100,"outputTokens":10,"cachedReadTokens":40
         }}}),
     );

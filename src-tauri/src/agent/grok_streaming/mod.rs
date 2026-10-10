@@ -10,7 +10,8 @@
 //! - `argv`：结构化启动参数 `agent [--always-approve] [-m model] stdio`
 //! - `session`：`GrokSessionHandle`（实现 `AgentSessionHandle`）
 //!
-//! 用量口径：只认整会话累计（`_meta.usage`），归一为既有会话 token 三项 + `Overwrite`。
+//! 用量口径：每一轮 prompt 的 `usage` 是本轮差额，同一 `promptId` 只计一次，
+//! 落库用 `TurnCommit` 加进 Session 累计。
 //! 执行时长：沿用 ADR-0043 的 json 活跃时长心跳（`is_turn_running` 由本模块广播的
 //! `TurnStarted` / `TurnCompleted` / `TurnFailed` / `TurnCanceled` 驱动），Grok 不新增
 //! 字段、不旁路。

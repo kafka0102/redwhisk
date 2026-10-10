@@ -46,7 +46,7 @@ fn resumed_session_prompts_with_the_original_session_id() {
     handle.shutdown();
 }
 
-/// 恢复后的轮次事件与用量口径必须与新建会话一致（整会话累计 + `Overwrite`）。
+/// 恢复后的轮次事件与用量口径必须与新建会话一致（本轮差额 + `TurnCommit`）。
 #[test]
 fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
     let temp = tempfile::tempdir().expect("temp");
@@ -87,18 +87,23 @@ fn resumed_session_emits_same_turn_events_and_cumulative_usage_as_new() {
         .on_prompt_result(&result);
     match completion.as_slice() {
         [AgentStreamEvent::TurnCompleted {
-            usage: Some(usage),
+            usage: None,
             stop_reason,
             ..
         }] => {
-            assert_eq!(usage.session_token_input, Some(100 - 40));
-            assert_eq!(usage.session_token_output, Some(10));
-            assert_eq!(usage.session_token_cache, Some(40));
-            assert_eq!(usage.session_token_merge, SessionTokenMerge::Overwrite);
             assert_eq!(stop_reason.as_deref(), Some("end_turn"));
         }
         other => panic!("unexpected completion events {other:?}"),
     }
+    let usage = notifications.iter().find_map(|event| match event {
+        AgentStreamEvent::UsageUpdated { usage } => Some(usage),
+        _ => None,
+    });
+    let usage = usage.expect("turn usage");
+    assert_eq!(usage.session_token_input, Some(100 - 40));
+    assert_eq!(usage.session_token_output, Some(10));
+    assert_eq!(usage.session_token_cache, Some(40));
+    assert_eq!(usage.session_token_merge, SessionTokenMerge::TurnCommit);
 
     transport.shutdown();
 }

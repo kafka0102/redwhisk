@@ -119,3 +119,78 @@ fn child_session_chunks_do_not_enter_parent_assistant_text() {
         other => panic!("unexpected {other:?}"),
     }
 }
+
+fn displayed_total(usage: &crate::types::agent_session_stream::AgentUsage) -> u64 {
+    usage.session_token_input.unwrap_or(0)
+        + usage.session_token_output.unwrap_or(0)
+        + usage.session_token_cache.unwrap_or(0)
+}
+
+fn commit_total(events: &[AgentStreamEvent]) -> u64 {
+    events.iter().fold(0, |total, event| {
+        let usage = match event {
+            AgentStreamEvent::UsageUpdated { usage } => usage,
+            AgentStreamEvent::TurnCompleted {
+                usage: Some(usage), ..
+            } => usage,
+            _ => return total,
+        };
+        assert_eq!(
+            usage.session_token_merge,
+            crate::types::agent_session_stream::SessionTokenMerge::TurnCommit
+        );
+        total + displayed_total(usage)
+    })
+}
+
+#[test]
+fn prompt_usage_adds_across_turns_and_counts_child_turns() {
+    let mut mapper = GrokStreamMapper::new();
+    mapper.begin_turn("local-1".into());
+    let first = mapper.on_prompt_result(&json!({
+        "stopReason": "end_turn",
+        "_meta": {"promptId": "turn-7", "usage": {
+            "inputTokens": 9_082_984, "outputTokens": 58_238, "cachedReadTokens": 8_420_352,
+            "totalTokens": 9_141_222
+        }}
+    }));
+    mapper.begin_turn("local-2".into());
+    let last = mapper.on_prompt_result(&json!({
+        "stopReason": "end_turn",
+        "_meta": {"promptId": "turn-8", "usage": {
+            "inputTokens": 599_064, "outputTokens": 536, "cachedReadTokens": 479_104,
+            "totalTokens": 599_600
+        }}
+    }));
+    // 重复通知不得把最后一轮再加一次。
+    let duplicate = mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({"update":{"sessionUpdate":"turn_completed","prompt_id":"turn-8","usage":{
+            "inputTokens": 599_064, "outputTokens": 536, "cachedReadTokens": 479_104,
+            "totalTokens": 599_600
+        }}}),
+    );
+    assert!(duplicate.is_empty());
+
+    mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({
+            "sessionId": "parent-session",
+            "update": {"sessionUpdate": "subagent_spawned", "child_session_id": "child-session"}
+        }),
+    );
+    let child = mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({
+            "sessionId": "child-session",
+            "update": {"sessionUpdate": "turn_completed", "prompt_id": "child-prompt", "usage": {
+                "inputTokens": 3_143_694, "outputTokens": 15_175, "cachedReadTokens": 2_887_680,
+                "totalTokens": 3_158_869
+            }}
+        }),
+    );
+
+    let stored = commit_total(&first) + commit_total(&last) + commit_total(&child);
+    assert_eq!(stored, 9_141_222 + 599_600 + 3_158_869);
+    assert_ne!(stored, 599_600);
+}

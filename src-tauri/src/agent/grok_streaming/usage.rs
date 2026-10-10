@@ -1,9 +1,10 @@
 //! Grok ACP 用量 → `AgentUsage` 归一（纯函数）。
 //!
-//! Grok 的 `_meta.usage` 是**整会话累计**口径（camelCase：`inputTokens` /
-//! `outputTokens` / `cachedReadTokens` / `cacheCreationTokens` / `reasoningTokens`）。
-//! 本模块把它收成既有 `session_token_input` / `session_token_output` /
-//! `session_token_cache` 三项，落库合并用 `Overwrite`（与 Codex 线程累计一致）。
+//! `session/prompt` 的 `_meta.usage` 和 `turn_completed.usage` 都是**这一轮 prompt**
+//! 的用量，不是整段会话累计。同一 `promptId` 的 prompt 结果和 `turn_completed`
+//! 只计一次。落库用 `TurnCommit`，把每一轮加进 Session 已有累计。
+
+use std::collections::HashSet;
 
 use serde_json::Value;
 
@@ -43,11 +44,59 @@ pub fn agent_usage_from_value(usage: &Value) -> Option<AgentUsage> {
     })
 }
 
-/// 从 `_meta` / `update` 取**整会话累计**用量（`usage` 子对象）并归一。
+/// 跨 prompt 累加 Grok 用量。同一 prompt 的重复通知不再加一次。
+#[derive(Debug, Default)]
+pub struct GrokUsageLedger {
+    seen_prompt_ids: HashSet<String>,
+}
+
+impl GrokUsageLedger {
+    /// 计入这一轮。已经计过的 `promptId` 返回 `None`。
+    pub fn absorb(&mut self, prompt_id: Option<&str>, usage: &Value) -> Option<AgentUsage> {
+        let turn = session_usage_from_value(usage)?;
+        if let Some(prompt_id) = prompt_id.filter(|id| !id.is_empty()) {
+            if !self.seen_prompt_ids.insert(prompt_id.to_string()) {
+                return None;
+            }
+        }
+        Some(AgentUsage {
+            input_tokens: u64_field(usage, "inputTokens"),
+            output_tokens: u64_field(usage, "outputTokens"),
+            context_window_max_tokens: None,
+            context_window_used_tokens: u64_field(usage, "totalTokens"),
+            session_token_input: Some(turn.input),
+            session_token_output: Some(turn.output),
+            session_token_cache: Some(turn.cache),
+            session_token_merge: SessionTokenMerge::TurnCommit,
+        })
+    }
+
+    pub fn absorb_notification(&mut self, update: &Value) -> Option<AgentUsage> {
+        match update.get("sessionUpdate").and_then(Value::as_str) {
+            Some("turn_completed" | "response_completed") => {}
+            _ => return None,
+        }
+        let prompt_id = update
+            .get("prompt_id")
+            .and_then(Value::as_str)
+            .or_else(|| update.get("promptId").and_then(Value::as_str));
+        update
+            .get("usage")
+            .and_then(|usage| self.absorb(prompt_id, usage))
+    }
+
+    pub fn absorb_prompt_result(&mut self, result: &Value) -> Option<AgentUsage> {
+        let meta = result.get("_meta")?;
+        let prompt_id = meta.get("promptId").and_then(Value::as_str);
+        meta.get("usage")
+            .and_then(|usage| self.absorb(prompt_id, usage))
+    }
+}
+
+/// 从 `_meta` / `update` 取 `usage` 子对象并归一为一条快照。
 ///
 /// 注意：`_meta` 顶层 `inputTokens` / `outputTokens` 等只代表**最后一次模型调用**
-/// （本轮），不是会话累计（见 `docs/survey/grok-build-cli-probe-notes.md` §3.4）。
-/// 因此缺 `usage` 子对象时返回 `None`，绝不用顶层本轮值冒充会话累计。
+/// 不是这一 prompt 的合计。缺 `usage` 子对象时返回 `None`。
 pub fn agent_usage_from_meta(meta: &Value) -> Option<AgentUsage> {
     meta.get("usage").and_then(agent_usage_from_value)
 }

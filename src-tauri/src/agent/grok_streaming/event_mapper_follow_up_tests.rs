@@ -43,12 +43,12 @@ fn prompt_result_then_follow_up_stream_closes_on_later_turn_notification() {
     // prompt 刚结束、还没有续写时，迟到的用量通知不得再收尾一次。
     let late = mapper.on_notification(
         "_x.ai/session_notification",
-        &json!({"update":{"sessionUpdate":"turn_completed","usage":{"inputTokens":10,"outputTokens":1,"cachedReadTokens":0}}}),
+        &json!({"update":{"sessionUpdate":"turn_completed","prompt_id":"p-1","usage":{"inputTokens":10,"outputTokens":1,"cachedReadTokens":0}}}),
     );
-    assert!(matches!(
-        late.as_slice(),
-        [AgentStreamEvent::UsageUpdated { .. }]
-    ));
+    assert!(
+        late.is_empty(),
+        "同一 prompt 已由 prompt 结果计入，不得再记一次"
+    );
 
     let more = mapper.on_notification(
         "session/update",
@@ -80,7 +80,7 @@ fn prompt_result_then_follow_up_stream_closes_on_later_turn_notification() {
 
     let closed = mapper.on_notification(
         "_x.ai/session_notification",
-        &json!({"update":{"sessionUpdate":"turn_completed","usage":{"inputTokens":12,"outputTokens":2,"cachedReadTokens":0}}}),
+        &json!({"update":{"sessionUpdate":"turn_completed","prompt_id":"follow-up","usage":{"inputTokens":12,"outputTokens":2,"cachedReadTokens":0}}}),
     );
     assert!(
         matches!(
@@ -99,10 +99,7 @@ fn prompt_result_then_follow_up_stream_closes_on_later_turn_notification() {
 
     let again = mapper.on_notification(
         "_x.ai/session_notification",
-        &json!({"update":{"sessionUpdate":"response_completed","usage":{"inputTokens":12,"outputTokens":2,"cachedReadTokens":0}}}),
+        &json!({"update":{"sessionUpdate":"response_completed","prompt_id":"follow-up","usage":{"inputTokens":12,"outputTokens":2,"cachedReadTokens":0}}}),
     );
-    assert!(matches!(
-        again.as_slice(),
-        [AgentStreamEvent::UsageUpdated { .. }]
-    ));
+    assert!(again.is_empty(), "同一续写 prompt 不得再记一次用量");
 }
