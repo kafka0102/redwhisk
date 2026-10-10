@@ -7,6 +7,8 @@
 //! - `tool_call` / `tool_call_update` → `ToolCall`（Pending → running → completed/failed）；
 //! - 无对应位的事件（`available_commands_update` 重复推送、MCP / setup 进度、
 //!   `tool_call_delta_chunk`、`pending_interaction` 等）既不新增事件类型，也不误发为 turn 事件。
+//! - 子代理是另一条 ACP 会话。`subagent_spawned` 记下 `child_session_id` 后，
+//!   该 `sessionId` 上的正文、推理和工具调用一律丢弃，避免并进父助手缓冲。
 //!
 //! **`tool_call_delta_chunk` 裁决**：实测首个 `tool_call` 事件已携带完整 `rawInput`，
 //! 且该增量帧的 `arguments_delta` 为空串（无信息增量），故**不累积增量**——只按
@@ -14,7 +16,7 @@
 //! `ToolCallState`）。裁决依据见
 //! `docs/survey/grok-build-cli-probe-notes.md` §3.5 与 ADR-0047「工具参数增量裁决」。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -43,6 +45,8 @@ pub struct GrokStreamMapper {
     message_index: usize,
     /// 每个 toolCallId 跨更新累积的状态（工具名 + 最近一次完整入参 / locations）。
     tool_calls: HashMap<String, ToolCallState>,
+    /// 已出现的子代理 ACP `sessionId`。这些更新走同一条 stdio，但不能写入父时间线。
+    child_session_ids: HashSet<String>,
 }
 
 /// 同一 toolCallId 跨更新的累积状态。
@@ -79,6 +83,7 @@ impl GrokStreamMapper {
             reasoning_text: String::new(),
             message_index: 0,
             tool_calls: HashMap::new(),
+            child_session_ids: HashSet::new(),
         }
     }
 
@@ -108,6 +113,10 @@ impl GrokStreamMapper {
 
     /// 归一一条服务端通知。
     pub fn on_notification(&mut self, method: &str, params: &Value) -> Vec<AgentStreamEvent> {
+        self.note_subagent_spawned(params);
+        if self.is_child_session(params) {
+            return Vec::new();
+        }
         let mut events = Vec::new();
         if let Some(event) = self.ensure_turn_started(params) {
             events.push(event);
@@ -118,6 +127,28 @@ impl GrokStreamMapper {
             _ => {}
         }
         events
+    }
+
+    /// `_x.ai/session/update` 的 `subagent_spawned` 不产生时间线条目，只登记子会话。
+    /// 登记后保留到进程结束：下一轮 `begin_turn` 清父缓冲，但迟到的子会话 chunk 仍要丢。
+    fn note_subagent_spawned(&mut self, params: &Value) {
+        let Some(update) = params.get("update") else {
+            return;
+        };
+        if string_field(update, "sessionUpdate").as_deref() != Some("subagent_spawned") {
+            return;
+        }
+        let Some(child_session_id) = string_field(update, "child_session_id")
+            .or_else(|| string_field(update, "subagent_id"))
+        else {
+            return;
+        };
+        self.child_session_ids.insert(child_session_id);
+    }
+
+    fn is_child_session(&self, params: &Value) -> bool {
+        string_field(params, "sessionId")
+            .is_some_and(|session_id| self.child_session_ids.contains(&session_id))
     }
 
     /// `session/prompt` 正常返回：收尾 turn 并带上用量与 stopReason。
@@ -456,3 +487,7 @@ mod follow_up_tests;
 #[cfg(test)]
 #[path = "tool_lifecycle_tests.rs"]
 mod tool_lifecycle_tests;
+
+#[cfg(test)]
+#[path = "event_mapper_subagent_tests.rs"]
+mod subagent_tests;
