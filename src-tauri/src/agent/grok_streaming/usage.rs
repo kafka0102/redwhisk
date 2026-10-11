@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::agent::session_token_usage::SessionTokenUsage;
 use crate::types::agent_session_stream::{AgentUsage, SessionTokenMerge};
 
-/// 从 Grok `_meta.usage`（会话累计）取输入 / 输出 / 缓存三项。
+/// 从 Grok `_meta.usage`（本轮 prompt）取输入 / 输出 / 缓存三项。
 ///
 /// 输入 = `inputTokens`（ACP 口径含 cache 读取）去掉 cache 读取、并计入
 /// cache 写入；缓存只计 cache 读取。缺字段时返回 `None`，避免把空快照写库。
@@ -26,21 +26,6 @@ pub fn session_usage_from_value(usage: &Value) -> Option<SessionTokenUsage> {
             .saturating_add(cache_write),
         output,
         cache,
-    })
-}
-
-/// 把会话累计用量归一为广播用 `AgentUsage`（`Overwrite` 合并）。
-pub fn agent_usage_from_value(usage: &Value) -> Option<AgentUsage> {
-    let snapshot = session_usage_from_value(usage)?;
-    Some(AgentUsage {
-        input_tokens: u64_field(usage, "inputTokens"),
-        output_tokens: u64_field(usage, "outputTokens"),
-        context_window_max_tokens: None,
-        context_window_used_tokens: u64_field(usage, "totalTokens"),
-        session_token_input: Some(snapshot.input),
-        session_token_output: Some(snapshot.output),
-        session_token_cache: Some(snapshot.cache),
-        session_token_merge: SessionTokenMerge::Overwrite,
     })
 }
 
@@ -91,14 +76,6 @@ impl GrokUsageLedger {
         meta.get("usage")
             .and_then(|usage| self.absorb(prompt_id, usage))
     }
-}
-
-/// 从 `_meta` / `update` 取 `usage` 子对象并归一为一条快照。
-///
-/// 注意：`_meta` 顶层 `inputTokens` / `outputTokens` 等只代表**最后一次模型调用**
-/// 不是这一 prompt 的合计。缺 `usage` 子对象时返回 `None`。
-pub fn agent_usage_from_meta(meta: &Value) -> Option<AgentUsage> {
-    meta.get("usage").and_then(agent_usage_from_value)
 }
 
 fn u64_field(object: &Value, key: &str) -> Option<u64> {
@@ -172,44 +149,20 @@ mod tests {
     }
 
     #[test]
-    fn agent_usage_uses_overwrite_merge_and_exposes_total_tokens() {
-        let usage = json!({
-            "inputTokens": 10,
-            "outputTokens": 5,
-            "totalTokens": 20,
-            "cachedReadTokens": 0
-        });
-        let agent = agent_usage_from_value(&usage).expect("usage");
-        assert_eq!(agent.session_token_input, Some(10));
-        assert_eq!(agent.session_token_output, Some(5));
-        assert_eq!(agent.session_token_cache, Some(0));
-        assert_eq!(agent.context_window_used_tokens, Some(20));
-        assert_eq!(agent.session_token_merge, SessionTokenMerge::Overwrite);
-    }
-
-    #[test]
-    fn agent_usage_from_meta_prefers_nested_usage() {
-        let meta = json!({
-            "inputTokens": 1,
-            "outputTokens": 1,
-            "usage": { "inputTokens": 30, "outputTokens": 7, "cachedReadTokens": 20 }
-        });
-        let agent = agent_usage_from_meta(&meta).expect("usage");
-        assert_eq!(agent.session_token_input, Some(10));
-        assert_eq!(agent.session_token_output, Some(7));
-    }
-
-    #[test]
     fn ignores_per_turn_top_level_tokens_without_session_usage() {
         // `_meta` 顶层 token 只代表最后一次模型调用（本轮），不是整会话累计；
         // 缺 `usage` 时不得把它当成会话累计写库（见
         // `docs/survey/grok-build-cli-probe-notes.md` §3.4）。
-        let meta = json!({
-            "inputTokens": 30047,
-            "outputTokens": 21,
-            "totalTokens": 30068,
-            "cachedReadTokens": 29952
+        let mut ledger = GrokUsageLedger::default();
+        let result = json!({
+            "stopReason": "end_turn",
+            "_meta": {
+                "inputTokens": 30047,
+                "outputTokens": 21,
+                "totalTokens": 30068,
+                "cachedReadTokens": 29952
+            }
         });
-        assert!(agent_usage_from_meta(&meta).is_none());
+        assert!(ledger.absorb_prompt_result(&result).is_none());
     }
 }

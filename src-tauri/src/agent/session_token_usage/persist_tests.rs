@@ -386,39 +386,3 @@ fn opencode_turn_completed_same_caliber_usage_accumulates_on_list_item() {
     assert_eq!(listed.sessions[0].token_output, Some(20));
     assert_eq!(listed.sessions[0].token_cache, Some(0));
 }
-
-#[test]
-fn grok_session_cumulative_usage_overwrites_list_item_without_accumulating() {
-    let connection = setup();
-    let repository = AgentSessionRepository::new(&connection);
-    let persist = |usage: serde_json::Value| {
-        let normalized = crate::agent::grok_streaming::usage::agent_usage_from_value(&usage)
-            .expect("normalize grok session usage");
-        crate::agent::session_token_usage::persist_session_token_usage(
-            &repository,
-            410,
-            &crate::types::agent_session_stream::AgentStreamEvent::UsageUpdated {
-                usage: normalized,
-            },
-        )
-        .expect("persist grok usage");
-    };
-
-    // 第 1 轮整会话累计（`_meta.usage`）。
-    persist(serde_json::json!({
-        "inputTokens": 29971, "outputTokens": 398, "totalTokens": 30369,
-        "cachedReadTokens": 1152, "cacheCreationTokens": 0, "numTurns": 1
-    }));
-    // 第 2 轮仍是整会话累计（numTurns=2）：必须覆盖，禁止与第 1 轮相加。
-    persist(serde_json::json!({
-        "inputTokens": 60063, "outputTokens": 67, "totalTokens": 60130,
-        "cachedReadTokens": 59904, "cacheCreationTokens": 0, "numTurns": 2
-    }));
-
-    let listed = service(&connection)
-        .list_agent_sessions(1)
-        .expect("list sessions");
-    assert_eq!(listed.sessions[0].token_input, Some(60_063 - 59_904));
-    assert_eq!(listed.sessions[0].token_output, Some(67));
-    assert_eq!(listed.sessions[0].token_cache, Some(59_904));
-}
