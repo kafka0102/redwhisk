@@ -134,6 +134,10 @@ export interface FileTreeDraftRowProps extends NodeRendererProps<WorkspaceFileTr
  *
  * Escape、空值失焦、空值回车 = 取消；非空失焦、非空回车 = 提交。提交失败时输入行
  * 与已输入内容保持在原位并重新选中，便于就地改名。
+ *
+ * 按键和点击必须停在输入框内：react-arborist 会在容器上做前缀搜索（约 600ms
+ * 清空）并在行点击时选中节点，随后把 DOM 焦点挪到行上。焦点一离开输入框，
+ * 非空失焦就会被当成提交。
  */
 export function FileTreeDraftRow({
   node,
@@ -199,7 +203,11 @@ export function FileTreeDraftRow({
           submit();
         }}
         onChange={(event) => setName(event.target.value)}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
         onKeyDown={(event) => {
+          event.stopPropagation();
           if (event.key === "Escape") {
             event.preventDefault();
             onCancel();
