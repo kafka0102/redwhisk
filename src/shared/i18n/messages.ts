@@ -249,6 +249,7 @@ export interface I18nMessages {
     noSessionLinked: string;
     openLinkedSession: (sessionId: number) => string;
     openStatusOptions: string;
+    reopenResumeUnavailable: string;
     previewAttachment: (displayName: string) => string;
     prompt: string;
     review: string;

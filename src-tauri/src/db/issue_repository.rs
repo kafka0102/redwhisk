@@ -46,6 +46,36 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
           AND agent_sessions.del = 0
         LIMIT 1
     ) AS linked_session_latest_output,
+    (
+        SELECT agent_sessions.agent_profile_id
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
+        LIMIT 1
+    ) AS linked_session_agent_profile_id,
+    (
+        SELECT agent_sessions.display_mode
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
+        LIMIT 1
+    ) AS linked_session_display_mode,
+    (
+        SELECT NULLIF(TRIM(agent_sessions.provider_session_id), '')
+        FROM agent_sessions
+        WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
+        LIMIT 1
+    ) AS linked_session_provider_session_id,
+    (
+        SELECT agent_profiles.agent_type
+        FROM agent_sessions
+        INNER JOIN agent_profiles
+          ON agent_profiles.id = agent_sessions.agent_profile_id
+        WHERE agent_sessions.issue_id = issues.id
+          AND agent_sessions.del = 0
+        LIMIT 1
+    ) AS linked_session_agent_type,
     issues.label_ids,
     issues.created_at,
     issues.updated_at,
@@ -545,7 +575,7 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
         description: row.get(3)?,
         attachments: Vec::new(),
         labels: Vec::new(),
-        label_ids: parse_label_ids_json(&row.get::<_, String>(10)?)?,
+        label_ids: parse_label_ids_json(&row.get::<_, String>(14)?)?,
         status: issue_status_from_str(&row.get::<_, String>(4)?)?,
         linked_session_id: row.get(5)?,
         linked_session_status: row
@@ -558,10 +588,14 @@ fn issue_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IssueRecord> {
             .transpose()?,
         linked_session_log_path: row.get(8)?,
         linked_session_latest_output: row.get(9)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
-        number: row.get(13)?,
-        status_changed_at: row.get(14)?,
+        linked_session_agent_profile_id: row.get(10)?,
+        linked_session_display_mode: row.get(11)?,
+        linked_session_provider_session_id: row.get(12)?,
+        linked_session_agent_type: row.get(13)?,
+        created_at: row.get(15)?,
+        updated_at: row.get(16)?,
+        number: row.get(17)?,
+        status_changed_at: row.get(18)?,
     })
 }
 
@@ -1157,6 +1191,47 @@ mod tests {
         assert_eq!(status_changed_at_of(&connection, with_actions), 800);
         // 无任何相关动作 → 退回 updated_at（= 200）。
         assert_eq!(status_changed_at_of(&connection, no_actions), 200);
+    }
+
+    #[test]
+    fn list_projects_linked_session_resume_fields() {
+        let connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        insert_agent_profile(&connection, 100);
+        let repo = IssueRepository::new(&connection);
+        let issue = repo
+            .insert(1, "done", "desc", "[]")
+            .expect("insert issue");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (
+                   project_id, number, issue_id, agent_profile_id, status, attention,
+                   working_dir, command_snapshot, prompt_snapshot, log_path,
+                   display_mode, provider_session_id, last_active_at, started_at, del
+                 ) VALUES (
+                   1, 1, ?1, 100, 'closed', 'none',
+                   '/tmp/repo', 'codex', '', '/tmp/s.log',
+                   'tui', '  thread-1  ', 1, 1, 0
+                 )",
+                params![issue.id],
+            )
+            .expect("insert session");
+
+        let listed = repo
+            .list_by_project_id(1)
+            .expect("list issues")
+            .into_iter()
+            .find(|row| row.id == issue.id)
+            .expect("listed issue");
+        assert_eq!(listed.linked_session_agent_profile_id, Some(100));
+        assert_eq!(listed.linked_session_display_mode.as_deref(), Some("tui"));
+        assert_eq!(
+            listed.linked_session_provider_session_id.as_deref(),
+            Some("thread-1")
+        );
+        assert_eq!(listed.linked_session_agent_type.as_deref(), Some("codex"));
+        assert_eq!(listed.number, issue.number);
+        assert_eq!(listed.status, IssueStatus::Backlog);
     }
 
     #[test]

@@ -2132,6 +2132,141 @@ describe("IssuesActivity", () => {
     });
   });
 
+  it("reopens a completed issue by resuming the same session with the agent locked", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentsActivity = vi.fn();
+    const reopenable = {
+      ...completedLinkedSessionIssue,
+      linkedSessionAgentProfileId: projectProfile.id,
+      linkedSessionDisplayMode: "json" as const,
+      linkedSessionProviderSessionId: "thread-reopen",
+    };
+    listIssuesMock.mockResolvedValue({ issues: [reopenable] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile, globalProfile] };
+      }
+      return { profiles: [] };
+    });
+    resumeAgentSessionMock.mockRejectedValueOnce({
+      code: "AGENT_SESSION_START_FAILED",
+      message: "resume failed once",
+    });
+
+    renderIssuesActivity({ onOpenAgentsActivity });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Completed linked session issue",
+      }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "Open status options" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Review" })).toBeDisabled();
+    await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Run Issue #25",
+    });
+    const agentSelect = within(dialog).getByRole("combobox", {
+      name: "Agent profile",
+    });
+    expect(agentSelect).toBeDisabled();
+    expect(agentSelect).toHaveTextContent("Project Codex");
+
+    await user.click(within(dialog).getByRole("button", { name: "Start" }));
+    const failedDialog = await screen.findByRole("dialog", {
+      name: "Run Issue #25",
+    });
+    expect(
+      await within(failedDialog).findByText("resume failed once"),
+    ).toBeInTheDocument();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "Issue Detail" }),
+    ).toBeInTheDocument();
+
+    resumeAgentSessionMock.mockResolvedValueOnce({
+      sessionId: reopenable.linkedSessionId!,
+      threadId: "thread-reopen",
+    });
+    listIssuesMock.mockResolvedValue({
+      issues: [{ ...reopenable, status: "running" }],
+    });
+    await user.click(
+      within(failedDialog).getByRole("button", { name: "Start" }),
+    );
+
+    await waitFor(() =>
+      expect(resumeAgentSessionMock).toHaveBeenLastCalledWith({
+        projectId: 1,
+        sessionId: reopenable.linkedSessionId,
+        reopenCompleted: true,
+        workspaceBranch: "main",
+      }),
+    );
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(onOpenAgentsActivity).toHaveBeenCalledWith(
+      reopenable.linkedSessionId,
+    );
+  });
+
+  it.each([
+    {
+      label: "missing provider session id",
+      issue: {
+        linkedSessionDisplayMode: "tui" as const,
+        linkedSessionProviderSessionId: null,
+        linkedSessionAgentType: "codex" as const,
+      },
+    },
+    {
+      label: "deepseek tui",
+      issue: {
+        linkedSessionDisplayMode: "tui" as const,
+        linkedSessionProviderSessionId: "thread-deepseek",
+        linkedSessionAgentType: "deepseek" as const,
+      },
+    },
+  ])(
+    "keeps running disabled when a completed session cannot resume ($label)",
+    async ({ issue }) => {
+      const user = userEvent.setup();
+      listIssuesMock.mockResolvedValue({
+        issues: [
+          {
+            ...completedLinkedSessionIssue,
+            ...issue,
+          },
+        ],
+      });
+
+      renderIssuesActivity();
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Completed linked session issue",
+        }),
+      );
+      const detail = await screen.findByRole("region", {
+        name: "Issue Detail",
+      });
+      await user.click(
+        within(detail).getByRole("button", { name: "Open status options" }),
+      );
+
+      const running = screen.getByRole("menuitem", { name: "In Progress" });
+      expect(running).toBeDisabled();
+      expect(running).toHaveAttribute(
+        "title",
+        "The current agent cannot resume this session",
+      );
+      expect(screen.getByRole("menuitem", { name: "Review" })).toBeDisabled();
+    },
+  );
+
   it("submits the generated prompt snapshot when starting", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });

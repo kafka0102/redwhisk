@@ -31,6 +31,7 @@ import {
 } from "../../settings/settings-commands";
 import {
   listAgentSessions,
+  resumeAgentSession,
   type AgentSessionListItem,
   type WorkspaceMode as SessionWorkspaceMode,
 } from "../../agents/agent-session-commands";
@@ -49,7 +50,15 @@ const NO_WORKFLOW_SKILL_VALUE = "__none__";
 interface IssueRunDialogProps {
   issue: Pick<
     IssueRecord,
-    "id" | "number" | "title" | "description" | "attachments" | "labels"
+    | "id"
+    | "number"
+    | "title"
+    | "description"
+    | "attachments"
+    | "labels"
+    | "status"
+    | "linkedSessionId"
+    | "linkedSessionAgentProfileId"
   >;
   projectId: number;
   worktreeSetupCommand?: string;
@@ -153,12 +162,23 @@ export function IssueRunDialog({
         const selectableGlobalProfiles = globalProfilesResponse.profiles.filter(
           (profile) => resolveAgentProfileLaunchEligibility(profile).selectable,
         );
-        const initialProfile = resolveInitialProfile({
-          profiles: [...selectableProjectProfiles, ...selectableGlobalProfiles],
-          projectProfiles: selectableProjectProfiles,
-          globalProfiles: selectableGlobalProfiles,
-          sessions: sessionsResponse.sessions,
-        });
+        const lockedProfile =
+          issue.status === "completed"
+            ? mergedProfiles.find(
+                (profile) => profile.id === issue.linkedSessionAgentProfileId,
+              )
+            : null;
+        const initialProfile =
+          lockedProfile ??
+          resolveInitialProfile({
+            profiles: [
+              ...selectableProjectProfiles,
+              ...selectableGlobalProfiles,
+            ],
+            projectProfiles: selectableProjectProfiles,
+            globalProfiles: selectableGlobalProfiles,
+            sessions: sessionsResponse.sessions,
+          });
         const initialWorkspaceMode = resolveInitialWorkspaceMode({
           currentBranch: branchesResponse.currentBranch,
           recentWorkspaceMode: resolveMostRecentIssueWorkspaceMode(
@@ -272,14 +292,18 @@ export function IssueRunDialog({
       ? branchState.currentBranch
       : targetBranch.trim();
   const effectiveSetupCommand = worktreeSetupCommand.trim();
+  const isReopen =
+    issue.status === "completed" && issue.linkedSessionId != null;
+  const lockedProfileId = isReopen
+    ? (issue.linkedSessionAgentProfileId ?? null)
+    : null;
 
   const isStartDisabled =
     isLoadingProfiles ||
     isLoadingBranches ||
     isStarting ||
     selectedProfile === null ||
-    preview === null ||
-    promptDraft.trim().length === 0 ||
+    (!isReopen && (preview === null || promptDraft.trim().length === 0)) ||
     effectiveTargetBranch.length === 0;
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -330,9 +354,8 @@ export function IssueRunDialog({
     onStartAttempt?.();
 
     try {
-      // 前端预检查：worktree 模式下若已存在同名 worktree，直接禁止运行；
-      // 后端 prepare_issue_session_launch 亦有 IssueWorktreeOccupied 兜底。
-      if (workspaceMode === "worktree") {
+      // 首次运行：同名 worktree 已存在则禁止。重开沿用或重建原目录，不做这个检查。
+      if (!isReopen && workspaceMode === "worktree") {
         const worktreeStatus = await getIssueWorktreeStatus({
           projectId,
           issueId: issue.id,
@@ -351,6 +374,20 @@ export function IssueRunDialog({
         effectiveWorkflowSkill.trim().length > 0
           ? effectiveWorkflowSkill.trim()
           : null;
+      if (isReopen && issue.linkedSessionId != null) {
+        await resumeAgentSession({
+          projectId,
+          sessionId: issue.linkedSessionId,
+          reopenCompleted: true,
+          workspaceBranch:
+            workspaceMode === "worktree" ? effectiveTargetBranch : null,
+        });
+        await onStarted({
+          issueId: issue.id,
+          sessionId: issue.linkedSessionId,
+        });
+        return;
+      }
       const result = await startAgentSession({
         projectId,
         issueId: issue.id,
@@ -435,8 +472,11 @@ export function IssueRunDialog({
                   value: profile.id,
                   label: `${profile.name}${profile.scope === "project" ? " (Project)" : " (Global)"}`,
                 }))}
-                value={selectedProfileId}
+                value={lockedProfileId ?? selectedProfileId}
                 onValueChange={(value) => {
+                  if (lockedProfileId != null) {
+                    return;
+                  }
                   const nextProfileId = value as number;
                   const nextProfile =
                     profiles.find((profile) => profile.id === nextProfileId) ??
@@ -463,7 +503,10 @@ export function IssueRunDialog({
                   aria-label={messages.issues.agentProfile}
                   className="w-full"
                   disabled={
-                    isLoadingProfiles || isStarting || profiles.length === 0
+                    isLoadingProfiles ||
+                    isStarting ||
+                    profiles.length === 0 ||
+                    lockedProfileId != null
                   }
                 >
                   <SelectValue />

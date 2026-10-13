@@ -44,6 +44,9 @@ export type RunDialogIssue = Pick<
   | "labels"
   | "status"
   | "linkedSessionId"
+  | "linkedSessionAgentProfileId"
+  | "linkedSessionDisplayMode"
+  | "linkedSessionProviderSessionId"
 >;
 
 interface UseIssueRunDialogOptions {

@@ -27,6 +27,7 @@ import {
   mergeIssue,
 } from "./issue-form/issue-description-serializer";
 import type { RunDialogIssue } from "./use-issue-run-dialog";
+import { canReopenCompletedIssue } from "./issue-detail/can-reopen-completed-issue";
 import {
   CompletionCancelledError,
   WorktreeMergeConflictError,
@@ -151,11 +152,15 @@ export function useIssueCompletionFlow({
       return;
     }
 
-    // 已完成 Issue 只能回退到 backlog（后端同步强校验）。
-    if (
-      selectedIssue.status === "completed" &&
-      (targetStatus === "running" || targetStatus === "review")
-    ) {
+    // 已完成不能直接进入 Review。运行中只在当前 Session 能续接时打开运行对话框。
+    if (selectedIssue.status === "completed" && targetStatus === "review") {
+      return;
+    }
+    if (selectedIssue.status === "completed" && targetStatus === "running") {
+      if (!canReopenCompletedIssue(selectedIssue)) {
+        return;
+      }
+      setRunDialogIssue(selectedIssue);
       return;
     }
 

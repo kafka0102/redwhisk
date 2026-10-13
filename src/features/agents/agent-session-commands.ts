@@ -182,6 +182,10 @@ export type { AgentAttachmentKindLiteral } from "./agent-stream-types";
 export interface ResumeAgentSessionInput {
   projectId: number;
   sessionId: number;
+  /** 用户确认把已完成 Issue 切回运行中。 */
+  reopenCompleted?: boolean;
+  /** worktree 已删除时，用来重建的已有本地分支。 */
+  workspaceBranch?: string | null;
 }
 
 export interface ResumeAgentSessionResult {

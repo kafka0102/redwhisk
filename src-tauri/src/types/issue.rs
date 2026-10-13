@@ -370,6 +370,14 @@ pub struct IssueRecord {
     pub linked_session_attention: Option<AgentSessionAttention>,
     pub linked_session_log_path: Option<String>,
     pub linked_session_latest_output: Option<String>,
+    /// 关联 Session 的 Agent profile。无关联 Session 时为 None。
+    pub linked_session_agent_profile_id: Option<i64>,
+    /// 关联 Session 的展示形式：`json` 或 `tui`。
+    pub linked_session_display_mode: Option<String>,
+    /// 关联 Session 的 Provider 会话标识。空字符串按 None 返回。
+    pub linked_session_provider_session_id: Option<String>,
+    /// 关联 Session 的 Agent 类型，用于判断 TUI 能否续接。
+    pub linked_session_agent_type: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     /// 进入当前 `status` 的时刻（epoch 毫秒）；仅在状态迁移时刷新，与 `updated_at` 职责分离。
