@@ -106,4 +106,5 @@ pub(super) fn service<'a>(connection: &'a Connection) -> AgentSessionService<'a>
 
 mod grok;
 mod issue;
+mod reopen;
 mod resume;

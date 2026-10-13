@@ -1570,7 +1570,7 @@ impl AgentSessionService<'_> {
     ) -> Result<ResumeAgentSessionResult, CommandError> {
         let session = self.find_project_session(input.project_id, input.session_id)?;
 
-        // 统一门禁：仅关联 Issue 为 running / review 时可 resume；无 Issue、backlog、completed 拒绝。
+        // 统一门禁：running / review 可续接。已完成仅显式重开放行。无 Issue、backlog 拒绝。
         let Some(issue_id) = session.issue_id else {
             return Err(CommandError::new(
                 CommandErrorCode::AgentSessionValidationFailed,
@@ -1588,7 +1588,8 @@ impl AgentSessionService<'_> {
                     .with_reason("issueNotFound")
                     .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
             })?;
-        match issue.status {
+        let issue_status = issue.status.clone();
+        match issue_status {
             IssueStatus::Running | IssueStatus::Review => {}
             IssueStatus::Backlog => {
                 return Err(CommandError::new(
@@ -1601,6 +1602,7 @@ impl AgentSessionService<'_> {
                     ErrorDetail::new("AgentSession").with_value("sessionId", session.id),
                 ));
             }
+            IssueStatus::Completed if input.reopen_completed => {}
             IssueStatus::Completed => {
                 return Err(CommandError::new(
                     CommandErrorCode::AgentSessionValidationFailed,
@@ -1614,8 +1616,10 @@ impl AgentSessionService<'_> {
             }
         }
 
+        let reopen_completed = input.reopen_completed && issue_status == IssueStatus::Completed;
+
         // 幂等：structured live handle / TUI 活跃 PTY / mark_starting 均 short-circuit。
-        if let Some(handle) = agent_registry.get(session.id) {
+        let result = if let Some(handle) = agent_registry.get(session.id) {
             let active_thread_id = handle
                 .thread_id()
                 .or_else(|| {
@@ -1625,42 +1629,97 @@ impl AgentSessionService<'_> {
                         .filter(|value| !value.trim().is_empty())
                 })
                 .unwrap_or_default();
-            self.mark_structured_session_resumed(&session, &active_thread_id)?;
-            return Ok(ResumeAgentSessionResult {
+            self.mark_structured_session_resumed(&session, &active_thread_id, None)?;
+            Ok(ResumeAgentSessionResult {
                 session_id: session.id,
                 thread_id: active_thread_id,
-            });
-        }
-        if pty_sessions.contains(session.id) || agent_registry.contains(session.id) {
+            })
+        } else if pty_sessions.contains(session.id) || agent_registry.contains(session.id) {
             let active_thread_id = session
                 .provider_session_id
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_default();
-            self.mark_structured_session_resumed(&session, &active_thread_id)?;
-            return Ok(ResumeAgentSessionResult {
+            self.mark_structured_session_resumed(&session, &active_thread_id, None)?;
+            Ok(ResumeAgentSessionResult {
                 session_id: session.id,
                 thread_id: active_thread_id,
-            });
-        }
+            })
+        } else {
+            match super::lifecycle::runtime_transport_from_raw(&session.display_mode)? {
+                super::lifecycle::RuntimeTransport::InteractiveTui => self
+                    .resume_tui_agent_session(
+                        data_dir,
+                        &session,
+                        input.project_id,
+                        input.workspace_branch.as_deref(),
+                        reopen_completed,
+                        agent_registry,
+                        pty_sessions,
+                    ),
+                super::lifecycle::RuntimeTransport::StructuredJson => self
+                    .resume_structured_agent_session(
+                        data_dir,
+                        &session,
+                        input.project_id,
+                        input.workspace_branch.as_deref(),
+                        reopen_completed,
+                        agent_registry,
+                        broadcaster,
+                        &DefaultAgentSessionProviderFactory,
+                    ),
+            }
+        }?;
 
-        match super::lifecycle::runtime_transport_from_raw(&session.display_mode)? {
-            super::lifecycle::RuntimeTransport::InteractiveTui => self.resume_tui_agent_session(
-                data_dir,
-                &session,
-                input.project_id,
-                agent_registry,
-                pty_sessions,
-            ),
-            super::lifecycle::RuntimeTransport::StructuredJson => self
-                .resume_structured_agent_session(
-                    data_dir,
-                    &session,
-                    input.project_id,
-                    agent_registry,
-                    broadcaster,
-                ),
+        if reopen_completed {
+            self.mark_reopened_issue_running(input.project_id, issue_id, session.id)?;
         }
+        Ok(result)
+    }
+
+    fn mark_reopened_issue_running(
+        &self,
+        project_id: i64,
+        issue_id: i64,
+        session_id: i64,
+    ) -> Result<(), CommandError> {
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let updated = IssueRepository::update_status_in_transaction(
+            &transaction,
+            project_id,
+            issue_id,
+            IssueStatus::Running,
+        )
+        .map_err(agent_session_database_error)?
+        .ok_or_else(|| {
+            CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                .with_reason("issueNotFound")
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+        })?;
+        let payload = json!({
+            "fromStatus": "completed",
+            "toStatus": "running",
+            "linkedSessionId": session_id,
+            "reopenCompleted": true,
+        })
+        .to_string();
+        EventRepository::insert_issue_action_in_transaction(
+            &transaction,
+            updated.id,
+            IssueActionType::IssueStatusChanged,
+            &payload,
+            updated.updated_at,
+            IssueActionActor::User { profile_id: 1 },
+        )
+        .map_err(agent_session_database_error)?;
+        transaction
+            .commit()
+            .map_err(agent_session_database_error)?;
+        Ok(())
     }
 
     fn resume_structured_agent_session(
@@ -1668,8 +1727,11 @@ impl AgentSessionService<'_> {
         data_dir: &Path,
         session: &crate::types::agent_session::AgentSessionRecord,
         project_id: i64,
+        workspace_branch: Option<&str>,
+        reopen_completed: bool,
         agent_registry: &AgentSessionRegistry,
         broadcaster: &AgentEventBroadcaster,
+        factory: &dyn AgentSessionProviderFactory,
     ) -> Result<ResumeAgentSessionResult, CommandError> {
         let thread_id = session
             .provider_session_id
@@ -1705,11 +1767,13 @@ impl AgentSessionService<'_> {
         } else {
             session.command_snapshot.clone()
         };
-        let cwd = self.resolve_session_cwd_for_resume(session)?;
+        let session = self.prepare_reopen_workspace(session, workspace_branch)?;
+        let log_path = self.prepare_reopened_runtime_log(data_dir, &session, reopen_completed)?;
+        let cwd = self.resolve_session_cwd_for_resume(&session)?;
         agent_registry.mark_starting(session.id);
         let runtime = descriptor.resolve_runtime_config(data_dir, &binary, None, None);
         let started = match start_provider_session(
-            &DefaultAgentSessionProviderFactory,
+            factory,
             AgentSessionStartRequest {
                 agent_type: profile.agent_type.clone(),
                 project_id,
@@ -1744,7 +1808,9 @@ impl AgentSessionService<'_> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        if let Err(error) = self.mark_structured_session_resumed(session, &resumed_thread_id) {
+        if let Err(error) =
+            self.mark_structured_session_resumed(&session, &resumed_thread_id, Some(log_path.as_str()))
+        {
             agent_registry.unmark_starting(session.id);
             started.handle.shutdown();
             return Err(error);
@@ -1763,6 +1829,8 @@ impl AgentSessionService<'_> {
         data_dir: &Path,
         session: &crate::types::agent_session::AgentSessionRecord,
         project_id: i64,
+        workspace_branch: Option<&str>,
+        reopen_completed: bool,
         agent_registry: &AgentSessionRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ResumeAgentSessionResult, CommandError> {
@@ -1804,7 +1872,9 @@ impl AgentSessionService<'_> {
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
 
-        let cwd = self.resolve_session_cwd_for_resume(session)?;
+        let session = self.prepare_reopen_workspace(session, workspace_branch)?;
+        let log_path = self.prepare_reopened_runtime_log(data_dir, &session, reopen_completed)?;
+        let cwd = self.resolve_session_cwd_for_resume(&session)?;
         // resume 命令现算，不改写 DB 中的 command_snapshot；不注入 prompt。
         let resume_command =
             descriptor.build_tui_resume_command(&session.command_snapshot, &thread_id);
@@ -1814,7 +1884,7 @@ impl AgentSessionService<'_> {
             mode: PtyCommandMode::ExecReplace,
             command: resume_command,
             working_dir: cwd.clone(),
-            log_path: session.log_path.clone(),
+            log_path: log_path.clone(),
             initial_prompt: None,
             rows: 32,
             cols: 120,
@@ -1834,7 +1904,9 @@ impl AgentSessionService<'_> {
             }
         };
 
-        if let Err(error) = self.mark_structured_session_resumed(session, &thread_id) {
+        if let Err(error) =
+            self.mark_structured_session_resumed(&session, &thread_id, Some(log_path.as_str()))
+        {
             agent_registry.unmark_starting(session.id);
             pending_pty.terminate();
             return Err(error);
@@ -1957,10 +2029,129 @@ impl AgentSessionService<'_> {
             })
     }
 
+    fn prepare_reopen_workspace(
+        &self,
+        session: &crate::types::agent_session::AgentSessionRecord,
+        requested_branch: Option<&str>,
+    ) -> Result<crate::types::agent_session::AgentSessionRecord, CommandError> {
+        let mut session = session.clone();
+        let Some(requested_branch) = requested_branch.map(str::trim).filter(|value| !value.is_empty())
+        else {
+            return Ok(session);
+        };
+        if !should_restore_redwhisk_worktree(&session) {
+            return Ok(session);
+        }
+        let cwd = preferred_session_cwd(&session);
+        if Path::new(&cwd).is_dir() {
+            return Ok(session);
+        }
+
+        let project = self.find_project_summary(session.project_id)?;
+        if !crate::git::worktree::branch_exists(&project.repo_path, requested_branch)
+            .map_err(agent_session_start_error)?
+        {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "指定的本地分支不存在，不能新建同名分支。",
+            )
+            .with_reason("workspaceBranchMissing")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+            .with_detail(
+                ErrorDetail::new("GitBranch").with_value("branch", requested_branch.to_string()),
+            ));
+        }
+
+        session.workspace_branch = Some(requested_branch.to_string());
+        let workspace_path = session.workspace_path.clone().unwrap_or(cwd);
+        restore_worktree_for_branch(&project.repo_path, &workspace_path, requested_branch)
+            .map_err(agent_session_start_error)?;
+        run_worktree_setup_command(&workspace_path, session.worktree_setup_command.as_deref())?;
+
+        let transaction = self
+            .issue_repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(agent_session_database_error)?;
+        let changed = transaction
+            .execute(
+                "UPDATE agent_sessions
+                 SET workspace_branch = ?1, workspace_path = ?2, working_dir = ?2
+                 WHERE id = ?3 AND del = 0",
+                rusqlite::params![requested_branch, workspace_path, session.id],
+            )
+            .map_err(agent_session_database_error)?;
+        if changed == 0 {
+            return Err(CommandError::new(
+                CommandErrorCode::AgentSessionPersistenceFailed,
+                "Agent Session 工作区更新失败。",
+            )
+            .with_reason("restoreFailed")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
+        }
+        transaction
+            .commit()
+            .map_err(agent_session_database_error)?;
+        session.workspace_path = Some(workspace_path.clone());
+        session.working_dir = workspace_path;
+        Ok(session)
+    }
+
+    fn prepare_reopened_runtime_log(
+        &self,
+        data_dir: &Path,
+        session: &crate::types::agent_session::AgentSessionRecord,
+        reopen_completed: bool,
+    ) -> Result<String, CommandError> {
+        if !reopen_completed || !is_archived_issue_log_path(data_dir, &session.log_path) {
+            return Ok(session.log_path.clone());
+        }
+        let issue_id = session.issue_id.ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "未关联 Issue 的 Session 不能续接。",
+            )
+            .with_reason("missingLinkedIssue")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+        })?;
+        let issue = self
+            .issue_repository
+            .find_by_id(issue_id)
+            .map_err(agent_session_database_error)?
+            .ok_or_else(|| {
+                CommandError::new(CommandErrorCode::IssueNotFound, "Issue 不存在。")
+                    .with_reason("issueNotFound")
+                    .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id))
+            })?;
+        let runtime_path = if session.display_mode == "tui" {
+            super::log_path::build_log_path(
+                data_dir,
+                session.project_id,
+                &format!("issue-{}", issue.number),
+                session.agent_profile_id,
+                session.started_at,
+            )?
+        } else {
+            super::log_path::build_issue_runtime_structured_log_path(
+                data_dir,
+                session.project_id,
+                issue.number,
+                session.number,
+            )?
+        };
+        let archive_bytes = fs::read(&session.log_path).unwrap_or_default();
+        if let Some(parent) = Path::new(&runtime_path).parent() {
+            fs::create_dir_all(parent).map_err(agent_session_start_error)?;
+        }
+        fs::write(&runtime_path, archive_bytes).map_err(agent_session_start_error)?;
+        Ok(runtime_path)
+    }
+
     fn mark_structured_session_resumed(
         &self,
         session: &crate::types::agent_session::AgentSessionRecord,
         thread_id: &str,
+        log_path: Option<&str>,
     ) -> Result<(), CommandError> {
         let resumed_at = current_epoch_millis()?;
         let transaction = self
@@ -1985,6 +2176,18 @@ impl AgentSessionService<'_> {
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
 
+        let persisted_log_path = if let Some(log_path) = log_path {
+            AgentSessionRepository::update_log_path_in_transaction(
+                &transaction,
+                session.id,
+                log_path,
+            )
+            .map_err(agent_session_database_error)?;
+            log_path.to_string()
+        } else {
+            session.log_path.clone()
+        };
+
         let payload = json!({
             "sessionId": session.id,
             "issueId": session.issue_id,
@@ -1992,7 +2195,7 @@ impl AgentSessionService<'_> {
             "resumed": true,
             "structuredStream": true,
             "providerSessionId": thread_id,
-            "logPath": session.log_path,
+            "logPath": persisted_log_path,
         })
         .to_string();
         EventRepository::insert_session_event_in_transaction(
@@ -6198,6 +6401,8 @@ mod tests {
                 crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 701,
+                    reopen_completed: false,
+                    workspace_branch: None,
                 },
                 &registry,
                 &broadcaster,
@@ -6237,6 +6442,8 @@ mod tests {
                 crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 702,
+                    reopen_completed: false,
+                    workspace_branch: None,
                 },
                 &registry,
                 &broadcaster,
@@ -6279,6 +6486,8 @@ mod tests {
                 crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 703,
+                    reopen_completed: false,
+                    workspace_branch: None,
                 },
                 &registry,
                 &broadcaster,
@@ -6389,6 +6598,8 @@ mod tests {
                 crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 602,
+                    reopen_completed: false,
+                    workspace_branch: None,
                 },
                 &registry,
                 &broadcaster,
@@ -6438,6 +6649,8 @@ mod tests {
                 crate::types::agent_session::ResumeAgentSessionInput {
                     project_id: 1,
                     session_id: 601,
+                    reopen_completed: false,
+                    workspace_branch: None,
                 },
                 &registry,
                 &broadcaster,

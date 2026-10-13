@@ -5,7 +5,7 @@ use crate::types::agent_session::{AgentSessionStatus, ResumeAgentSessionInput};
 use crate::types::errors::CommandErrorCode;
 use rusqlite::params;
 
-fn seed_stopped_tui_session(
+pub(super) fn seed_stopped_tui_session(
     connection: &Connection,
     repo_path: &str,
     command_snapshot: &str,
@@ -90,6 +90,8 @@ fn resume_tui_rejects_missing_provider_session_id() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -131,6 +133,8 @@ fn resume_tui_allows_closed_session_for_incomplete_issue() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -177,6 +181,8 @@ fn resume_tui_rejects_closed_session_for_backlog_issue() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -218,6 +224,8 @@ fn resume_tui_rejects_closed_session_for_completed_issue() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -259,6 +267,8 @@ fn resume_tui_rejects_workspace_missing_with_stable_reason() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -310,6 +320,8 @@ fn resume_tui_spawns_pty_marks_running_keeps_command_snapshot() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -367,6 +379,8 @@ fn resume_tui_short_circuits_when_pty_already_active() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -381,6 +395,8 @@ fn resume_tui_short_circuits_when_pty_already_active() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -420,6 +436,8 @@ fn resume_tui_short_circuits_when_mark_starting() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,
@@ -460,6 +478,8 @@ fn resume_tui_allows_running_session_without_pty() {
             ResumeAgentSessionInput {
                 project_id: 1,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,

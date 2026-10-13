@@ -3149,6 +3149,8 @@ fn resume_agent_session_rejects_completed_issue() {
             ResumeAgentSessionInput {
                 project_id,
                 session_id,
+                reopen_completed: false,
+                workspace_branch: None,
             },
             &registry,
             &broadcaster,

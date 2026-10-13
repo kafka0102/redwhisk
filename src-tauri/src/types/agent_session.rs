@@ -292,6 +292,12 @@ impl AgentPermissionDecision {
 pub struct ResumeAgentSessionInput {
     pub project_id: i64,
     pub session_id: i64,
+    /// 用户确认把已完成 Issue 切回运行中。缺省或 false 时，已完成 Issue 仍拒绝续接。
+    #[serde(default)]
+    pub reopen_completed: bool,
+    /// worktree 目录已不在时，用来重建的已有本地分支。缺省则沿用 Session 记录上的分支。
+    #[serde(default)]
+    pub workspace_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

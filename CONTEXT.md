@@ -267,7 +267,7 @@ _Avoid_: 复制前裁剪文本、全选兜底降级、以 content-visibility 估
 _Avoid_: 仅 Codex 语义的 id、前端伪造 id、与 RedWhisk session 主键混用
 
 **Agent Session 续接**（resume）：
-在既有 Agent Session 记录上重新拉起运行时，以继续同一外部对话上下文：json 走结构化 provider resume；tui 走交互式 PTY + 各 CLI 的续接命令。仅当关联 Issue 为 running 或 review 时可续接；无 Issue、backlog、completed 的不自动续接，Session 是否 closed 不再作为门禁（ADR-0044 supersede ADR-0033 第 2 条）。应用重启后无活跃 PTY 时，Agents 工作台打开 tui 会话可自动尝试续接。
+在既有 Agent Session 记录上重新拉起运行时，以继续同一外部对话上下文：json 走结构化 provider resume；tui 走交互式 PTY + 各 CLI 的续接命令。关联 Issue 为 running 或 review 时可续接。已完成 Issue 只有用户显式把它切回运行中并确认时才可续接，且当前 Agent 必须支持该展示形式的续接并持有 Provider 会话标识；无 Issue、backlog 不续接。Session 是否 closed 不再作为门禁（ADR-0044 supersede ADR-0033 第 2 条；ADR-0050 放宽已完成 Issue 的显式重开）。应用重启后无活跃 PTY 时，Agents 工作台打开 tui 会话可自动尝试续接。
 _Avoid_: 冷启动全新对话冒充续接、Issue 只读归档面板续接、无 providerSessionId 时静默新开会话
 
 **Agent 启用状态**（enabled）：

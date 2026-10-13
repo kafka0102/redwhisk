@@ -28,7 +28,7 @@ pub(crate) struct IssueSessionArchive {
     pub latest_output: Option<String>,
 }
 
-pub(super) fn build_log_path(
+pub(crate) fn build_log_path(
     data_dir: &Path,
     project_id: i64,
     session_name: &str,
