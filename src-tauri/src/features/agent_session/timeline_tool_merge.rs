@@ -1,4 +1,4 @@
-use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail};
+use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail, ToolCallStatus};
 
 pub(super) fn merge_tool_call_timeline_item(
     previous: AgentTimelineItem,
@@ -10,7 +10,7 @@ pub(super) fn merge_tool_call_timeline_item(
                 call_id,
                 name: previous_name,
                 detail: previous_detail,
-                status: _,
+                status: previous_status,
                 error: _,
                 subagent_id,
             },
@@ -29,11 +29,22 @@ pub(super) fn merge_tool_call_timeline_item(
                 name
             },
             detail: merge_tool_call_detail(previous_detail, detail),
-            status,
+            status: preserve_terminal_tool_status(previous_status, status),
             error,
             subagent_id,
         },
         (_, incoming) => incoming,
+    }
+}
+
+fn preserve_terminal_tool_status(
+    previous: ToolCallStatus,
+    incoming: ToolCallStatus,
+) -> ToolCallStatus {
+    if previous != ToolCallStatus::Running && incoming == ToolCallStatus::Running {
+        previous
+    } else {
+        incoming
     }
 }
 
@@ -176,5 +187,40 @@ fn merge_tool_call_detail(previous: ToolCallDetail, incoming: ToolCallDetail) ->
             sender_thread_id: sender_thread_id.or(previous_sender),
         },
         (_, incoming) => incoming,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_tool_call_timeline_item;
+    use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail, ToolCallStatus};
+
+    fn shell(status: ToolCallStatus) -> AgentTimelineItem {
+        AgentTimelineItem::ToolCall {
+            call_id: "call-shell".into(),
+            name: "shell".into(),
+            detail: ToolCallDetail::Shell {
+                command: "find skills".into(),
+                output: Some("done".into()),
+                exit_code: None,
+            },
+            status,
+            error: None,
+            subagent_id: None,
+        }
+    }
+
+    #[test]
+    fn completed_tool_call_ignores_later_running_update() {
+        let merged = merge_tool_call_timeline_item(
+            shell(ToolCallStatus::Completed),
+            shell(ToolCallStatus::Running),
+        );
+        match merged {
+            AgentTimelineItem::ToolCall { status, .. } => {
+                assert_eq!(status, ToolCallStatus::Completed);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

@@ -806,6 +806,53 @@ describe("messageStreamReducer", () => {
       }
     });
 
+    it("已完成的 tool_call 不会被迟到的 running 更新打回运行中", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call-shell",
+          name: "shell",
+          detail: { type: "shell", command: "find skills" },
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call-shell",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "find skills",
+            output: "done",
+          },
+          status: "completed",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call-shell",
+          name: "shell",
+          detail: {
+            type: "shell",
+            command: "find skills",
+            output: "done",
+          },
+          status: "running",
+        }),
+      });
+      const item = state.entries[0]?.item;
+      expect(item?.type).toBe("tool_call");
+      if (item?.type === "tool_call") {
+        expect(item.status).toBe("completed");
+      }
+    });
+
     it("reasoning 携带 durationMs 时透传到 entry", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "EVENT",

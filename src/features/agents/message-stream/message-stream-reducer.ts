@@ -472,6 +472,10 @@ function applyTimelineItem(
         const mergedDetail = existingDetail
           ? mergeToolCallDetail(existingDetail, item.detail)
           : item.detail;
+        const existingStatus =
+          existing.kind === "tool_call" && existing.item.type === "tool_call"
+            ? existing.item.status
+            : item.status;
         const mergedItem: Extract<AgentTimelineItem, { type: "tool_call" }> = {
           ...item,
           name:
@@ -481,6 +485,8 @@ function applyTimelineItem(
               ? existing.item.name
               : item.name,
           detail: mergedDetail,
+          // 终态不能被迟到的 running 回放打回去，否则已完成工具会重新显示为运行中。
+          status: preserveTerminalToolStatus(existingStatus, item.status),
         };
         return replaceAt(entries, index, {
           id: callId,
@@ -635,6 +641,16 @@ function scopedTimelineId(id: string, subagentId: string | undefined): string {
 
 function normalizeMessageText(text: string): string {
   return text.trim().replace(/\r\n/g, "\n");
+}
+
+function preserveTerminalToolStatus(
+  previous: Extract<AgentTimelineItem, { type: "tool_call" }>["status"],
+  incoming: Extract<AgentTimelineItem, { type: "tool_call" }>["status"],
+): Extract<AgentTimelineItem, { type: "tool_call" }>["status"] {
+  if (previous !== "running" && incoming === "running") {
+    return previous;
+  }
+  return incoming;
 }
 
 function shouldPreserveExistingToolName(

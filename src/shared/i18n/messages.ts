@@ -459,6 +459,8 @@ export interface I18nMessages {
     /** 本轮异常中断且携带 stop_reason 时的提示。 */
     turnInterruptedWithReason: (stopReason: string) => string;
     reasoningTitle: string;
+    /** 轮次已结束、但 reasoning 没有时长时的标题。 */
+    reasoningSettled: string;
     /** 已完成 reasoning 块的标题文案，入参为持续秒数。 */
     reasoningDuration: (seconds: number) => string;
     structuredSessionView: string;

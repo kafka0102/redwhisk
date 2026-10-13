@@ -508,6 +508,7 @@
     "turnInterruptedWithReason": "This turn may not have finished normally (interrupted, stop_reason: {{stopReason}}). Send a message to continue.",
     "subagentInterrupted": "A background subagent was interrupted. The workflow may be paused. Send a message to continue.",
     "reasoningTitle": "Thinking",
+    "reasoningSettled": "Thought process",
     "reasoningDuration": "Thought process ({{seconds}}s)",
     "structuredSessionView": "Agent structured session view",
     "tuiSessionView": "Agent TUI session view",

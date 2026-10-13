@@ -16,7 +16,12 @@ import {
   resetMessageStreamScrollOffsetCacheForTests,
   writeMessageStreamScrollOffset,
 } from "./message-stream-scroll-offset";
+import type { AgentStreamEvent } from "../agent-stream-types";
 import type { MessageStreamState } from "./message-stream-types";
+import {
+  createInitialState,
+  messageStreamReducer,
+} from "./message-stream-reducer";
 import { clearAgentMessageStreamCacheForTest } from "./use-agent-message-stream";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -35,6 +40,12 @@ function setupStream(
 ) {
   readAgentTimelineMock.mockReset();
   readAgentTimelineMock.mockResolvedValue({ items, effort: null, model: null });
+}
+
+function timelineEvent(
+  item: Extract<AgentStreamEvent, { type: "timeline" }>["item"],
+): AgentStreamEvent {
+  return { type: "timeline", item, seq: 1, timestamp: 0 };
 }
 
 function createMessageStreamState(
@@ -171,10 +182,10 @@ describe("AgentMessageStream", () => {
     });
     render(<AgentMessageStream projectId={1} sessionId={3} />);
     await waitFor(() => {
-      expect(screen.getByText("Thinking")).toBeInTheDocument();
+      expect(screen.getByText("Thought process")).toBeInTheDocument();
     });
     const details = screen
-      .getByText("Thinking")
+      .getByText("Thought process")
       .closest("details") as HTMLDetailsElement | null;
     expect(details?.open).toBe(false);
     expect(screen.getByText("我先想想")).toBeInTheDocument();
@@ -629,6 +640,68 @@ describe("AgentMessageStream", () => {
     );
     expect(screen.queryByText("Thinking...")).not.toBeInTheDocument();
     expect(screen.getByText("我先读取文件")).toBeInTheDocument();
+  });
+
+  it("turn 已结束并等待用户回复时，未结算的思考不再显示正在思考", () => {
+    // session 324：Grok 已写出 Q1 并 turn_completed，reasoning 没有 durationMs。
+    // 标题不能继续用进行中的 Thinking / 正在思考。
+    let state = createInitialState();
+    const events: AgentStreamEvent[] = [
+      { type: "turn_started", turnId: "turn-1" },
+      timelineEvent({
+        type: "reasoning",
+        text: "Waiting for the user to answer Q1.",
+      }),
+      timelineEvent({
+        type: "assistant_message",
+        text: "Reply with 1-3.",
+        messageId: "grok-msg-1",
+      }),
+      {
+        type: "turn_completed",
+        turnId: "turn-1",
+        usage: null,
+        stopReason: "end_turn",
+      },
+    ];
+    for (const event of events) {
+      state = messageStreamReducer(state, { type: "EVENT", event });
+    }
+    expect(state.turnStatus).toBe("idle");
+
+    render(
+      <AgentMessageStreamView
+        agentType="grok"
+        isTurnRunning={false}
+        state={{ ...state, isInitialized: true }}
+      />,
+    );
+
+    expect(screen.queryByText("Thinking...")).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+    expect(screen.getByText("Thought process")).toBeInTheDocument();
+    expect(screen.getByText("Reply with 1-3.")).toBeInTheDocument();
+  });
+
+  it("turn 仍在运行时，未结算的思考继续显示正在思考", () => {
+    render(
+      <AgentMessageStreamView
+        agentType="grok"
+        isTurnRunning
+        state={createMessageStreamState({
+          entries: [
+            {
+              id: "r1",
+              kind: "reasoning",
+              item: { type: "reasoning", text: "Still working." },
+            },
+          ],
+          turnStatus: "running",
+        })}
+      />,
+    );
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.queryByText("Thought process")).not.toBeInTheDocument();
   });
 });
 

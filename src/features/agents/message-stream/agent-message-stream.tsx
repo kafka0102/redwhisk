@@ -339,7 +339,10 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
             {lastError}
           </p>
         ) : null}
-        <AgentMessageCards entries={entries} />
+        <AgentMessageCards
+          entries={entries}
+          reasoningInProgress={isTurnActive}
+        />
         {turnInterrupted ? (
           <div className="agents-message__entry agents-message__entry--interrupted">
             <p className="agents-message-stream__interrupted" role="status">

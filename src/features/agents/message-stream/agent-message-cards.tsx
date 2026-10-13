@@ -35,6 +35,8 @@ import type { MessageStreamEntry } from "./message-stream-types";
 
 interface AgentMessageCardsProps {
   entries: MessageStreamEntry[];
+  /** 当前轮次仍在跑。为 false 时，没有时长的思考不再显示「正在思考」。 */
+  reasoningInProgress?: boolean;
 }
 
 const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
@@ -46,11 +48,16 @@ const USER_MESSAGE_MAX_LINES = 5;
 // 实例池模式下 sessions 列表刷新不再触发未变 session 的卡片重渲染。
 export const AgentMessageCards = memo(function AgentMessageCards({
   entries,
+  reasoningInProgress = false,
 }: AgentMessageCardsProps) {
   return (
     <>
       {entries.map((entry) => (
-        <MessageCard key={entry.id} entry={entry} />
+        <MessageCard
+          key={entry.id}
+          entry={entry}
+          reasoningInProgress={reasoningInProgress}
+        />
       ))}
     </>
   );
@@ -58,8 +65,10 @@ export const AgentMessageCards = memo(function AgentMessageCards({
 
 const MessageCard = memo(function MessageCard({
   entry,
+  reasoningInProgress,
 }: {
   entry: MessageStreamEntry;
+  reasoningInProgress: boolean;
 }) {
   const { messages } = useI18n();
   const item = entry.item;
@@ -72,7 +81,9 @@ const MessageCard = memo(function MessageCard({
       return (
         <ReasoningCard
           item={item}
+          inProgress={reasoningInProgress}
           thinkingLabel={messages.agentsFeature.reasoningTitle}
+          settledLabel={messages.agentsFeature.reasoningSettled}
           completedLabel={messages.agentsFeature.reasoningDuration}
         />
       );
@@ -126,20 +137,26 @@ function AssistantMessageCard({
 
 function ReasoningCard({
   item,
+  inProgress,
   thinkingLabel,
+  settledLabel,
   completedLabel,
 }: {
   item: Extract<AgentTimelineItem, { type: "reasoning" }>;
+  inProgress: boolean;
   thinkingLabel: string;
+  settledLabel: string;
   /** 已完成 reasoning 的时长文案 formatter：入参为秒。 */
   completedLabel: (seconds: number) => string;
 }) {
-  // durationMs 存在表示 reasoning 块已结束（后端 force flush 时填充）。
-  // 此时标题展示「思考过程（共进行了 X 秒）」；否则回退到「正在思考…」。
+  // durationMs 表示这块思考已经结束。没有时长时，只有轮次仍在跑才显示
+  // 「正在思考…」；轮次结束后（例如正在等用户回复）改为「思考过程」。
   const label =
     item.durationMs != null
       ? completedLabel(Math.max(1, Math.round(item.durationMs / 1000)))
-      : thinkingLabel;
+      : inProgress
+        ? thinkingLabel
+        : settledLabel;
   return (
     <article className="agents-message__entry agents-message__entry--reasoning">
       <details className="agents-message__reasoning">
