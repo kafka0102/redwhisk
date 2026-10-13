@@ -36,7 +36,6 @@ pub const SESSION_PROMPT_METHOD: &str = "session/prompt";
 pub const SESSION_CANCEL_METHOD: &str = "session/cancel";
 
 const NO_INTERRUPTIBLE_TURN: &str = "没有可中断的 Turn";
-const CANCEL_REQUEST_TIMEOUT_MS: u64 = 10_000;
 
 /// Grok 结构化会话配置。
 #[derive(Clone)]
@@ -174,10 +173,12 @@ impl GrokSessionHandle {
         Ok(())
     }
 
-    /// 中断当前 Turn：向服务端发 `session/cancel` 并广播 `TurnCanceled`。
+    /// 中断当前 Turn：向服务端发 `session/cancel` 通知并广播 `TurnCanceled`。
     ///
-    /// 没有可中断 Turn 时返回 `NO_INTERRUPTIBLE_TURN`（映射为
-    /// `AgentSessionError::NoInterruptibleTurn`），不做空成功。
+    /// ACP 的 `session/cancel` 是无 id 的通知。带 id 的请求对端不会当成打断，
+    /// 进行中的 prompt 会继续跑。没有可中断 Turn 时返回
+    /// `NO_INTERRUPTIBLE_TURN`（映射为 `AgentSessionError::NoInterruptibleTurn`），
+    /// 不做空成功。
     pub fn cancel_turn(&self) -> Result<(), GrokStreamingError> {
         let transport = self.current_transport()?;
         let (event, session_id) = {
@@ -191,13 +192,7 @@ impl GrokSessionHandle {
             (state.mapper.on_cancel(), state.session_id.clone())
         };
         if let Some(session_id) = session_id {
-            std::thread::spawn(move || {
-                let _ = transport.request_with_timeout(
-                    SESSION_CANCEL_METHOD,
-                    json!({ "sessionId": session_id }),
-                    CANCEL_REQUEST_TIMEOUT_MS,
-                );
-            });
+            transport.notify(SESSION_CANCEL_METHOD, json!({ "sessionId": session_id }))?;
         }
         self.config.broadcaster.emit_stream_event(
             self.config.project_id,

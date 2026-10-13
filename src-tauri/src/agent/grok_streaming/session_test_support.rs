@@ -42,7 +42,6 @@ while IFS= read -r line; do
       printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","_meta":{"promptId":"grok-prompt-1","usage":{"inputTokens":100,"outputTokens":10,"totalTokens":110,"cachedReadTokens":40,"cacheCreationTokens":0}}}}\n' "$id"
       ;;
     session/cancel)
-      printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id"
       ;;
     *)
       printf '{"jsonrpc":"2.0","id":%s,"error":{"message":"unexpected method"}}\n' "$id"

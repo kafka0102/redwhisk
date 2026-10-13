@@ -228,6 +228,41 @@ fn path_field(input: &Value, locations: &[String]) -> String {
     .unwrap_or_default()
 }
 
+/// 合并同一 toolCallId 的两次 `rawInput`。首个 `tool_call` 给完整入参，后续
+/// `tool_call_update` 可能只带 `variant` 等子集；整段覆盖会丢字段，故对 JSON
+/// 对象做浅合并（同名字段以新值为准），非对象入参直接取新值。
+pub(crate) fn merge_tool_input(existing: &Value, incoming: &Value) -> Value {
+    match (existing, incoming) {
+        (Value::Object(previous), Value::Object(next)) => {
+            let mut merged = previous.clone();
+            for (key, value) in next {
+                merged.insert(key.clone(), value.clone());
+            }
+            Value::Object(merged)
+        }
+        (_, incoming) => incoming.clone(),
+    }
+}
+
+/// ACP `locations[].path`。完成帧不再携带 locations，调用方按 call id 累积。
+pub(crate) fn location_paths(update: &Value) -> Vec<String> {
+    update
+        .get("locations")
+        .and_then(Value::as_array)
+        .map(|locations| {
+            locations
+                .iter()
+                .filter_map(|location| {
+                    location
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn string_field(input: &Value, keys: &[&str]) -> Option<String> {
     keys.iter()
         .find_map(|key| input.get(*key).and_then(Value::as_str))

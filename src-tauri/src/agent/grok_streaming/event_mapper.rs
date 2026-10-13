@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use serde_json::Value;
 
 use crate::agent::grok_streaming::tool_detail::{
-    map_grok_tool_detail, tool_name_from_update, tool_output_text,
+    location_paths, map_grok_tool_detail, merge_tool_input, tool_name_from_update, tool_output_text,
 };
 use crate::agent::grok_streaming::usage::GrokUsageLedger;
 use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem, ToolCallStatus};
@@ -28,7 +28,7 @@ pub const METHOD_SESSION_UPDATE: &str = "session/update";
 pub const METHOD_SESSION_NOTIFICATION: &str = "_x.ai/session_notification";
 
 /// 一轮 turn 的事件归一状态机。
-pub struct GrokStreamMapper {
+pub(crate) struct GrokStreamMapper {
     turn_id: Option<String>,
     turn_started: bool,
     turn_finalized: bool,
@@ -37,7 +37,10 @@ pub struct GrokStreamMapper {
     turn_id_frozen: bool,
     /// 收尾之后又收到产出。随后的 `turn_completed` / `response_completed`
     /// 必须再补一次 `TurnCompleted`，否则运行态不再收回，前端停在「正在思考」。
+    /// 用户取消后保持 false：迟到产出不得把已取消的 turn 重新打开。
     follow_up_open: bool,
+    /// 用户已点终止。与 prompt 正常返回不同，之后的工具 / 正文 / 推理都丢弃。
+    user_canceled: bool,
     assistant_text: String,
     reasoning_text: String,
     message_index: usize,
@@ -77,6 +80,7 @@ impl GrokStreamMapper {
             turn_finalized: true,
             turn_id_frozen: false,
             follow_up_open: false,
+            user_canceled: false,
             assistant_text: String::new(),
             reasoning_text: String::new(),
             message_index: 0,
@@ -94,15 +98,11 @@ impl GrokStreamMapper {
         self.turn_finalized = false;
         self.turn_id_frozen = false;
         self.follow_up_open = false;
+        self.user_canceled = false;
         self.assistant_text.clear();
         self.reasoning_text.clear();
         self.message_index = 0;
         self.tool_calls.clear();
-    }
-
-    /// 当前 turn id（服务端 `promptId` 优先，否则本地兜底 id）。
-    pub fn turn_id(&self) -> Option<String> {
-        self.turn_id.clone()
     }
 
     /// 是否有一轮正在运行（用于判断取消是否可中断）。
@@ -201,8 +201,9 @@ impl GrokStreamMapper {
         events
     }
 
-    /// 用户取消：直接收尾为 `TurnCanceled`。
+    /// 用户取消：直接收尾为 `TurnCanceled`，并拒绝之后的续写重开。
     pub fn on_cancel(&mut self) -> AgentStreamEvent {
+        self.user_canceled = true;
         self.close_turn();
         AgentStreamEvent::TurnCanceled {
             turn_id: self.turn_id.clone(),
@@ -251,13 +252,18 @@ impl GrokStreamMapper {
         self.follow_up_open = false;
     }
 
-    /// prompt 已经返回后又有正文 / 推理 / 工具，说明这轮还没真正停。
-    fn note_output_while_closed(&mut self) {
+    /// prompt 正常返回后又有正文 / 推理 / 工具，说明这轮还没真正停。
+    /// 用户取消是终态：迟到产出保持关闭，不再重开 turn。
+    fn note_output_while_closed(&mut self) -> bool {
+        if self.user_canceled {
+            return false;
+        }
         if !self.turn_finalized {
-            return;
+            return true;
         }
         self.turn_finalized = false;
         self.follow_up_open = true;
+        true
     }
 
     fn map_session_update(&mut self, params: &Value, events: &mut Vec<AgentStreamEvent>) {
@@ -265,7 +271,9 @@ impl GrokStreamMapper {
         match string_field(update, "sessionUpdate").as_deref() {
             Some("agent_message_chunk") => {
                 if let Some(delta) = content_text(update) {
-                    self.note_output_while_closed();
+                    if !self.note_output_while_closed() {
+                        return;
+                    }
                     self.assistant_text.push_str(&delta);
                     let message_id =
                         format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn"));
@@ -278,7 +286,9 @@ impl GrokStreamMapper {
             }
             Some("agent_thought_chunk") => {
                 if let Some(delta) = content_text(update) {
-                    self.note_output_while_closed();
+                    if !self.note_output_while_closed() {
+                        return;
+                    }
                     self.reasoning_text.push_str(&delta);
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
                         text: self.reasoning_text.clone(),
@@ -328,7 +338,9 @@ impl GrokStreamMapper {
 
     fn map_tool_call(&mut self, update: &Value) -> Option<AgentStreamEvent> {
         let call_id = string_field(update, "toolCallId")?;
-        self.note_output_while_closed();
+        if !self.note_output_while_closed() {
+            return None;
+        }
         let incoming_input = update
             .get("rawInput")
             .filter(|value| !value.is_null())
@@ -383,7 +395,7 @@ impl GrokStreamMapper {
 }
 
 /// 从通知 params 解析服务端 prompt id（`_meta.promptId` 优先，其次队列 `runningPromptId`）。
-pub fn turn_id_from_params(params: &Value) -> Option<String> {
+pub(crate) fn turn_id_from_params(params: &Value) -> Option<String> {
     params
         .get("_meta")
         .and_then(|meta| meta.get("promptId"))
@@ -399,7 +411,7 @@ pub fn turn_id_from_params(params: &Value) -> Option<String> {
 }
 
 /// ACP chunk 的文本载荷（`content.text` 为主，兼容字符串 / 数组 / 直接 `text`）。
-pub fn content_text(update: &Value) -> Option<String> {
+pub(crate) fn content_text(update: &Value) -> Option<String> {
     let content = update.get("content").unwrap_or(&Value::Null);
     if let Some(text) = content.as_str() {
         return non_empty(text);
@@ -437,40 +449,6 @@ fn tool_status(status: Option<&str>) -> ToolCallStatus {
     }
 }
 
-/// 合并同一 toolCallId 的两次 `rawInput`。真实报文里首个 `tool_call` 给完整入参，
-/// 后续 `tool_call_update` 可能只带 `variant` 等子集；整段覆盖会丢字段，故对 JSON
-/// 对象做浅合并（同名字段以新值为准），非对象入参直接取新值。
-fn merge_tool_input(existing: &Value, incoming: &Value) -> Value {
-    match (existing, incoming) {
-        (Value::Object(previous), Value::Object(next)) => {
-            let mut merged = previous.clone();
-            for (key, value) in next {
-                merged.insert(key.clone(), value.clone());
-            }
-            Value::Object(merged)
-        }
-        (_, incoming) => incoming.clone(),
-    }
-}
-
-fn location_paths(update: &Value) -> Vec<String> {
-    update
-        .get("locations")
-        .and_then(Value::as_array)
-        .map(|locations| {
-            locations
-                .iter()
-                .filter_map(|location| {
-                    location
-                        .get("path")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn string_field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
 }
@@ -490,6 +468,10 @@ mod tests;
 #[cfg(test)]
 #[path = "event_mapper_follow_up_tests.rs"]
 mod follow_up_tests;
+
+#[cfg(test)]
+#[path = "event_mapper_cancel_tests.rs"]
+mod cancel_tests;
 
 #[cfg(test)]
 #[path = "tool_lifecycle_tests.rs"]

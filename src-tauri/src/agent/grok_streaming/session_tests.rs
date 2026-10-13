@@ -140,6 +140,77 @@ fn canonicalizes_cwd_before_session_new() {
     handle.shutdown();
 }
 
+/// 进行中的 prompt 不返回，直到读到 `session/cancel`。用于证明取消能插进
+/// 被 prompt 占住的 stdin，并且报文本身不带请求 id。
+const FAKE_SERVER_CANCEL_TEMPLATE: &str = r#"#!/usr/bin/env bash
+log="__LOG__"
+while IFS= read -r line || [[ -n "$line" ]]; do
+  [[ -z "$line" ]] && continue
+  printf '%s\n' "$line" >> "$log"
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  method=$(printf '%s' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  case "$method" in
+    initialize)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":1}}\n' "$id"
+      ;;
+    session/new)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"grok-fake-1"}}\n' "$id"
+      ;;
+    session/prompt)
+      printf '%s\n' '{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"working"}},"_meta":{"promptId":"grok-prompt-1"}}}'
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue
+        printf '%s\n' "$line" >> "$log"
+        if printf '%s' "$line" | grep -q '"method":"session/cancel"'; then
+          break
+        fi
+      done
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"cancelled","_meta":{"promptId":"grok-prompt-1"}}}\n' "$id"
+      ;;
+    session/cancel)
+      ;;
+  esac
+done
+"#;
+
+#[test]
+fn cancel_running_turn_sends_notification_without_id() {
+    let temp = tempfile::tempdir().expect("temp");
+    let log = temp.path().join("cancel-running.log");
+    let script_path = temp.path().join("fake-cancel-running.sh");
+    write_script(
+        &script_path,
+        &FAKE_SERVER_CANCEL_TEMPLATE.replace("__LOG__", &log.to_string_lossy()),
+    );
+    let handle = GrokSessionHandle::start(grok_session_config(&script_path, temp.path(), None))
+        .expect("start");
+    handle
+        .send_message("请停下来".into(), Vec::new())
+        .expect("prompt starts");
+
+    let content = wait_for_log(&log, "\"method\":\"session/prompt\"");
+    assert!(content.contains("请停下来"));
+
+    let as_trait: &dyn AgentSessionHandle = &handle;
+    as_trait.cancel_turn().expect("cancel notifies ACP");
+
+    let traffic = wait_for_log(&log, "\"method\":\"session/cancel\"");
+    let cancel_line = traffic
+        .lines()
+        .find(|line| line.contains("\"method\":\"session/cancel\""))
+        .unwrap_or("");
+    assert!(
+        !cancel_line.contains("\"id\""),
+        "session/cancel 必须是无 id 的通知，实际：{cancel_line}"
+    );
+    assert!(
+        cancel_line.contains("\"sessionId\":\"grok-fake-1\""),
+        "取消通知必须带当前 sessionId，实际：{cancel_line}"
+    );
+
+    handle.shutdown();
+}
+
 #[test]
 fn cancel_without_active_turn_is_not_a_silent_success() {
     let temp = tempfile::tempdir().expect("temp");
