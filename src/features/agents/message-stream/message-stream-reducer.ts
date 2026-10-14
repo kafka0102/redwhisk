@@ -21,13 +21,13 @@ import type {
   AgentTimelineItem,
   AgentUsage,
   TimelineHistoryItem,
-  ToolCallDetail,
 } from "../agent-stream-types";
 import {
   foldColdCollapsibleEntries,
   isColdCollapsibleEntry,
   stripToolCallBody,
 } from "./message-stream-fold";
+import { mergeToolCallDetail } from "./message-stream-tool-detail";
 import { foldSubagentRoster } from "./output-source";
 import type {
   MessageStreamAction,
@@ -816,108 +816,6 @@ function mergeUsage(
     contextWindowUsedTokens:
       next.contextWindowUsedTokens ?? current.contextWindowUsedTokens,
   };
-}
-
-/**
- * 合并同一 callId 的两个 ToolCallDetail（字段级合并）。
- *
- * 场景：tool_use 事件先建立 detail（带 path/command/diff 等摘要），
- * tool_result 事件回填时新建 detail（带 output/exit_code/content，但摘要
- * 可能为空）。整体替换会丢失摘要，故按字段合并：incoming 非空字段覆盖
- * existing，incoming 空字段保留 existing。
- *
- * type 不一致时以 incoming 为准（降级场景，少见）。
- * matches 列表：取非空一方（incoming 非空优先）。
- */
-function mergeToolCallDetail(
-  existing: ToolCallDetail,
-  incoming: ToolCallDetail,
-): ToolCallDetail {
-  if (existing.type !== incoming.type) {
-    return incoming;
-  }
-  switch (incoming.type) {
-    case "shell": {
-      const prev = existing as Extract<ToolCallDetail, { type: "shell" }>;
-      return {
-        type: "shell",
-        command: incoming.command || prev.command,
-        output: incoming.output ?? prev.output,
-        exitCode: incoming.exitCode ?? prev.exitCode,
-      };
-    }
-    case "read": {
-      const prev = existing as Extract<ToolCallDetail, { type: "read" }>;
-      return {
-        type: "read",
-        path: incoming.path || prev.path,
-        content: incoming.content ?? prev.content,
-      };
-    }
-    case "edit": {
-      const prev = existing as Extract<ToolCallDetail, { type: "edit" }>;
-      return {
-        type: "edit",
-        path: incoming.path || prev.path,
-        diff: incoming.diff ?? prev.diff,
-      };
-    }
-    case "write": {
-      const prev = existing as Extract<ToolCallDetail, { type: "write" }>;
-      return {
-        type: "write",
-        path: incoming.path || prev.path,
-        content: incoming.content ?? prev.content,
-      };
-    }
-    case "search": {
-      const prev = existing as Extract<ToolCallDetail, { type: "search" }>;
-      return {
-        type: "search",
-        query: incoming.query || prev.query,
-        mode: incoming.mode,
-        matches: incoming.matches.length > 0 ? incoming.matches : prev.matches,
-      };
-    }
-    case "sub_agent": {
-      const prev = existing as Extract<ToolCallDetail, { type: "sub_agent" }>;
-      return {
-        type: "sub_agent",
-        childSessionId: incoming.childSessionId ?? prev.childSessionId,
-      };
-    }
-    case "collab_agent": {
-      const prev = existing as Extract<
-        ToolCallDetail,
-        { type: "collab_agent" }
-      >;
-      return {
-        type: "collab_agent",
-        prompt: incoming.prompt?.trim() ? incoming.prompt : prev.prompt,
-        receiverThreadIds:
-          incoming.receiverThreadIds.length > 0
-            ? incoming.receiverThreadIds
-            : prev.receiverThreadIds,
-        senderThreadId: incoming.senderThreadId ?? prev.senderThreadId,
-      };
-    }
-    case "plan": {
-      return {
-        type: "plan",
-        text: incoming.text,
-      };
-    }
-    case "unknown": {
-      const prev = existing as Extract<ToolCallDetail, { type: "unknown" }>;
-      return {
-        type: "unknown",
-        rawInput: incoming.rawInput ?? prev.rawInput,
-        rawOutput: incoming.rawOutput ?? prev.rawOutput,
-      };
-    }
-    default:
-      return incoming;
-  }
 }
 
 function asHistoryItem(

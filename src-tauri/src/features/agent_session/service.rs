@@ -3845,6 +3845,95 @@ mod tests {
     }
 
     #[test]
+    fn read_timeline_item_at_offset_returns_that_sessions_line() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("structured.jsonl");
+        let first = AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 401,
+            seq: 1,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage {
+                    text: ("第一行".to_string()).into(),
+                    message_id: Some("msg-1".to_string()),
+                    subagent_id: None,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 1,
+            },
+            log_offset: None,
+        };
+        let second = AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 401,
+            seq: 2,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::ToolCall {
+                    call_id: "call-1".to_string(),
+                    name: "shell".to_string(),
+                    detail: ToolCallDetail::Shell {
+                        command: "echo".to_string(),
+                        output: Some("第二行".to_string()),
+                        exit_code: Some(0),
+                    },
+                    status: ToolCallStatus::Completed,
+                    error: None,
+                    subagent_id: None,
+                },
+                turn_id: None,
+                seq: 1,
+                timestamp: 2,
+            },
+            log_offset: None,
+        };
+        let first_line = serde_json::to_string(&first).expect("serialize first");
+        let second_line = serde_json::to_string(&second).expect("serialize second");
+        let offset = (first_line.len() + 1) as u64;
+        fs::write(&log_path, format!("{first_line}\n{second_line}\n")).expect("write log");
+
+        let database = setup_session_list_database();
+        let started_at = current_millis();
+        insert_session_list_row(
+            &database,
+            401,
+            None,
+            None,
+            None,
+            AgentSessionStatus::Running,
+            started_at,
+            None,
+        );
+        database
+            .execute(
+                "UPDATE agent_sessions SET log_path = ?1 WHERE id = 401",
+                params![log_path.to_string_lossy().to_string()],
+            )
+            .expect("update log path");
+
+        let service = test_agent_session_service(&database);
+        let item = service
+            .read_timeline_item_at_offset(1, 401, offset)
+            .expect("read one line");
+        match item {
+            AgentTimelineItem::ToolCall { call_id, .. } => assert_eq!(call_id, "call-1"),
+            other => panic!("expected tool call, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_timeline_item_at_offset_rejects_unknown_session() {
+        let database = setup_session_list_database();
+        let service = test_agent_session_service(&database);
+        let error = service
+            .read_timeline_item_at_offset(1, 404, 0)
+            .expect_err("missing session");
+        assert_eq!(error.reason.as_deref(), Some("sessionNotFound"));
+    }
+
+    #[test]
     fn read_agent_timeline_treats_unmaterialized_standalone_thread_as_empty() {
         let database = setup_session_list_database();
         let started_at = current_millis();

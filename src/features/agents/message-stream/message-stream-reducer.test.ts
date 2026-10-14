@@ -100,7 +100,9 @@ describe("messageStreamReducer", () => {
         type: "HYDRATE",
         items,
       });
-      const folded = foldedState.entries.find((entry) => entry.id === tools[0]!.id);
+      const folded = foldedState.entries.find(
+        (entry) => entry.id === tools[0]!.id,
+      );
       expect(
         folded?.item.type === "tool_call" && folded.item.detail.type === "shell"
           ? folded.item.detail.output
@@ -126,6 +128,55 @@ describe("messageStreamReducer", () => {
           ? afterCollapse.item.detail.output
           : "kept",
       ).toBeUndefined();
+    });
+
+    it("第 50 个 Turn 里的工具调用仍留正文，再早一个 Turn 才收成占位", () => {
+      const items: TimelineHistoryItem[] = [];
+      for (let turn = 0; turn < 51; turn += 1) {
+        items.push({
+          item: {
+            type: "tool_call",
+            callId: `edge-${turn}`,
+            name: "shell",
+            status: "completed",
+            detail: { type: "shell", command: "echo", output: `body-${turn}` },
+          },
+          turnId: `edge-turn-${turn}`,
+        });
+      }
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items,
+      });
+      const outputOf = (id: string) => {
+        const entry = state.entries.find((item) => item.id === id);
+        return entry?.item.type === "tool_call" &&
+          entry.item.detail.type === "shell"
+          ? entry.item.detail.output
+          : undefined;
+      };
+      expect(outputOf("edge-0")).toBeUndefined();
+      expect(outputOf("edge-1")).toBe("body-1");
+
+      const updated = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent(
+          {
+            type: "tool_call",
+            callId: "edge-1",
+            name: "shell",
+            status: "completed",
+            detail: { type: "shell", command: "echo", output: "kept" },
+          },
+          2,
+        ),
+      });
+      const edge = updated.entries.find((entry) => entry.id === "edge-1");
+      expect(
+        edge?.item.type === "tool_call" && edge.item.detail.type === "shell"
+          ? edge.item.detail.output
+          : undefined,
+      ).toBe("kept");
     });
 
     it("同一条助手消息和同一次工具调用只用新正文替换", () => {
@@ -1138,7 +1189,9 @@ describe("messageStreamReducer", () => {
       });
       expect(state.turnStatus).toBe("failed");
       expect(state.lastError).toBe("爆炸了");
-      const visible = state.entries.filter((entry) => entry.kind !== "turn_boundary");
+      const visible = state.entries.filter(
+        (entry) => entry.kind !== "turn_boundary",
+      );
       expect(visible).toHaveLength(1);
       expect(visible[0].kind).toBe("error");
     });
