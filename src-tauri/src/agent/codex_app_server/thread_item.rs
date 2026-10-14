@@ -36,7 +36,7 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
             let text = str_field(item, "text").unwrap_or_default();
             let message_id = str_field(item, "id");
             Some(AgentTimelineItem::AssistantMessage {
-                text,
+                text: text.into(),
                 message_id,
                 subagent_id: None,
             })
@@ -59,7 +59,7 @@ pub fn map_thread_item(item: &Value, include_user_message: bool) -> Option<Agent
             let text = summary.or(content)?;
             // Codex timeline 历史回放不携带 per-block 计时，duration_ms 留 None。
             Some(AgentTimelineItem::Reasoning {
-                text,
+                text: text.into(),
                 duration_ms: None,
                 subagent_id: None,
             })

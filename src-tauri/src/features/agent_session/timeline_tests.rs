@@ -65,7 +65,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
         envelope(
             2,
             AgentTimelineItem::AssistantMessage {
-                text: "我先对照电子书列表。".to_string(),
+                text: ("我先对照电子书列表。".to_string()).into(),
                 message_id: Some("grok-msg-1".to_string()),
                 subagent_id: None,
             },
@@ -103,7 +103,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
         envelope(
             5,
             AgentTimelineItem::AssistantMessage {
-                text: "我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string(),
+                text: ("我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string()).into(),
                 message_id: Some("grok-msg-1".to_string()),
                 subagent_id: None,
             },
@@ -134,7 +134,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
     assert_eq!(
         history.items.last(),
         Some(&AgentTimelineItem::AssistantMessage {
-            text: "我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string(),
+            text: ("我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string()).into(),
             message_id: Some("grok-msg-1".to_string()),
             subagent_id: None,
         })
@@ -155,7 +155,7 @@ fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
             seq,
             &turn_id,
             AgentTimelineItem::AssistantMessage {
-                text: format!("draft-{turn}"),
+                text: (format!("draft-{turn}")).into(),
                 message_id: Some(format!("msg-{turn}")),
                 subagent_id: None,
             },
@@ -165,7 +165,7 @@ fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
             seq,
             &turn_id,
             AgentTimelineItem::AssistantMessage {
-                text: format!("final-{turn}"),
+                text: (format!("final-{turn}")).into(),
                 message_id: Some(format!("msg-{turn}")),
                 subagent_id: None,
             },
@@ -214,7 +214,7 @@ fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
     assert_eq!(
         history.items.first(),
         Some(&AgentTimelineItem::AssistantMessage {
-            text: "final-10".to_string(),
+            text: ("final-10".to_string()).into(),
             message_id: Some("msg-10".to_string()),
             subagent_id: None,
         })
@@ -277,7 +277,7 @@ fn read_assistant_texts_for_turn_keeps_last_snapshot_inside_the_window() {
             turn * 3 + 2,
             &turn_id,
             AgentTimelineItem::AssistantMessage {
-                text: format!("draft-{turn}"),
+                text: (format!("draft-{turn}")).into(),
                 message_id: Some("same".to_string()),
                 subagent_id: None,
             },
@@ -286,7 +286,7 @@ fn read_assistant_texts_for_turn_keeps_last_snapshot_inside_the_window() {
             turn * 3 + 3,
             &turn_id,
             AgentTimelineItem::AssistantMessage {
-                text: format!("final-{turn}"),
+                text: (format!("final-{turn}")).into(),
                 message_id: Some("same".to_string()),
                 subagent_id: None,
             },
@@ -414,7 +414,7 @@ fn read_timeline_replays_collab_prompt_and_ended_roster() {
         envelope(
             3,
             AgentTimelineItem::AssistantMessage {
-                text: "查完了".to_string(),
+                text: ("查完了".to_string()).into(),
                 message_id: Some("m1".to_string()),
                 subagent_id: Some("thr_child".to_string()),
             },
@@ -448,7 +448,7 @@ fn read_timeline_replays_collab_prompt_and_ended_roster() {
                 status: SubagentRosterStatus::Ended,
             },
             AgentTimelineItem::AssistantMessage {
-                text: "查完了".to_string(),
+                text: ("查完了".to_string()).into(),
                 message_id: Some("m1".to_string()),
                 subagent_id: Some("thr_child".to_string()),
             },

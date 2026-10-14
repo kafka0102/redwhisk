@@ -276,7 +276,7 @@ impl GrokStreamMapper {
                         None => format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn")),
                     };
                     events.push(self.timeline(AgentTimelineItem::AssistantMessage {
-                        text: snapshot_text(text),
+                        text: text.into(),
                         message_id: Some(message_id),
                         subagent_id,
                     }));
@@ -289,7 +289,7 @@ impl GrokStreamMapper {
                     }
                     let text = self.append_reasoning_text(subagent_id.as_deref(), &delta);
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
-                        text: snapshot_text(text),
+                        text: text.into(),
                         duration_ms: None,
                         subagent_id,
                     }));
@@ -452,11 +452,6 @@ fn tool_status(status: Option<&str>) -> ToolCallStatus {
 
 fn string_field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
-}
-
-/// 时间轴事件仍要拥有一份 `String`。`Arc<str>` 不能拆成 `String`，这里复制正文。
-fn snapshot_text(text: Arc<str>) -> String {
-    text.to_string()
 }
 
 fn non_empty(text: &str) -> Option<String> {

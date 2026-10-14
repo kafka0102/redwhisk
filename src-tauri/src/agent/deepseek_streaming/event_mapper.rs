@@ -138,7 +138,7 @@ impl DeepSeekStreamMapper {
             entry.clone()
         };
         vec![self.timeline(AgentTimelineItem::AssistantMessage {
-            text: merged,
+            text: (merged).into(),
             message_id: Some(id),
             subagent_id: None,
         })]
@@ -155,7 +155,7 @@ impl DeepSeekStreamMapper {
             entry.clone()
         };
         vec![self.timeline(AgentTimelineItem::Reasoning {
-            text: merged,
+            text: (merged).into(),
             // 已提交块不是进行中的推理。duration 表示这块已经结束，避免前端停在「正在思考」。
             duration_ms: self.committed_thought_duration_ms(),
             subagent_id: None,

@@ -2770,7 +2770,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::AssistantMessage {
-                        text: "归档后的回答".to_string(),
+                        text: ("归档后的回答".to_string()).into(),
                         message_id: Some("a1".to_string()),
                         subagent_id: None,
                     },

@@ -86,7 +86,7 @@ fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::Reasoning {
-                    text: "分析中".to_string(),
+                    text: ("分析中".to_string()).into(),
                     duration_ms: Some(10),
                     subagent_id: None,
                 },
@@ -124,7 +124,7 @@ fn build_issue_session_archive_filters_out_tool_calls_and_reasoning_for_json() {
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage {
-                    text: "已完成归纳".to_string(),
+                    text: ("已完成归纳".to_string()).into(),
                     message_id: Some("a1".to_string()),
                     subagent_id: None,
                 },
@@ -422,7 +422,7 @@ fn build_issue_session_archive_keeps_subagent_source_without_roster_bookkeeping(
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage {
-                    text: "子路结论".to_string(),
+                    text: ("子路结论".to_string()).into(),
                     message_id: Some("a1".to_string()),
                     subagent_id: Some("thr_child".to_string()),
                 },

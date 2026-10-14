@@ -180,9 +180,9 @@ fn timeline_texts(events: &[AgentStreamEvent], kind: &str) -> Vec<String> {
             AgentStreamEvent::Timeline { item, .. } => match (kind, item) {
                 ("user", AgentTimelineItem::UserMessage { text, .. }) => Some(text.clone()),
                 ("assistant", AgentTimelineItem::AssistantMessage { text, .. }) => {
-                    Some(text.clone())
+                    Some(text.to_string())
                 }
-                ("reasoning", AgentTimelineItem::Reasoning { text, .. }) => Some(text.clone()),
+                ("reasoning", AgentTimelineItem::Reasoning { text, .. }) => Some(text.to_string()),
                 _ => None,
             },
             _ => None,

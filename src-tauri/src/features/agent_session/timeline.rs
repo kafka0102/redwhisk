@@ -365,7 +365,7 @@ fn read_terminal_timeline_log(path: &Path) -> Result<Vec<AgentTimelineItem>, Com
     }
 
     Ok(vec![AgentTimelineItem::AssistantMessage {
-        text,
+        text: text.into(),
         message_id: Some("session-log".to_string()),
         subagent_id: None,
     }])
@@ -394,9 +394,10 @@ pub(super) fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Opti
     use crate::types::agent_session_stream::ToolCallDetail;
 
     let text = match item {
-        AgentTimelineItem::AssistantMessage { text, .. }
-        | AgentTimelineItem::UserMessage { text, .. }
-        | AgentTimelineItem::Reasoning { text, .. } => text.as_str(),
+        AgentTimelineItem::AssistantMessage { text, .. } | AgentTimelineItem::Reasoning { text, .. } => {
+            text.as_str()
+        }
+        AgentTimelineItem::UserMessage { text, .. } => text.as_str(),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => command.as_str(),
             ToolCallDetail::Read { path, .. }

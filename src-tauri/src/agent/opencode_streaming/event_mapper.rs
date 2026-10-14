@@ -60,7 +60,7 @@ pub fn map_ndjson_value(value: &Value, ctx: &MapContext) -> MapOutcome {
                 events: vec![timeline(
                     &ctx.turn_id,
                     AgentTimelineItem::AssistantMessage {
-                        text,
+                        text: text.into(),
                         message_id: Some(message_id),
                         subagent_id: None,
                     },
@@ -79,7 +79,7 @@ pub fn map_ndjson_value(value: &Value, ctx: &MapContext) -> MapOutcome {
                 events: vec![timeline(
                     &ctx.turn_id,
                     AgentTimelineItem::Reasoning {
-                        text,
+                        text: text.into(),
                         duration_ms: None,
                         subagent_id: None,
                     },

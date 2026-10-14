@@ -4,7 +4,102 @@
 //! `AgentStreamEvent`。命名遵循项目约定：struct 使用 `camelCase`，事件与
 //! 状态 enum 使用 `snake_case`。前端只消费这些结构，不发起业务写入。
 
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
+
+/// 助手正文与推理的共享快照。序列化仍是 JSON 字符串。
+/// 克隆只增加引用计数，下一帧需要追加时才复制正文。
+#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SnapshotText(Arc<str>);
+
+impl SnapshotText {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for SnapshotText {
+    fn default() -> Self {
+        Self(Arc::from(""))
+    }
+}
+
+impl From<String> for SnapshotText {
+    fn from(value: String) -> Self {
+        Self(Arc::from(value))
+    }
+}
+
+impl From<&str> for SnapshotText {
+    fn from(value: &str) -> Self {
+        Self(Arc::from(value))
+    }
+}
+
+impl From<Arc<str>> for SnapshotText {
+    fn from(value: Arc<str>) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<str> for SnapshotText {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::borrow::Borrow<str> for SnapshotText {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl std::ops::Deref for SnapshotText {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq for SnapshotText {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl PartialEq<str> for SnapshotText {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for SnapshotText {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for SnapshotText {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Hash for SnapshotText {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+impl std::fmt::Display for SnapshotText {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
 
 /// 顶层结构化事件，对应 `agent-session-stream-event` 广播载荷中的 `event` 字段。
 ///
@@ -90,7 +185,7 @@ pub enum AgentTimelineItem {
         message_id: Option<String>,
     },
     AssistantMessage {
-        text: String,
+        text: SnapshotText,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message_id: Option<String>,
         /// 子智能体 thread id。缺省表示主智能体。必须在项上，重读日志时广播外壳不会留下。
@@ -98,7 +193,7 @@ pub enum AgentTimelineItem {
         subagent_id: Option<String>,
     },
     Reasoning {
-        text: String,
+        text: SnapshotText,
         /// reasoning 块持续时长（毫秒）。仅在块结束时（force flush）填充；
         /// 中间节流 flush 为 None。前端据此展示「思考过程 持续了 X 秒」。
         #[serde(skip_serializing_if = "Option::is_none")]

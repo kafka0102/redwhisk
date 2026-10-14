@@ -520,9 +520,10 @@ fn latest_output_from_timeline_item(
     use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail};
 
     match item {
-        AgentTimelineItem::AssistantMessage { text, .. }
-        | AgentTimelineItem::UserMessage { text, .. }
-        | AgentTimelineItem::Reasoning { text, .. } => Some(text.as_str()),
+        AgentTimelineItem::AssistantMessage { text, .. } | AgentTimelineItem::Reasoning { text, .. } => {
+            Some(text.as_str())
+        }
+        AgentTimelineItem::UserMessage { text, .. } => Some(text.as_str()),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => Some(command.as_str()),
             ToolCallDetail::Read { path, .. }

@@ -63,11 +63,11 @@ fn remember_assistant_text(
         if let Some(existing) = latest_by_message.iter_mut().rev().find(|(id, source, _)| {
             id.as_deref() == Some(message_id.as_str()) && source == &subagent_id
         }) {
-            existing.2 = text;
+            existing.2 = text.to_string();
             return;
         }
     }
-    latest_by_message.push((message_id, subagent_id, text));
+    latest_by_message.push((message_id, subagent_id, text.to_string()));
 }
 
 /// 折叠项回读：按会话日志行的起始字节只读这一行，解析成时间轴项。

@@ -74,7 +74,7 @@ fn json_archive_keeps_distinct_message_ids_and_errors() {
         timeline(
             1,
             AgentTimelineItem::AssistantMessage {
-                text: "甲".to_string(),
+                text: ("甲".to_string()).into(),
                 message_id: Some("a".to_string()),
                 subagent_id: None,
             },
@@ -88,7 +88,7 @@ fn json_archive_keeps_distinct_message_ids_and_errors() {
         timeline(
             3,
             AgentTimelineItem::AssistantMessage {
-                text: "乙".to_string(),
+                text: ("乙".to_string()).into(),
                 message_id: Some("b".to_string()),
                 subagent_id: Some("child".to_string()),
             },

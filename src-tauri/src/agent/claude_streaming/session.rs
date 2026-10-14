@@ -104,7 +104,7 @@ struct SessionState {
     ///
     /// 用于避免完整 assistant 消息到达时把相同 message_id / 相同文本再写入一次，
     /// 否则 structured log 会出现重复结论行。
-    flushed_text_messages: HashMap<String, String>,
+    flushed_text_messages: HashMap<String, crate::types::agent_session_stream::SnapshotText>,
     /// 流式 reasoning（thinking）增量累积：block_index → 累积文本。
     ///
     /// 与 Codex 的 reasoning_buffer 对齐：Claude 的 ThinkingDelta 原始片段
@@ -670,7 +670,7 @@ fn build_events(
                             events.push(timeline_event(
                                 turn_id,
                                 AgentTimelineItem::AssistantMessage {
-                                    text,
+                                    text: text.into(),
                                     message_id: Some(message_id),
                                     subagent_id: None,
                                 },
@@ -679,13 +679,13 @@ fn build_events(
                     }
                     MappedBlock::Reasoning { text } => {
                         if !text.is_empty() {
-                            if flushed_reasonings.contains(&text) {
+                            if flushed_reasonings.contains(text.as_str()) {
                                 continue;
                             }
                             events.push(timeline_event(
                                 turn_id,
                                 AgentTimelineItem::Reasoning {
-                                    text,
+                                    text: text.into(),
                                     // 完整 assistant 消息无 per-block 计时上下文，不填充 duration。
                                     duration_ms: None,
                                     subagent_id: None,
@@ -1099,13 +1099,13 @@ fn try_flush_text_delta(
     let message_id = claude_text_message_id(&event_turn_id, message_index, index);
     guard
         .flushed_text_messages
-        .insert(message_id.clone(), text.clone());
+        .insert(message_id.clone(), text.as_str().into());
     // 返回完整文本作为 AssistantMessage。message_id 派生为
     // message_id 带 turn_id + message_index + block_index，跨 turn / message 唯一，
     // 避免第二轮回复覆盖第一轮同位置回复。
     Some(AgentStreamEvent::Timeline {
         item: AgentTimelineItem::AssistantMessage {
-            text,
+            text: text.into(),
             message_id: Some(message_id),
             subagent_id: None,
         },
@@ -1191,7 +1191,7 @@ fn try_flush_reasoning_delta(
     let turn_id = guard.current_turn_id.clone();
     Some(AgentStreamEvent::Timeline {
         item: AgentTimelineItem::Reasoning {
-            text,
+            text: text.into(),
             duration_ms,
             subagent_id: None,
         },

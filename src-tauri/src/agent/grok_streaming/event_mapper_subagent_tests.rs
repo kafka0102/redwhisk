@@ -16,7 +16,7 @@ fn assistant_text(event: &AgentStreamEvent) -> Option<String> {
         AgentStreamEvent::Timeline {
             item: AgentTimelineItem::AssistantMessage { text, .. },
             ..
-        } => Some(text.clone()),
+        } => Some(text.to_string()),
         _ => None,
     }
 }

@@ -287,8 +287,8 @@ fn assert_process_gone(pid_file: &Path) {
 fn timeline_contains(event: &AgentStreamEvent, needle: &str) -> bool {
     match event {
         AgentStreamEvent::Timeline { item, .. } => match item {
-            AgentTimelineItem::UserMessage { text, .. }
-            | AgentTimelineItem::AssistantMessage { text, .. }
+            AgentTimelineItem::UserMessage { text, .. } => text.contains(needle),
+            AgentTimelineItem::AssistantMessage { text, .. }
             | AgentTimelineItem::Reasoning { text, .. } => text.contains(needle),
             _ => false,
         },
@@ -303,7 +303,7 @@ fn timeline_texts(events: &[AgentStreamEvent], kind: &str) -> Vec<String> {
             AgentStreamEvent::Timeline { item, .. } => match (kind, item) {
                 ("user", AgentTimelineItem::UserMessage { text, .. }) => Some(text.clone()),
                 ("assistant", AgentTimelineItem::AssistantMessage { text, .. }) => {
-                    Some(text.clone())
+                    Some(text.to_string())
                 }
                 _ => None,
             },

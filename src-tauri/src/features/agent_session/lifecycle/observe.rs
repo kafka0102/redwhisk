@@ -140,7 +140,7 @@ mod tests {
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage {
-                    text: "本地历史".to_string(),
+                    text: ("本地历史".to_string()).into(),
                     message_id: Some("msg-local".to_string()),
                     subagent_id: None,
                 },
@@ -163,7 +163,7 @@ mod tests {
         assert_eq!(
             result.items,
             vec![AgentTimelineItem::AssistantMessage {
-                text: "本地历史".to_string(),
+                text: ("本地历史".to_string()).into(),
                 message_id: Some("msg-local".to_string()),
                 subagent_id: None,
             }]

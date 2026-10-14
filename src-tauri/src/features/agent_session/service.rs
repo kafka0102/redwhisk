@@ -3158,7 +3158,7 @@ mod tests {
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage {
-                    text: "历史回答".to_string(),
+                    text: ("历史回答".to_string()).into(),
                     message_id: Some("msg-1".to_string()),
                     subagent_id: None,
                 },
@@ -3192,7 +3192,7 @@ mod tests {
         assert_eq!(
             history.items,
             vec![AgentTimelineItem::AssistantMessage {
-                text: "历史回答".to_string(),
+                text: ("历史回答".to_string()).into(),
                 message_id: Some("msg-1".to_string()),
                 subagent_id: None,
             }]
@@ -3246,7 +3246,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析中".to_string(),
+                        text: ("分析中".to_string()).into(),
                         duration_ms: Some(10),
                         subagent_id: None,
                     },
@@ -3284,7 +3284,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::AssistantMessage {
-                        text: "已完成归纳".to_string(),
+                        text: ("已完成归纳".to_string()).into(),
                         message_id: Some("a1".to_string()),
                         subagent_id: None,
                     },
@@ -3353,7 +3353,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::AssistantMessage {
-                        text: "你".to_string(),
+                        text: ("你".to_string()).into(),
                         message_id: Some("msg-1".to_string()),
                         subagent_id: None,
                     },
@@ -3369,7 +3369,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::AssistantMessage {
-                        text: "你好".to_string(),
+                        text: ("你好".to_string()).into(),
                         message_id: Some("msg-1".to_string()),
                         subagent_id: None,
                     },
@@ -3385,7 +3385,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析一步".to_string(),
+                        text: ("分析一步".to_string()).into(),
                         duration_ms: None,
                         subagent_id: None,
                     },
@@ -3401,7 +3401,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析完成".to_string(),
+                        text: ("分析完成".to_string()).into(),
                         duration_ms: Some(4200),
                         subagent_id: None,
                     },
@@ -3417,7 +3417,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析完成".to_string(),
+                        text: ("分析完成".to_string()).into(),
                         duration_ms: None,
                         subagent_id: None,
                     },
@@ -3485,12 +3485,12 @@ mod tests {
             history.items,
             vec![
                 AgentTimelineItem::AssistantMessage {
-                    text: "你好".to_string(),
+                    text: ("你好".to_string()).into(),
                     message_id: Some("msg-1".to_string()),
                     subagent_id: None,
                 },
                 AgentTimelineItem::Reasoning {
-                    text: "分析完成".to_string(),
+                    text: ("分析完成".to_string()).into(),
                     duration_ms: Some(4200),
                     subagent_id: None,
                 },
@@ -3521,7 +3521,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析中".to_string(),
+                        text: ("分析中".to_string()).into(),
                         duration_ms: None,
                         subagent_id: None,
                     },
@@ -3537,7 +3537,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::Reasoning {
-                        text: "分析完成".to_string(),
+                        text: ("分析完成".to_string()).into(),
                         duration_ms: None,
                         subagent_id: None,
                     },
@@ -3553,7 +3553,7 @@ mod tests {
                 epoch: "epoch-test".to_string(),
                 event: AgentStreamEvent::Timeline {
                     item: AgentTimelineItem::AssistantMessage {
-                        text: "结论".to_string(),
+                        text: ("结论".to_string()).into(),
                         message_id: Some("msg-1".to_string()),
                         subagent_id: None,
                     },
@@ -3577,12 +3577,12 @@ mod tests {
             history.items,
             vec![
                 AgentTimelineItem::Reasoning {
-                    text: "分析完成".to_string(),
+                    text: ("分析完成".to_string()).into(),
                     duration_ms: Some(4_000),
                     subagent_id: None,
                 },
                 AgentTimelineItem::AssistantMessage {
-                    text: "结论".to_string(),
+                    text: ("结论".to_string()).into(),
                     message_id: Some("msg-1".to_string()),
                     subagent_id: None,
                 },
@@ -3615,7 +3615,7 @@ mod tests {
                     message_id: Some("u1".to_string()),
                 },
                 AgentTimelineItem::AssistantMessage {
-                    text: "我会查询北京天气。".to_string(),
+                    text: ("我会查询北京天气。".to_string()).into(),
                     message_id: Some("a1".to_string()),
                     subagent_id: None,
                 },
@@ -3739,7 +3739,7 @@ mod tests {
             epoch: "epoch-test".to_string(),
             event: AgentStreamEvent::Timeline {
                 item: AgentTimelineItem::AssistantMessage {
-                    text: "本地历史".to_string(),
+                    text: ("本地历史".to_string()).into(),
                     message_id: Some("msg-local".to_string()),
                     subagent_id: None,
                 },
@@ -3787,7 +3787,7 @@ mod tests {
         assert_eq!(
             result.items,
             vec![AgentTimelineItem::AssistantMessage {
-                text: "本地历史".to_string(),
+                text: ("本地历史".to_string()).into(),
                 message_id: Some("msg-local".to_string()),
                 subagent_id: None,
             }]

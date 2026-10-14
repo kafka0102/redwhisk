@@ -1167,7 +1167,7 @@ fn flush_agent_message_delta(
     vec![AgentStreamEvent::Timeline {
         item: stamp_output_source(
             AgentTimelineItem::AssistantMessage {
-                text,
+                text: text.into(),
                 message_id: Some(key.item_id.clone()),
                 subagent_id: None,
             },
@@ -1216,7 +1216,7 @@ fn flush_reasoning_delta(
         // Codex 的 reasoning 不携带 per-block 计时（仅 Claude 支持），duration_ms 留 None。
         item: stamp_output_source(
             AgentTimelineItem::Reasoning {
-                text,
+                text: text.into(),
                 duration_ms: None,
                 subagent_id: None,
             },
