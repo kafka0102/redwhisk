@@ -2,7 +2,11 @@ import { render, waitFor } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentStreamEventEnvelope } from "../agent-stream-types";
+import type {
+  AgentStreamEventEnvelope,
+  AgentTimelineItem,
+  TimelineHistoryItem,
+} from "../agent-stream-types";
 import {
   clearAgentMessageStreamCacheForTest,
   useAgentMessageStream,
@@ -36,6 +40,10 @@ vi.mock("../agent-session-commands", () => ({
 
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+
+function historyItems(items: AgentTimelineItem[]): TimelineHistoryItem[] {
+  return items.map((item) => ({ item }));
+}
 
 let originalRequestAnimationFrame: typeof window.requestAnimationFrame;
 let originalCancelAnimationFrame: typeof window.cancelAnimationFrame;
@@ -111,10 +119,10 @@ describe("useAgentMessageStream", () => {
   it("readAgentTimeline 完成后用历史 timeline 种子 state", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         { type: "user_message", text: "你好", messageId: "u1" },
         { type: "assistant_message", text: "你好！", messageId: "a1" },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -134,7 +142,7 @@ describe("useAgentMessageStream", () => {
   it("readAgentTimeline 完成后用历史 effort 初始化 state", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: "high",
       model: null,
     });
@@ -154,7 +162,7 @@ describe("useAgentMessageStream", () => {
   it("readAgentTimeline 完成后用历史 model 初始化 state", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: "gpt-5.2",
     });
@@ -190,7 +198,7 @@ describe("useAgentMessageStream", () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -223,7 +231,7 @@ describe("useAgentMessageStream", () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -288,7 +296,7 @@ describe("useAgentMessageStream", () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -371,10 +379,13 @@ describe("useAgentMessageStream", () => {
     dispatchFrame();
 
     const state = getState()!;
+    const visible = state.entries.filter(
+      (entry) => entry.kind !== "turn_boundary",
+    );
     expect(state.turnStatus).toBe("idle");
     expect(state.turnInterrupted).toBe(false);
-    expect(state.entries).toHaveLength(2);
-    expect(state.entries[1].item).toEqual({
+    expect(visible).toHaveLength(2);
+    expect(visible[1].item).toEqual({
       type: "assistant_message",
       text: "已完成",
       messageId: "a-race",
@@ -387,7 +398,7 @@ describe("useAgentMessageStream", () => {
   it("忽略其它 projectId/sessionId 的事件", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -417,7 +428,7 @@ describe("useAgentMessageStream", () => {
   it("unmount 时调用 unlisten", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -436,7 +447,9 @@ describe("useAgentMessageStream", () => {
   it("切换 session 时重置 state", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [{ type: "user_message", text: "旧", messageId: "u1" }],
+      items: historyItems([
+        { type: "user_message", text: "旧", messageId: "u1" },
+      ]),
       effort: null,
       model: null,
     });
@@ -451,7 +464,9 @@ describe("useAgentMessageStream", () => {
 
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [{ type: "user_message", text: "新", messageId: "u2" }],
+      items: historyItems([
+        { type: "user_message", text: "新", messageId: "u2" },
+      ]),
       effort: null,
       model: null,
     });
@@ -473,16 +488,20 @@ describe("useAgentMessageStream", () => {
     expect(state.entries[0].id).toBe("u2");
   });
 
-  it("切回已缓存 session 时先恢复缓存预览，再后台重读 timeline 校正", async () => {
+  it("切回已缓存 session 时恢复整段消息流，不再重读打开回放", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValueOnce({
-      items: [{ type: "user_message", text: "旧", messageId: "u1" }],
+      items: historyItems([
+        { type: "user_message", text: "旧", messageId: "u1" },
+      ]),
       effort: null,
       model: null,
     });
     readAgentTimelineMock.mockResolvedValueOnce({
-      items: [{ type: "user_message", text: "新", messageId: "u2" }],
+      items: historyItems([
+        { type: "user_message", text: "新", messageId: "u2" },
+      ]),
       effort: null,
       model: null,
     });
@@ -502,30 +521,18 @@ describe("useAgentMessageStream", () => {
     });
     expect(getState()!.entries[0]?.id).toBe("u2");
 
-    readAgentTimelineMock.mockReset();
-    readAgentTimelineMock.mockResolvedValueOnce({
-      items: [{ type: "user_message", text: "最新", messageId: "u3" }],
-      effort: null,
-      model: null,
-    });
+    const readsBeforeReturn = readAgentTimelineMock.mock.calls.length;
     rerenderWith({ projectId: 1, sessionId: 17 });
 
-    expect(getState()!.isInitialized).toBe(false);
-    expect(getState()!.entries).toHaveLength(0);
-
-    dispatchFrame();
-
     expect(getState()!.entries[0]?.id).toBe("u1");
+    expect(getState()!.entries[0]?.item).toMatchObject({ text: "旧" });
 
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(readAgentTimelineMock).toHaveBeenCalledWith({
-      projectId: 1,
-      sessionId: 17,
-    });
-    expect(getState()!.entries[0]?.id).toBe("u3");
+    expect(readAgentTimelineMock.mock.calls.length).toBe(readsBeforeReturn);
+    expect(getState()!.entries[0]?.id).toBe("u1");
   });
 });

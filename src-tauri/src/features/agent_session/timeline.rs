@@ -2,13 +2,14 @@ use serde_json::Value;
 use std::path::Path;
 
 use crate::agent::pty_session_manager::read_terminal_snapshot;
+use crate::types::agent_session::TimelineHistoryItem;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
-use super::session_log_tail::{read_session_log_turn_window, OPEN_REPLAY_TURN_LIMIT};
+use super::session_log_tail::{read_session_log_turn_window_located, OPEN_REPLAY_TURN_LIMIT};
 
 #[path = "timeline_tool_merge.rs"]
 mod timeline_tool_merge;
@@ -20,7 +21,7 @@ const LATEST_OUTPUT_MAX_CHARS: usize = 500;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct StructuredTimelineHistory {
-    pub(crate) items: Vec<AgentTimelineItem>,
+    pub(crate) items: Vec<TimelineHistoryItem>,
     pub(crate) effort: Option<String>,
     pub(crate) model: Option<String>,
 }
@@ -37,7 +38,14 @@ pub(crate) fn read_timeline_from_log_path(
         return Ok(history);
     }
 
-    let items = read_terminal_timeline_log(path)?;
+    let items = read_terminal_timeline_log(path)?
+        .into_iter()
+        .map(|item| TimelineHistoryItem {
+            item,
+            log_offset: None,
+            turn_id: None,
+        })
+        .collect();
     Ok(StructuredTimelineHistory {
         items,
         effort: None,
@@ -48,7 +56,7 @@ pub(crate) fn read_timeline_from_log_path(
 fn read_structured_timeline_log(
     path: &Path,
 ) -> Result<Option<StructuredTimelineHistory>, CommandError> {
-    let lines = match read_session_log_turn_window(path, OPEN_REPLAY_TURN_LIMIT) {
+    let lines = match read_session_log_turn_window_located(path, OPEN_REPLAY_TURN_LIMIT) {
         Ok(lines) => lines,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Some(StructuredTimelineHistory::default()));
@@ -58,9 +66,10 @@ fn read_structured_timeline_log(
     let mut saw_structured_line = false;
     let mut history = StructuredTimelineHistory::default();
     let mut pending_reasoning_started_at: Option<i64> = None;
+    let mut current_turn_id: Option<String> = None;
 
     for line in lines {
-        let trimmed = line.trim();
+        let trimmed = line.text.trim();
         if trimmed.is_empty() {
             continue;
         }
@@ -74,9 +83,18 @@ fn read_structured_timeline_log(
         saw_structured_line = true;
         for event in events {
             match event {
+                AgentStreamEvent::TurnStarted { turn_id } => {
+                    current_turn_id = turn_id.or(current_turn_id);
+                }
                 AgentStreamEvent::Timeline {
-                    item, timestamp, ..
+                    item,
+                    turn_id,
+                    timestamp,
+                    ..
                 } => {
+                    if turn_id.is_some() {
+                        current_turn_id = turn_id;
+                    }
                     if !matches!(item, AgentTimelineItem::Reasoning { .. }) {
                         finalize_pending_reasoning_duration(
                             &mut history.items,
@@ -100,7 +118,14 @@ fn read_structured_timeline_log(
                         }
                     );
 
-                    push_compacted_timeline_item(&mut history.items, item);
+                    push_compacted_timeline_item(
+                        &mut history.items,
+                        TimelineHistoryItem {
+                            item,
+                            log_offset: Some(line.offset),
+                            turn_id: current_turn_id.clone(),
+                        },
+                    );
 
                     if has_explicit_reasoning_duration {
                         pending_reasoning_started_at = None;
@@ -140,7 +165,7 @@ pub(super) fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStr
 }
 
 fn finalize_pending_reasoning_duration(
-    items: &mut [AgentTimelineItem],
+    items: &mut [TimelineHistoryItem],
     started_at: Option<i64>,
     end_timestamp: i64,
 ) {
@@ -150,7 +175,9 @@ fn finalize_pending_reasoning_duration(
     if end_timestamp <= started_at {
         return;
     }
-    let Some(AgentTimelineItem::Reasoning { duration_ms, .. }) = items.last_mut() else {
+    let Some(AgentTimelineItem::Reasoning { duration_ms, .. }) =
+        items.last_mut().map(|entry| &mut entry.item)
+    else {
         return;
     };
     if duration_ms.is_none() {
@@ -158,8 +185,12 @@ fn finalize_pending_reasoning_duration(
     }
 }
 
-fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentTimelineItem) {
-    match &item {
+fn push_compacted_timeline_item(
+    items: &mut Vec<TimelineHistoryItem>,
+    incoming: TimelineHistoryItem,
+) {
+    let item = &incoming.item;
+    match item {
         AgentTimelineItem::AssistantMessage {
             message_id: Some(message_id),
             subagent_id,
@@ -167,7 +198,7 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
         } => {
             if let Some(index) = items.iter().rposition(|existing| {
                 matches!(
-                    existing,
+                    &existing.item,
                     AgentTimelineItem::AssistantMessage {
                         message_id: Some(existing_id),
                         subagent_id: existing_source,
@@ -180,10 +211,10 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                 // 已完成的 tool_call，turn_completed(end_turn) 会被误判成异常中断。
                 // 与前端 reducer 一致：仍是尾项时原地替换，中间已有别的条目则挪到尾部。
                 if index + 1 == items.len() {
-                    items[index] = item;
+                    items[index] = incoming;
                 } else {
                     items.remove(index);
-                    items.push(item);
+                    items.push(incoming);
                 }
                 return;
             }
@@ -194,20 +225,20 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
         } => {
             if let Some(index) = items.iter().rposition(|existing| {
                 matches!(
-                    existing,
+                    &existing.item,
                     AgentTimelineItem::UserMessage {
                         message_id: Some(existing_id),
                         ..
                     } if existing_id == message_id
                 )
             }) {
-                items[index] = item;
+                items[index] = incoming;
                 return;
             }
         }
         AgentTimelineItem::Reasoning { subagent_id, .. } => {
             let same_source = matches!(
-                items.last(),
+                items.last().map(|entry| &entry.item),
                 Some(AgentTimelineItem::Reasoning {
                     subagent_id: existing_source,
                     ..
@@ -215,8 +246,10 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
             );
             if same_source {
                 if let Some(last) = items.last_mut() {
-                    let previous = last.clone();
-                    *last = merge_reasoning_timeline_item(previous, item);
+                    let previous = last.item.clone();
+                    last.item = merge_reasoning_timeline_item(previous, incoming.item);
+                    last.log_offset = incoming.log_offset.or(last.log_offset);
+                    last.turn_id = incoming.turn_id.or(last.turn_id.clone());
                     return;
                 }
             }
@@ -228,7 +261,7 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
         } => {
             if let Some(index) = items.iter().rposition(|existing| {
                 matches!(
-                    existing,
+                    &existing.item,
                     AgentTimelineItem::ToolCall {
                         call_id: existing_id,
                         subagent_id: existing_source,
@@ -236,15 +269,22 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
                     } if existing_id == call_id && existing_source == subagent_id
                 )
             }) {
-                let previous = items[index].clone();
-                items[index] = merge_tool_call_timeline_item(previous, item);
+                let previous = items[index].item.clone();
+                items[index].item = merge_tool_call_timeline_item(previous, incoming.item);
+                items[index].log_offset = incoming.log_offset.or(items[index].log_offset);
+                items[index].turn_id = incoming.turn_id.or(items[index].turn_id.clone());
                 return;
             }
         }
         AgentTimelineItem::Todo { .. } => {
-            if matches!(items.last(), Some(AgentTimelineItem::Todo { .. })) {
+            if matches!(
+                items.last().map(|entry| &entry.item),
+                Some(AgentTimelineItem::Todo { .. })
+            ) {
                 if let Some(last) = items.last_mut() {
-                    *last = item;
+                    last.item = incoming.item;
+                    last.log_offset = incoming.log_offset.or(last.log_offset);
+                    last.turn_id = incoming.turn_id.or(last.turn_id.clone());
                     return;
                 }
             }
@@ -252,7 +292,7 @@ fn push_compacted_timeline_item(items: &mut Vec<AgentTimelineItem>, item: AgentT
         _ => {}
     }
 
-    items.push(item);
+    items.push(incoming);
 }
 
 fn merge_reasoning_timeline_item(
@@ -379,7 +419,7 @@ pub(super) fn latest_output_from_session_log(log_path: &str) -> Option<String> {
     let path = Path::new(log_path);
     if let Ok(Some(history)) = read_structured_timeline_log(path) {
         for item in history.items.iter().rev() {
-            if let Some(output) = latest_output_from_timeline_item(item) {
+            if let Some(output) = latest_output_from_timeline_item(&item.item) {
                 return Some(output);
             }
         }
@@ -394,9 +434,8 @@ pub(super) fn latest_output_from_timeline_item(item: &AgentTimelineItem) -> Opti
     use crate::types::agent_session_stream::ToolCallDetail;
 
     let text = match item {
-        AgentTimelineItem::AssistantMessage { text, .. } | AgentTimelineItem::Reasoning { text, .. } => {
-            text.as_str()
-        }
+        AgentTimelineItem::AssistantMessage { text, .. }
+        | AgentTimelineItem::Reasoning { text, .. } => text.as_str(),
         AgentTimelineItem::UserMessage { text, .. } => text.as_str(),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => command.as_str(),

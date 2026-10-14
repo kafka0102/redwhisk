@@ -18,6 +18,7 @@ import { useCallback, memo, useMemo, useState } from "react";
 
 import { AgentComposer } from "../composer/agent-composer";
 import { AgentMessageStreamView } from "../message-stream/agent-message-stream";
+import { useExpandTimelineEntry } from "../message-stream/use-expand-timeline-entry";
 import { useAgentMessageStream } from "../message-stream/use-agent-message-stream";
 import { PermissionCard } from "../message-stream/permission-card";
 import {
@@ -75,6 +76,12 @@ export const AgentSessionView = memo(function AgentSessionView({
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
+  const onEntryExpandedChange = useExpandTimelineEntry(
+    projectId,
+    sessionId,
+    state,
+    dispatch,
+  );
   const [outputSource, setOutputSource] =
     useState<OutputSourceSelection>("all");
   const canUseExternalTurnRunning =
@@ -130,6 +137,7 @@ export const AgentSessionView = memo(function AgentSessionView({
         isActive={isActive}
         autoScrollOnActivate={!isReadOnly}
         sessionId={sessionId}
+        onEntryExpandedChange={onEntryExpandedChange}
       />
 
       <div className="agents-session-view__permissions">

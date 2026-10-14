@@ -242,6 +242,7 @@ fn build_json_issue_session_archive(
                     seq: (index + 1) as u64,
                     timestamp: 0,
                 },
+                log_offset: None,
             })
         })
         .collect::<Result<Vec<_>, _>>()
@@ -294,6 +295,10 @@ pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
 #[cfg(test)]
 #[path = "log_path_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "log_path_subagent_archive_tests.rs"]
+mod subagent_archive_tests;
 
 #[cfg(test)]
 #[path = "session_log_archive_tests.rs"]

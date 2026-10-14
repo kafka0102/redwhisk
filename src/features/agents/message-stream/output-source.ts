@@ -90,11 +90,10 @@ export function projectMessageStream(
   turnRunning = state.turnStatus === "running",
 ): MessageStreamOutputView {
   const options = outputSourceOptions(state.subagents ?? [], turnRunning);
-  const entries = state.entries.some(
-    (entry) => entry.item.type === "subagent_roster",
-  )
-    ? state.entries.filter((entry) => entry.item.type !== "subagent_roster")
-    : state.entries;
+  const entries = state.entries.filter(
+    (entry) =>
+      entry.kind !== "turn_boundary" && entry.item.type !== "subagent_roster",
+  );
   return {
     entries:
       selection === "all"

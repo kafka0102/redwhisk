@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::agent_profile::AgentType;
-use crate::types::agent_session_stream::{AgentMode, AgentModel, AgentTimelineItem};
+use crate::types::agent_session_stream::{AgentMode, AgentModel};
 use crate::types::issue::IssueStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -485,10 +485,6 @@ pub struct ReadAgentTimelineInput {
     pub session_id: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadAgentTimelineResult {
-    pub items: Vec<AgentTimelineItem>,
-    pub effort: Option<String>,
-    pub model: Option<String>,
-}
+pub use crate::types::agent_session_timeline::{
+    ReadAgentTimelineResult, ReadTimelineItemAtOffsetInput, TimelineHistoryItem,
+};

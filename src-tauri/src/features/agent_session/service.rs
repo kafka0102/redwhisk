@@ -1488,6 +1488,16 @@ impl<'connection> AgentSessionService<'connection> {
         let session = self.find_project_session(project_id, session_id)?;
         super::lifecycle::read_timeline_for_session(&session, handle)
     }
+
+    pub fn read_timeline_item_at_offset(
+        &self,
+        project_id: i64,
+        session_id: i64,
+        log_offset: u64,
+    ) -> Result<crate::types::agent_session_stream::AgentTimelineItem, CommandError> {
+        let session = self.find_project_session(project_id, session_id)?;
+        super::read_timeline_item_at_log_offset(&session.log_path, log_offset)
+    }
 }
 
 fn project_completion_capabilities(_repo_path: &str) -> (bool, bool) {
@@ -3166,6 +3176,7 @@ mod tests {
                 seq: 0,
                 timestamp: 1_700_000_000_000,
             },
+            log_offset: None,
         };
         let usage_event = AgentStreamEventEnvelope {
             project_id: 1,
@@ -3175,6 +3186,7 @@ mod tests {
             event: AgentStreamEvent::ThreadStarted {
                 thread_id: "thread-1".to_string(),
             },
+            log_offset: None,
         };
         fs::write(
             &log_path,
@@ -3190,7 +3202,11 @@ mod tests {
         let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
-            history.items,
+            history
+                .items
+                .into_iter()
+                .map(|entry| entry.item)
+                .collect::<Vec<_>>(),
             vec![AgentTimelineItem::AssistantMessage {
                 text: ("历史回答".to_string()).into(),
                 message_id: Some("msg-1".to_string()),
@@ -3238,6 +3254,7 @@ mod tests {
                     seq: 1,
                     timestamp: 1,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3254,6 +3271,7 @@ mod tests {
                     seq: 2,
                     timestamp: 2,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3276,6 +3294,7 @@ mod tests {
                     seq: 3,
                     timestamp: 3,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3292,6 +3311,7 @@ mod tests {
                     seq: 4,
                     timestamp: 4,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3306,6 +3326,7 @@ mod tests {
                     seq: 5,
                     timestamp: 5,
                 },
+                log_offset: None,
             },
         ];
         let lines = events
@@ -3361,6 +3382,7 @@ mod tests {
                     seq: 0,
                     timestamp: 1,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3377,6 +3399,7 @@ mod tests {
                     seq: 0,
                     timestamp: 2,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3393,6 +3416,7 @@ mod tests {
                     seq: 0,
                     timestamp: 3,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3409,6 +3433,7 @@ mod tests {
                     seq: 0,
                     timestamp: 4,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3425,6 +3450,7 @@ mod tests {
                     seq: 0,
                     timestamp: 5,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3447,6 +3473,7 @@ mod tests {
                     seq: 0,
                     timestamp: 6,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3469,6 +3496,7 @@ mod tests {
                     seq: 0,
                     timestamp: 7,
                 },
+                log_offset: None,
             },
         ];
         let lines = events
@@ -3482,7 +3510,11 @@ mod tests {
         let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
-            history.items,
+            history
+                .items
+                .iter()
+                .map(|entry| entry.item.clone())
+                .collect::<Vec<_>>(),
             vec![
                 AgentTimelineItem::AssistantMessage {
                     text: ("你好".to_string()).into(),
@@ -3529,6 +3561,7 @@ mod tests {
                     seq: 0,
                     timestamp: 1_000,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3545,6 +3578,7 @@ mod tests {
                     seq: 0,
                     timestamp: 2_500,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -3561,6 +3595,7 @@ mod tests {
                     seq: 0,
                     timestamp: 5_000,
                 },
+                log_offset: None,
             },
         ];
         let lines = events
@@ -3574,7 +3609,11 @@ mod tests {
         let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
-            history.items,
+            history
+                .items
+                .iter()
+                .map(|entry| entry.item.clone())
+                .collect::<Vec<_>>(),
             vec![
                 AgentTimelineItem::Reasoning {
                     text: ("分析完成".to_string()).into(),
@@ -3608,7 +3647,11 @@ mod tests {
         let history = read_timeline_from_log_path(&session.log_path).expect("read timeline");
 
         assert_eq!(
-            history.items,
+            history
+                .items
+                .iter()
+                .map(|entry| entry.item.clone())
+                .collect::<Vec<_>>(),
             vec![
                 AgentTimelineItem::UserMessage {
                     text: "北京今天天气如何？".to_string(),
@@ -3669,6 +3712,7 @@ mod tests {
                 event: AgentStreamEvent::ModelChanged {
                     model_id: "gpt-5.2".to_string(),
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 2,
@@ -3678,6 +3722,7 @@ mod tests {
                 event: AgentStreamEvent::ModelChanged {
                     model_id: "gpt-5.5".to_string(),
                 },
+                log_offset: None,
             },
         ];
         let lines = events
@@ -3709,7 +3754,7 @@ mod tests {
 
         assert_eq!(history.items.len(), 1);
         assert_eq!(history.effort, None);
-        match &history.items[0] {
+        match &history.items[0].item {
             AgentTimelineItem::AssistantMessage {
                 text,
                 message_id,
@@ -3747,6 +3792,7 @@ mod tests {
                 seq: 0,
                 timestamp: 1,
             },
+            log_offset: None,
         };
         fs::write(
             &log_path,
@@ -3785,7 +3831,11 @@ mod tests {
             .expect("read persisted timeline");
 
         assert_eq!(
-            result.items,
+            result
+                .items
+                .into_iter()
+                .map(|entry| entry.item)
+                .collect::<Vec<_>>(),
             vec![AgentTimelineItem::AssistantMessage {
                 text: ("本地历史".to_string()).into(),
                 message_id: Some("msg-local".to_string()),

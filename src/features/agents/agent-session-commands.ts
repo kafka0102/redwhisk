@@ -1,6 +1,7 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 import type {
   AgentAttachmentKindLiteral,
+  AgentTimelineItem,
   ListAgentModelsResult,
   ListAgentModesResult,
   ReadAgentTimelineResult,
@@ -336,6 +337,20 @@ export function readAgentTimeline(
   input: ReadAgentTimelineInput,
 ): Promise<ReadAgentTimelineResult> {
   return invokeCommand<ReadAgentTimelineResult>("read_agent_timeline", {
+    input,
+  });
+}
+
+export interface ReadTimelineItemAtOffsetInput {
+  projectId: number;
+  sessionId: number;
+  logOffset: number;
+}
+
+export function readTimelineItemAtOffset(
+  input: ReadTimelineItemAtOffsetInput,
+): Promise<AgentTimelineItem> {
+  return invokeCommand<AgentTimelineItem>("read_timeline_item_at_offset", {
     input,
   });
 }

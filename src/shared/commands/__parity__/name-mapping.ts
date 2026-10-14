@@ -83,4 +83,8 @@ export const rustOnlyAllowlist: ReadonlySet<string> = new Set<string>([
   // WorkspaceFileTreeNode.kind 用内联字面量 `"directory" | "file"`，未抽成具名 union；
   // parity 工具看不到内联字面量集合，登记 allowlist 跳过（前端已正确表达契约）。
   "WorkspaceFileTreeNodeKind",
+
+  // SnapshotText 是 `#[serde(transparent)]` 的 Arc<str>，线上仍是 JSON 字符串。
+  // 前端助手正文与推理继续用 string，没有独立 interface。
+  "SnapshotText",
 ]);

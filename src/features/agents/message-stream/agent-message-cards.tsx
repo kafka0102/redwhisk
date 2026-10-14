@@ -37,6 +37,9 @@ interface AgentMessageCardsProps {
   entries: MessageStreamEntry[];
   /** 当前轮次仍在跑。为 false 时，没有时长的思考不再显示「正在思考」。 */
   reasoningInProgress?: boolean;
+  expandedEntryIds?: readonly string[];
+  entryLoadErrors?: Readonly<Record<string, string>>;
+  onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
 }
 
 const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
@@ -49,6 +52,9 @@ const USER_MESSAGE_MAX_LINES = 5;
 export const AgentMessageCards = memo(function AgentMessageCards({
   entries,
   reasoningInProgress = false,
+  expandedEntryIds = [],
+  entryLoadErrors = {},
+  onEntryExpandedChange,
 }: AgentMessageCardsProps) {
   return (
     <>
@@ -57,6 +63,9 @@ export const AgentMessageCards = memo(function AgentMessageCards({
           key={entry.id}
           entry={entry}
           reasoningInProgress={reasoningInProgress}
+          isDetailOpen={expandedEntryIds.includes(entry.id)}
+          loadError={entryLoadErrors[entry.id]}
+          onEntryExpandedChange={onEntryExpandedChange}
         />
       ))}
     </>
@@ -66,9 +75,15 @@ export const AgentMessageCards = memo(function AgentMessageCards({
 const MessageCard = memo(function MessageCard({
   entry,
   reasoningInProgress,
+  isDetailOpen,
+  loadError,
+  onEntryExpandedChange,
 }: {
   entry: MessageStreamEntry;
   reasoningInProgress: boolean;
+  isDetailOpen: boolean;
+  loadError?: string;
+  onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
 }) {
   const { messages } = useI18n();
   const item = entry.item;
@@ -88,7 +103,16 @@ const MessageCard = memo(function MessageCard({
         />
       );
     case "tool_call":
-      return <ToolCallCard item={item} />;
+      return (
+        <ToolCallCard
+          item={item}
+          entryId={entry.id}
+          logOffset={entry.logOffset}
+          isDetailOpen={isDetailOpen}
+          loadError={loadError}
+          onEntryExpandedChange={onEntryExpandedChange}
+        />
+      );
     case "todo":
       return <TodoCard item={item} />;
     case "error":
@@ -178,17 +202,36 @@ function ReasoningCard({
 
 function ToolCallCard({
   item,
+  entryId,
+  logOffset,
+  isDetailOpen = false,
+  loadError,
+  onEntryExpandedChange,
 }: {
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
+  entryId?: string;
+  logOffset?: number;
+  isDetailOpen?: boolean;
+  loadError?: string;
+  onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
 }) {
   const { messages } = useI18n();
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = onEntryExpandedChange ? isDetailOpen : localOpen;
+  const setOpen = (next: boolean) => {
+    if (onEntryExpandedChange && entryId) {
+      onEntryExpandedChange(entryId, next);
+      return;
+    }
+    setLocalOpen(next);
+  };
   const presentation = buildToolCallPresentation(
     messages.agentsFeature,
     item.name,
     item.detail,
   );
-  const hasExpandableDetail = hasToolCallDetail(item.detail);
+  const hasExpandableDetail =
+    hasToolCallDetail(item.detail) || logOffset != null;
   return (
     <article className="agents-message__entry agents-message__entry--tool">
       <div
@@ -197,12 +240,12 @@ function ToolCallCard({
         }`}
       >
         {hasExpandableDetail ? (
-          <details className="agents-message__tool-details" open={isDetailOpen}>
+          <details className="agents-message__tool-details" open={open}>
             <summary
               className="agents-message__tool-header"
               onClick={(event) => {
                 event.preventDefault();
-                setIsDetailOpen((current) => !current);
+                setOpen(!open);
               }}
             >
               <ToolCallHeader
@@ -213,8 +256,13 @@ function ToolCallCard({
                 isExpandable
               />
             </summary>
-            {isDetailOpen ? (
+            {open ? (
               <ToolCallDetail name={item.name} detail={item.detail} />
+            ) : null}
+            {loadError ? (
+              <p className="agents-message__tool-error" role="status">
+                {loadError}
+              </p>
             ) : null}
           </details>
         ) : (

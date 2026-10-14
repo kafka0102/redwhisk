@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AgentStreamEvent,
   AgentTimelineItem,
+  TimelineHistoryItem,
 } from "../agent-stream-types";
 import {
   createInitialState,
@@ -58,6 +59,102 @@ describe("messageStreamReducer", () => {
   });
 
   describe("HYDRATE", () => {
+    it("超出最近 50 个 Turn 的工具调用收成占位，展开中的仍留正文", () => {
+      const items: TimelineHistoryItem[] = [];
+      for (let turn = 0; turn < 51; turn += 1) {
+        items.push({
+          item: {
+            type: "tool_call",
+            callId: `call-${turn}`,
+            name: "shell",
+            status: "completed",
+            detail: {
+              type: "shell",
+              command: "echo",
+              output: `body-${turn}`,
+            },
+          },
+          turnId: `turn-${turn}`,
+        });
+      }
+      const warm = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: items.slice(0, 50),
+      });
+      const tools = warm.entries.filter((entry) => entry.kind === "tool_call");
+      expect(tools[0]?.item).toMatchObject({ detail: { output: "body-0" } });
+
+      const pinned = messageStreamReducer(warm, {
+        type: "SET_ENTRY_EXPANDED",
+        entryId: tools[0]!.id,
+        expanded: true,
+      });
+      const shifted = messageStreamReducer(pinned, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "turn-extra" },
+      });
+      const kept = shifted.entries.find((entry) => entry.id === tools[0]!.id);
+      expect(kept?.item).toMatchObject({ detail: { output: "body-0" } });
+
+      const foldedState = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items,
+      });
+      const folded = foldedState.entries.find((entry) => entry.id === tools[0]!.id);
+      expect(
+        folded?.item.type === "tool_call" && folded.item.detail.type === "shell"
+          ? folded.item.detail.output
+          : "kept",
+      ).toBeUndefined();
+      expect(folded?.item).toMatchObject({
+        name: "shell",
+        status: "completed",
+        detail: { type: "shell", command: "echo" },
+      });
+
+      const collapsed = messageStreamReducer(shifted, {
+        type: "SET_ENTRY_EXPANDED",
+        entryId: tools[0]!.id,
+        expanded: false,
+      });
+      const afterCollapse = collapsed.entries.find(
+        (entry) => entry.id === tools[0]!.id,
+      );
+      expect(
+        afterCollapse?.item.type === "tool_call" &&
+          afterCollapse.item.detail.type === "shell"
+          ? afterCollapse.item.detail.output
+          : "kept",
+      ).toBeUndefined();
+    });
+
+    it("同一条助手消息和同一次工具调用只用新正文替换", () => {
+      const first = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "旧正文",
+          messageId: "m1",
+        }),
+      });
+      const replaced = messageStreamReducer(first, {
+        type: "EVENT",
+        event: timelineEvent(
+          {
+            type: "assistant_message",
+            text: "新正文",
+            messageId: "m1",
+          },
+          2,
+        ),
+      });
+      const messages = replaced.entries.filter(
+        (entry) => entry.kind === "assistant_message",
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.item).toMatchObject({ text: "新正文" });
+    });
+
     it("用历史 items 替换 timeline 并标记 initialized", () => {
       const items: AgentTimelineItem[] = [
         { type: "user_message", text: "你好", messageId: "u1" },
@@ -374,21 +471,27 @@ describe("messageStreamReducer", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "EVENT_BATCH",
         events: [
-          timelineEvent({
-            type: "assistant_message",
-            text: "你",
-            messageId: "a1",
-          }),
-          timelineEvent({
-            type: "assistant_message",
-            text: "你好",
-            messageId: "a1",
-          }),
-          timelineEvent({
-            type: "assistant_message",
-            text: "你好！",
-            messageId: "a1",
-          }),
+          {
+            event: timelineEvent({
+              type: "assistant_message",
+              text: "你",
+              messageId: "a1",
+            }),
+          },
+          {
+            event: timelineEvent({
+              type: "assistant_message",
+              text: "你好",
+              messageId: "a1",
+            }),
+          },
+          {
+            event: timelineEvent({
+              type: "assistant_message",
+              text: "你好！",
+              messageId: "a1",
+            }),
+          },
         ],
       });
 
@@ -1035,8 +1138,9 @@ describe("messageStreamReducer", () => {
       });
       expect(state.turnStatus).toBe("failed");
       expect(state.lastError).toBe("爆炸了");
-      expect(state.entries).toHaveLength(1);
-      expect(state.entries[0].kind).toBe("error");
+      const visible = state.entries.filter((entry) => entry.kind !== "turn_boundary");
+      expect(visible).toHaveLength(1);
+      expect(visible[0].kind).toBe("error");
     });
 
     it("turn_canceled → canceled", () => {

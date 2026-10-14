@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Seek, Write};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -144,14 +144,15 @@ impl AgentEventBroadcaster {
             return;
         };
         let (seq, epoch) = self.advance_cursor(session_id);
-        let envelope = AgentStreamEventEnvelope {
+        let mut envelope = AgentStreamEventEnvelope {
             project_id,
             session_id,
             seq,
             epoch,
             event,
+            log_offset: None,
         };
-        let should_refresh_list = self.persist_stream_event(&envelope)
+        let should_refresh_list = self.persist_stream_event(&mut envelope)
             || should_refresh_session_list_for_stream_event(&envelope.event);
         // 广播失败只忽略：前端可经 read_agent_timeline 补历史，不应阻塞 Agent 执行。
         let _ = app_handle.emit(AGENT_SESSION_STREAM_EVENT, envelope);
@@ -214,7 +215,7 @@ impl AgentEventBroadcaster {
         (cursor.seq, cursor.epoch.clone())
     }
 
-    fn persist_stream_event(&self, envelope: &AgentStreamEventEnvelope) -> bool {
+    fn persist_stream_event(&self, envelope: &mut AgentStreamEventEnvelope) -> bool {
         let Some(app_handle) = self.app_handle.get() else {
             return false;
         };
@@ -240,8 +241,15 @@ impl AgentEventBroadcaster {
         };
 
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
-            if let Ok(line) = serde_json::to_string(envelope) {
-                let _ = writeln!(file, "{line}");
+            // 偏移记这一行的起点。log_offset 写盘时是空的，所以不会进 JSONL。
+            if let Ok(offset) = file.stream_position() {
+                if let Ok(line) = serde_json::to_string(&*envelope) {
+                    if writeln!(file, "{line}").is_ok()
+                        && matches!(envelope.event, AgentStreamEvent::Timeline { .. })
+                    {
+                        envelope.log_offset = Some(offset);
+                    }
+                }
             }
         }
 
@@ -520,9 +528,8 @@ fn latest_output_from_timeline_item(
     use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail};
 
     match item {
-        AgentTimelineItem::AssistantMessage { text, .. } | AgentTimelineItem::Reasoning { text, .. } => {
-            Some(text.as_str())
-        }
+        AgentTimelineItem::AssistantMessage { text, .. }
+        | AgentTimelineItem::Reasoning { text, .. } => Some(text.as_str()),
         AgentTimelineItem::UserMessage { text, .. } => Some(text.as_str()),
         AgentTimelineItem::ToolCall { name, detail, .. } => match detail {
             ToolCallDetail::Shell { command, .. } => Some(command.as_str()),

@@ -20,8 +20,14 @@ import type {
   AgentStreamEvent,
   AgentTimelineItem,
   AgentUsage,
+  TimelineHistoryItem,
   ToolCallDetail,
 } from "../agent-stream-types";
+import {
+  foldColdCollapsibleEntries,
+  isColdCollapsibleEntry,
+  stripToolCallBody,
+} from "./message-stream-fold";
 import { foldSubagentRoster } from "./output-source";
 import type {
   MessageStreamAction,
@@ -48,6 +54,8 @@ export function createInitialState(): MessageStreamState {
     subagentInterrupted: false,
     subagents: [],
     isInitialized: false,
+    expandedEntryIds: [],
+    entryLoadErrors: {},
   };
 }
 
@@ -106,24 +114,38 @@ export function messageStreamReducer(
       const folded = action.items.reduce<{
         entries: MessageStreamEntry[];
         subagents: SubagentRosterEntry[];
+        turnId: string | null;
       }>(
-        (current, item) => ({
-          entries:
-            item.type === "subagent_roster"
-              ? current.entries
-              : applyTimelineItem(current.entries, item),
-          subagents: foldSubagentRoster(current.subagents, item),
-        }),
-        { entries: [], subagents: [] },
+        (current, rawItem) => {
+          const historyItem = asHistoryItem(rawItem);
+          const item = historyItem.item;
+          const markedTurn = historyItem.turnId ?? null;
+          const turnId = markedTurn ?? current.turnId;
+          const startsTurn =
+            markedTurn !== null &&
+            (current.turnId === null || markedTurn !== current.turnId);
+          const withBoundary = startsTurn
+            ? appendTurnBoundary(current.entries, turnId)
+            : current.entries;
+          return {
+            entries:
+              item.type === "subagent_roster"
+                ? withBoundary
+                : applyTimelineItem(withBoundary, item, historyItem.logOffset),
+            subagents: foldSubagentRoster(current.subagents, item),
+            turnId,
+          };
+        },
+        { entries: [], subagents: [], turnId: null },
       );
-      return {
+      return foldState({
         ...createInitialState(),
         entries: folded.entries,
         subagents: folded.subagents,
         effort: action.effort ?? null,
         model: action.model ?? null,
         isInitialized: true,
-      };
+      });
     }
 
     case "HYDRATE_FAILED":
@@ -134,13 +156,70 @@ export function messageStreamReducer(
       };
 
     case "EVENT":
-      return applyEvent(state, action.event);
+      return applyEvent(state, action.event, action.logOffset);
 
     case "EVENT_BATCH":
       return action.events.reduce(
-        (currentState, event) => applyEvent(currentState, event),
+        (currentState, queued) =>
+          applyEvent(currentState, queued.event, queued.logOffset),
         state,
       );
+
+    case "SET_ENTRY_EXPANDED": {
+      const expanded = action.expanded
+        ? state.expandedEntryIds.includes(action.entryId)
+          ? state.expandedEntryIds
+          : [...state.expandedEntryIds, action.entryId]
+        : state.expandedEntryIds.filter((id) => id !== action.entryId);
+      if (expanded === state.expandedEntryIds) {
+        return state;
+      }
+      return foldState({ ...state, expandedEntryIds: expanded });
+    }
+
+    case "RESTORE_ENTRY_BODY": {
+      const index = state.entries.findIndex(
+        (entry) => entry.id === action.entryId,
+      );
+      if (index < 0) {
+        return state;
+      }
+      const current = state.entries[index];
+      if (
+        current.item.type !== "tool_call" ||
+        action.item.type !== "tool_call"
+      ) {
+        return state;
+      }
+      const entryLoadErrors = { ...state.entryLoadErrors };
+      delete entryLoadErrors[action.entryId];
+      return foldState({
+        ...state,
+        entryLoadErrors,
+        entries: replaceAt(state.entries, index, {
+          ...current,
+          item: action.item,
+        }),
+      });
+    }
+
+    case "SET_ENTRY_LOAD_ERROR": {
+      if (action.error == null) {
+        if (!(action.entryId in state.entryLoadErrors)) {
+          return state;
+        }
+        const entryLoadErrors = { ...state.entryLoadErrors };
+        delete entryLoadErrors[action.entryId];
+        return { ...state, entryLoadErrors };
+      }
+      return {
+        ...state,
+        entryLoadErrors: {
+          ...state.entryLoadErrors,
+          [action.entryId]: action.error,
+        },
+      };
+    }
 
     case "OPTIMISTIC_USER_MESSAGE": {
       // 乐观插入用户消息：发送成功后立即展示，不等后端 timeline 回显。
@@ -189,19 +268,21 @@ export function messageStreamReducer(
 function applyEvent(
   state: MessageStreamState,
   event: AgentStreamEvent,
+  envelopeLogOffset?: number,
 ): MessageStreamState {
   switch (event.type) {
     case "thread_started":
       return state;
 
     case "turn_started":
-      return {
+      return foldState({
         ...state,
+        entries: appendTurnBoundary(state.entries, event.turnId),
         turnStatus: "running",
         turnInterrupted: false,
         interruptedStopReason: null,
         subagentInterrupted: false,
-      };
+      });
 
     case "turn_completed": {
       const usage = mergeUsage(state.usage, event.usage);
@@ -268,7 +349,12 @@ function applyEvent(
           event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
         return { ...state, ...turnPatch, subagents, lastSeq };
       }
-      const entries = applyTimelineItem(state.entries, event.item);
+      const entries = applyTimelineItem(
+        state.entries,
+        event.item,
+        event.logOffset ?? envelopeLogOffset,
+        state.expandedEntryIds,
+      );
       const lastSeq =
         event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
       // 异步子代理被中断（task_notification status 异常）：工作流可能因此暂停，
@@ -277,14 +363,14 @@ function applyEvent(
         event.item.type === "tool_call" &&
         event.item.detail.type === "sub_agent" &&
         event.item.status === "canceled";
-      return {
+      return foldState({
         ...state,
         ...turnPatch,
         entries,
         subagents,
         lastSeq,
         ...(subagentInterrupted ? { subagentInterrupted: true } : {}),
-      };
+      });
     }
 
     case "usage_updated":
@@ -336,6 +422,8 @@ function applyEvent(
 function applyTimelineItem(
   entries: MessageStreamEntry[],
   item: AgentTimelineItem,
+  logOffset?: number | null,
+  expandedEntryIds: readonly string[] = [],
 ): MessageStreamEntry[] {
   if (shouldSkipTimelineItem(item, entries)) {
     return entries;
@@ -351,11 +439,15 @@ function applyTimelineItem(
           (entry) => entry.kind === "assistant_message" && entry.id === entryId,
         );
         if (index >= 0) {
-          const next = {
-            id: entryId,
-            kind: item.type,
-            item,
-          };
+          const next = entryWithOffset(
+            {
+              id: entryId,
+              kind: item.type,
+              item,
+            },
+            logOffset,
+            entries[index]?.logOffset,
+          );
           // Grok 整轮共用一个 messageId，reasoning 会插在同一条正文中间。
           // 原地替换会让后写的问题留在思考前面；中间已有别的条目时挪到尾部。
           if (index === entries.length - 1) {
@@ -368,7 +460,10 @@ function applyTimelineItem(
           ];
         }
       }
-      return [...entries, toEntry(item, nextLocalId(entries))];
+      return [
+        ...entries,
+        entryWithOffset(toEntry(item, nextLocalId(entries)), logOffset),
+      ];
     }
 
     case "user_message": {
@@ -444,13 +539,24 @@ function applyTimelineItem(
             normalizeMessageText(item.text)
             ? { ...item, durationMs: last.item.durationMs }
             : item;
-        return replaceAt(entries, lastIndex, {
-          id: last.id,
-          kind: "reasoning",
-          item: mergedItem,
-        });
+        return replaceAt(
+          entries,
+          lastIndex,
+          entryWithOffset(
+            {
+              id: last.id,
+              kind: "reasoning",
+              item: mergedItem,
+            },
+            logOffset,
+            last.logOffset,
+          ),
+        );
       }
-      return [...entries, toEntry(item, nextLocalId(entries))];
+      return [
+        ...entries,
+        entryWithOffset(toEntry(item, nextLocalId(entries)), logOffset),
+      ];
     }
 
     case "tool_call": {
@@ -469,9 +575,17 @@ function applyTimelineItem(
           existing.kind === "tool_call" && existing.item.type === "tool_call"
             ? existing.item.detail
             : null;
+        // 占位已经丢掉正文。迟到的旧快照不能把空正文再写回来。
+        const keepBody =
+          expandedEntryIds.includes(existing.id) ||
+          logOffset != null ||
+          !isColdCollapsibleEntry(entries, existing.id);
+        const incomingDetail = keepBody
+          ? item.detail
+          : stripToolCallBody(item.detail);
         const mergedDetail = existingDetail
-          ? mergeToolCallDetail(existingDetail, item.detail)
-          : item.detail;
+          ? mergeToolCallDetail(existingDetail, incomingDetail)
+          : incomingDetail;
         const existingStatus =
           existing.kind === "tool_call" && existing.item.type === "tool_call"
             ? existing.item.status
@@ -488,13 +602,24 @@ function applyTimelineItem(
           // 终态不能被迟到的 running 回放打回去，否则已完成工具会重新显示为运行中。
           status: preserveTerminalToolStatus(existingStatus, item.status),
         };
-        return replaceAt(entries, index, {
-          id: callId,
-          kind: item.type,
-          item: mergedItem,
-        });
+        return replaceAt(
+          entries,
+          index,
+          entryWithOffset(
+            {
+              id: callId,
+              kind: item.type,
+              item: mergedItem,
+            },
+            logOffset,
+            existing.logOffset,
+          ),
+        );
       }
-      return [...entries, toEntry(item, nextLocalId(entries))];
+      return [
+        ...entries,
+        entryWithOffset(toEntry(item, nextLocalId(entries)), logOffset),
+      ];
     }
 
     case "todo": {
@@ -793,6 +918,60 @@ function mergeToolCallDetail(
     default:
       return incoming;
   }
+}
+
+function asHistoryItem(
+  value: AgentTimelineItem | TimelineHistoryItem,
+): TimelineHistoryItem {
+  if ("type" in value) {
+    return { item: value };
+  }
+  return value;
+}
+
+function appendTurnBoundary(
+  entries: MessageStreamEntry[],
+  turnId: string | null,
+): MessageStreamEntry[] {
+  const last = entries[entries.length - 1];
+  if (last?.kind === "turn_boundary" && last.id === turnBoundaryId(turnId)) {
+    return entries;
+  }
+  return [
+    ...entries,
+    {
+      id: turnBoundaryId(turnId),
+      kind: "turn_boundary",
+      item: { type: "compaction", status: "completed" },
+    },
+  ];
+}
+
+function turnBoundaryId(turnId: string | null): string {
+  return `turn:${turnId ?? "unknown"}`;
+}
+
+function entryWithOffset(
+  entry: MessageStreamEntry,
+  logOffset: number | null | undefined,
+  previous?: number,
+): MessageStreamEntry {
+  const offset = logOffset ?? previous;
+  if (offset == null) {
+    return entry;
+  }
+  return { ...entry, logOffset: offset };
+}
+
+function foldState(state: MessageStreamState): MessageStreamState {
+  const entries = foldColdCollapsibleEntries(
+    state.entries,
+    new Set(state.expandedEntryIds),
+  );
+  if (entries === state.entries) {
+    return state;
+  }
+  return { ...state, entries: entries.slice() };
 }
 
 function replaceAt(

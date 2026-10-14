@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
 import { AgentSessionView } from "./agent-session-view";
@@ -104,6 +104,10 @@ function emitEvent(payload: AgentStreamEventEnvelope) {
     mocks.listeners[0]?.callback({ payload });
   });
 }
+
+beforeEach(() => {
+  clearAgentMessageStreamCacheForTest();
+});
 
 afterEach(() => {
   clearAgentMessageStreamCacheForTest();

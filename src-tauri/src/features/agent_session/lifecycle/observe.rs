@@ -11,7 +11,9 @@ use crate::features::agent_session::timeline::{
     is_empty_standalone_thread_timeline_error, latest_effort_from_session_log,
     latest_model_from_session_log, read_timeline_from_log_path,
 };
-use crate::types::agent_session::{AgentSessionRecord, ReadAgentTimelineResult};
+use crate::types::agent_session::{
+    AgentSessionRecord, ReadAgentTimelineResult, TimelineHistoryItem,
+};
 use crate::types::errors::CommandError;
 
 pub(crate) fn read_timeline_for_session(
@@ -41,7 +43,14 @@ fn read_json_timeline(
         match handle.read_timeline() {
             Ok(items) => {
                 return Ok(ReadAgentTimelineResult {
-                    items,
+                    items: items
+                        .into_iter()
+                        .map(|item| TimelineHistoryItem {
+                            item,
+                            log_offset: None,
+                            turn_id: None,
+                        })
+                        .collect(),
                     effort: latest_effort_from_session_log(session),
                     model: latest_model_from_session_log(session),
                 });
@@ -148,6 +157,7 @@ mod tests {
                 seq: 0,
                 timestamp: 1,
             },
+            log_offset: None,
         };
         fs::write(
             &log,
@@ -161,7 +171,11 @@ mod tests {
         let session = sample_session("json", log.to_string_lossy().as_ref());
         let result = read_timeline_for_session(&session, None).unwrap();
         assert_eq!(
-            result.items,
+            result
+                .items
+                .into_iter()
+                .map(|entry| entry.item)
+                .collect::<Vec<_>>(),
             vec![AgentTimelineItem::AssistantMessage {
                 text: ("本地历史".to_string()).into(),
                 message_id: Some("msg-local".to_string()),
@@ -185,6 +199,7 @@ mod tests {
                 event: AgentStreamEvent::ModelChanged {
                     model_id: "gpt-5.2".to_string(),
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -194,6 +209,7 @@ mod tests {
                 event: AgentStreamEvent::ModelChanged {
                     model_id: "gpt-5.5".to_string(),
                 },
+                log_offset: None,
             },
         ];
         let lines = events

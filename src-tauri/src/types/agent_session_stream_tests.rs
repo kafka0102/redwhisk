@@ -82,6 +82,7 @@ fn serializes_envelope_with_camel_case_top_level() {
         event: AgentStreamEvent::ThreadStarted {
             thread_id: "thr_1".into(),
         },
+        log_offset: None,
     };
 
     let value = serde_json::to_value(&envelope).unwrap();
@@ -91,6 +92,7 @@ fn serializes_envelope_with_camel_case_top_level() {
     assert_eq!(value["epoch"], "epoch-1");
     assert_eq!(value["event"]["type"], "thread_started");
     assert_eq!(value["event"]["threadId"], "thr_1");
+    assert!(value.get("logOffset").is_none());
 }
 
 #[test]

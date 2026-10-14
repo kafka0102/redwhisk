@@ -22,11 +22,12 @@ use crate::types::agent_session::{
     InjectAgentSessionPromptResult, IssueSessionStartProgressEvent, ListAgentModelsInput,
     ListAgentModelsResult, ListAgentModesInput, ListAgentModesResult, ListAgentProfileModelsInput,
     ProjectGitBranchListInput, ProjectGitBranchListResult, ReadAgentTimelineInput,
-    ReadAgentTimelineResult, RespondAgentPermissionInput, ResumeAgentSessionInput,
-    ResumeAgentSessionResult, SaveAgentAttachmentInput, SaveAgentAttachmentResult,
-    SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput, SetAgentSessionAttentionInput,
-    SetAgentSessionAttentionResult, SetAgentThinkingInput, StartAgentSessionInput,
-    StartAgentSessionResult, UpdateAgentSessionTitleInput, UpdateAgentSessionTitleResult,
+    ReadAgentTimelineResult, ReadTimelineItemAtOffsetInput, RespondAgentPermissionInput,
+    ResumeAgentSessionInput, ResumeAgentSessionResult, SaveAgentAttachmentInput,
+    SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput,
+    SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, SetAgentThinkingInput,
+    StartAgentSessionInput, StartAgentSessionResult, UpdateAgentSessionTitleInput,
+    UpdateAgentSessionTitleResult,
 };
 use crate::types::agent_session_stream::AgentStreamEvent;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -891,4 +892,26 @@ pub async fn read_agent_timeline(
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
     .log_if_error("read_agent_timeline")
+}
+
+#[tauri::command]
+pub async fn read_timeline_item_at_offset(
+    app: tauri::AppHandle,
+    input: ReadTimelineItemAtOffsetInput,
+) -> Result<crate::types::agent_session_stream::AgentTimelineItem, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = open_agent_session_database(&app)?;
+        let service = build_agent_session_service(&database.connection);
+        service.read_timeline_item_at_offset(input.project_id, input.session_id, input.log_offset)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 历史读取失败。",
+        )
+        .with_reason("historyReadFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+    .log_if_error("read_timeline_item_at_offset")
 }

@@ -7,7 +7,7 @@ use crate::types::errors::CommandError;
 
 use super::service::agent_session_start_error;
 use super::session_log_line::read_session_log_line_at;
-use super::session_log_tail::{read_session_log_turn_window, OPEN_REPLAY_TURN_LIMIT};
+use super::session_log_tail::{read_session_log_turn_window_located, OPEN_REPLAY_TURN_LIMIT};
 use super::timeline::structured_events_from_log_line;
 
 /// 按 `turn_id` 从最近 50 个 Turn 的打开回放窗口读取助手答复正文。
@@ -16,13 +16,14 @@ pub(crate) fn read_assistant_texts_for_turn(log_path: &str, turn_id: &str) -> Ve
     if log_path.trim().is_empty() {
         return Vec::new();
     }
-    let Ok(lines) = read_session_log_turn_window(Path::new(log_path), OPEN_REPLAY_TURN_LIMIT)
+    let Ok(lines) =
+        read_session_log_turn_window_located(Path::new(log_path), OPEN_REPLAY_TURN_LIMIT)
     else {
         return Vec::new();
     };
     let mut latest_by_message: Vec<(Option<String>, Option<String>, String)> = Vec::new();
     for line in &lines {
-        let Some(events) = structured_events_from_log_line(&line) else {
+        let Some(events) = structured_events_from_log_line(&line.text) else {
             continue;
         };
         for event in events {

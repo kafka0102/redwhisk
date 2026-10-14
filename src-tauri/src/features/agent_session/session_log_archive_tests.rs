@@ -130,5 +130,6 @@ fn timeline(seq: u64, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
             seq,
             timestamp: seq as i64,
         },
+        log_offset: None,
     }
 }

@@ -37,6 +37,8 @@ export type AgentStreamEvent =
       turnId?: string;
       seq: number;
       timestamp: number;
+      /** 这一条最新一次快照在会话日志中的起始字节。 */
+      logOffset?: number;
     }
   | { type: "usage_updated"; usage: AgentUsage }
   | { type: "permission_requested"; request: AgentPermissionRequest }
@@ -59,6 +61,8 @@ export interface AgentStreamEventEnvelope {
   seq: number;
   epoch: string;
   event: AgentStreamEvent;
+  /** 刚写入的会话日志行起始字节。只在实时广播里出现。 */
+  logOffset?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,8 +239,16 @@ export interface SaveAgentAttachmentResult {
   kind: AgentAttachmentKindLiteral;
 }
 
+export interface TimelineHistoryItem {
+  item: AgentTimelineItem;
+  /** 这一条最新一次快照在会话日志中的起始字节。 */
+  logOffset?: number | null;
+  /** 写入这条快照时所属的 Turn。新 Turn 以 `turn_started` 计。 */
+  turnId?: string | null;
+}
+
 export interface ReadAgentTimelineResult {
-  items: AgentTimelineItem[];
+  items: TimelineHistoryItem[];
   effort: string | null;
   model: string | null;
 }

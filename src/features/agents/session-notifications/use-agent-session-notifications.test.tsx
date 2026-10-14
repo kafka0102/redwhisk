@@ -1,7 +1,11 @@
 import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentStreamEventEnvelope } from "../agent-stream-types";
+import type {
+  AgentStreamEventEnvelope,
+  AgentTimelineItem,
+  TimelineHistoryItem,
+} from "../agent-stream-types";
 import { I18nProvider } from "../../../shared/i18n/i18n";
 import {
   listAgentSessions,
@@ -36,6 +40,10 @@ vi.mock("../agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
   readAgentTimeline: vi.fn(),
 }));
+
+function historyItems(items: AgentTimelineItem[]): TimelineHistoryItem[] {
+  return items.map((item) => ({ item }));
+}
 
 vi.mock("../../../shared/audio/notification-sound", () => ({
   playNotificationSound: vi.fn(),
@@ -103,7 +111,7 @@ describe("useAgentSessionNotifications", () => {
     readAgentTimelineMock.mockReset();
     listAgentSessionsMock.mockResolvedValue({ sessions: [] });
     readAgentTimelineMock.mockResolvedValue({
-      items: [],
+      items: historyItems([]),
       effort: null,
       model: null,
     });
@@ -226,10 +234,10 @@ describe("useAgentSessionNotifications", () => {
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
       model: null,
-      items: [
+      items: historyItems([
         { type: "user_message", text: "Add monitor" },
         { type: "assistant_message", text: "Monitor implementation finished." },
-      ],
+      ]),
     });
 
     await renderProbe({ pollIntervalMs: 10, transport });
@@ -264,13 +272,13 @@ describe("useAgentSessionNotifications", () => {
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
       model: null,
-      items: [
+      items: historyItems([
         { type: "user_message", text: "Mark the issue done." },
         {
           type: "assistant_message",
           text: "Summary: finished with status completed and lots of detail.",
         },
-      ],
+      ]),
     });
 
     await renderProbe({ pollIntervalMs: 10, transport });
@@ -300,7 +308,9 @@ describe("useAgentSessionNotifications", () => {
     readAgentTimelineMock.mockResolvedValue({
       effort: null,
       model: null,
-      items: [{ type: "error", message: "Process exited with code 1." }],
+      items: historyItems([
+        { type: "error", message: "Process exited with code 1." },
+      ]),
     });
 
     await renderProbe({ pollIntervalMs: 10, transport });

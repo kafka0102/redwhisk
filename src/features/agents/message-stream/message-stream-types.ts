@@ -8,6 +8,7 @@ import type {
   AgentStreamEvent,
   AgentTimelineItem,
   AgentUsage,
+  TimelineHistoryItem,
 } from "../agent-stream-types";
 
 /** 轮次运行状态。 */
@@ -28,8 +29,10 @@ export interface SubagentRosterEntry {
  */
 export interface MessageStreamEntry {
   id: string;
-  kind: AgentTimelineItem["type"];
+  kind: AgentTimelineItem["type"] | "turn_boundary";
   item: AgentTimelineItem;
+  /** 这一条最新一次快照在会话日志中的起始字节。展开占位时按它回读一行。 */
+  logOffset?: number;
 }
 
 /** 消息流 reducer 的完整状态。 */
@@ -53,6 +56,10 @@ export interface MessageStreamState {
   subagents: SubagentRosterEntry[];
   /** readAgentTimeline 完成前为 false，完成后为 true。 */
   isInitialized: boolean;
+  /** 用户正在展开的可折叠项。超出热区也留正文，收起后再收成占位。 */
+  expandedEntryIds: string[];
+  /** 展开占位回读失败时的说明。卡片仍留在原处。 */
+  entryLoadErrors: Record<string, string>;
 }
 
 /** hook 内部 dispatch 的动作。 */
@@ -61,11 +68,21 @@ export type MessageStreamAction =
   | { type: "RESTORE"; state: MessageStreamState }
   | {
       type: "HYDRATE";
-      items: AgentTimelineItem[];
+      items: Array<AgentTimelineItem | TimelineHistoryItem>;
       effort?: string | null;
       model?: string | null;
     }
   | { type: "HYDRATE_FAILED"; error: string }
-  | { type: "EVENT"; event: AgentStreamEvent }
-  | { type: "EVENT_BATCH"; events: AgentStreamEvent[] }
-  | { type: "OPTIMISTIC_USER_MESSAGE"; text: string };
+  | { type: "EVENT"; event: AgentStreamEvent; logOffset?: number }
+  | {
+      type: "EVENT_BATCH";
+      events: Array<{ event: AgentStreamEvent; logOffset?: number }>;
+    }
+  | { type: "OPTIMISTIC_USER_MESSAGE"; text: string }
+  | { type: "SET_ENTRY_EXPANDED"; entryId: string; expanded: boolean }
+  | {
+      type: "RESTORE_ENTRY_BODY";
+      entryId: string;
+      item: AgentTimelineItem;
+    }
+  | { type: "SET_ENTRY_LOAD_ERROR"; entryId: string; error: string | null };

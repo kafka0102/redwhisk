@@ -175,6 +175,7 @@ pub fn run() {
             features::agent_session::commands::list_agent_modes,
             features::agent_session::commands::save_agent_attachment,
             features::agent_session::commands::read_agent_timeline,
+            features::agent_session::commands::read_timeline_item_at_offset,
             features::agent_session::tui_terminal_commands::write_agent_session_terminal,
             features::agent_session::tui_terminal_commands::resize_agent_session_terminal,
             features::agent_session::tui_terminal_commands::restore_agent_session_terminal,

@@ -8,7 +8,11 @@ import {
   readAgentTimeline,
 } from "../agent-session-commands";
 import type { AgentSessionListItem } from "../agent-session-commands";
-import type { AgentStreamEventEnvelope } from "../agent-stream-types";
+import type {
+  AgentStreamEventEnvelope,
+  AgentTimelineItem,
+  TimelineHistoryItem,
+} from "../agent-stream-types";
 import { AGENT_SESSION_STREAM_EVENT } from "../message-stream/agent-stream-events";
 import {
   AGENT_SESSION_LIST_CHANGED_EVENT,
@@ -224,6 +228,12 @@ async function deliverNotification(
   }
 }
 
+function timelineItemOf(
+  entry: TimelineHistoryItem | AgentTimelineItem,
+): AgentTimelineItem {
+  return "item" in entry ? entry.item : entry;
+}
+
 async function deliverSessionStatusNotification({
   messages,
   projectId,
@@ -237,14 +247,14 @@ async function deliverSessionStatusNotification({
   session: AgentSessionListItem;
   transport: AgentSessionNotificationTransport;
 }): Promise<void> {
-  let timelineItems: Awaited<ReturnType<typeof readAgentTimeline>>["items"];
+  let timelineItems: AgentTimelineItem[];
 
   try {
     const timeline = await readAgentTimeline({
       projectId,
       sessionId: session.sessionId,
     });
-    timelineItems = timeline.items;
+    timelineItems = timeline.items.map(timelineItemOf);
   } catch {
     timelineItems = [];
   }

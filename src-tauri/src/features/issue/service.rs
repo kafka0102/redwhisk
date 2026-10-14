@@ -2740,6 +2740,7 @@ mod tests {
                     seq: 1,
                     timestamp: 1,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -2762,6 +2763,7 @@ mod tests {
                     seq: 2,
                     timestamp: 2,
                 },
+                log_offset: None,
             },
             AgentStreamEventEnvelope {
                 project_id: 1,
@@ -2778,6 +2780,7 @@ mod tests {
                     seq: 3,
                     timestamp: 3,
                 },
+                log_offset: None,
             },
         ];
         let lines = runtime_events

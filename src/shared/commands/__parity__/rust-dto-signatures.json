@@ -197,7 +197,8 @@
         "event": "required",
         "projectId": "required",
         "seq": "required",
-        "sessionId": "required"
+        "sessionId": "required",
+        "logOffset": "optional"
       }
     },
     "AgentUiCapabilities": {
@@ -1675,6 +1676,16 @@
         "projectId": "required",
         "sessionId": "required"
       }
+    },
+    "TimelineHistoryItem": {
+      "fields": {
+        "item": "required",
+        "logOffset": "optional",
+        "turnId": "optional"
+      }
+    },
+    "SnapshotText": {
+      "fields": {}
     }
   },
   "enums": {

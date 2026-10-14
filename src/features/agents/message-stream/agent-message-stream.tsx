@@ -25,6 +25,7 @@ import type { AgentTimelineItem } from "../agent-stream-types";
 import type { AgentType } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
+import { useExpandTimelineEntry } from "./use-expand-timeline-entry";
 import { AgentMessageCards } from "./agent-message-cards";
 import { installSelectionDragClamp } from "./selection-drag-clamp";
 import {
@@ -58,8 +59,20 @@ export function AgentMessageStream({
   projectId,
   sessionId,
 }: AgentMessageStreamProps) {
-  const { state } = useAgentMessageStream({ projectId, sessionId });
-  return <AgentMessageStreamView state={state} sessionId={sessionId} />;
+  const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
+  const onEntryExpandedChange = useExpandTimelineEntry(
+    projectId,
+    sessionId,
+    state,
+    dispatch,
+  );
+  return (
+    <AgentMessageStreamView
+      state={state}
+      sessionId={sessionId}
+      onEntryExpandedChange={onEntryExpandedChange}
+    />
+  );
 }
 
 interface AgentMessageStreamViewProps {
@@ -75,6 +88,7 @@ interface AgentMessageStreamViewProps {
   autoScrollOnActivate?: boolean;
   /** 当前 session id：用于按 session 记录并恢复滚动位置。缺省（未提供）时不恢复。 */
   sessionId?: number;
+  onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
 }
 
 /**
@@ -93,6 +107,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   isActive = true,
   autoScrollOnActivate = false,
   sessionId,
+  onEntryExpandedChange,
 }: AgentMessageStreamViewProps) {
   const { messages, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -342,6 +357,9 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
         <AgentMessageCards
           entries={entries}
           reasoningInProgress={isTurnActive}
+          expandedEntryIds={state.expandedEntryIds}
+          entryLoadErrors={state.entryLoadErrors}
+          onEntryExpandedChange={onEntryExpandedChange}
         />
         {turnInterrupted ? (
           <div className="agents-message__entry agents-message__entry--interrupted">

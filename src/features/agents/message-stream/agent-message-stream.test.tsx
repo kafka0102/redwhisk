@@ -16,7 +16,11 @@ import {
   resetMessageStreamScrollOffsetCacheForTests,
   writeMessageStreamScrollOffset,
 } from "./message-stream-scroll-offset";
-import type { AgentStreamEvent } from "../agent-stream-types";
+import type {
+  AgentStreamEvent,
+  AgentTimelineItem,
+  TimelineHistoryItem,
+} from "../agent-stream-types";
 import type { MessageStreamState } from "./message-stream-types";
 import {
   createInitialState,
@@ -35,11 +39,17 @@ vi.mock("../agent-session-commands", () => ({
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
 
-function setupStream(
-  items: Parameters<typeof readAgentTimelineMock.mockResolvedValue>[0]["items"],
-) {
+function historyItems(items: AgentTimelineItem[]): TimelineHistoryItem[] {
+  return items.map((item) => ({ item }));
+}
+
+function setupStream(items: AgentTimelineItem[]) {
   readAgentTimelineMock.mockReset();
-  readAgentTimelineMock.mockResolvedValue({ items, effort: null, model: null });
+  readAgentTimelineMock.mockResolvedValue({
+    items: historyItems(items),
+    effort: null,
+    model: null,
+  });
 }
 
 function timelineEvent(
@@ -66,6 +76,8 @@ function createMessageStreamState(
     subagentInterrupted: false,
     subagents: [],
     isInitialized: true,
+    expandedEntryIds: [],
+    entryLoadErrors: {},
     ...overrides,
   };
 }
@@ -89,10 +101,10 @@ describe("AgentMessageStream", () => {
   it("readAgentTimeline 返回历史消息时渲染卡片", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         { type: "user_message", text: "你好", messageId: "u1" },
         { type: "assistant_message", text: "你好！", messageId: "a1" },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -176,7 +188,7 @@ describe("AgentMessageStream", () => {
   it("渲染 reasoning 折叠区", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [{ type: "reasoning", text: "我先想想" }],
+      items: historyItems([{ type: "reasoning", text: "我先想想" }]),
       effort: null,
       model: null,
     });
@@ -194,7 +206,7 @@ describe("AgentMessageStream", () => {
   it("渲染 tool_call 卡片并由工具行展开详情", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "c1",
@@ -207,7 +219,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -231,7 +243,7 @@ describe("AgentMessageStream", () => {
   it("展开工具行前不挂载大块输出内容", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "c1",
@@ -244,7 +256,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -265,7 +277,7 @@ describe("AgentMessageStream", () => {
     const longOutput = `${"a".repeat(20_000)}TAIL`;
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "c-long",
@@ -278,7 +290,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -300,7 +312,7 @@ describe("AgentMessageStream", () => {
   it("按文件扩展名渲染 Edit diff 的语法高亮和新增删除背景", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "edit-1",
@@ -316,7 +328,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -352,7 +364,7 @@ describe("AgentMessageStream", () => {
   it("隐藏无输出的 shell 详情折叠区", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "c1",
@@ -363,7 +375,7 @@ describe("AgentMessageStream", () => {
           },
           status: "running",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -380,7 +392,7 @@ describe("AgentMessageStream", () => {
   it("渲染搜索工具的可展开查询内容和 URL 结果", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "search-1",
@@ -395,7 +407,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -427,7 +439,7 @@ describe("AgentMessageStream", () => {
   it("兼容旧 unknown webSearch 工具并在摘要显示 query", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "legacy-search-1",
@@ -440,7 +452,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -459,7 +471,7 @@ describe("AgentMessageStream", () => {
   it("把 TaskUpdate unknown 工具渲染为带图标的任务状态更新卡片", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "tool_call",
           callId: "task-update-1",
@@ -474,7 +486,7 @@ describe("AgentMessageStream", () => {
           },
           status: "completed",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -499,7 +511,7 @@ describe("AgentMessageStream", () => {
   it("渲染 todo 清单", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "todo",
           items: [
@@ -507,7 +519,7 @@ describe("AgentMessageStream", () => {
             { text: "任务二", completed: false },
           ],
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });
@@ -522,7 +534,7 @@ describe("AgentMessageStream", () => {
   it("渲染 error 卡片", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [{ type: "error", message: "出错了" }],
+      items: historyItems([{ type: "error", message: "出错了" }]),
       effort: null,
       model: null,
     });
@@ -535,7 +547,7 @@ describe("AgentMessageStream", () => {
   it("渲染 compaction 横幅", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [{ type: "compaction", status: "completed" }],
+      items: historyItems([{ type: "compaction", status: "completed" }]),
       effort: null,
       model: null,
     });
@@ -557,13 +569,13 @@ describe("AgentMessageStream", () => {
   it("assistant 消息含 markdown 代码块时渲染 code", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({
-      items: [
+      items: historyItems([
         {
           type: "assistant_message",
           text: "示例：\n```ts\nconst x = 1;\n```",
           messageId: "a1",
         },
-      ],
+      ]),
       effort: null,
       model: null,
     });

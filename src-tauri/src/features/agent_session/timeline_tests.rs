@@ -24,6 +24,7 @@ fn envelope_for_turn(seq: u64, turn_id: &str, item: AgentTimelineItem) -> AgentS
             seq: 0,
             timestamp: seq as i64,
         },
+        log_offset: None,
     }
 }
 
@@ -36,6 +37,7 @@ fn turn_started(seq: u64, turn_id: &str) -> AgentStreamEventEnvelope {
         event: AgentStreamEvent::TurnStarted {
             turn_id: Some(turn_id.to_string()),
         },
+        log_offset: None,
     }
 }
 
@@ -121,7 +123,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
     let kinds: Vec<&str> = history
         .items
         .iter()
-        .map(|item| match item {
+        .map(|item| match &item.item {
             AgentTimelineItem::UserMessage { .. } => "user",
             AgentTimelineItem::AssistantMessage { .. } => "assistant",
             AgentTimelineItem::ToolCall { .. } => "tool",
@@ -132,7 +134,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
 
     assert_eq!(kinds, vec!["user", "tool", "assistant"]);
     assert_eq!(
-        history.items.last(),
+        history.items.last().map(|entry| &entry.item),
         Some(&AgentTimelineItem::AssistantMessage {
             text: ("我先对照电子书列表。\n\n对应接口：GET /queue/status".to_string()).into(),
             message_id: Some("grok-msg-1".to_string()),
@@ -212,14 +214,14 @@ fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
         read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
     assert_eq!(history.items.len(), 100);
     assert_eq!(
-        history.items.first(),
+        history.items.first().map(|entry| &entry.item),
         Some(&AgentTimelineItem::AssistantMessage {
             text: ("final-10".to_string()).into(),
             message_id: Some("msg-10".to_string()),
             subagent_id: None,
         })
     );
-    assert!(history.items.iter().all(|item| match item {
+    assert!(history.items.iter().all(|entry| match &entry.item {
         AgentTimelineItem::AssistantMessage { text, .. } => text.starts_with("final-"),
         AgentTimelineItem::ToolCall { detail, .. } => {
             matches!(detail, ToolCallDetail::Shell { output: Some(output), .. } if output.starts_with("done-"))
@@ -257,7 +259,7 @@ fn read_timeline_keeps_every_turn_when_fewer_than_50_including_unfinished() {
         read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
     assert_eq!(history.items.len(), 2);
     assert_eq!(
-        history.items.last(),
+        history.items.last().map(|entry| &entry.item),
         Some(&AgentTimelineItem::UserMessage {
             text: "未结束".to_string(),
             message_id: Some("u1".to_string()),
@@ -371,7 +373,14 @@ fn subagent_output_source_survives_log_reread() {
 
     let history =
         read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
-    let value = serde_json::to_value(&history.items).expect("items");
+    let value = serde_json::to_value(
+        history
+            .items
+            .iter()
+            .map(|entry| &entry.item)
+            .collect::<Vec<_>>(),
+    )
+    .expect("items");
     assert_eq!(
         value,
         serde_json::json!([
@@ -429,7 +438,11 @@ fn read_timeline_replays_collab_prompt_and_ended_roster() {
 
     let history = read_timeline_from_log_path(log_path.to_str().expect("path")).expect("read");
     assert_eq!(
-        history.items,
+        history
+            .items
+            .iter()
+            .map(|entry| entry.item.clone())
+            .collect::<Vec<_>>(),
         vec![
             AgentTimelineItem::ToolCall {
                 call_id: "call_spawn".to_string(),

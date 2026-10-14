@@ -13,12 +13,30 @@ pub(super) const OPEN_REPLAY_TURN_LIMIT: usize = 50;
 const TAIL_CHUNK_START: u64 = 64 * 1024;
 const TAIL_CHUNK_MAX: u64 = 1024 * 1024;
 
+/// 会话日志一行，以及它在文件中的起始字节。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SessionLogLine {
+    pub offset: u64,
+    pub text: String,
+}
+
 /// 从文件末尾倒序凑满 `turn_limit` 个 `turn_started`，返回该起点到文件末尾的行。
 /// 不足则返回全部可读行。起点落在一行中间时从下一行开始。
+#[cfg(test)]
 pub(super) fn read_session_log_turn_window(
     path: &Path,
     turn_limit: usize,
 ) -> io::Result<Vec<String>> {
+    Ok(read_session_log_turn_window_located(path, turn_limit)?
+        .into_iter()
+        .map(|line| line.text)
+        .collect())
+}
+
+pub(super) fn read_session_log_turn_window_located(
+    path: &Path,
+    turn_limit: usize,
+) -> io::Result<Vec<SessionLogLine>> {
     read_session_log_turn_window_chunked(path, turn_limit, TAIL_CHUNK_START)
 }
 
@@ -26,7 +44,7 @@ fn read_session_log_turn_window_chunked(
     path: &Path,
     turn_limit: usize,
     chunk_start: u64,
-) -> io::Result<Vec<String>> {
+) -> io::Result<Vec<SessionLogLine>> {
     if turn_limit == 0 {
         return Ok(Vec::new());
     }
@@ -53,12 +71,12 @@ fn read_session_log_turn_window_chunked(
             if relative > 0 {
                 buffer.drain(..relative);
             }
-            break;
+            return decode_located_lines(&buffer, offset + relative as u64);
         }
         chunk_size = chunk_size.saturating_mul(2).min(TAIL_CHUNK_MAX);
     }
 
-    decode_complete_lines(&buffer)
+    decode_located_lines(&buffer, 0)
 }
 
 /// 在已倒读的字节里定位窗口起点。
@@ -123,14 +141,21 @@ fn trim_ascii(bytes: &[u8]) -> &[u8] {
     &bytes[start..end]
 }
 
-fn decode_complete_lines(bytes: &[u8]) -> io::Result<Vec<String>> {
+fn decode_located_lines(bytes: &[u8], start_offset: u64) -> io::Result<Vec<SessionLogLine>> {
     let text = String::from_utf8(bytes.to_vec())
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let mut lines: Vec<String> = text.split('\n').map(ToOwned::to_owned).collect();
-    if lines.last().is_some_and(|line| line.is_empty()) {
-        lines.pop();
+    let mut lines = Vec::new();
+    let mut cursor = 0usize;
+    for raw in text.split('\n') {
+        let next = cursor + raw.len();
+        if !raw.is_empty() {
+            lines.push(SessionLogLine {
+                offset: start_offset + cursor as u64,
+                text: raw.to_owned(),
+            });
+        }
+        cursor = next + 1;
     }
-    lines.retain(|line| !line.is_empty());
     Ok(lines)
 }
 
@@ -170,9 +195,10 @@ mod tests {
                 let path = dir.path().join("session.jsonl");
                 let got = read_session_log_turn_window_chunked(&path, 50, chunk).expect("window");
                 assert_eq!(got.len(), 100, "chunk={chunk} trailing={trailing_newline}");
-                assert_eq!(got[0], turn_line(10));
+                assert_eq!(got[0].text, turn_line(10));
+                assert!(got[0].offset > 0 || !trailing_newline);
                 assert_eq!(
-                    got.last().map(String::as_str),
+                    got.last().map(|line| line.text.as_str()),
                     Some(message_line(59).as_str())
                 );
             }

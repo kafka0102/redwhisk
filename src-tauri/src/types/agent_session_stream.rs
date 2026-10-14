@@ -457,6 +457,9 @@ pub struct AgentStreamEventEnvelope {
     pub seq: u64,
     pub epoch: String,
     pub event: AgentStreamEvent,
+    /// 刚写入的会话日志行起始字节。写盘时为空，所以不会进 JSONL；广播前再填上。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_offset: Option<u64>,
 }
 
 #[cfg(test)]

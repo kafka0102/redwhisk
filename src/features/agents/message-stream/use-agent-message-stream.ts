@@ -6,8 +6,8 @@
 // 沿用项目既有范式：`isDisposed` + `unlisten` 双标志，await 期间若已卸载则
 // 主动调用 unlisten 防泄漏（参考 `terminal-surface.tsx`、`agent-profile-form.tsx`）。
 //
-// 性能优化：使用 LRU 缓存最近访问的几个 session 的状态；命中缓存时先提交轻量
-// loading 状态，下一帧再恢复大 timeline，避免切换 session 被大量历史 DOM 阻塞。
+// 性能优化：使用 LRU 缓存最近访问的几个 session 的状态。
+// 进程内第一次进入才读打开回放；同一次运行里切回直接恢复缓存，不再重读。
 
 import { useEffect, useReducer, useRef } from "react";
 import type { Dispatch } from "react";
@@ -38,10 +38,13 @@ interface CachedSessionState {
 
 // 最大缓存的 session 数量（LRU 策略）
 const MAX_CACHED_SESSIONS = 5;
-const CACHE_PREVIEW_BATCH_SIZE = 50;
 
-// 全局的 session 状态缓存
-const sessionStateCache = new Map<number, CachedSessionState>();
+// 全局的 session 状态缓存。键含 projectId，避免不同项目的同号会话串缓存。
+const sessionStateCache = new Map<string, CachedSessionState>();
+
+function cacheKey(projectId: number, sessionId: number): string {
+  return `${projectId}:${sessionId}`;
+}
 
 export function clearAgentMessageStreamCacheForTest(): void {
   sessionStateCache.clear();
@@ -49,27 +52,29 @@ export function clearAgentMessageStreamCacheForTest(): void {
 
 // 更新 session 缓存
 function updateCachedSessionState(
+  projectId: number,
   sessionId: number,
   state: MessageStreamState,
 ) {
+  const key = cacheKey(projectId, sessionId);
   // LRU 清理：如果超过最大数量，删除最久未使用的
   if (
-    !sessionStateCache.has(sessionId) &&
+    !sessionStateCache.has(key) &&
     sessionStateCache.size >= MAX_CACHED_SESSIONS
   ) {
-    let oldestSessionId: number | null = null;
+    let oldestKey: string | null = null;
     let oldestTime = Infinity;
     for (const [id, cached] of sessionStateCache.entries()) {
       if (cached.lastAccessTime < oldestTime) {
         oldestTime = cached.lastAccessTime;
-        oldestSessionId = id;
+        oldestKey = id;
       }
     }
-    if (oldestSessionId !== null) {
-      sessionStateCache.delete(oldestSessionId);
+    if (oldestKey !== null) {
+      sessionStateCache.delete(oldestKey);
     }
   }
-  sessionStateCache.set(sessionId, {
+  sessionStateCache.set(key, {
     state,
     lastAccessTime: Date.now(),
   });
@@ -81,7 +86,7 @@ function updateCachedSessionState(
  * 返回当前 `MessageStreamState` 与 `dispatch`；首次加载历史前 `isInitialized`
  * 为 false。`dispatch` 供父组件做乐观更新（如发送消息后立即插入用户消息）。
  *
- * 性能优化：使用 LRU 缓存最近访问的几个 session，避免每次切换都重新读取 timeline。
+ * 进程内第一次进入读打开回放。同一次运行里切回沿用缓存，不用新的末尾窗口替换。
  */
 export function useAgentMessageStream({
   projectId,
@@ -99,6 +104,11 @@ export function useAgentMessageStream({
     createInitialState,
   );
   const stateSessionIdRef = useRef(sessionId);
+  const stateProjectIdRef = useRef(projectId);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // 监听 state 变化，更新缓存
   useEffect(() => {
@@ -108,23 +118,39 @@ export function useAgentMessageStream({
     if (!state.isInitialized) {
       return;
     }
-    updateCachedSessionState(sessionId, state);
-  }, [sessionId, state]);
+    updateCachedSessionState(projectId, sessionId, state);
+  }, [projectId, sessionId, state]);
 
   useEffect(() => {
     let isDisposed = false;
-    // 切换session时立刻重置状态，显示loading，避免旧内容停留
-    dispatch({ type: "RESET" });
-
-    // 切换session时立刻重置状态，显示loading，避免旧内容停留
+    const previousSessionId = stateSessionIdRef.current;
+    const previousProjectId = stateProjectIdRef.current;
+    if (
+      (previousSessionId !== sessionId || previousProjectId !== projectId) &&
+      stateRef.current.isInitialized
+    ) {
+      updateCachedSessionState(
+        previousProjectId,
+        previousSessionId,
+        stateRef.current,
+      );
+    }
+    const cachedState = sessionStateCache.get(cacheKey(projectId, sessionId));
+    const hasCachedInitialized = cachedState?.state.isInitialized ?? false;
+    // 进程内第一次进入才清空。同一次运行里切回直接沿用缓存，避免先闪空再盖掉。
+    if (!hasCachedInitialized) {
+      dispatch({ type: "RESET" });
+    } else {
+      dispatch({ type: "RESTORE", state: cachedState!.state });
+    }
 
     let unlisten: (() => void) | null = null;
-    let pendingEvents: AgentStreamEvent[] = [];
-    let deferredEvents: AgentStreamEvent[] = [];
+    let pendingEvents: Array<{
+      event: AgentStreamEvent;
+      logOffset?: number;
+    }> = [];
     let flushHandle: ReturnType<typeof setTimeout> | number | null = null;
     let flushHandleKind: "animation-frame" | "timeout" | null = null;
-    let restoreFrameHandle: number | null = null;
-    let restoreTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     const scheduleFlush = () => {
       if (flushHandle !== null) {
@@ -166,12 +192,8 @@ export function useAgentMessageStream({
       flushHandleKind = null;
     };
 
-    // 检查是否已有缓存的初始化状态
-    const cachedState = sessionStateCache.get(sessionId);
-    const hasCachedInitialized = cachedState?.state.isInitialized ?? false;
-    let isWaitingForTimeline = hasCachedInitialized;
-
     stateSessionIdRef.current = sessionId;
+    stateProjectIdRef.current = projectId;
 
     // 所有事件走同一有序队列再按帧 flush。
     // 旧实现把 turn_completed 等非 timeline 事件立刻 dispatch，会越过尚未
@@ -179,75 +201,18 @@ export function useAgentMessageStream({
     // tool_call 当成异常中断，后续 batched timeline 再把 turnStatus 恢复成
     // running，于是 session card 已因 grace 结束变蓝点，session view 仍卡在
     // 「思考中」。统一入队可保持事件相对顺序。
-    const dispatchStreamEvent = (event: AgentStreamEvent) => {
-      if (isWaitingForTimeline) {
-        deferredEvents.push(event);
-        return;
-      }
-      pendingEvents.push(event);
+    const dispatchStreamEvent = (
+      event: AgentStreamEvent,
+      logOffset?: number,
+    ) => {
+      pendingEvents.push({ event, logOffset });
       scheduleFlush();
     };
 
-    const scheduleCacheRestore = (restore: () => void) => {
-      if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
-        restoreFrameHandle = window.requestAnimationFrame(() => {
-          restoreFrameHandle = null;
-          restoreTimeoutHandle = globalThis.setTimeout(() => {
-            restoreTimeoutHandle = null;
-            restore();
-          }, 0);
-        });
-        return;
-      }
-      restoreTimeoutHandle = globalThis.setTimeout(() => {
-        restoreTimeoutHandle = null;
-        restore();
-      }, 0);
-    };
-
-    const cancelCacheRestoreSchedule = () => {
-      if (restoreFrameHandle !== null) {
-        window.cancelAnimationFrame(restoreFrameHandle);
-        restoreFrameHandle = null;
-      }
-      if (restoreTimeoutHandle !== null) {
-        globalThis.clearTimeout(restoreTimeoutHandle);
-        restoreTimeoutHandle = null;
-      }
-    };
-
-    const flushDeferredEvents = () => {
-      if (deferredEvents.length === 0) {
-        return;
-      }
-      const events = deferredEvents;
-      deferredEvents = [];
-      dispatch({ type: "EVENT_BATCH", events });
-    };
-
     async function initialize() {
-      // 如果已有缓存，先用缓存做轻量预览，再后台重读 timeline 校正最终状态。
+      // 同一次运行里再次进入：沿用内存中的消息流，不重读打开回放。
       if (hasCachedInitialized && cachedState) {
-        scheduleCacheRestore(() => {
-          if (isDisposed) {
-            return;
-          }
-          cachedState.lastAccessTime = Date.now();
-
-          const fullState = cachedState.state;
-          if (fullState.entries.length <= CACHE_PREVIEW_BATCH_SIZE) {
-            dispatch({ type: "RESTORE", state: fullState });
-            return;
-          }
-
-          dispatch({
-            type: "RESTORE",
-            state: {
-              ...fullState,
-              entries: fullState.entries.slice(-CACHE_PREVIEW_BATCH_SIZE),
-            },
-          });
-        });
+        cachedState.lastAccessTime = Date.now();
 
         try {
           unlisten = await subscribeAgentSessionStream((envelope) => {
@@ -257,36 +222,14 @@ export function useAgentMessageStream({
             ) {
               return;
             }
-            dispatchStreamEvent(envelope.event);
+            dispatchStreamEvent(envelope.event, envelope.logOffset);
           });
           if (isDisposed) {
             unlisten?.();
             unlisten = null;
           }
         } catch {
-          // 订阅失败不阻塞：用户可刷新历史回放补齐。
-        }
-
-        try {
-          const { items, effort, model } = await readAgentTimeline({
-            projectId,
-            sessionId,
-          });
-          if (isDisposed) {
-            return;
-          }
-          cancelCacheRestoreSchedule();
-          isWaitingForTimeline = false;
-          dispatch({ type: "HYDRATE", items, effort, model });
-          flushDeferredEvents();
-        } catch {
-          if (isDisposed) {
-            return;
-          }
-          cancelCacheRestoreSchedule();
-          isWaitingForTimeline = false;
-          dispatch({ type: "RESTORE", state: cachedState.state });
-          flushDeferredEvents();
+          // 订阅失败不阻塞：已有消息流仍留在页面上。
         }
         return;
       }
@@ -334,10 +277,8 @@ export function useAgentMessageStream({
 
     return () => {
       isDisposed = true;
-      cancelCacheRestoreSchedule();
       cancelFlush();
       pendingEvents = [];
-      deferredEvents = [];
       unlisten?.();
     };
   }, [projectId, sessionId, t]);
