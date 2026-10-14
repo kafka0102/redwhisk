@@ -90,7 +90,7 @@ DeepSeek Harness 走 ACP，不走 SDK，也不启动 `dsh web`。
 ## 生命周期规则
 
 1. 启动 provider（或 TUI PTY）成功后再创建可用 Agent Session，并更新关联 Issue 状态。
-2. **json**：`send_agent_message` 开始 turn；`is_turn_running` 仅由 Rust 后端维护。**tui**：不以结构化 turn 事件驱动；产品状态以进程存活为准（`isTurnRunning` 不依赖易碎启发）。
+2. **json**：`send_agent_message` 开始 turn；`is_turn_running` 仅由 Rust 后端维护。**tui**：进程存活仍决定 Session 四态；Codex / Grok TUI 的 `is_turn_running` 由已注册 hook 的 turn 边沿决定；未注册时保持蓝点。TTY 启发式仍然不做。
 3. **json**：正常结束、失败和取消都通过统一 stream event 通知前端，并更新持久化 session 事实。**tui**：进程正常退出 → `closed`；异常退出 → `crashed`；应用重启后无活跃 PTY 的 running tui session → `stopped`。
 4. `crashed` / `stopped` 均不自动完成 Issue。
 5. **json** timeline 历史使用 `read_agent_timeline`；不能将截断 ANSI 日志作为结构化会话恢复方式。**tui** 恢复为终端 buffer restore，不映射 structured timeline。

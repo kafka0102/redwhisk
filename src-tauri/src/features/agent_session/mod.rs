@@ -19,6 +19,7 @@ mod startup_model;
 mod terminal_archive_clean;
 mod terminal_archive_render;
 mod timeline;
+mod tui_hook_turn;
 mod tui_session_metrics_sync;
 mod tui_terminal;
 pub mod tui_terminal_commands;
@@ -51,5 +52,9 @@ pub(crate) use timeline::read_assistant_texts_for_turn;
 
 #[cfg(test)]
 mod timeline_tests;
+#[cfg(test)]
+mod tui_hook_turn_fallback_tests;
+#[cfg(test)]
+mod tui_hook_turn_tests;
 #[cfg(test)]
 mod tui_start_tests;

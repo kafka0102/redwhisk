@@ -59,6 +59,9 @@ pub struct AgentSessionRepository<'connection> {
     connection: &'connection Connection,
 }
 
+#[path = "agent_session_tui_hook.rs"]
+mod tui_hook;
+
 impl<'connection> AgentSessionRepository<'connection> {
     pub fn new(connection: &'connection Connection) -> Self {
         Self { connection }
@@ -883,14 +886,18 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
-    /// 活跃时长心跳：对「运行中且当前 turn 正在运行」的会话批量累加一次活跃时长。
+    /// 活跃时长心跳：只累加 json 会话。TUI 即使 `is_turn_running=1`（hook 置位）
+    /// 也不被本语句累加，避免和 TUI session log 覆盖打架。
     /// 累加值以当前 Turn 开始时刻夹取，Turn 开始之前的时间不计入本轮；漏记
     /// turn_started_at 时不累加（COALESCE 兜底为 0）。单条 UPDATE 覆盖全部命中会话。
     pub fn accumulate_active_time_ms(&self, active_ms: i64, now: i64) -> rusqlite::Result<usize> {
         self.connection.execute(
             "UPDATE agent_sessions
              SET processing_ms = processing_ms + MIN(?1, MAX(0, ?2 - COALESCE(turn_started_at, ?2)))
-             WHERE status = 'running' AND is_turn_running = 1 AND del = 0",
+             WHERE status = 'running'
+               AND is_turn_running = 1
+               AND display_mode = 'json'
+               AND del = 0",
             params![active_ms, now],
         )
     }
@@ -898,8 +905,8 @@ impl<'connection> AgentSessionRepository<'connection> {
     /// 覆盖写入 TUI 会话的累计执行时长（取自 provider session log 各 turn 处理耗时之和）。
     ///
     /// 与 [`Self::accumulate_active_time_ms`] 按 `display_mode` 互斥：本方法只命中
-    /// `tui`；活跃时长心跳只累加 `is_turn_running=1` 的会话（TUI 无结构化 Turn 事件，
-    /// 不会命中），两条路径不互相覆盖。
+    /// `tui`；活跃时长心跳只累加 `display_mode='json'` 且 `is_turn_running=1` 的会话，
+    /// 两条路径不互相覆盖。
     pub fn overwrite_tui_processing_ms(
         &self,
         session_id: i64,
