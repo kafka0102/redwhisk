@@ -777,6 +777,7 @@ fn agent_profile_record_from_row(
         del: row.del,
         display_mode: row.display_mode,
         enabled: row.enabled,
+        display_order: row.display_order.unwrap_or(0),
     }
 }
 

@@ -83,6 +83,7 @@
         "defaultSkill": "required",
         "del": "required",
         "displayMode": "required",
+        "displayOrder": "required",
         "enabled": "required",
         "id": "required",
         "mode": "required",

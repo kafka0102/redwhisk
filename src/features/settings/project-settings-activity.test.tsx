@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +20,7 @@ import {
   previewAgentCommandArgs,
   reconcileSavedAgentSkills,
   refreshAgentSkills,
+  saveAgentDisplayOrder,
   saveAgentProfile,
   saveProjectLabel,
   testAgentCommand,
@@ -50,6 +57,7 @@ vi.mock("./settings-commands", async (importOriginal) => {
     previewAgentCommandArgs: vi.fn(),
     reconcileSavedAgentSkills: vi.fn(),
     refreshAgentSkills: vi.fn(),
+    saveAgentDisplayOrder: vi.fn(),
     saveAgentProfile: vi.fn(),
     saveProjectLabel: vi.fn(),
   };
@@ -106,6 +114,7 @@ const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
 const reconcileSavedAgentSkillsMock = vi.mocked(reconcileSavedAgentSkills);
 const refreshAgentSkillsMock = vi.mocked(refreshAgentSkills);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
+const saveAgentDisplayOrderMock = vi.mocked(saveAgentDisplayOrder);
 const saveAgentProfileMock = vi.mocked(saveAgentProfile);
 const saveProjectLabelMock = vi.mocked(saveProjectLabel);
 const previewAgentCommandArgsMock = vi.mocked(previewAgentCommandArgs);
@@ -131,6 +140,7 @@ const projectProfile: AgentProfileRecord = {
   del: 0,
   displayMode: "json",
   enabled: true,
+  displayOrder: 1,
 };
 
 const globalProfile: AgentProfileRecord = {
@@ -147,6 +157,7 @@ const globalProfile: AgentProfileRecord = {
   del: 0,
   displayMode: "json",
   enabled: true,
+  displayOrder: 2,
 };
 
 const legacyPromptProfile: AgentProfileRecord = {
@@ -154,6 +165,7 @@ const legacyPromptProfile: AgentProfileRecord = {
   id: 3,
   name: "Legacy Prompt Codex",
   promptTemplate: "Keep this legacy prompt",
+  displayOrder: 3,
 };
 
 const projectLabel: ProjectLabelRecord = {
@@ -189,6 +201,7 @@ describe("ProjectSettingsActivity", () => {
     reconcileSavedAgentSkillsMock.mockReset();
     refreshAgentSkillsMock.mockReset();
     listProjectLabelsMock.mockReset();
+    saveAgentDisplayOrderMock.mockReset();
     saveAgentProfileMock.mockReset();
     saveProjectLabelMock.mockReset();
     previewAgentCommandArgsMock.mockReset();
@@ -211,6 +224,7 @@ describe("ProjectSettingsActivity", () => {
       if (agentType === "opencode" || agentType === "grok") return [];
       return ["--dangerously-skip", "--json"];
     });
+    saveAgentDisplayOrderMock.mockResolvedValue(undefined);
     deleteAgentProfileMock.mockResolvedValue(undefined);
     deleteProjectLabelMock.mockResolvedValue(undefined);
     updateProjectSettingsMock.mockResolvedValue({
@@ -997,10 +1011,15 @@ describe("ProjectSettingsActivity", () => {
     const user = userEvent.setup();
     const longWorkflowSkill =
       "codex-global-skill-with-a-very-long-unbroken-name";
-    const projectProfileWithHigherId = { ...projectProfile, id: 20 };
+    const projectProfileWithHigherId = {
+      ...projectProfile,
+      id: 20,
+      displayOrder: 1,
+    };
     const globalProfileWithLowerId = {
       ...globalProfile,
       id: 10,
+      displayOrder: 2,
       defaultSkill: longWorkflowSkill,
     };
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
@@ -1066,16 +1085,16 @@ describe("ProjectSettingsActivity", () => {
 
     const rows = within(table).getAllByRole("row").slice(1);
     expect(
-      within(rows[0]).getByRole("button", { name: "Edit Global Codex" }),
+      within(rows[0]).getByRole("button", { name: "Edit Project Codex" }),
     ).toBeInTheDocument();
     expect(
-      within(rows[0]).getByRole("button", { name: "Delete Global Codex" }),
+      within(rows[0]).getByRole("button", { name: "Delete Project Codex" }),
     ).toBeInTheDocument();
     expect(
-      within(rows[0]).getAllByRole("button", { name: "Delete Global Codex" }),
+      within(rows[0]).getAllByRole("button", { name: "Delete Project Codex" }),
     ).toHaveLength(1);
     expect(
-      within(rows[1]).getByRole("button", { name: "Edit Project Codex" }),
+      within(rows[1]).getByRole("button", { name: "Edit Global Codex" }),
     ).toBeInTheDocument();
   });
 
@@ -1166,29 +1185,32 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("places disabled profiles last while keeping id ascending inside each group", async () => {
+  it("keeps the returned display order and marks disabled rows without moving them", async () => {
     const user = userEvent.setup();
-    const enabledHigher: AgentProfileRecord = {
-      ...projectProfile,
-      id: 30,
-      name: "Enabled Higher",
-      enabled: true,
-    };
-    const disabledLower: AgentProfileRecord = {
-      ...globalProfile,
-      id: 5,
-      name: "Disabled Lower",
-      enabled: false,
-    };
-    const disabledHigher: AgentProfileRecord = {
+    const disabledFirst: AgentProfileRecord = {
       ...globalProfile,
       id: 40,
-      name: "Disabled Higher",
+      name: "Disabled First",
       enabled: false,
+      displayOrder: 1,
+    };
+    const enabledMiddle: AgentProfileRecord = {
+      ...projectProfile,
+      id: 5,
+      name: "Enabled Middle",
+      enabled: true,
+      displayOrder: 2,
+    };
+    const disabledLast: AgentProfileRecord = {
+      ...globalProfile,
+      id: 7,
+      name: "Disabled Last",
+      enabled: false,
+      displayOrder: 3,
     };
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
-      if (scope === "project") return { profiles: [enabledHigher] };
-      return { profiles: [disabledLower, disabledHigher] };
+      if (scope === "project") return { profiles: [enabledMiddle] };
+      return { profiles: [disabledFirst, disabledLast] };
     });
 
     render(
@@ -1202,26 +1224,181 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    const rows = within(
-      screen.getByRole("table", { name: "Configured agents" }),
-    )
-      .getAllByRole("row")
-      .slice(1);
-    expect(
-      rows.map((row) => {
-        const buttons = row.querySelectorAll("button");
-        // Edit 按钮的 aria-label 形如 "Edit <name>"
-        const editButton = Array.from(buttons).find((button) =>
-          button.getAttribute("aria-label")?.startsWith("Edit "),
-        );
-        return editButton?.getAttribute("aria-label")?.replace(/^Edit /, "");
-      }),
-    ).toEqual(["Enabled Higher", "Disabled Lower", "Disabled Higher"]);
-
-    // 禁用行带灰底（bg-muted/50）
-    expect(rows[0]).not.toHaveClass("bg-muted/50");
-    expect(rows[1]).toHaveClass("bg-muted/50");
+    const rows = agentTableRows();
+    expect(agentRowNames(rows)).toEqual([
+      "Disabled First",
+      "Enabled Middle",
+      "Disabled Last",
+    ]);
+    expect(rows[0]).toHaveClass("bg-muted/50");
+    expect(rows[1]).not.toHaveClass("bg-muted/50");
     expect(rows[2]).toHaveClass("bg-muted/50");
+    expect(
+      screen.getByRole("columnheader", { name: "Order" }),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[0]).getByRole("button", {
+        name: "Reorder Disabled First",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("saves the visible row order when a reorder handle is dropped", async () => {
+    const user = userEvent.setup();
+    const first: AgentProfileRecord = {
+      ...projectProfile,
+      id: 11,
+      name: "First Agent",
+      displayOrder: 1,
+    };
+    const second: AgentProfileRecord = {
+      ...globalProfile,
+      id: 22,
+      name: "Second Agent",
+      displayOrder: 2,
+    };
+    const third: AgentProfileRecord = {
+      ...globalProfile,
+      id: 33,
+      name: "Third Agent",
+      enabled: false,
+      displayOrder: 3,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [first] };
+      return { profiles: [second, third] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    dropAgentRow("First Agent", "Third Agent");
+
+    await waitFor(() =>
+      expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
+        profileIds: [22, 33, 11],
+      }),
+    );
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Second Agent",
+      "Third Agent",
+      "First Agent",
+    ]);
+  });
+
+  it("restores the previous order and shows the settings error when saving display order fails", async () => {
+    const user = userEvent.setup();
+    saveAgentDisplayOrderMock.mockRejectedValue(new Error("disk full"));
+    const first: AgentProfileRecord = {
+      ...projectProfile,
+      id: 11,
+      name: "First Agent",
+      displayOrder: 1,
+    };
+    const second: AgentProfileRecord = {
+      ...globalProfile,
+      id: 22,
+      name: "Second Agent",
+      displayOrder: 2,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [first] };
+      return { profiles: [second] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    dropAgentRow("First Agent", "Second Agent");
+
+    expect(
+      await screen.findByRole("status", { name: "Settings status" }),
+    ).toHaveTextContent(
+      "Couldn't save agent order. The previous order was restored.",
+    );
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "First Agent",
+      "Second Agent",
+    ]);
+  });
+
+  it("appends a newly saved agent after the existing display order", async () => {
+    const user = userEvent.setup();
+    const created: AgentProfileRecord = {
+      ...globalProfile,
+      id: 90,
+      name: "Newest Agent",
+      displayOrder: 99,
+    };
+    saveAgentProfileMock.mockResolvedValue(created);
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+    await user.click(screen.getByRole("button", { name: "New agent" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Agent profile name" }),
+      "Newest Agent",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saveAgentProfileMock).toHaveBeenCalled());
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Project Codex",
+      "Global Codex",
+      "Newest Agent",
+    ]);
+  });
+
+  it("keeps a row in place when its enabled state changes", async () => {
+    const user = userEvent.setup();
+    const disabledCopy: AgentProfileRecord = {
+      ...globalProfile,
+      enabled: false,
+    };
+    saveAgentProfileMock.mockResolvedValue(disabledCopy);
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+    await user.click(screen.getByRole("button", { name: "Edit Global Codex" }));
+    await selectShadcnOption(user, screen, "Enabled", "No");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saveAgentProfileMock).toHaveBeenCalled());
+    const rows = agentTableRows();
+    expect(agentRowNames(rows)).toEqual(["Project Codex", "Global Codex"]);
+    expect(rows[1]).toHaveClass("bg-muted/50");
   });
 
   it("confirms before deleting an agent profile from the table", async () => {
@@ -1919,6 +2096,42 @@ describe("ProjectSettingsActivity", () => {
     expect(updateProjectSettingsMock).not.toHaveBeenCalled();
   });
 });
+
+function agentTableRows(): HTMLElement[] {
+  return within(screen.getByRole("table", { name: "Configured agents" }))
+    .getAllByRole("row")
+    .slice(1);
+}
+
+function agentRowNames(rows: HTMLElement[]): string[] {
+  return rows.map((row) => {
+    const editButton = Array.from(row.querySelectorAll("button")).find(
+      (button) => button.getAttribute("aria-label")?.startsWith("Edit "),
+    );
+    return editButton?.getAttribute("aria-label")?.replace(/^Edit /, "") ?? "";
+  });
+}
+
+function dropAgentRow(draggedName: string, targetName: string): void {
+  const dragged = screen.getByRole("button", {
+    name: `Reorder ${draggedName}`,
+  });
+  const targetRow = screen
+    .getByRole("button", { name: `Edit ${targetName}` })
+    .closest("tr");
+  if (!targetRow) {
+    throw new Error(`missing row for ${targetName}`);
+  }
+  const dataTransfer = {
+    effectAllowed: "move",
+    dropEffect: "move",
+    setData: () => {},
+    getData: () => "",
+  };
+  fireEvent.dragStart(dragged, { dataTransfer });
+  fireEvent.dragOver(targetRow, { dataTransfer });
+  fireEvent.drop(targetRow, { dataTransfer });
+}
 
 function skillResponse(
   skills: AgentSkillListResponse["skills"],

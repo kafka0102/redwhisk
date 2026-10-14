@@ -23,6 +23,7 @@ function makeProfile(
     del: 0,
     displayMode: "json",
     enabled: true,
+    displayOrder: 1,
     ...overrides,
   };
 }

@@ -29,6 +29,7 @@ export interface AgentProfileRecord {
   del: number;
   displayMode: AgentDisplayMode;
   enabled: boolean;
+  displayOrder: number;
 }
 
 export interface ListAgentProfilesInput {

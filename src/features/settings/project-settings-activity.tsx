@@ -38,8 +38,8 @@ import { GeneralSettingsPanel } from "./settings-general-panel";
 import { AgentsSettingsPanel } from "./settings-agents-panel";
 import { LabelsSettingsPanel } from "./settings-labels-panel";
 import { SkillsSettingsPanel } from "./settings-skills-panel";
-// ADR-0020 决策 9：表格排序——禁用置末、同组按 id 升序。
-import { sortAgentProfilesForDisplay } from "./agent-profile-sort";
+import { mergeAgentProfilesByDisplayOrder } from "./merge-agent-profiles-by-display-order";
+import { saveAgentDisplayOrder } from "./settings-commands";
 
 export type SettingsMenu = "general" | "agents" | "labels" | "skills";
 
@@ -194,14 +194,13 @@ export function ProjectSettingsActivity({
     SETTINGS_MENU_ITEMS[0];
   const activeMenuLabel = getSettingsMenuLabel(activeMenuItem.key, messages);
   const isProfilesCurrent = profilesProjectId === projectId;
-  // ADR-0020 决策 9：表格排序——禁用置末、同组按 id 升序。useMemo 稳定引用，
-  // 供下游 useAgentCommandArgs 据此判定是否需要重新拉取参数（内容未变不重跑）。
+  // ADR-0051：接口已按 displayOrder 返回。合并时穿插，不再按启用状态或 id 重排。
   const currentProfiles = useMemo(
     () =>
-      sortAgentProfilesForDisplay([
-        ...(isProfilesCurrent ? projectProfiles : []),
-        ...(isProfilesCurrent ? globalProfiles : []),
-      ]),
+      mergeAgentProfilesByDisplayOrder(
+        isProfilesCurrent ? projectProfiles : [],
+        isProfilesCurrent ? globalProfiles : [],
+      ),
     [isProfilesCurrent, projectProfiles, globalProfiles],
   );
   const currentProfilesErrorMessage = isProfilesCurrent
@@ -400,6 +399,29 @@ export function ProjectSettingsActivity({
       clearDragState();
     };
   }, [clearDragState]);
+
+  async function handleReorderProfiles(orderedIds: number[]) {
+    const previousProjectProfiles = projectProfiles;
+    const previousGlobalProfiles = globalProfiles;
+    const rank = new Map(orderedIds.map((id, index) => [id, index]));
+    const reorder = (profiles: AgentProfileRecord[]) =>
+      profiles.map((profile) => {
+        const nextOrder = rank.get(profile.id);
+        return nextOrder === undefined
+          ? profile
+          : { ...profile, displayOrder: nextOrder };
+      });
+    setProjectProfiles(reorder(projectProfiles));
+    setGlobalProfiles(reorder(globalProfiles));
+    setProfilesErrorMessage(null);
+    try {
+      await saveAgentDisplayOrder({ profileIds: orderedIds });
+    } catch {
+      setProjectProfiles(previousProjectProfiles);
+      setGlobalProfiles(previousGlobalProfiles);
+      setProfilesErrorMessage(messages.settings.agentOrderSaveFailed);
+    }
+  }
 
   function handleProfileSaved(savedProfile: AgentProfileRecord) {
     setProjectProfiles((current) => {
@@ -759,6 +781,7 @@ export function ProjectSettingsActivity({
                 onDeleteProfile={handleDeleteProfile}
                 onEditingProfileChange={handleEditingProfileChange}
                 onProfileSaved={handleProfileSaved}
+                onReorderProfiles={handleReorderProfiles}
               />
             ) : null}
 
@@ -837,7 +860,21 @@ function mergeProfile(
   savedProfile: AgentProfileRecord,
 ): AgentProfileRecord[] {
   const remaining = removeProfile(currentProfiles, savedProfile.id);
-  return [...remaining, savedProfile].sort((left, right) => left.id - right.id);
+  const existing = currentProfiles.find(
+    (profile) => profile.id === savedProfile.id,
+  );
+  if (existing) {
+    return [
+      ...remaining,
+      { ...savedProfile, displayOrder: existing.displayOrder },
+    ];
+  }
+  const nextOrder =
+    remaining.reduce(
+      (maxOrder, profile) => Math.max(maxOrder, profile.displayOrder),
+      0,
+    ) + 1;
+  return [...remaining, { ...savedProfile, displayOrder: nextOrder }];
 }
 
 function removeProfile(

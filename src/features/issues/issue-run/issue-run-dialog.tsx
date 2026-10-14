@@ -144,10 +144,12 @@ export function IssueRunDialog({
           return;
         }
 
-        const mergedProfiles = filterLaunchVisibleAgentProfiles([
-          ...projectProfilesResponse.profiles,
-          ...globalProfilesResponse.profiles,
-        ]);
+        const mergedProfiles = filterLaunchVisibleAgentProfiles(
+          [
+            ...projectProfilesResponse.profiles,
+            ...globalProfilesResponse.profiles,
+          ].sort((left, right) => left.displayOrder - right.displayOrder),
+        );
         const mergedSavedSkills = [
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,

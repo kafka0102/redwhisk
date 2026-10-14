@@ -132,6 +132,9 @@ export interface I18nMessages {
     agentCommand: string;
     // ADR-0020：表单展示形式 / 启用状态 / 名称校验。ticket 05 使用。
     agentNameTooLong: string;
+    agentOrder: string;
+    agentOrderSaveFailed: string;
+    reorderAgent: (profileName: string) => string;
     displayMode: string;
     displayModeJson: string;
     displayModeTui: string;

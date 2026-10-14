@@ -53,7 +53,10 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
-import { selectShadcnOption } from "../../test/select-helpers";
+import {
+  openShadcnSelect,
+  selectShadcnOption,
+} from "../../test/select-helpers";
 
 vi.mock("./issue-commands", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./issue-commands")>();
@@ -410,6 +413,7 @@ const projectProfile = {
   del: 0,
   displayMode: "json" as const,
   enabled: true,
+  displayOrder: 2,
 };
 
 const globalProfile = {
@@ -426,6 +430,7 @@ const globalProfile = {
   del: 0,
   displayMode: "json" as const,
   enabled: true,
+  displayOrder: 1,
 };
 
 const projectLabel = {
@@ -1992,6 +1997,41 @@ describe("IssuesActivity", () => {
       }),
     ).not.toBeInTheDocument();
     expect(createButton).toBeInTheDocument();
+  });
+
+  it("lists enabled launch profiles in settings display order and hides disabled ones", async () => {
+    const user = userEvent.setup();
+    const disabledBetween = {
+      ...globalProfile,
+      id: 150,
+      name: "Disabled Between",
+      enabled: false,
+      displayOrder: 2,
+    };
+    const laterGlobal = {
+      ...globalProfile,
+      id: 50,
+      name: "Later Global",
+      displayOrder: 1,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+      return { profiles: [laterGlobal, disabledBetween] };
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await openShadcnSelect(user, within(dialog), "Agent profile");
+
+    const options = await screen.findAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Later Global (Global)",
+      "Project Codex (Project)",
+    ]);
   });
 
   it("opens a compact run dialog with read-only prompt when profiles are available", async () => {

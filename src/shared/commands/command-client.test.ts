@@ -698,6 +698,7 @@ describe("command client", () => {
           del: 0,
           displayMode: "json",
           enabled: true,
+          displayOrder: 1,
         },
       ],
     });
@@ -720,6 +721,7 @@ describe("command client", () => {
           del: 0,
           displayMode: "json",
           enabled: true,
+          displayOrder: 1,
         },
       ],
     });
@@ -743,6 +745,7 @@ describe("command client", () => {
       del: 0,
       displayMode: "json",
       enabled: true,
+      displayOrder: 1,
     });
 
     await expect(
@@ -773,6 +776,7 @@ describe("command client", () => {
       del: 0,
       displayMode: "json",
       enabled: true,
+      displayOrder: 1,
     });
     expect(invokeMock).toHaveBeenCalledWith("save_agent_profile", {
       input: {

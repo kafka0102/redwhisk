@@ -64,6 +64,8 @@ pub struct AgentProfileRecord {
     pub del: i64,
     pub display_mode: String,
     pub enabled: bool,
+    /// 全应用智能体显示顺序。列表已按该字段返回；前端合并两个 scope 时用它穿插。
+    pub display_order: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

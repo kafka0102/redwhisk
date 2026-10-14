@@ -1,4 +1,5 @@
-import { Info } from "lucide-react";
+import { useRef } from "react";
+import { GripVertical, Info } from "lucide-react";
 
 import { Button, Empty, EmptyTitle } from "@/components/ui";
 import {
@@ -39,6 +40,7 @@ interface AgentsSettingsPanelProps {
   onDeleteProfile: (profile: AgentProfileRecord) => void;
   onEditingProfileChange: (state: EditingProfileState | null) => void;
   onProfileSaved: (profile: AgentProfileRecord) => void;
+  onReorderProfiles: (orderedIds: number[]) => void;
 }
 
 export function AgentsSettingsPanel({
@@ -53,8 +55,10 @@ export function AgentsSettingsPanel({
   onDeleteProfile,
   onEditingProfileChange,
   onProfileSaved,
+  onReorderProfiles,
 }: AgentsSettingsPanelProps) {
   const { messages, t } = useI18n();
+  const draggedProfileIdRef = useRef<number | null>(null);
   // ADR-0020 决策 8：批量获取可见 profiles 的启动参数；codex/claude 返回非空、
   // opencode/grok 当前为空。仅非空时命令列渲染「i」图标。
   const { argsByProfileId } = useAgentCommandArgs(profiles);
@@ -87,6 +91,9 @@ export function AgentsSettingsPanel({
           >
             <TableHeader>
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-12">
+                  {messages.settings.agentOrder}
+                </TableHead>
                 <TableHead className="w-14">{messages.settings.type}</TableHead>
                 <TableHead className="w-[300px]">
                   {messages.settings.name}
@@ -132,7 +139,52 @@ export function AgentsSettingsPanel({
                   <TableRow
                     key={profile.id}
                     className={profile.enabled ? undefined : "bg-muted/50"}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const draggedId = draggedProfileIdRef.current;
+                      draggedProfileIdRef.current = null;
+                      if (draggedId === null || draggedId === profile.id) {
+                        return;
+                      }
+                      const ids = profiles.map((item) => item.id);
+                      const fromIndex = ids.indexOf(draggedId);
+                      const toIndex = ids.indexOf(profile.id);
+                      if (fromIndex < 0 || toIndex < 0) {
+                        return;
+                      }
+                      const nextIds = [...ids];
+                      const [moved] = nextIds.splice(fromIndex, 1);
+                      nextIds.splice(toIndex, 0, moved);
+                      onReorderProfiles(nextIds);
+                    }}
                   >
+                    <TableCell>
+                      <button
+                        type="button"
+                        draggable
+                        aria-label={messages.settings.reorderAgent(
+                          profile.name,
+                        )}
+                        title={messages.settings.agentOrder}
+                        className="grid size-7 cursor-grab place-items-center rounded-sm text-muted-foreground active:cursor-grabbing"
+                        onDragStart={(event) => {
+                          draggedProfileIdRef.current = profile.id;
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            String(profile.id),
+                          );
+                        }}
+                        onDragEnd={() => {
+                          draggedProfileIdRef.current = null;
+                        }}
+                      >
+                        <GripVertical aria-hidden="true" className="size-4" />
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <img
                         alt={t("agentsFeature.agentTypeAlt", {
