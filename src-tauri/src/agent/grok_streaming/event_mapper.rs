@@ -14,7 +14,8 @@
 //! `ToolCallState`）。裁决依据见
 //! `docs/survey/grok-build-cli-probe-notes.md` §3.5 与 ADR-0047「工具参数增量裁决」。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 use serde_json::Value;
 
@@ -24,12 +25,15 @@ use crate::agent::grok_streaming::tool_detail::{
 use crate::agent::grok_streaming::usage::GrokUsageLedger;
 use crate::types::agent_session_stream::{AgentStreamEvent, AgentTimelineItem, ToolCallStatus};
 
+#[path = "event_mapper_subagent.rs"]
+mod subagent;
+
 pub const METHOD_SESSION_UPDATE: &str = "session/update";
 pub const METHOD_SESSION_NOTIFICATION: &str = "_x.ai/session_notification";
 
 /// 一轮 turn 的事件归一状态机。
 pub(crate) struct GrokStreamMapper {
-    turn_id: Option<String>,
+    pub(super) turn_id: Option<String>,
     turn_started: bool,
     turn_finalized: bool,
     /// `session/prompt` 已经收尾后，Grok 仍可能换 `promptId` 继续吐正文。
@@ -41,12 +45,15 @@ pub(crate) struct GrokStreamMapper {
     follow_up_open: bool,
     /// 用户已点终止。与 prompt 正常返回不同，之后的工具 / 正文 / 推理都丢弃。
     user_canceled: bool,
-    assistant_text: String,
-    reasoning_text: String,
+    pub(super) assistant_text: String,
+    pub(super) reasoning_text: String,
+    /// 子会话正文 / 推理按 `child_session_id` 分开累积，避免并进父缓冲。
+    child_assistant_text: HashMap<String, String>,
+    child_reasoning_text: HashMap<String, String>,
     message_index: usize,
     /// 每个 toolCallId 跨更新累积的状态（工具名 + 最近一次完整入参 / locations）。
     tool_calls: HashMap<String, ToolCallState>,
-    child_session_ids: HashSet<String>,
+    pub(super) child_session_ids: HashSet<String>,
     usage_ledger: GrokUsageLedger,
 }
 
@@ -83,9 +90,11 @@ impl GrokStreamMapper {
             user_canceled: false,
             assistant_text: String::new(),
             reasoning_text: String::new(),
+            child_assistant_text: HashMap::new(),
+            child_reasoning_text: HashMap::new(),
             message_index: 0,
             tool_calls: HashMap::new(),
-            child_session_ids: HashSet::new(),
+            child_session_ids: subagent::new_child_ids(),
             usage_ledger: GrokUsageLedger::default(),
         }
     }
@@ -101,6 +110,8 @@ impl GrokStreamMapper {
         self.user_canceled = false;
         self.assistant_text.clear();
         self.reasoning_text.clear();
+        self.child_assistant_text.clear();
+        self.child_reasoning_text.clear();
         self.message_index = 0;
         self.tool_calls.clear();
     }
@@ -113,50 +124,27 @@ impl GrokStreamMapper {
     /// 归一一条服务端通知。
     pub fn on_notification(&mut self, method: &str, params: &Value) -> Vec<AgentStreamEvent> {
         self.note_subagent_spawned(params);
-        if self.is_child_session(params) {
-            return self.child_usage_events(params);
+        // 子会话和父会话共用这一条 stdio。正文 / 工具必须进时间线并挂上
+        // `subagent_id`，但不能写进父助手缓冲，也不能重开父 turn。
+        let child_session_id = self.child_session_id(params);
+        if child_session_id.is_some() {
+            return self.map_child_notification(method, params, child_session_id);
         }
         let mut events = Vec::new();
         if let Some(event) = self.ensure_turn_started(params) {
             events.push(event);
         }
         match method {
-            METHOD_SESSION_UPDATE => self.map_session_update(params, &mut events),
+            METHOD_SESSION_UPDATE => self.map_session_update(params, &mut events, None),
             METHOD_SESSION_NOTIFICATION | "_x.ai/session/update" => {
                 self.map_session_notification(params, &mut events)
             }
             _ => {}
         }
-        events
-    }
-
-    fn child_usage_events(&mut self, params: &Value) -> Vec<AgentStreamEvent> {
-        let update = params.get("update").unwrap_or(&Value::Null);
-        self.usage_ledger
-            .absorb_notification(update)
-            .map_or_else(Vec::new, |usage| {
-                vec![AgentStreamEvent::UsageUpdated { usage }]
-            })
-    }
-
-    fn note_subagent_spawned(&mut self, params: &Value) {
-        let Some(update) = params.get("update") else {
-            return;
-        };
-        if string_field(update, "sessionUpdate").as_deref() != Some("subagent_spawned") {
-            return;
+        if let Some(event) = self.subagent_lifecycle_event(params) {
+            events.push(event);
         }
-        let Some(child_session_id) = string_field(update, "child_session_id")
-            .or_else(|| string_field(update, "subagent_id"))
-        else {
-            return;
-        };
-        self.child_session_ids.insert(child_session_id);
-    }
-
-    fn is_child_session(&self, params: &Value) -> bool {
-        string_field(params, "sessionId")
-            .is_some_and(|session_id| self.child_session_ids.contains(&session_id))
+        events
     }
 
     pub fn on_prompt_result(&mut self, result: &Value) -> Vec<AgentStreamEvent> {
@@ -266,39 +254,46 @@ impl GrokStreamMapper {
         true
     }
 
-    fn map_session_update(&mut self, params: &Value, events: &mut Vec<AgentStreamEvent>) {
+    pub(super) fn map_session_update(
+        &mut self,
+        params: &Value,
+        events: &mut Vec<AgentStreamEvent>,
+        subagent_id: Option<String>,
+    ) {
         let update = params.get("update").unwrap_or(&Value::Null);
         match string_field(update, "sessionUpdate").as_deref() {
             Some("agent_message_chunk") => {
                 if let Some(delta) = content_text(update) {
-                    if !self.note_output_while_closed() {
+                    if subagent_id.is_none() && !self.note_output_while_closed() {
                         return;
                     }
-                    self.assistant_text.push_str(&delta);
-                    let message_id =
-                        format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn"));
+                    let text = self.append_assistant_text(subagent_id.as_deref(), &delta);
+                    let message_id = match subagent_id.as_deref() {
+                        Some(child_session_id) => format!("grok-msg-{child_session_id}"),
+                        None => format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn")),
+                    };
                     events.push(self.timeline(AgentTimelineItem::AssistantMessage {
-                        text: self.assistant_text.clone(),
+                        text,
                         message_id: Some(message_id),
-                        subagent_id: None,
+                        subagent_id,
                     }));
                 }
             }
             Some("agent_thought_chunk") => {
                 if let Some(delta) = content_text(update) {
-                    if !self.note_output_while_closed() {
+                    if subagent_id.is_none() && !self.note_output_while_closed() {
                         return;
                     }
-                    self.reasoning_text.push_str(&delta);
+                    let text = self.append_reasoning_text(subagent_id.as_deref(), &delta);
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
-                        text: self.reasoning_text.clone(),
+                        text,
                         duration_ms: None,
-                        subagent_id: None,
+                        subagent_id,
                     }));
                 }
             }
             Some("tool_call") | Some("tool_call_update") => {
-                if let Some(event) = self.map_tool_call(update) {
+                if let Some(event) = self.map_tool_call(update, subagent_id.clone()) {
                     events.push(event);
                 }
             }
@@ -307,7 +302,11 @@ impl GrokStreamMapper {
         }
     }
 
-    fn map_session_notification(&mut self, params: &Value, events: &mut Vec<AgentStreamEvent>) {
+    pub(super) fn map_session_notification(
+        &mut self,
+        params: &Value,
+        events: &mut Vec<AgentStreamEvent>,
+    ) {
         let update = params.get("update").unwrap_or(&Value::Null);
         match string_field(update, "sessionUpdate").as_deref() {
             Some("turn_completed") | Some("response_completed") => {
@@ -336,9 +335,13 @@ impl GrokStreamMapper {
         }
     }
 
-    fn map_tool_call(&mut self, update: &Value) -> Option<AgentStreamEvent> {
+    fn map_tool_call(
+        &mut self,
+        update: &Value,
+        subagent_id: Option<String>,
+    ) -> Option<AgentStreamEvent> {
         let call_id = string_field(update, "toolCallId")?;
-        if !self.note_output_while_closed() {
+        if subagent_id.is_none() && !self.note_output_while_closed() {
             return None;
         }
         let incoming_input = update
@@ -380,7 +383,7 @@ impl GrokStreamMapper {
             detail,
             status,
             error,
-            subagent_id: None,
+            subagent_id,
         }))
     }
 

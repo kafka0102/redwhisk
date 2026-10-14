@@ -1,8 +1,8 @@
-//! 子代理 ACP 更新不得进入父会话正文。
+//! 子代理 ACP 更新挂在自己的 `subagent_id` 上，不得并进父助手正文。
 //!
 //! 实测 `grok agent stdio` 会把子会话的 `session/update` 发到同一条连接上，
-//! `sessionId` 是子会话。这些 chunk 常把一行状态包成 `\n \n…\n \n`，
-//! 若并进父助手缓冲，完成归档会拆行并带上整段过程独白。
+//! `sessionId` 是子会话。这些 chunk 常把一行状态包成 `\n \n…\n \n`。
+//! 它们必须作为子代理自己的时间线项保留，不能并进父助手缓冲。
 
 use super::*;
 use serde_json::json;
@@ -17,6 +17,18 @@ fn assistant_text(event: &AgentStreamEvent) -> Option<String> {
             item: AgentTimelineItem::AssistantMessage { text, .. },
             ..
         } => Some(text.clone()),
+        _ => None,
+    }
+}
+
+fn subagent_id_of(event: &AgentStreamEvent) -> Option<String> {
+    match event {
+        AgentStreamEvent::Timeline { item, .. } => match item {
+            AgentTimelineItem::AssistantMessage { subagent_id, .. }
+            | AgentTimelineItem::Reasoning { subagent_id, .. }
+            | AgentTimelineItem::ToolCall { subagent_id, .. } => subagent_id.clone(),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -42,19 +54,27 @@ fn child_session_chunks_do_not_enter_parent_assistant_text() {
         Some("进入自动阶段。".to_string())
     );
 
-    assert!(mapper
-        .on_notification(
-            "_x.ai/session/update",
-            &json!({
-                "sessionId": "parent-session",
-                "update": {
-                    "sessionUpdate": "subagent_spawned",
-                    "child_session_id": "child-session",
-                    "subagent_id": "child-session"
-                }
-            }),
-        )
-        .is_empty());
+    let spawned = mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({
+            "sessionId": "parent-session",
+            "update": {
+                "sessionUpdate": "subagent_spawned",
+                "child_session_id": "child-session",
+                "subagent_id": "child-session"
+            }
+        }),
+    );
+    assert!(matches!(
+        spawned.as_slice(),
+        [AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::SubagentRoster {
+                subagent_id,
+                status: crate::types::agent_session_stream::SubagentRosterStatus::Running,
+            },
+            ..
+        }] if subagent_id == "child-session"
+    ));
 
     let child_events = [
         json!({
@@ -84,12 +104,28 @@ fn child_session_chunks_do_not_enter_parent_assistant_text() {
             "_meta": prompt_meta("child-prompt")
         }),
     ];
+    let mut child_timeline = Vec::new();
     for params in &child_events {
+        let events = mapper.on_notification("session/update", params);
+        assert!(!events.is_empty(), "子会话正文与工具调用必须进入时间线");
         assert!(
-            mapper.on_notification("session/update", params).is_empty(),
-            "子会话更新不应进入父时间线"
+            events
+                .iter()
+                .all(|event| subagent_id_of(event).as_deref() == Some("child-session")),
+            "子会话项必须挂上 child_session_id：{events:?}"
         );
+        child_timeline.extend(events);
     }
+    assert_eq!(child_timeline.len(), 3);
+    let child_message = child_timeline
+        .iter()
+        .rev()
+        .find_map(assistant_text)
+        .expect("child assistant text");
+    assert_eq!(
+        child_message,
+        "\n \nSeam 已对齐票面。\n \n我先读 implement、TDD。"
+    );
 
     let done = mapper.on_notification(
         "session/update",
@@ -124,6 +160,113 @@ fn displayed_total(usage: &crate::types::agent_session_stream::AgentUsage) -> u6
     usage.session_token_input.unwrap_or(0)
         + usage.session_token_output.unwrap_or(0)
         + usage.session_token_cache.unwrap_or(0)
+}
+
+/// 回放 session 61 父进程 `updates.jsonl` 里真实出现过的子代理帧：
+/// 父连接只收到 `subagent_spawned`，子会话正文与工具调用在子 `sessionId` 上。
+#[test]
+fn replayed_child_session_output_stays_on_its_own_timeline() {
+    let mut mapper = GrokStreamMapper::new();
+    mapper.begin_turn("local-go".into());
+    let child = "01a13562-dc6f-7541-862e-05007e310f30";
+
+    let spawned = mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({
+            "sessionId": "01a13442-9e37-7480-b4fd-562b88c7765c",
+            "update": {
+                "sessionUpdate": "subagent_spawned",
+                "subagent_id": child,
+                "child_session_id": child,
+                "description": "实现前端 Base 地址行"
+            }
+        }),
+    );
+    assert!(spawned.iter().any(|event| matches!(
+        event,
+        AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::SubagentRoster { subagent_id, .. },
+            ..
+        } if subagent_id == child
+    )));
+
+    let message = mapper.on_notification(
+        "session/update",
+        &json!({
+            "sessionId": child,
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "先写失败测试。"}
+            }
+        }),
+    );
+    assert_eq!(
+        assistant_text(message.last().expect("child text")),
+        Some("先写失败测试。".into())
+    );
+    assert_eq!(
+        subagent_id_of(message.last().unwrap()).as_deref(),
+        Some(child)
+    );
+
+    let tool = mapper.on_notification(
+        "session/update",
+        &json!({
+            "sessionId": child,
+            "update": {
+                "sessionUpdate": "tool_call",
+                "toolCallId": "call-child-read",
+                "title": "read_file",
+                "rawInput": {"target_file": "/tmp/spec.md"}
+            }
+        }),
+    );
+    assert!(matches!(
+        tool.as_slice(),
+        [AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::ToolCall { subagent_id: Some(id), .. },
+            ..
+        }] if id == child
+    ));
+
+    let parent = mapper.on_notification(
+        "session/update",
+        &json!({
+            "sessionId": "01a13442-9e37-7480-b4fd-562b88c7765c",
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "实现还在跑。"}
+            },
+            "_meta": prompt_meta("parent-prompt")
+        }),
+    );
+    assert_eq!(
+        assistant_text(parent.last().expect("parent")),
+        Some("实现还在跑。".into())
+    );
+    assert_eq!(subagent_id_of(parent.last().unwrap()), None);
+
+    let finished = mapper.on_notification(
+        "_x.ai/session/update",
+        &json!({
+            "sessionId": "01a13442-9e37-7480-b4fd-562b88c7765c",
+            "update": {
+                "sessionUpdate": "subagent_finished",
+                "child_session_id": child,
+                "status": "cancelled"
+            }
+        }),
+    );
+    assert!(matches!(
+        finished.as_slice(),
+        [AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::SubagentRoster {
+                status: crate::types::agent_session_stream::SubagentRosterStatus::Ended,
+                ..
+            },
+            ..
+        }]
+    ));
 }
 
 fn commit_total(events: &[AgentStreamEvent]) -> u64 {
