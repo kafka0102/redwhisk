@@ -395,6 +395,56 @@ describe("useAgentMessageStream", () => {
     vi.useRealTimers();
   });
 
+  it("首次进入后的实时工具调用记下信封上的回读位置", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValue({
+      items: historyItems([]),
+      effort: null,
+      model: null,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, result } = await renderProbe({
+      projectId: 1,
+      sessionId: 122,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 122,
+          seq: 1,
+          epoch: "epoch-1",
+          logOffset: 4096,
+          event: {
+            type: "timeline",
+            item: {
+              type: "tool_call",
+              callId: "call-live",
+              name: "shell",
+              detail: { type: "shell", command: "echo", output: "now" },
+              status: "completed",
+            },
+            seq: 1,
+            timestamp: 0,
+          },
+        },
+      });
+    });
+    dispatchFrame();
+
+    const tool = getState()!.entries.find(
+      (entry) => entry.kind === "tool_call",
+    );
+    expect(tool?.logOffset).toBe(4096);
+
+    result.unmount();
+    vi.useRealTimers();
+  });
+
   it("忽略其它 projectId/sessionId 的事件", async () => {
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValue({

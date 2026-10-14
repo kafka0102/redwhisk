@@ -262,7 +262,7 @@ export function useAgentMessageStream({
           ) {
             return;
           }
-          dispatchStreamEvent(envelope.event);
+          dispatchStreamEvent(envelope.event, envelope.logOffset);
         });
         if (isDisposed) {
           unlisten?.();
