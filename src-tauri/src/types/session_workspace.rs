@@ -234,6 +234,12 @@ pub struct WorkspaceDiffContent {
     pub modified_content: String,
     pub is_binary: bool,
     pub is_too_large: bool,
+    /// 扩展名判定的预览类别；非图片、非 PDF 时为 `null`。
+    pub preview_kind: Option<WorkspacePreviewKind>,
+    /// 变更前可预览字节；该侧不存在或整份过大时为空字符串。
+    pub original_preview_bytes_base64: String,
+    /// 变更后可预览字节；该侧不存在或整份过大时为空字符串。
+    pub modified_preview_bytes_base64: String,
 }
 
 /// 工作区内容搜索入参：在当前代码根内按查询串做行级匹配。

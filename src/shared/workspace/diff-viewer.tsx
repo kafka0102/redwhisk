@@ -1,9 +1,17 @@
 import { DiffEditor } from "@monaco-editor/react";
+import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 
 import { useI18n } from "../i18n/i18n";
 import { useMonacoEditorReady } from "../use-monaco-editor-ready";
 import { getDiffAvailability } from "./diff-availability";
 import { estimateDiffEditorContentHeightPx } from "./estimate-diff-editor-content-height";
+import {
+  isSvgDiffTextSwitchable,
+  visualPreviewMimeType,
+  type SvgPreviewView,
+} from "./visual-file-preview-model";
+import { VisualFilePreview } from "./visual-file-preview";
 import type {
   WorkspaceChangeKind,
   WorkspaceDiffContent,
@@ -34,6 +42,34 @@ interface DiffViewerProps {
   heightMode?: "fill" | "content";
 }
 
+function SvgDiffTextToggle({
+  filePath,
+  mode,
+  label,
+  onToggle,
+}: {
+  filePath: string;
+  mode: SvgPreviewView;
+  label: string;
+  onToggle: (filePath: string, mode: SvgPreviewView) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="code-workspace__markdown-toggle"
+      aria-label={label}
+      aria-pressed={mode === "image"}
+      onClick={() => onToggle(filePath, mode === "image" ? "text" : "image")}
+    >
+      {mode === "image" ? (
+        <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
+      ) : (
+        <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+      )}
+    </button>
+  );
+}
+
 const CHANGE_KIND_KEY: Record<WorkspaceChangeKind, string> = {
   added: "agentsFeature.changeKindAdded",
   untracked: "agentsFeature.changeKindAdded",
@@ -52,6 +88,10 @@ export function DiffViewer({
   const { messages, t, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
   const availability = getDiffAvailability(tab);
+  const [svgView, setSvgView] = useState<{
+    filePath: string;
+    mode: SvgPreviewView;
+  } | null>(null);
 
   if (availability.kind === "none") {
     return (
@@ -85,10 +125,90 @@ export function DiffViewer({
       >
         <h3>{availability.fileName}</h3>
         <p>
-          {availability.isBinary
-            ? messages.agentsFeature.binaryPreviewUnavailable
-            : messages.agentsFeature.largeFilePreviewUnavailable}
+          {availability.isTooLarge
+            ? messages.agentsFeature.largeFilePreviewUnavailable
+            : messages.agentsFeature.binaryPreviewUnavailable}
         </p>
+      </section>
+    );
+  }
+
+  const previewDiff = availability.kind === "content" ? tab?.diff : null;
+  const activeSvgView =
+    svgView?.filePath === previewDiff?.filePath ? svgView : null;
+  const svgViewMode = activeSvgView?.mode ?? "image";
+  const showVisual =
+    previewDiff?.previewKind != null &&
+    !previewDiff.isTooLarge &&
+    !(isSvgDiffTextSwitchable(previewDiff) && svgViewMode === "text");
+
+  if (showVisual && previewDiff?.previewKind) {
+    const kind = previewDiff.previewKind;
+    const mimeType = visualPreviewMimeType(previewDiff.filePath, kind);
+    const sides = [
+      previewDiff.originalPreviewBytesBase64.length > 0
+        ? {
+            bytes: previewDiff.originalPreviewBytesBase64,
+            label: messages.agentsFeature.diffPreviewBefore,
+          }
+        : null,
+      previewDiff.modifiedPreviewBytesBase64.length > 0
+        ? {
+            bytes: previewDiff.modifiedPreviewBytesBase64,
+            label: messages.agentsFeature.diffPreviewAfter,
+          }
+        : null,
+    ].filter((side) => side != null);
+    const canSwitchText = isSvgDiffTextSwitchable(previewDiff);
+
+    return (
+      <section
+        aria-label={messages.agentsFeature.diffView(availability.fileName)}
+        className={
+          showStatusBar
+            ? "session-diff-viewer"
+            : "session-diff-viewer session-diff-viewer--bare"
+        }
+      >
+        {showStatusBar || canSwitchText ? (
+          <div className="session-diff-viewer__status">
+            {showStatusBar ? (
+              <span>
+                {t(CHANGE_KIND_KEY[previewDiff.kind])} {availability.filePath}
+              </span>
+            ) : (
+              <span />
+            )}
+            {canSwitchText ? (
+              <SvgDiffTextToggle
+                filePath={previewDiff.filePath}
+                label={messages.agentsFeature.toggleSvgPreview}
+                mode={svgViewMode}
+                onToggle={(filePath, mode) => setSvgView({ filePath, mode })}
+              />
+            ) : null}
+          </div>
+        ) : null}
+        <div
+          className={
+            sides.length > 1
+              ? "visual-diff-preview"
+              : "visual-diff-preview visual-diff-preview--single"
+          }
+        >
+          {sides.map((side) => (
+            <figure className="visual-diff-preview__side" key={side.label}>
+              <figcaption>{side.label}</figcaption>
+              <VisualFilePreview
+                bytesBase64={side.bytes}
+                failureMessage={messages.agentsFeature.visualPreviewLoadFailed}
+                kind={kind}
+                label={side.label}
+                mimeType={mimeType}
+              />
+            </figure>
+          ))}
+        </div>
       </section>
     );
   }
@@ -121,9 +241,23 @@ export function DiffViewer({
       }
       style={heightMode === "content" ? { height: editorHeight } : undefined}
     >
-      {showStatusBar ? (
+      {showStatusBar || isSvgDiffTextSwitchable(diff) ? (
         <div className="session-diff-viewer__status">
-          {t(CHANGE_KIND_KEY[diff.kind])} {filePath}
+          {showStatusBar ? (
+            <span>
+              {t(CHANGE_KIND_KEY[diff.kind])} {filePath}
+            </span>
+          ) : (
+            <span />
+          )}
+          {isSvgDiffTextSwitchable(diff) ? (
+            <SvgDiffTextToggle
+              filePath={diff.filePath}
+              label={messages.agentsFeature.toggleSvgPreview}
+              mode={svgViewMode}
+              onToggle={(filePath, mode) => setSvgView({ filePath, mode })}
+            />
+          ) : null}
         </div>
       ) : null}
       <DiffEditor

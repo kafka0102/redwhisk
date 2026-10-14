@@ -640,6 +640,9 @@ describe("useSessionWorkspaceCache multi-diff change tab", () => {
       modifiedContent: "new",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     };
     readProjectWorktreeDiffMock.mockImplementation(async ({ filePath }) => ({
       ...diffContent,
@@ -725,6 +728,9 @@ describe("useSessionWorkspaceCache multi-diff change tab", () => {
       modifiedContent: "n",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
 
     const { result } = renderHook(
@@ -808,6 +814,9 @@ describe("useSessionWorkspaceCache multi-diff change tab", () => {
       modifiedContent: "new",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     }));
 
     const { result } = renderHook(
@@ -921,6 +930,9 @@ describe("useSessionWorkspaceCache multi-diff change tab", () => {
       modifiedContent: "n",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
 
     const { result } = renderHook(
@@ -1019,6 +1031,9 @@ describe("useSessionWorkspaceCache remount persistence", () => {
       modifiedContent: "new",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
   });
 

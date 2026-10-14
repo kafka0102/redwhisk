@@ -27,15 +27,21 @@ export function DiffSummaryView({ tab }: DiffSummaryViewProps) {
   );
 
   const availability = getDiffAvailability(tab);
-  // 只有 content 态才有可切分的原 / 新全文；其余状态交回 DiffViewer 渲染。
-  const diff = availability.kind === "content" ? availability.diff : null;
+  // 图片 / PDF 走共用并排预览；只有纯文本 content 才切 hunk。
+  const diff =
+    availability.kind === "content" && availability.diff.previewKind == null
+      ? availability.diff
+      : null;
   const hunks = useMemo(
     () =>
       diff ? computeDiffHunks(diff.originalContent, diff.modifiedContent) : [],
     [diff],
   );
 
-  if (availability.kind !== "content") {
+  if (
+    availability.kind !== "content" ||
+    availability.diff.previewKind != null
+  ) {
     return <DiffViewer tab={tab} showStatusBar={false} heightMode="content" />;
   }
 

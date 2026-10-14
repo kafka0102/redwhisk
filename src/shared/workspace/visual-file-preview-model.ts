@@ -1,4 +1,5 @@
 import type {
+  WorkspaceDiffContent,
   WorkspaceFileContent,
   WorkspacePreviewKind,
 } from "./workspace-commands";
@@ -46,6 +47,16 @@ export function shouldRenderVisualPreview(
     return false;
   }
   return true;
+}
+
+/** SVG 两侧都有 ≤1MB 文本时，才允许从并排图片切到文本 diff。 */
+export function isSvgDiffTextSwitchable(diff: WorkspaceDiffContent): boolean {
+  return (
+    diff.previewKind === "image" &&
+    !diff.isTooLarge &&
+    !diff.isBinary &&
+    diff.originalContent.length + diff.modifiedContent.length > 0
+  );
 }
 
 export function visualPreviewMimeType(

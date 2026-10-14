@@ -543,6 +543,8 @@ export interface I18nMessages {
     toggleMarkdownPreview: string;
     toggleSvgPreview: string;
     visualPreviewLoadFailed: string;
+    diffPreviewBefore: string;
+    diffPreviewAfter: string;
     toggleFileEdit: string;
     fileTabUnsaved: string;
     fileEditDisabledLoading: string;

@@ -2,7 +2,10 @@
 
 use std::fs;
 
+use base64::Engine;
+
 use crate::features::agent_session::workspace::MAX_TEXT_FILE_BYTES;
+use crate::types::session_workspace::WorkspacePreviewKind;
 
 use super::test_support::{commit_all, error_reason, git, init_git_repo, renamed_file_content};
 use super::*;
@@ -120,6 +123,34 @@ fn worktree_diff_reads_deleted_file_with_empty_modified_content() {
 }
 
 #[test]
+fn worktree_diff_returns_preview_bytes_for_modified_png() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let root = temp_dir.path();
+    init_git_repo(root);
+    let original = b"\x89PNG\r\n\x1a\noriginal";
+    let modified = b"\x89PNG\r\n\x1a\nmodified";
+    fs::write(root.join("logo.png"), original).expect("write image");
+    commit_all(root, "base");
+    fs::write(root.join("logo.png"), modified).expect("modify image");
+
+    let diff = read_workspace_diff(root, "logo.png").expect("read png diff");
+
+    assert_eq!(diff.preview_kind, Some(WorkspacePreviewKind::Image));
+    assert_eq!(
+        diff.original_preview_bytes_base64,
+        base64::engine::general_purpose::STANDARD.encode(original)
+    );
+    assert_eq!(
+        diff.modified_preview_bytes_base64,
+        base64::engine::general_purpose::STANDARD.encode(modified)
+    );
+    assert!(diff.original_content.is_empty());
+    assert!(diff.modified_content.is_empty());
+    assert!(!diff.is_too_large);
+    assert!(diff.is_binary);
+}
+
+#[test]
 fn worktree_diff_marks_binary_change() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let root = temp_dir.path();
@@ -130,8 +161,9 @@ fn worktree_diff_marks_binary_change() {
     fs::write(root.join("payload.bin"), b"hello\x00world\n").expect("write untracked binary");
 
     let tracked = read_workspace_diff(root, "logo.png").expect("read tracked diff");
-    assert_eq!(tracked.kind, WorkspaceChangeKind::Binary);
-    assert!(tracked.is_binary);
+    assert_eq!(tracked.preview_kind, Some(WorkspacePreviewKind::Image));
+    assert!(!tracked.original_preview_bytes_base64.is_empty());
+    assert!(!tracked.modified_preview_bytes_base64.is_empty());
     assert!(tracked.original_content.is_empty());
     assert!(tracked.modified_content.is_empty());
 
@@ -141,7 +173,7 @@ fn worktree_diff_marks_binary_change() {
 }
 
 #[test]
-fn worktree_diff_keeps_ascii_pdf_text_on_the_legacy_diff() {
+fn worktree_diff_returns_ascii_pdf_preview_and_keeps_text() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let root = temp_dir.path();
     init_git_repo(root);
@@ -153,8 +185,11 @@ fn worktree_diff_keeps_ascii_pdf_text_on_the_legacy_diff() {
 
     let diff = read_workspace_diff(root, "notes.pdf").expect("read pdf diff");
 
-    assert!(!diff.is_binary);
+    assert_eq!(diff.preview_kind, Some(WorkspacePreviewKind::Pdf));
+    assert!(diff.is_binary);
     assert!(!diff.is_too_large);
+    assert!(!diff.original_preview_bytes_base64.is_empty());
+    assert!(!diff.modified_preview_bytes_base64.is_empty());
     assert_eq!(diff.original_content, original);
     assert_eq!(diff.modified_content, modified);
 }
@@ -267,6 +302,89 @@ fn worktree_diff_agrees_with_full_status_for_mixed_changes() {
             assert_eq!(&diff.kind, kind, "kind mismatch for {path}");
         }
     }
+}
+
+#[test]
+fn worktree_diff_returns_only_the_existing_side_for_added_and_deleted_images() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let root = temp_dir.path();
+    init_git_repo(root);
+    let deleted = b"\x89PNG\r\n\x1a\ndeleted";
+    fs::write(root.join("gone.png"), deleted).expect("write deleted image");
+    commit_all(root, "base");
+    fs::remove_file(root.join("gone.png")).expect("remove image");
+    let added = b"\x89PNG\r\n\x1a\nadded";
+    fs::write(root.join("fresh.JPG"), added).expect("write added image");
+
+    let deleted_diff = read_workspace_diff(root, "gone.png").expect("read deleted diff");
+    assert_eq!(deleted_diff.kind, WorkspaceChangeKind::Deleted);
+    assert_eq!(
+        deleted_diff.original_preview_bytes_base64,
+        base64::engine::general_purpose::STANDARD.encode(deleted)
+    );
+    assert!(deleted_diff.modified_preview_bytes_base64.is_empty());
+
+    let added_diff = read_workspace_diff(root, "fresh.JPG").expect("read added diff");
+    assert_eq!(added_diff.kind, WorkspaceChangeKind::Untracked);
+    assert!(added_diff.original_preview_bytes_base64.is_empty());
+    assert_eq!(
+        added_diff.modified_preview_bytes_base64,
+        base64::engine::general_purpose::STANDARD.encode(added)
+    );
+    assert_eq!(added_diff.preview_kind, Some(WorkspacePreviewKind::Image));
+}
+
+#[test]
+fn worktree_diff_marks_preview_too_large_when_either_side_exceeds_limit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let root = temp_dir.path();
+    init_git_repo(root);
+    let oversized = MAX_TEXT_FILE_BYTES * 21;
+    let path = root.join("huge.png");
+    let file = std::fs::File::create(&path).expect("create image");
+    file.set_len(oversized).expect("set image length");
+    git(root, &["add", "huge.png"]);
+    git(root, &["commit", "-m", "add huge"]);
+    fs::write(root.join("huge.png"), b"\x89PNG\r\n\x1a\nsmall").expect("shrink image");
+
+    let diff = read_workspace_diff(root, "huge.png").expect("read oversized diff");
+
+    assert!(diff.is_too_large);
+    assert!(diff.preview_kind.is_none());
+    assert!(diff.original_preview_bytes_base64.is_empty());
+    assert!(diff.modified_preview_bytes_base64.is_empty());
+    assert!(diff.original_content.is_empty());
+    assert!(diff.modified_content.is_empty());
+}
+
+#[test]
+fn worktree_diff_keeps_svg_text_and_drops_it_above_text_limit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let root = temp_dir.path();
+    init_git_repo(root);
+    let original = "<svg xmlns=\"http://www.w3.org/2000/svg\">old</svg>\n";
+    fs::write(root.join("icon.svg"), original).expect("write svg");
+    commit_all(root, "base");
+    let modified = "<svg xmlns=\"http://www.w3.org/2000/svg\">new</svg>\n";
+    fs::write(root.join("icon.svg"), modified).expect("modify svg");
+
+    let diff = read_workspace_diff(root, "icon.svg").expect("read svg diff");
+
+    assert_eq!(diff.preview_kind, Some(WorkspacePreviewKind::Image));
+    assert!(!diff.is_binary);
+    assert_eq!(diff.original_content, original);
+    assert_eq!(diff.modified_content, modified);
+    assert!(!diff.original_preview_bytes_base64.is_empty());
+    assert!(!diff.modified_preview_bytes_base64.is_empty());
+
+    let large = format!("<svg>{}</svg>", "a".repeat(MAX_TEXT_FILE_BYTES as usize));
+    fs::write(root.join("large.svg"), &large).expect("write large svg");
+    let large_diff = read_workspace_diff(root, "large.svg").expect("read large svg");
+    assert_eq!(large_diff.preview_kind, Some(WorkspacePreviewKind::Image));
+    assert!(large_diff.is_binary);
+    assert!(large_diff.modified_content.is_empty());
+    assert!(large_diff.original_preview_bytes_base64.is_empty());
+    assert!(!large_diff.modified_preview_bytes_base64.is_empty());
 }
 
 #[test]

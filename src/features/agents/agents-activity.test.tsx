@@ -772,6 +772,9 @@ describe("AgentsActivity", () => {
       modifiedContent: "",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
     readProjectWorktreeFileMock.mockResolvedValue({
       filePath: "src/placeholder.ts",
@@ -1516,6 +1519,9 @@ describe("AgentsActivity", () => {
       modifiedContent: "new",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301), runningSession(302, "Other issue")],
@@ -1550,6 +1556,9 @@ describe("AgentsActivity", () => {
       modifiedContent: "new",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
     createTemporaryProjectTerminalMock.mockResolvedValue({
       sessionId: -11,
@@ -1600,6 +1609,9 @@ describe("AgentsActivity", () => {
       modifiedContent: "const value = 2;",
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],
@@ -1705,6 +1717,9 @@ describe("AgentsActivity", () => {
       modifiedContent: "",
       isBinary: true,
       isTooLarge: false,
+      previewKind: null,
+      originalPreviewBytesBase64: "",
+      modifiedPreviewBytesBase64: "",
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],

@@ -29,6 +29,7 @@ mod workspace_checkout_ops;
 pub mod workspace_commands;
 mod workspace_diff;
 mod workspace_diff_commit;
+mod workspace_diff_preview;
 mod workspace_github;
 mod workspace_merge_ops;
 mod workspace_path_ops;

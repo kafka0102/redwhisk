@@ -2,6 +2,8 @@
 
 use std::fs;
 
+use crate::types::session_workspace::WorkspacePreviewKind;
+
 use super::test_support::{
     commit_all, error_reason, git, head_hash, init_git_repo, renamed_file_content,
 };
@@ -107,7 +109,9 @@ fn commit_diff_reads_deleted_and_binary_entries() {
 
     let binary =
         read_workspace_commit_diff(root, &commit_hash, "logo.png").expect("read binary diff");
-    assert!(binary.is_binary);
+    assert_eq!(binary.preview_kind, Some(WorkspacePreviewKind::Image));
+    assert!(!binary.original_preview_bytes_base64.is_empty());
+    assert!(!binary.modified_preview_bytes_base64.is_empty());
     assert!(binary.original_content.is_empty());
     assert!(binary.modified_content.is_empty());
 }

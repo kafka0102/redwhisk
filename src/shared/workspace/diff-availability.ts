@@ -6,14 +6,19 @@ import type { WorkspaceDiffContent } from "./workspace-commands";
  * - `none`：未选中变更文件，或还没有 diff 内容
  * - `loading`：正在取数
  * - `error`：取数失败，文案在 `message`
- * - `unavailable`：二进制 / 过大文件不可预览
- * - `content`：有可渲染的原 / 新内容
+ * - `unavailable`：非图片非 PDF 的二进制，或任一侧过大，不可预览
+ * - `content`：有可渲染的原 / 新内容，或图片 / PDF 预览
  */
 export type WorkspaceDiffAvailability =
   | { kind: "none" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "unavailable"; fileName: string; isBinary: boolean }
+  | {
+      kind: "unavailable";
+      fileName: string;
+      isBinary: boolean;
+      isTooLarge: boolean;
+    }
   | {
       kind: "content";
       fileName: string;
@@ -40,11 +45,15 @@ export function getDiffAvailability(
   if (!tab.diff) {
     return { kind: "none" };
   }
-  if (tab.diff.isBinary || tab.diff.isTooLarge) {
+  if (
+    tab.diff.isTooLarge ||
+    (tab.diff.isBinary && tab.diff.previewKind == null)
+  ) {
     return {
       kind: "unavailable",
       fileName: tab.fileName,
       isBinary: tab.diff.isBinary,
+      isTooLarge: tab.diff.isTooLarge,
     };
   }
   return {

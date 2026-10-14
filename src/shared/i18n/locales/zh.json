@@ -687,6 +687,8 @@
     "toggleMarkdownPreview": "Markdown 预览",
     "toggleSvgPreview": "SVG 预览",
     "visualPreviewLoadFailed": "预览加载失败。",
+    "diffPreviewBefore": "变更前",
+    "diffPreviewAfter": "变更后",
     "toggleFileEdit": "编辑文件",
     "fileTabUnsaved": "未保存更改",
     "unsavedChangesTitle": "未保存的更改",

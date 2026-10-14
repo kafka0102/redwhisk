@@ -48,6 +48,9 @@ const diffContent: WorkspaceDiffContent = {
   modifiedContent: "new",
   isBinary: false,
   isTooLarge: false,
+  previewKind: null,
+  originalPreviewBytesBase64: "",
+  modifiedPreviewBytesBase64: "",
 };
 
 function renderDiffHook(workspacePath: string | null = "/tmp/repo") {

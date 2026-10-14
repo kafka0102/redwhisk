@@ -236,6 +236,12 @@ export interface WorkspaceDiffContent {
   modifiedContent: string;
   isBinary: boolean;
   isTooLarge: boolean;
+  /** 扩展名判定的预览类别；非图片、非 PDF 时为 `null`。 */
+  previewKind: WorkspacePreviewKind | null;
+  /** 变更前可预览字节；该侧不存在或整份过大时为空字符串。 */
+  originalPreviewBytesBase64: string;
+  /** 变更后可预览字节；该侧不存在或整份过大时为空字符串。 */
+  modifiedPreviewBytesBase64: string;
 }
 
 export function getProjectWorktreeChanges(

@@ -1060,6 +1060,11 @@ pub(super) enum HeadFileRead {
     Content(String),
     Binary,
     TooLarge,
+    /// 图片 / PDF：可预览字节，以及 ≤1MB 且 UTF-8 时保留的文本（SVG / ASCII PDF）。
+    Preview {
+        bytes: Vec<u8>,
+        text: Option<String>,
+    },
 }
 
 /// 读取某个 revision 下该路径的文件内容（HEAD / 提交 / 父提交），供单文件差异取原始
@@ -1087,6 +1092,19 @@ pub(super) fn read_git_file(
         .with_reason("gitBlobSizeUnparseable")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?;
+    if super::workspace_preview::preview_kind_from_path(path).is_some() {
+        if size > super::workspace_preview::MAX_PREVIEW_FILE_BYTES {
+            return Ok(HeadFileRead::TooLarge);
+        }
+        let bytes = run_git_bytes(root, &["show", &object_spec])?;
+        let text = if size <= MAX_TEXT_FILE_BYTES && !is_binary_bytes(&bytes) {
+            Some(String::from_utf8_lossy(&bytes).into_owned())
+        } else {
+            None
+        };
+        return Ok(HeadFileRead::Preview { bytes, text });
+    }
+
     if size > MAX_TEXT_FILE_BYTES {
         return Ok(HeadFileRead::TooLarge);
     }

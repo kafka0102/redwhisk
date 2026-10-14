@@ -42,6 +42,9 @@ const loadedState: MultiDiffViewState = {
         modifiedContent: "new\nline2\nline3",
         isBinary: false,
         isTooLarge: false,
+        previewKind: null,
+        originalPreviewBytesBase64: "",
+        modifiedPreviewBytesBase64: "",
       },
       isLoading: false,
       errorMessage: null,
@@ -198,6 +201,9 @@ describe("MultiDiffViewer", () => {
             modifiedContent: "l1\nl2\nL3\nl4\nl5\nl6\n",
             isBinary: false,
             isTooLarge: false,
+            previewKind: null,
+            originalPreviewBytesBase64: "",
+            modifiedPreviewBytesBase64: "",
           },
           isLoading: false,
           errorMessage: null,
@@ -218,6 +224,70 @@ describe("MultiDiffViewer", () => {
     expect(screen.getByText("Original lines 1-6")).toBeInTheDocument();
     // 摘要模式不再渲染整文件 Monaco 对比
     expect(multiDiffEditorHeightProp.current).toBeUndefined();
+  });
+
+  it("lets each SVG diff switch to text without changing the other file", async () => {
+    const user = userEvent.setup();
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg">mark</svg>';
+    const svgDiff = {
+      oldPath: null,
+      kind: "modified" as const,
+      language: "xml",
+      originalContent: svg,
+      modifiedContent: svg,
+      isBinary: false,
+      isTooLarge: false,
+      previewKind: "image" as const,
+      originalPreviewBytesBase64: btoa(svg),
+      modifiedPreviewBytesBase64: btoa(svg),
+    };
+    render(
+      <I18nProvider initialLocale="en">
+        <MultiDiffViewer
+          state={{
+            commitHash: "svg",
+            mode: "details",
+            files: [
+              {
+                fileName: "a.svg",
+                filePath: "assets/a.svg",
+                status: "M",
+                kind: "modified",
+                diff: { ...svgDiff, filePath: "assets/a.svg" },
+                isLoading: false,
+                errorMessage: null,
+              },
+              {
+                fileName: "b.svg",
+                filePath: "assets/b.svg",
+                status: "M",
+                kind: "modified",
+                diff: { ...svgDiff, filePath: "assets/b.svg" },
+                isLoading: false,
+                errorMessage: null,
+              },
+            ],
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const toggles = screen.getAllByRole("button", { name: "SVG preview" });
+    expect(toggles).toHaveLength(2);
+    expect(screen.getAllByRole("img")).toHaveLength(4);
+
+    await user.click(toggles[0]);
+
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "SVG preview" })[0],
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getAllByRole("button", { name: "SVG preview" })[1],
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(multiDiffEditorHeightProp.current).toBe(
+      `${estimateDiffEditorContentHeightPx(svg, svg, 14)}px`,
+    );
   });
 
   it("keeps the details label in details mode", () => {

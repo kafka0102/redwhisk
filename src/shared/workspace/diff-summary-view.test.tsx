@@ -26,6 +26,9 @@ function makeDiff(
     modifiedContent: "",
     isBinary: false,
     isTooLarge: false,
+    previewKind: null,
+    originalPreviewBytesBase64: "",
+    modifiedPreviewBytesBase64: "",
     ...overrides,
   };
 }
@@ -139,6 +142,25 @@ describe("DiffSummaryView", () => {
     );
 
     expect(screen.getByText("No content changes")).toBeInTheDocument();
+  });
+
+  it("shows image and PDF diffs with the same side-by-side preview as the details view", () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    renderSummary(
+      makeDiff({
+        filePath: "assets/logo.png",
+        language: null,
+        isBinary: true,
+        previewKind: "image",
+        originalPreviewBytesBase64: png,
+        modifiedPreviewBytesBase64: png,
+      }),
+    );
+
+    expect(screen.getByRole("img", { name: "Before" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "After" })).toBeInTheDocument();
+    expect(screen.queryByText("No content changes")).toBeNull();
   });
 
   it("keeps the unavailable states of the details view", () => {

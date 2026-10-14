@@ -13,7 +13,7 @@ use super::workspace::{
     workspace_io_error, MAX_TEXT_FILE_BYTES,
 };
 
-const MAX_PREVIEW_FILE_BYTES: u64 = 20 * 1024 * 1024;
+pub(super) const MAX_PREVIEW_FILE_BYTES: u64 = 20 * 1024 * 1024;
 
 pub(super) fn read_workspace_file(
     root: &Path,
@@ -127,7 +127,7 @@ pub(super) fn read_workspace_file(
     })
 }
 
-fn preview_kind_from_path(path: &str) -> Option<WorkspacePreviewKind> {
+pub(super) fn preview_kind_from_path(path: &str) -> Option<WorkspacePreviewKind> {
     let extension = Path::new(path).extension()?.to_str()?;
     match extension.to_ascii_lowercase().as_str() {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "avif" | "svg" => {

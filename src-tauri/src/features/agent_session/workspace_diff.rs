@@ -13,19 +13,20 @@ use crate::types::errors::CommandError;
 use crate::types::session_workspace::{WorkspaceChangeKind, WorkspaceDiffContent};
 
 use super::workspace::{
-    language_from_path, literal_pathspec, parse_numstat_records, parse_status_entries,
-    read_git_file, read_head_file, read_untracked_numstat, read_workspace_file,
+    literal_pathspec, parse_status_entries, read_git_file, read_head_file, read_workspace_file,
     resolve_commit_hash, run_git, run_git_bytes, validate_workspace_relative_path,
-    workspace_validation_error, HeadFileRead,
+    workspace_validation_error,
 };
 use super::workspace_diff_commit::read_commit_change;
+use super::workspace_diff_preview::{
+    absent_side, assemble_diff, read_diff_side_from_git, read_diff_side_from_workspace,
+};
 
 /// 工作区变更条目：定向取数只保留差异渲染所需的字段。
 struct WorktreeChange {
     file_path: String,
     old_path: Option<String>,
     kind: WorkspaceChangeKind,
-    is_binary: bool,
 }
 
 /// 目标路径在重命名 / 复制检测结果里扮演的角色。
@@ -77,90 +78,25 @@ pub(super) fn read_workspace_diff(
             .with_reason("fileNoUncommittedChanges")
     })?;
 
-    if change.is_binary {
-        return Ok(WorkspaceDiffContent {
-            file_path: change.file_path,
-            old_path: change.old_path,
-            kind: WorkspaceChangeKind::Binary,
-            language: language_from_path(file_path),
-            original_content: String::new(),
-            modified_content: String::new(),
-            is_binary: true,
-            is_too_large: false,
-        });
-    }
-
-    let original_content = match change.kind {
-        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
+    let original = match change.kind {
+        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => absent_side(),
         _ => {
             let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
-            match read_head_file(root, original_path)? {
-                HeadFileRead::Content(content) => content,
-                HeadFileRead::Binary => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: WorkspaceChangeKind::Binary,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: true,
-                        is_too_large: false,
-                    });
-                }
-                HeadFileRead::TooLarge => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: change.kind,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: false,
-                        is_too_large: true,
-                    });
-                }
-            }
+            read_diff_side_from_git(read_head_file(root, original_path)?, original_path)?
         }
     };
-
-    let modified_content = match change.kind {
-        WorkspaceChangeKind::Deleted => String::new(),
-        _ => {
-            let content = read_workspace_file(root, &change.file_path)?;
-            // 预览字节不进入差异对比。标记仍按 1MB 文本规则，两侧字节留给后续票。
-            let (is_binary, is_too_large) =
-                (content.legacy_diff_binary, content.legacy_diff_too_large);
-            if is_binary || is_too_large {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: change.kind,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary,
-                    is_too_large,
-                });
-            }
-            if content.content.is_empty() && !content.legacy_diff_content.is_empty() {
-                content.legacy_diff_content
-            } else {
-                content.content
-            }
-        }
+    let modified = match change.kind {
+        WorkspaceChangeKind::Deleted => absent_side(),
+        _ => read_diff_side_from_workspace(read_workspace_file(root, &change.file_path)?),
     };
 
-    Ok(WorkspaceDiffContent {
-        file_path: change.file_path,
-        old_path: change.old_path,
-        kind: change.kind,
-        language: language_from_path(file_path),
-        original_content,
-        modified_content,
-        is_binary: false,
-        is_too_large: false,
-    })
+    Ok(assemble_diff(
+        &change.file_path,
+        change.old_path,
+        change.kind,
+        original,
+        modified,
+    ))
 }
 
 pub(super) fn read_workspace_commit_diff(
@@ -189,85 +125,35 @@ pub(super) fn read_workspace_commit_diff(
     )
     .is_ok();
 
-    let original_content = match change.kind {
-        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => String::new(),
-        _ if !has_parent => String::new(),
+    let original = match change.kind {
+        WorkspaceChangeKind::Added | WorkspaceChangeKind::Untracked => absent_side(),
+        _ if !has_parent => absent_side(),
         _ => {
             let original_path = change.old_path.as_deref().unwrap_or(&change.file_path);
-            match read_git_file(root, &parent_ref, original_path)? {
-                HeadFileRead::Content(content) => content,
-                HeadFileRead::Binary => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: WorkspaceChangeKind::Binary,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: true,
-                        is_too_large: false,
-                    });
-                }
-                HeadFileRead::TooLarge => {
-                    return Ok(WorkspaceDiffContent {
-                        file_path: change.file_path,
-                        old_path: change.old_path,
-                        kind: change.kind,
-                        language: language_from_path(file_path),
-                        original_content: String::new(),
-                        modified_content: String::new(),
-                        is_binary: false,
-                        is_too_large: true,
-                    });
-                }
-            }
+            read_diff_side_from_git(
+                read_git_file(root, &parent_ref, original_path)?,
+                original_path,
+            )?
         }
     };
-
-    let modified_content = match change.kind {
-        WorkspaceChangeKind::Deleted => String::new(),
-        _ => match read_git_file(root, &commit_hash, &change.file_path)? {
-            HeadFileRead::Content(content) => content,
-            HeadFileRead::Binary => {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: WorkspaceChangeKind::Binary,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary: true,
-                    is_too_large: false,
-                });
-            }
-            HeadFileRead::TooLarge => {
-                return Ok(WorkspaceDiffContent {
-                    file_path: change.file_path,
-                    old_path: change.old_path,
-                    kind: change.kind,
-                    language: language_from_path(file_path),
-                    original_content: String::new(),
-                    modified_content: String::new(),
-                    is_binary: false,
-                    is_too_large: true,
-                });
-            }
-        },
+    let modified = match change.kind {
+        WorkspaceChangeKind::Deleted => absent_side(),
+        _ => read_diff_side_from_git(
+            read_git_file(root, &commit_hash, &change.file_path)?,
+            &change.file_path,
+        )?,
     };
 
-    Ok(WorkspaceDiffContent {
-        file_path: change.file_path,
-        old_path: change.old_path,
-        kind: change.kind,
-        language: language_from_path(file_path),
-        original_content,
-        modified_content,
-        is_binary: false,
-        is_too_large: false,
-    })
+    Ok(assemble_diff(
+        &change.file_path,
+        change.old_path,
+        change.kind,
+        original,
+        modified,
+    ))
 }
 
-/// 按路径定向读取工作区变更条目：一次限定路径的 `git status` + 一次二进制判定。
+/// 按路径定向读取工作区变更条目：一次限定路径的 `git status`。
 ///
 /// 不再调用 `read_workspace_changes`，因此不付「全量 status + 全量 numstat +
 /// 逐文件 metadata + branch sync」的成本。
@@ -315,7 +201,6 @@ fn read_worktree_change(
         file_path: entry.path,
         old_path,
         kind,
-        is_binary: is_worktree_change_binary(root, file_path)?,
     }))
 }
 
@@ -375,40 +260,6 @@ fn staged_rename_entries(output: &[u8]) -> Vec<(WorkspaceChangeKind, String, Str
     }
 
     entries
-}
-
-/// 二进制判定与全量实现同源：`git diff --numstat` 把二进制记成 `-`/`-`；
-/// 未跟踪文件不在 diff 里，numstat 也没有该路径时回退成读取工作区文件内容。
-fn is_worktree_change_binary(root: &Path, file_path: &str) -> Result<bool, CommandError> {
-    match read_targeted_numstat(root, file_path)? {
-        Some((_, _, is_binary)) => Ok(is_binary),
-        None => Ok(read_untracked_numstat(root, file_path).2),
-    }
-}
-
-fn read_targeted_numstat(
-    root: &Path,
-    file_path: &str,
-) -> Result<Option<(i64, i64, bool)>, CommandError> {
-    let output = match run_git_bytes(
-        root,
-        &[
-            "diff",
-            "--numstat",
-            "-z",
-            "--no-renames",
-            "HEAD",
-            "--",
-            &literal_pathspec(file_path),
-        ],
-    ) {
-        Ok(output) => output,
-        // 空仓库（无 HEAD）等场景下 diff 会失败：与全量实现 `unwrap_or_default`
-        // 一致，按「没有该路径的 numstat」处理。
-        Err(_) => return Ok(None),
-    };
-
-    Ok(parse_numstat_records(&output).get(file_path).copied())
 }
 
 #[cfg(test)]
