@@ -184,6 +184,26 @@ impl std::fmt::Debug for PtyRegisterError {
     }
 }
 
+/// 是否在主题变化时主动写 OSC 10/11/12。
+///
+/// 项目终端 shell 与 Grok 都不推：二者都会把未请求的颜色报告当输入回显。
+/// 其它 Agent TUI 仍推，供 Codex / Claude 在主题切换后更新 composer。
+fn accepts_proactive_theme_osc(mode: PtyCommandMode, command: &str) -> bool {
+    matches!(mode, PtyCommandMode::ExecReplace) && !command_basename_is(command, "grok")
+}
+
+fn command_basename_is(command: &str, expected: &str) -> bool {
+    let Some(program) = command.split_whitespace().next() else {
+        return false;
+    };
+    let trimmed = program.trim_matches(['"', '\'']);
+    let name = Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(trimmed);
+    name.eq_ignore_ascii_case(expected)
+}
+
 impl PtySessionManager {
     pub fn new() -> Self {
         let store = Arc::new(PtySessionStore {
@@ -207,13 +227,22 @@ impl PtySessionManager {
 
     /// 更新终端背景主题：
     /// - 后续 spawn 的 PTY 注入新的 `COLORFGBG`，OSC 查询应答也读此状态；
-    /// - 对已运行且接受主动推送的 session 尽力写入 OSC 10/11/12 颜色报告
-    ///   （写失败吞掉，不阻断调用方；项目终端交互 shell 不推送，避免命令行乱码）。
+    /// - 仅当主题值真正变化时，才向接受主动推送的 session 写 OSC 10/11/12。
+    ///   窗口重挂载会反复 `set_app_theme` 同一主题；Grok 会把未请求的报告剥掉
+    ///   `ESC` 后塞进 composer（`10;rgb:...`）。主题未变时不得再写 stdin。
+    ///   写失败吞掉，不阻断调用方。项目终端 shell 与 Grok 不接受主动推送。
     pub fn set_theme(&self, theme: TerminalBackgroundTheme) {
-        if let Ok(mut app_theme) = self.store.app_theme.lock() {
-            *app_theme = theme;
+        let changed = match self.store.app_theme.lock() {
+            Ok(mut app_theme) => {
+                let changed = *app_theme != theme;
+                *app_theme = theme;
+                changed
+            }
+            Err(_) => false,
+        };
+        if changed {
+            self.push_theme_osc_to_live_sessions(theme);
         }
-        self.push_theme_osc_to_live_sessions(theme);
     }
 
     /// 尽力向接受主动推送的存活 PTY 推送与查询应答一致的 OSC 10/11/12 报告。
@@ -529,9 +558,11 @@ impl PtySessionManager {
             restore_buffer: Mutex::new(PtyRestoreBuffer::new()),
             log: Mutex::new(log_writer),
             routing: Arc::clone(&routing),
-            // ExecReplace = Agent TUI：主题切换时主动推 OSC。
-            // InteractiveRun = 项目终端 shell：禁止推送，避免 zsh 命令行乱码。
-            accepts_proactive_theme_osc: matches!(request.mode, PtyCommandMode::ExecReplace),
+            // 见 `accepts_proactive_theme_osc`：shell 与 Grok 不推，避免 stdin 乱码。
+            accepts_proactive_theme_osc: accepts_proactive_theme_osc(
+                request.mode,
+                &request.command,
+            ),
         });
 
         {
@@ -1426,8 +1457,8 @@ impl Write for CapturingWriter {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_shell_command_line, build_shell_keepalive_command_line, trim_log_file,
-        PtySessionManager, TerminalBackgroundTheme,
+        accepts_proactive_theme_osc, build_shell_command_line, build_shell_keepalive_command_line,
+        trim_log_file, PtyCommandMode, PtySessionManager, TerminalBackgroundTheme,
     };
     use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
     use std::io::Write;
@@ -1931,20 +1962,92 @@ mod tests {
         let _ = manager.kill(33);
     }
 
+    /// Grok 输入解析会丢掉 `ESC` 及紧随的 1 字节，把 OSC 报告剩进 composer。
+    fn grok_composer_echo(bytes: &[u8]) -> String {
+        let mut out = Vec::new();
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] == 0x1b {
+                index = index.saturating_add(2);
+                continue;
+            }
+            out.push(bytes[index]);
+            index += 1;
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    #[test]
+    fn same_theme_resync_does_not_echo_rgb_reports_into_agent_stdin() {
+        let manager = PtySessionManager::new();
+        let buf = manager.insert_capturing_session_for_test(7);
+        // 窗口重挂载 / 再次 set_app_theme 时主题往往没变（默认已是 dark）。
+        manager.set_theme(TerminalBackgroundTheme::Dark);
+        manager.set_theme(TerminalBackgroundTheme::Dark);
+        let echoed = grok_composer_echo(&buf.lock().expect("buf"));
+        assert!(
+            !echoed.contains("rgb:"),
+            "same-theme resync leaked into composer: {echoed}"
+        );
+
+        manager.set_theme(TerminalBackgroundTheme::Light);
+        let once = buf.lock().expect("buf").clone();
+        let changed = grok_composer_echo(&once);
+        assert!(
+            changed.contains("rgb:ffff/ffff/ffff"),
+            "real theme change should still notify accepting TUIs, got {changed}"
+        );
+        manager.set_theme(TerminalBackgroundTheme::Light);
+        assert_eq!(buf.lock().expect("buf").as_slice(), once.as_slice());
+        let _ = manager.kill(7);
+    }
+
+    #[test]
+    fn grok_tui_does_not_accept_proactive_theme_osc() {
+        assert!(!accepts_proactive_theme_osc(
+            PtyCommandMode::ExecReplace,
+            "grok"
+        ));
+        assert!(!accepts_proactive_theme_osc(
+            PtyCommandMode::ExecReplace,
+            "/opt/homebrew/bin/grok --always-approve"
+        ));
+        assert!(!accepts_proactive_theme_osc(
+            PtyCommandMode::ExecReplace,
+            "\"/usr/local/bin/grok\""
+        ));
+        assert!(accepts_proactive_theme_osc(
+            PtyCommandMode::ExecReplace,
+            "codex"
+        ));
+        assert!(accepts_proactive_theme_osc(
+            PtyCommandMode::ExecReplace,
+            "/usr/local/bin/claude"
+        ));
+        assert!(!accepts_proactive_theme_osc(
+            PtyCommandMode::InteractiveRun,
+            "zsh"
+        ));
+        assert!(!accepts_proactive_theme_osc(
+            PtyCommandMode::InteractiveRun,
+            "grok"
+        ));
+    }
+
     #[test]
     fn set_theme_swallows_writer_errors_and_continues() {
         let manager = PtySessionManager::new();
         manager.insert_failing_session_for_test(1);
         let ok_buf = manager.insert_capturing_session_for_test(2);
 
-        manager.set_theme(TerminalBackgroundTheme::Dark);
+        manager.set_theme(TerminalBackgroundTheme::Light);
 
-        let expected = format_theme_osc_color_reports(TerminalBackgroundTheme::Dark);
+        let expected = format_theme_osc_color_reports(TerminalBackgroundTheme::Light);
         assert_eq!(
             ok_buf.lock().expect("ok buf").as_slice(),
             expected.as_slice()
         );
-        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Dark);
+        assert_eq!(manager.theme_for_test(), TerminalBackgroundTheme::Light);
 
         let _ = manager.kill(1);
         let _ = manager.kill(2);

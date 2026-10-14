@@ -56,8 +56,9 @@ pub const APP_THEME_PREFERENCE_CHANGED_EVENT: &str = "app-theme-preference-chang
 
 /// 同步应用主题偏好与已解析终端背景主题：
 /// - 更新 `PtySessionManager` 中的已解析主题（供后续 spawn 的 `COLORFGBG` / OSC 应答）
-/// - 对已运行的 Agent TUI PTY 尽力推送 OSC 10/11/12 颜色报告
-///   （项目终端交互 shell 不推送，避免命令行乱码；写失败不阻断本 command）
+/// - 仅当已解析主题发生变化时，对接受主动推送的 Agent TUI PTY 尽力推送
+///   OSC 10/11/12（主题未变不推，避免 Grok composer 回显 `10;rgb:...`；
+///   项目终端 shell 与 Grok 不推送；写失败不阻断本 command）
 /// - 广播偏好变更事件，供各窗 `I18nProvider` 同步 UI 与 Settings 选中态
 #[tauri::command]
 pub fn set_app_theme(
