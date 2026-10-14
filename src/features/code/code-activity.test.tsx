@@ -293,6 +293,45 @@ vi.mock("../../shared/workspace/file-tree-panel", async (importOriginal) => {
         >
           Open markdown
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            onOpenFile({
+              id: "assets/mark.svg",
+              kind: "file",
+              name: "mark.svg",
+              path: "assets/mark.svg",
+            })
+          }
+        >
+          Open svg
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onOpenFile({
+              id: "assets/pixel.png",
+              kind: "file",
+              name: "pixel.png",
+              path: "assets/pixel.png",
+            })
+          }
+        >
+          Open png
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onOpenFile({
+              id: "docs/notes.pdf",
+              kind: "file",
+              name: "notes.pdf",
+              path: "docs/notes.pdf",
+            })
+          }
+        >
+          Open pdf
+        </button>
         {Array.from({ length: 12 }, (_, index) => {
           const n = index + 1;
           const path = `src/file-${n}.ts`;
@@ -384,6 +423,48 @@ const fileContent = {
   language: "typescript",
   modifiedAt: 1,
   sizeBytes: 24,
+};
+
+const PNG_BYTES_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const svgMarkup =
+  '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
+
+const svgContent = {
+  content: svgMarkup,
+  filePath: "assets/mark.svg",
+  isBinary: false,
+  isTooLarge: false,
+  previewKind: "image" as const,
+  previewBytesBase64: btoa(svgMarkup),
+  language: "xml",
+  modifiedAt: 1,
+  sizeBytes: svgMarkup.length,
+};
+
+const pngContent = {
+  content: "",
+  filePath: "assets/pixel.png",
+  isBinary: true,
+  isTooLarge: false,
+  previewKind: "image" as const,
+  previewBytesBase64: PNG_BYTES_BASE64,
+  language: null,
+  modifiedAt: 1,
+  sizeBytes: 68,
+};
+
+const pdfContent = {
+  content: "",
+  filePath: "docs/notes.pdf",
+  isBinary: true,
+  isTooLarge: false,
+  previewKind: "pdf" as const,
+  previewBytesBase64: btoa("%PDF-1.1\n"),
+  language: null,
+  modifiedAt: 1,
+  sizeBytes: 16,
 };
 
 const markdownContent = {
@@ -1890,6 +1971,177 @@ describe("CodeActivity", () => {
       "data-readonly",
       "false",
     );
+  });
+
+  it("previews an SVG as an image and toggles back to text for the current open only", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "assets/mark.svg") return svgContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open svg" }));
+    const toggle = await screen.findByRole("button", { name: "SVG preview" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "mark.svg" })).toBeInTheDocument();
+    expect(document.querySelector("script")).toBeNull();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      svgMarkup,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await user.click(screen.getByRole("tab", { name: /mark\.svg/ }));
+    const toggleAgain = await screen.findByRole("button", {
+      name: "SVG preview",
+    });
+    expect(toggleAgain).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "mark.svg" })).toBeInTheDocument();
+  });
+
+  it("returns to SVG text before entering edit and hides edit for bitmaps and PDFs", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "assets/mark.svg") return svgContent;
+        if (filePath === "assets/pixel.png") return pngContent;
+        if (filePath === "docs/notes.pdf") return pdfContent;
+        return fileContent;
+      },
+    );
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open svg" }));
+    await screen.findByRole("img", { name: "mark.svg" });
+    await user.click(screen.getByRole("button", { name: "Edit file" }));
+    expect(screen.getByRole("button", { name: "SVG preview" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-readonly",
+      "false",
+    );
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      svgMarkup,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open png" }));
+    await screen.findByRole("img", { name: "pixel.png" });
+    expect(
+      screen.queryByRole("button", { name: "Edit file" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SVG preview" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open pdf" }));
+    expect(await screen.findByTitle("notes.pdf")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit file" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a large SVG as an image without a text toggle or edit button", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue({
+      ...svgContent,
+      content: "",
+      isBinary: true,
+      sizeBytes: 2_000_000,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open svg" }));
+    expect(
+      await screen.findByRole("img", { name: "mark.svg" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SVG preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit file" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows the saved SVG bytes when the image preview is opened again", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    Object.defineProperty(navigator, "platform", {
+      configurable: true,
+      get: () => "MacIntel",
+    });
+    const savedMarkup =
+      '<svg xmlns="http://www.w3.org/2000/svg" id="next"></svg>';
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(svgContent);
+    vi.mocked(writeProjectWorktreeFile).mockResolvedValue({
+      ...svgContent,
+      content: savedMarkup,
+      previewBytesBase64: btoa(savedMarkup),
+      sizeBytes: savedMarkup.length,
+    });
+    const blobs: Blob[] = [];
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation((value: Blob | MediaSource) => {
+        blobs.push(value as Blob);
+        return `blob:svg-${blobs.length}`;
+      });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open svg" }));
+    await user.click(await screen.findByRole("button", { name: "Edit file" }));
+    await user.click(screen.getByTestId("monaco-edit"));
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "s",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await waitFor(() => {
+      expect(writeProjectWorktreeFile).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "export const value = 2;\n" }),
+      );
+    });
+    await user.click(screen.getByRole("button", { name: "SVG preview" }));
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "mark.svg" })).toHaveAttribute(
+        "src",
+        `blob:svg-${blobs.length}`,
+      );
+    });
+    await expect(blobs[blobs.length - 1]?.text()).resolves.toBe(savedMarkup);
+    createObjectUrl.mockRestore();
   });
 
   it("disables the edit toggle for binary content", async () => {

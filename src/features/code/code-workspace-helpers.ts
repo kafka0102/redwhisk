@@ -3,6 +3,7 @@ import {
   toCommandError,
 } from "../../shared/commands/command-error";
 import { type useI18n } from "../../shared/i18n/i18n";
+import { isBitmapOrPdfPreview } from "../../shared/workspace/visual-file-preview-model";
 import type { CodeFileTab } from "./code-workspace-cache";
 
 /** 工作区文件不可访问 / 不是文件 / 读取失败等「文件缺失」类错误原因集合。 */
@@ -39,6 +40,14 @@ export function isMarkdownPreviewable(tab: CodeFileTab): boolean {
     return false;
   }
   return tab.content.language === "markdown";
+}
+
+/** 位图与 PDF 不渲染编辑按钮；其余状态保留按钮（不可编辑时禁用）。 */
+export function shouldShowCodeFileEditToggle(tab: CodeFileTab): boolean {
+  if (!tab.content || tab.isLoading || tab.errorMessage) {
+    return true;
+  }
+  return !isBitmapOrPdfPreview(tab.content);
 }
 
 /** 当前 tab 是否允许进入轻量可编辑态（已成功加载的可预览文本）。 */

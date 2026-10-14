@@ -1,4 +1,5 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,7 +108,7 @@ vi.mock("@monaco-editor/react", () => ({
         onDidDispose: (listener) => monacoEditorApi.onDidDispose(listener),
       });
     }, [onMount]);
-    return null;
+    return <div data-testid="monaco-editor" />;
   },
 }));
 
@@ -264,6 +265,183 @@ describe("SessionFileViewer", () => {
       expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
     });
     expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
+  });
+
+  it("previews a bitmap and a PDF without an editor", () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const { rerender } = render(
+      renderViewer({
+        fileName: "pixel.png",
+        filePath: "assets/pixel.png",
+        content: {
+          ...fileTab.content!,
+          filePath: "assets/pixel.png",
+          language: null,
+          content: "",
+          isBinary: true,
+          previewKind: "image",
+          previewBytesBase64: png,
+        },
+      }),
+    );
+
+    expect(screen.getByRole("img", { name: "pixel.png" })).toHaveAttribute(
+      "src",
+      expect.stringMatching(/^blob:/),
+    );
+    expect(
+      screen.queryByText("Binary files cannot be previewed."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit file" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      renderViewer({
+        fileName: "notes.pdf",
+        filePath: "docs/notes.pdf",
+        content: {
+          ...fileTab.content!,
+          filePath: "docs/notes.pdf",
+          language: null,
+          content: "",
+          isBinary: true,
+          previewKind: "pdf",
+          previewBytesBase64: btoa("%PDF-1.1\n"),
+        },
+      }),
+    );
+
+    expect(screen.getByTitle("notes.pdf").tagName).toBe("IFRAME");
+  });
+
+  it("toggles SVG text from the viewer header and resets when the file changes", async () => {
+    const user = userEvent.setup();
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
+    const { rerender } = render(
+      renderViewer({
+        fileName: "mark.svg",
+        filePath: "assets/mark.svg",
+        content: {
+          ...fileTab.content!,
+          filePath: "assets/mark.svg",
+          language: "xml",
+          content: svg,
+          isBinary: false,
+          previewKind: "image",
+          previewBytesBase64: btoa(svg),
+        },
+      }),
+    );
+
+    const toggle = screen.getByRole("button", { name: "SVG preview" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "mark.svg" })).toBeInTheDocument();
+    expect(document.querySelector("script")).toBeNull();
+
+    await user.click(toggle);
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+
+    rerender(
+      renderViewer({
+        fileName: "other.svg",
+        filePath: "assets/other.svg",
+        content: {
+          ...fileTab.content!,
+          filePath: "assets/other.svg",
+          language: "xml",
+          content: svg,
+          isBinary: false,
+          previewKind: "image",
+          previewBytesBase64: btoa(svg),
+        },
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "SVG preview" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("img", { name: "other.svg" })).toBeInTheDocument();
+
+    rerender(
+      renderViewer({
+        fileName: "mark.svg",
+        filePath: "assets/mark.svg",
+        content: {
+          ...fileTab.content!,
+          filePath: "assets/mark.svg",
+          language: "xml",
+          content: svg,
+          isBinary: false,
+          previewKind: "image",
+          previewBytesBase64: btoa(svg),
+        },
+      }),
+    );
+    expect(screen.getByRole("button", { name: "SVG preview" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("img", { name: "mark.svg" })).toBeInTheDocument();
+  });
+
+  it("keeps binary and oversized files unavailable in the session viewer", () => {
+    const { rerender } = render(
+      renderViewer({
+        content: {
+          ...fileTab.content!,
+          content: "",
+          isBinary: true,
+          previewKind: null,
+          previewBytesBase64: "",
+        },
+      }),
+    );
+    expect(
+      screen.getByText("Binary files cannot be previewed."),
+    ).toBeInTheDocument();
+
+    rerender(
+      renderViewer({
+        content: {
+          ...fileTab.content!,
+          isTooLarge: true,
+          previewKind: null,
+          previewBytesBase64: "",
+        },
+      }),
+    );
+    expect(
+      screen.getByText("This file is too large to preview."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a preview load failure for a corrupt PDF", () => {
+    render(
+      renderViewer({
+        fileName: "broken.pdf",
+        filePath: "docs/broken.pdf",
+        content: {
+          ...fileTab.content!,
+          filePath: "docs/broken.pdf",
+          language: null,
+          content: "",
+          isBinary: true,
+          previewKind: "pdf",
+          previewBytesBase64: "%%%",
+        },
+      }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Failed to load preview.",
+    );
+    expect(
+      screen.queryByText("Binary files cannot be previewed."),
+    ).not.toBeInTheDocument();
   });
 
   it("does not restore a position cached for another project", async () => {

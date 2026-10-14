@@ -39,6 +39,7 @@ export function CodeBreadcrumb({
   onDirectoryOpen,
   editToggle = null,
   markdownPreviewToggle = null,
+  svgPreviewToggle = null,
 }: {
   filePath: string;
   tree: WorkspaceFileTreeNode[];
@@ -46,6 +47,7 @@ export function CodeBreadcrumb({
   onDirectoryOpen?: (directoryPath: string) => void;
   editToggle?: CodeEditToggle | null;
   markdownPreviewToggle?: CodeMarkdownPreviewToggle | null;
+  svgPreviewToggle?: CodeMarkdownPreviewToggle | null;
 }) {
   // 受控弹层：同一时间只展开一个目录段。打开文件后立即关闭，回到面包屑。
   const [openCrumb, setOpenCrumb] = useState<string | null>(null);
@@ -109,21 +111,8 @@ export function CodeBreadcrumb({
           )}
         </button>
       ) : null}
-      {markdownPreviewToggle ? (
-        <button
-          type="button"
-          className="code-workspace__markdown-toggle"
-          aria-label={markdownPreviewToggle.label}
-          aria-pressed={markdownPreviewToggle.pressed}
-          onClick={markdownPreviewToggle.onToggle}
-        >
-          {markdownPreviewToggle.pressed ? (
-            <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
-          ) : (
-            <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
-          )}
-        </button>
-      ) : null}
+      <CodePreviewToggleButton toggle={svgPreviewToggle} />
+      <CodePreviewToggleButton toggle={markdownPreviewToggle} />
     </div>
   );
 }
@@ -245,6 +234,31 @@ function CodeBreadcrumbMenuRow({
       />
       <FileTypeIcon fileName={node.name} />
       <span>{node.name}</span>
+    </button>
+  );
+}
+
+function CodePreviewToggleButton({
+  toggle,
+}: {
+  toggle: CodeMarkdownPreviewToggle | null;
+}) {
+  if (!toggle) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="code-workspace__markdown-toggle"
+      aria-label={toggle.label}
+      aria-pressed={toggle.pressed}
+      onClick={toggle.onToggle}
+    >
+      {toggle.pressed ? (
+        <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
+      ) : (
+        <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+      )}
     </button>
   );
 }

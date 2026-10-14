@@ -1,10 +1,19 @@
 import { Editor } from "@monaco-editor/react";
+import { Eye, EyeOff } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useMonacoEditorReady } from "../../../shared/use-monaco-editor-ready";
 import { createEditorReadingLoadKey } from "../../../shared/workspace/editor-reading-position";
 import { useEditorReadingPosition } from "../../../shared/workspace/use-editor-reading-position";
+import {
+  isSvgTextSwitchable,
+  shouldRenderVisualPreview,
+  visualPreviewMimeType,
+  type SvgPreviewView,
+} from "../../../shared/workspace/visual-file-preview-model";
+import { VisualFilePreview } from "../../../shared/workspace/visual-file-preview";
 import { sessionFileReadingPositionKey } from "./session-file-reading-position";
 
 interface SessionFileViewerProps {
@@ -25,6 +34,15 @@ export function SessionFileViewer({
   tab,
 }: SessionFileViewerProps) {
   const { messages, contentFontSize, theme } = useI18n();
+  const [svgView, setSvgView] = useState<{
+    filePath: string;
+    mode: SvgPreviewView;
+  } | null>(null);
+  if (svgView?.filePath !== tab.filePath) {
+    setSvgView({ filePath: tab.filePath, mode: "image" });
+  }
+  const svgViewMode =
+    svgView?.filePath === tab.filePath ? svgView.mode : "image";
   const isMonacoReady = useMonacoEditorReady();
   const { handleEditorMount } = useEditorReadingPosition({
     readingKey: sessionFileReadingPositionKey(
@@ -63,36 +81,54 @@ export function SessionFileViewer({
     );
   }
 
-  if (tab.content.isBinary || tab.content.isTooLarge) {
+  if (tab.content.isTooLarge) {
     return (
       <section
         className="session-viewer-state"
         aria-label={messages.agentsFeature.fileUnavailable}
       >
         <h3>{tab.fileName}</h3>
-        <p>
-          {tab.content.isBinary
-            ? messages.agentsFeature.binaryPreviewUnavailable
-            : messages.agentsFeature.largeFilePreviewUnavailable}
-        </p>
+        <p>{messages.agentsFeature.largeFilePreviewUnavailable}</p>
       </section>
     );
   }
 
-  if (!isMonacoReady) {
+  const svgTextSwitch = isSvgTextSwitchable(tab.content);
+  const previewKind = tab.content.previewKind;
+  const showVisual =
+    previewKind != null && shouldRenderVisualPreview(tab.content, svgViewMode);
+
+  if (!showVisual && !svgTextSwitch && tab.content.isBinary) {
     return (
+      <section
+        className="session-viewer-state"
+        aria-label={messages.agentsFeature.fileUnavailable}
+      >
+        <h3>{tab.fileName}</h3>
+        <p>{messages.agentsFeature.binaryPreviewUnavailable}</p>
+      </section>
+    );
+  }
+
+  let body: ReactNode;
+  if (showVisual && previewKind) {
+    body = (
+      <VisualFilePreview
+        bytesBase64={tab.content.previewBytesBase64}
+        failureMessage={messages.agentsFeature.visualPreviewLoadFailed}
+        kind={previewKind}
+        label={tab.fileName}
+        mimeType={visualPreviewMimeType(tab.content.filePath, previewKind)}
+      />
+    );
+  } else if (!isMonacoReady) {
+    body = (
       <p className="session-viewer-state">
         {messages.agentsFeature.loadingFile}
       </p>
     );
-  }
-
-  return (
-    <section
-      className="session-file-viewer"
-      aria-label={messages.agentsFeature.fileView(tab.fileName)}
-    >
-      <div className="session-file-viewer__status">{tab.filePath}</div>
+  } else {
+    body = (
       <Editor
         height="100%"
         theme={theme === "dark" ? "vs-dark" : "light"}
@@ -106,6 +142,38 @@ export function SessionFileViewer({
         value={tab.content.content}
         onMount={handleEditorMount}
       />
+    );
+  }
+
+  return (
+    <section
+      className="session-file-viewer"
+      aria-label={messages.agentsFeature.fileView(tab.fileName)}
+    >
+      <div className="session-file-viewer__status">
+        <span className="session-file-viewer__path">{tab.filePath}</span>
+        {svgTextSwitch ? (
+          <button
+            type="button"
+            className="code-workspace__markdown-toggle"
+            aria-label={messages.agentsFeature.toggleSvgPreview}
+            aria-pressed={svgViewMode === "image"}
+            onClick={() =>
+              setSvgView({
+                filePath: tab.filePath,
+                mode: svgViewMode === "image" ? "text" : "image",
+              })
+            }
+          >
+            {svgViewMode === "image" ? (
+              <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
+            ) : (
+              <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+            )}
+          </button>
+        ) : null}
+      </div>
+      {body}
     </section>
   );
 }

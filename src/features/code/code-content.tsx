@@ -13,6 +13,12 @@ import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import { createEditorReadingLoadKey } from "../../shared/workspace/editor-reading-position";
 import { useEditorReadingPosition } from "../../shared/workspace/use-editor-reading-position";
 import {
+  shouldRenderVisualPreview,
+  visualPreviewMimeType,
+  type SvgPreviewView,
+} from "../../shared/workspace/visual-file-preview-model";
+import { VisualFilePreview } from "../../shared/workspace/visual-file-preview";
+import {
   codeEditorReadingPositionKey,
   type CodeFileTab,
 } from "./code-workspace-cache";
@@ -43,6 +49,7 @@ export function CodeContent({
   revealRequest = null,
   unavailableReason = null,
   viewMode = "source",
+  svgViewMode = "image",
   workspacePath = null,
 }: {
   projectId: number;
@@ -54,6 +61,7 @@ export function CodeContent({
   revealRequest?: CodeRevealRequest | null;
   unavailableReason?: CodeLanguageUnavailableReason | null;
   viewMode?: "source" | "preview";
+  svgViewMode?: SvgPreviewView;
   workspacePath?: string | null;
 }) {
   const appliedRevealTokenRef = useRef<number | null>(null);
@@ -119,12 +127,34 @@ export function CodeContent({
   if (!tab.content) {
     return null;
   }
-  if (tab.content.isBinary || tab.content.isTooLarge) {
+  if (tab.content.isTooLarge) {
     return (
       <p className="session-viewer-state">
-        {tab.content.isBinary
-          ? messages.agentsFeature.binaryPreviewUnavailable
-          : messages.agentsFeature.largeFilePreviewUnavailable}
+        {messages.agentsFeature.largeFilePreviewUnavailable}
+      </p>
+    );
+  }
+  if (
+    tab.content.previewKind != null &&
+    shouldRenderVisualPreview(tab.content, svgViewMode)
+  ) {
+    return (
+      <VisualFilePreview
+        bytesBase64={tab.content.previewBytesBase64}
+        failureMessage={messages.agentsFeature.visualPreviewLoadFailed}
+        kind={tab.content.previewKind}
+        label={tab.fileName}
+        mimeType={visualPreviewMimeType(
+          tab.content.filePath,
+          tab.content.previewKind,
+        )}
+      />
+    );
+  }
+  if (tab.content.isBinary) {
+    return (
+      <p className="session-viewer-state">
+        {messages.agentsFeature.binaryPreviewUnavailable}
       </p>
     );
   }

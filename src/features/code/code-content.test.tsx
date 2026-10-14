@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -203,8 +209,14 @@ const messages = {
     loadingFile: "Loading",
     binaryPreviewUnavailable: "Binary",
     largeFilePreviewUnavailable: "Too large",
+    visualPreviewLoadFailed: "Preview failed",
+    fileView: (fileName: string) => fileName,
   },
 } as never;
+
+/** 1×1 PNG。 */
+const PNG_BYTES_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 describe("CodeContent edit interactions", () => {
   beforeEach(() => {
@@ -597,6 +609,260 @@ describe("CodeContent edit interactions", () => {
     expect(lastEditorOptions.current).toMatchObject({
       renderValidationDecorations: "off",
     });
+  });
+
+  it("shows a bitmap as an image instead of the binary placeholder", () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "pixel.png",
+          filePath: "assets/pixel.png",
+          content: {
+            filePath: "assets/pixel.png",
+            language: null,
+            content: "",
+            modifiedAt: 1000,
+            sizeBytes: 68,
+            isBinary: true,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: PNG_BYTES_BASE64,
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    const image = screen.getByRole("img", { name: "pixel.png" });
+    expect(image).toHaveAttribute("src", expect.stringMatching(/^blob:/));
+    expect(screen.queryByText("Binary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("embeds a PDF instead of the binary placeholder", () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "notes.pdf",
+          filePath: "docs/notes.pdf",
+          content: {
+            filePath: "docs/notes.pdf",
+            language: null,
+            content: "",
+            modifiedAt: 1000,
+            sizeBytes: 16,
+            isBinary: true,
+            isTooLarge: false,
+            previewKind: "pdf",
+            previewBytesBase64: btoa("%PDF-1.1\n"),
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    const frame = screen.getByTitle("notes.pdf");
+    expect(frame.tagName).toBe("IFRAME");
+    expect(frame).toHaveAttribute("src", expect.stringMatching(/^blob:/));
+    expect(screen.queryByText("Binary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows a load failure for undecodable image bytes instead of text", () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "broken.png",
+          filePath: "assets/broken.png",
+          content: {
+            filePath: "assets/broken.png",
+            language: null,
+            content: "not really text",
+            modifiedAt: 1000,
+            sizeBytes: 8,
+            isBinary: true,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: "%%%",
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Preview failed");
+    expect(screen.queryByText("not really text")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows a load failure when the image cannot be decoded", () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "pixel.png",
+          filePath: "assets/pixel.png",
+          content: {
+            filePath: "assets/pixel.png",
+            language: null,
+            content: "",
+            modifiedAt: 1000,
+            sizeBytes: 68,
+            isBinary: true,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: PNG_BYTES_BASE64,
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    fireEvent.error(screen.getByRole("img", { name: "pixel.png" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Preview failed");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("keeps the too-large message for an oversized image", () => {
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "huge.png",
+          filePath: "assets/huge.png",
+          content: {
+            filePath: "assets/huge.png",
+            language: null,
+            content: "",
+            modifiedAt: 1000,
+            sizeBytes: 30_000_000,
+            isBinary: true,
+            isTooLarge: true,
+            previewKind: null,
+            previewBytesBase64: "",
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    expect(screen.getByText("Too large")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("renders a small SVG as an image and does not insert it as HTML", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "mark.svg",
+          filePath: "assets/mark.svg",
+          content: {
+            filePath: "assets/mark.svg",
+            language: "xml",
+            content: svg,
+            modifiedAt: 1000,
+            sizeBytes: svg.length,
+            isBinary: false,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: btoa(svg),
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+
+    const image = screen.getByRole("img", { name: "mark.svg" });
+    expect(image).toHaveAttribute("src", expect.stringMatching(/^blob:/));
+    expect(document.querySelector("script")).toBeNull();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+  });
+
+  it("shows SVG source when the current open is switched to text", () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+    render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "mark.svg",
+          filePath: "assets/mark.svg",
+          content: {
+            filePath: "assets/mark.svg",
+            language: "xml",
+            content: svg,
+            modifiedAt: 1000,
+            sizeBytes: svg.length,
+            isBinary: false,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: btoa(svg),
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+        svgViewMode="text"
+      />,
+    );
+
+    expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+      "data-value",
+      svg,
+    );
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("releases the preview object URL when the file view unmounts", () => {
+    const revoke = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const view = render(
+      <CodeContent
+        projectId={1}
+        tab={buildTab({
+          fileName: "pixel.png",
+          filePath: "assets/pixel.png",
+          content: {
+            filePath: "assets/pixel.png",
+            language: null,
+            content: "",
+            modifiedAt: 1000,
+            sizeBytes: 68,
+            isBinary: true,
+            isTooLarge: false,
+            previewKind: "image",
+            previewBytesBase64: PNG_BYTES_BASE64,
+          },
+        })}
+        contentFontSize={14}
+        messages={messages}
+        theme="light"
+      />,
+    );
+    const src = screen
+      .getByRole("img", { name: "pixel.png" })
+      .getAttribute("src");
+    view.unmount();
+    expect(revoke).toHaveBeenCalledWith(src);
+    revoke.mockRestore();
   });
 
   it("uses a stable file uri as the editor path", async () => {

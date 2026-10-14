@@ -16,6 +16,10 @@ import {
   writeProjectWorktreeFile,
   type CodeWorkspaceRoot,
 } from "../../shared/workspace/workspace-commands";
+import {
+  isSvgTextSwitchable,
+  type SvgPreviewView,
+} from "../../shared/workspace/visual-file-preview-model";
 import { CodeBreadcrumb } from "./code-breadcrumb";
 import { CodeContent, type CodeRevealRequest } from "./code-content";
 import { CodeSidebar } from "./code-sidebar";
@@ -38,6 +42,7 @@ import {
   normalizeCodeFileTab,
   resolveEditDisabledTitle,
   resolveFileLoadErrorMessage,
+  shouldShowCodeFileEditToggle,
 } from "./code-workspace-helpers";
 import { useCodeUnsavedConfirm } from "./use-code-unsaved-confirm";
 import { buildActiveFileSignature } from "./use-code-active-file-refresh";
@@ -93,6 +98,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [markdownViewMode, setMarkdownViewMode] = useState<
     "source" | "preview"
   >("source");
+  const [svgViewMode, setSvgViewMode] = useState<SvgPreviewView>("image");
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
   const tabsRef = useRef<CodeFileTab[]>(
     (cached?.tabs ?? []).map(normalizeCodeFileTab),
@@ -112,6 +118,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     clearCodeEditorReadingPositions(projectId);
     setRevealRequest(null);
     setMarkdownViewMode("source");
+    setSvgViewMode("image");
   }, [projectId]);
 
   const shell = useWorkspaceShell({
@@ -260,8 +267,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const activateFilePath = useCallback((filePath: string | null) => {
     activePathRef.current = filePath;
     setActivePath(filePath);
-    // 换文件/关 tab 后回到默认源码视图（不跨文件记忆）。
+    // 换文件/关 tab 后回到默认源码与 SVG 图片（不跨文件记忆）。
     setMarkdownViewMode("source");
+    setSvgViewMode("image");
   }, []);
 
   const saveTabByPath = useCallback(
@@ -419,6 +427,9 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
 
     if (!tab.isEditable) {
       setMarkdownViewMode("source");
+      if (tab.content && isSvgTextSwitchable(tab.content)) {
+        setSvgViewMode("text");
+      }
       setTabs((currentTabs) =>
         currentTabs.map((item) => {
           if (item.filePath !== path || !canEditCodeFileTab(item)) {
@@ -608,16 +619,32 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                   tree={tree}
                   onDirectoryOpen={loadDirectory}
                   onOpenFile={openFile}
-                  editToggle={{
-                    disabled: !canEditCodeFileTab(activeTab),
-                    label: messages.agentsFeature.toggleFileEdit,
-                    onToggle: toggleActiveTabEditable,
-                    pressed: activeTab.isEditable,
-                    title: resolveEditDisabledTitle(
-                      getCodeFileEditBlockReason(activeTab),
-                      messages.agentsFeature,
-                    ),
-                  }}
+                  editToggle={
+                    shouldShowCodeFileEditToggle(activeTab)
+                      ? {
+                          disabled: !canEditCodeFileTab(activeTab),
+                          label: messages.agentsFeature.toggleFileEdit,
+                          onToggle: toggleActiveTabEditable,
+                          pressed: activeTab.isEditable,
+                          title: resolveEditDisabledTitle(
+                            getCodeFileEditBlockReason(activeTab),
+                            messages.agentsFeature,
+                          ),
+                        }
+                      : null
+                  }
+                  svgPreviewToggle={
+                    activeTab.content && isSvgTextSwitchable(activeTab.content)
+                      ? {
+                          label: messages.agentsFeature.toggleSvgPreview,
+                          onToggle: () =>
+                            setSvgViewMode((current) =>
+                              current === "image" ? "text" : "image",
+                            ),
+                          pressed: svgViewMode === "image",
+                        }
+                      : null
+                  }
                   markdownPreviewToggle={
                     isMarkdownPreviewable(activeTab)
                       ? {
@@ -647,6 +674,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                       ? markdownViewMode
                       : "source"
                   }
+                  svgViewMode={svgViewMode}
                 />
               </>
             ) : null}

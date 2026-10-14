@@ -685,6 +685,8 @@
     "permissionActionUnrecognized": "Unrecognized approval action: {{actionId}}",
     "agentTypeAlt": "Agent type: {{label}}",
     "toggleMarkdownPreview": "Markdown preview",
+    "toggleSvgPreview": "SVG preview",
+    "visualPreviewLoadFailed": "Failed to load preview.",
     "toggleFileEdit": "Edit file",
     "fileTabUnsaved": "Unsaved changes",
     "unsavedChangesTitle": "Unsaved Changes",

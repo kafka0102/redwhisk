@@ -541,6 +541,8 @@ export interface I18nMessages {
     loadingCode: string;
     toggleContentSearch: string;
     toggleMarkdownPreview: string;
+    toggleSvgPreview: string;
+    visualPreviewLoadFailed: string;
     toggleFileEdit: string;
     fileTabUnsaved: string;
     fileEditDisabledLoading: string;
