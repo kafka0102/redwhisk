@@ -175,6 +175,10 @@ const AGENT_SESSIONS_SESSION_TOKEN_USAGE_MIGRATION_SQL: &str =
 const AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION: &str = "0053_agent_profiles_deepseek";
 const AGENT_PROFILES_DEEPSEEK_MIGRATION_SQL: &str =
     include_str!("../../migrations/0053_agent_profiles_deepseek.sql");
+const TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_VERSION: &str =
+    "0054_tui_hook_registration_preference";
+const TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0054_tui_hook_registration_preference.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -474,6 +478,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION,
             sql: AGENT_PROFILES_DEEPSEEK_MIGRATION_SQL,
+        },
+        Migration {
+            version: TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_VERSION,
+            sql: TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_SQL,
         },
     ]
 }

@@ -170,6 +170,21 @@ export interface I18nMessages {
     searchSkillName: string;
     skillNameDuplicate: string;
     skillNameRequired: string;
+    tuiHookTitle: string;
+    tuiHookScopeNotice: string;
+    tuiHookTrustNotice: string;
+    tuiHookKeepOthersNotice: string;
+    tuiHookStatusUnregistered: string;
+    tuiHookStatusRegistered: string;
+    tuiHookStatusTrustMayBeRequired: string;
+    tuiHookChannelUnavailable: string;
+    tuiHookFeatureDisabled: string;
+    tuiHookEnableFeature: string;
+    tuiHookInstall: string;
+    tuiHookUninstall: string;
+    tuiHookRecheck: string;
+    tuiHookCodex: string;
+    tuiHookGrok: string;
   };
   projectHome: {
     chooseFolder: string;

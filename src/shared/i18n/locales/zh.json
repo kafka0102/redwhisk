@@ -192,7 +192,22 @@
     "skillNameRequired": "技能名称不能为空",
     "agentActionsColumn": "操作",
     "deleteAgentProfile": "删除",
-    "deleteAgentProfileConfirm": "确认删除智能体配置「{{profileName}}」吗？"
+    "deleteAgentProfileConfirm": "确认删除智能体配置「{{profileName}}」吗？",
+    "tuiHookTitle": "TUI 状态 Hook",
+    "tuiHookScopeNotice": "只影响本机 RedWhisk 拉起的 Codex / Grok TUI 左侧 running。",
+    "tuiHookTrustNotice": "Codex 安装后若 CLI 提示 review hooks，需要在 Codex 里执行 /hooks 并信任 RedWhisk 那几条，否则事件不会来。",
+    "tuiHookKeepOthersNotice": "不会删除其它产品写在同一文件里的 hook。",
+    "tuiHookStatusUnregistered": "未注册",
+    "tuiHookStatusRegistered": "已注册",
+    "tuiHookStatusTrustMayBeRequired": "注册后 CLI 仍可能要求信任",
+    "tuiHookChannelUnavailable": "本机状态通道不可用",
+    "tuiHookFeatureDisabled": "Codex hooks 未开启，左侧 running 不会出现。",
+    "tuiHookEnableFeature": "允许写入 [features] hooks = true",
+    "tuiHookInstall": "安装",
+    "tuiHookUninstall": "卸载",
+    "tuiHookRecheck": "重新检测",
+    "tuiHookCodex": "Codex",
+    "tuiHookGrok": "Grok"
   },
   "projectHome": {
     "chooseFolder": "选择目录",

@@ -132,7 +132,7 @@ pub fn codex_hooks_feature_enabled(config_toml: &str) -> bool {
     true
 }
 
-fn enable_codex_hooks_feature(config_path: &Path) -> io::Result<()> {
+pub fn enable_codex_hooks_feature(config_path: &Path) -> io::Result<()> {
     let text = match fs::read_to_string(config_path) {
         Ok(text) => text,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),

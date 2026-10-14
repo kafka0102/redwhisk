@@ -22,7 +22,13 @@ mod timeline;
 mod tui_hook_dispatch;
 mod tui_hook_env;
 mod tui_hook_install;
+mod tui_hook_settings;
 mod tui_hook_socket;
+pub(crate) use tui_hook_settings::{
+    apply_tui_hook_registration, channel_unavailable_error, detect_tui_hook_registration_with_flags,
+    enable_codex_hooks_feature_file, uninstall_tui_hook_registration, TuiHookAgentKind,
+    TuiHookRegistrationStatus,
+};
 pub use tui_hook_dispatch::run_tui_hook_command_from_process;
 pub(crate) use tui_hook_dispatch::spawn_tui_hook_listener;
 pub(crate) use tui_hook_socket::tui_hook_socket_path;
@@ -63,6 +69,8 @@ mod timeline_tests;
 mod tui_hook_env_tests;
 #[cfg(test)]
 mod tui_hook_install_tests;
+#[cfg(test)]
+mod tui_hook_settings_tests;
 #[cfg(test)]
 mod tui_hook_socket_tests;
 #[cfg(test)]

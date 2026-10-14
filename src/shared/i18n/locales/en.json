@@ -192,7 +192,22 @@
     "skillNameRequired": "Skill name is required",
     "agentActionsColumn": "Actions",
     "deleteAgentProfile": "Delete",
-    "deleteAgentProfileConfirm": "Are you sure you want to delete Agent Profile \"{{profileName}}\"?"
+    "deleteAgentProfileConfirm": "Are you sure you want to delete Agent Profile \"{{profileName}}\"?",
+    "tuiHookTitle": "TUI status hooks",
+    "tuiHookScopeNotice": "Only affects the left-side running indicator of Codex / Grok TUI sessions launched by RedWhisk on this machine.",
+    "tuiHookTrustNotice": "After install, if Codex asks you to review hooks, run /hooks in Codex and trust the RedWhisk entries. Otherwise events will not arrive.",
+    "tuiHookKeepOthersNotice": "Uninstall does not delete hooks written by other products.",
+    "tuiHookStatusUnregistered": "Not registered",
+    "tuiHookStatusRegistered": "Registered",
+    "tuiHookStatusTrustMayBeRequired": "The CLI may still require trust after registration",
+    "tuiHookChannelUnavailable": "The local status channel is unavailable",
+    "tuiHookFeatureDisabled": "Codex hooks are off, so the running indicator will not appear.",
+    "tuiHookEnableFeature": "Allow writing [features] hooks = true",
+    "tuiHookInstall": "Install",
+    "tuiHookUninstall": "Uninstall",
+    "tuiHookRecheck": "Recheck",
+    "tuiHookCodex": "Codex",
+    "tuiHookGrok": "Grok"
   },
   "projectHome": {
     "chooseFolder": "Choose folder",

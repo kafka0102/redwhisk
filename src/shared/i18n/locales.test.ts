@@ -50,6 +50,44 @@ describe("locale resources", () => {
     expect(enG.english).toBe("English");
   });
 
+  it("tui hook card copy exists in zh and en without claiming trust", () => {
+    const keys = [
+      "settings.tuiHookTitle",
+      "settings.tuiHookScopeNotice",
+      "settings.tuiHookTrustNotice",
+      "settings.tuiHookKeepOthersNotice",
+      "settings.tuiHookStatusUnregistered",
+      "settings.tuiHookStatusRegistered",
+      "settings.tuiHookStatusTrustMayBeRequired",
+      "settings.tuiHookChannelUnavailable",
+      "settings.tuiHookFeatureDisabled",
+      "settings.tuiHookEnableFeature",
+      "settings.tuiHookInstall",
+      "settings.tuiHookUninstall",
+      "settings.tuiHookRecheck",
+      "settings.tuiHookCodex",
+      "settings.tuiHookGrok",
+    ];
+    for (const key of keys) {
+      expect(zhFlat[key], key).toBeTruthy();
+      expect(enFlat[key], key).toBeTruthy();
+    }
+    expect(zhFlat["settings.tuiHookScopeNotice"]).toContain("RedWhisk");
+    expect(zhFlat["settings.tuiHookTrustNotice"]).toContain("/hooks");
+    expect(zhFlat["settings.tuiHookKeepOthersNotice"]).toContain("hook");
+    expect(enFlat["settings.tuiHookScopeNotice"]).toContain("RedWhisk");
+    expect(enFlat["settings.tuiHookTrustNotice"]).toContain("/hooks");
+    expect(zhFlat["settings.tuiHookStatusRegistered"]).not.toMatch(
+      /已信任|已生效/,
+    );
+    expect(enFlat["settings.tuiHookStatusRegistered"]).not.toMatch(
+      /trusted|active/i,
+    );
+    expect(zhFlat["settings.tuiHookChannelUnavailable"]).toContain(
+      "本机状态通道不可用",
+    );
+  });
+
   it("zh uses unified terminology 智能体 / 会话 / 任务", () => {
     expect(zhText).toContain("智能体");
     expect(zhText).toContain("会话");

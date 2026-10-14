@@ -176,6 +176,13 @@ pub fn update_user_profile(
     super::user_profile::UserProfileService::update_profile_in_data_dir(data_dir, input)
 }
 
+pub(crate) fn prepare_settings_data_dir_for_hooks(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+) -> Result<std::path::PathBuf, CommandError> {
+    prepare_settings_data_dir(app, state)
+}
+
 fn prepare_settings_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
