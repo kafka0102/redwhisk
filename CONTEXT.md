@@ -4,6 +4,10 @@ RedWhisk 是以本地 SQLite 作为业务状态事实源的桌面工作台，用
 
 ## Language
 
+**Issue 项目内编号**：
+某一项目内从 1 起递增、在该项目范围内唯一的 Issue 序号；界面上写作 `#12` 这类短编号，供人在项目语境里辨认 Issue。
+_Avoid_: 全局 issue id、会话 ID、数据库主键
+
 **Issue 时间轴**：
 按发生时间呈现某一 Issue 的用户、Agent 与系统事实的审计视图；其唯一事件流是 `issue_actions`，评论正文不直接存入事件负载。
 _Avoid_: 动态表、操作日志
