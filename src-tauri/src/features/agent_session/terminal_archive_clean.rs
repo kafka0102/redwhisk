@@ -17,6 +17,7 @@ use terminal_archive_clean_classify::*;
 /// - 保留 Markdown 源文（标题/加粗等），仅去掉交付用 `issue-comment` 标签
 pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
     let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let normalized = dedupe_repeated_screen_snapshots(&normalized);
     let lines: Vec<&str> = normalized.lines().map(|line| line.trim_end()).collect();
     if lines.is_empty() {
         return String::new();
@@ -60,6 +61,67 @@ pub(crate) fn extract_tui_archive_conclusion_text(text: &str) -> String {
     }
 
     finalize_archive_text(&join_blocks_with_spacing(&output_blocks))
+}
+
+/// 全屏 TUI 会把同一屏按不同列宽重绘后整段拼进归档。
+/// 后一次重绘可能少几行或把一行拆开，整屏比对认不出；
+/// 按行指纹合并：后一屏的行若已在前一屏出现，视为同一次重绘，只留最后一屏。
+fn dedupe_repeated_screen_snapshots(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let starts: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| is_real_user_prompt_line(line).then_some(index))
+        .collect();
+    if starts.len() < 2 {
+        return text.to_string();
+    }
+
+    let mut kept: Vec<Vec<&str>> = Vec::new();
+    let mut kept_keys: Vec<std::collections::HashSet<String>> = Vec::new();
+    for (index, &start) in starts.iter().enumerate() {
+        let end = starts.get(index + 1).copied().unwrap_or(lines.len());
+        let screen = lines[start..end].to_vec();
+        let keys = line_keys(&screen);
+        // 同一屏的后一次重绘：保留更宽的那一帧，避免窄窗口把一行拆成两行。
+        if let Some(prev) = kept_keys.last() {
+            let overlap = keys.intersection(prev).count();
+            let smaller = keys.len().min(prev.len()).max(1);
+            if overlap * 2 >= smaller {
+                if screen_width(&screen) <= screen_width(kept.last().expect("screen")) {
+                    continue;
+                }
+                kept.pop();
+                kept_keys.pop();
+            }
+        }
+        kept.push(screen);
+        kept_keys.push(keys);
+    }
+
+    if kept.len() == starts.len() {
+        return text.to_string();
+    }
+    kept.into_iter()
+        .map(|screen| screen.join("\n"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn screen_width(lines: &[&str]) -> usize {
+    lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0)
+}
+
+fn line_keys(lines: &[&str]) -> std::collections::HashSet<String> {
+    lines
+        .iter()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect()
 }
 
 /// 写档收尾：去掉交付标签，保留 Markdown；折叠多余空行。

@@ -166,6 +166,9 @@ pub(super) fn is_process_or_chrome_line(line: &str) -> bool {
     if contains_sticky_status_chrome(trimmed) {
         return true;
     }
+    if is_tui_footer_chrome_line(trimmed) {
+        return true;
+    }
     if is_status_header_prompt(trimmed) {
         return true;
     }
@@ -267,13 +270,7 @@ pub(super) fn is_decorative_line(line: &str) -> bool {
         return false;
     }
     if trimmed.contains("Worked for") {
-        let bar_count = trimmed
-            .chars()
-            .filter(|c| matches!(*c, '─' | '━' | '-'))
-            .count();
-        if bar_count >= 3 {
-            return true;
-        }
+        return true;
     }
     let decorative = |c: char| {
         matches!(
@@ -314,6 +311,10 @@ pub(super) fn is_decorative_line(line: &str) -> bool {
         .filter(|c| !c.is_whitespace() && *c != '•' && *c != '·')
         .count();
     symbol_count >= 3
+}
+
+pub(super) fn is_tui_footer_chrome_line(line: &str) -> bool {
+    line.contains("Shift+Tab") || line.contains("Ctrl+x:shortcuts")
 }
 
 pub(super) fn contains_sticky_status_chrome(line: &str) -> bool {

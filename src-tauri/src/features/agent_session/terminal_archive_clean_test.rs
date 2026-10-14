@@ -402,6 +402,43 @@ fn indented_grok_style_user_prompt_is_kept() {
     assert!(got.contains("最终结论"), "got={got:?}");
 }
 
+/// 回归：archive-project-1-issue-277-session-328。
+/// 同一屏被按不同宽度重绘后整段拼接，用户 prompt 重复，且夹着状态栏。
+#[test]
+fn repeated_fullscreen_redraws_keep_one_copy_without_footer() {
+    let frame = "\
+     ❯ 使用 skill diagnosing-bugs 执行任务：
+
+     cargo fmt --check 把无关文件也改了。
+
+     ◆ Run Revert unrelated fmt
+
+     回归和文件大小门禁都过了。
+
+     Worked for 26m21s
+
+  Shift+Tab:mode  │  Ctrl+x:shortcuts
+
+  issue-277-redwhisk worktree ~/w/k/redwhisk.worktrees/issue-277-redwhisk  146K / 200K │ [Dashboard]
+";
+    let input = format!("{frame}\n{frame}\n{frame}");
+    let got = extract_tui_archive_conclusion_text(&input);
+    assert_eq!(
+        got.matches("使用 skill diagnosing-bugs").count(),
+        1,
+        "prompt must appear once, got:\n{got}"
+    );
+    assert_eq!(
+        got.matches("回归和文件大小门禁都过了").count(),
+        1,
+        "conclusion must appear once, got:\n{got}"
+    );
+    assert!(!got.contains("Shift+Tab"), "footer dropped:\n{got}");
+    assert!(!got.contains("Ctrl+x"), "footer dropped:\n{got}");
+    assert!(!got.contains("[Dashboard]"), "footer dropped:\n{got}");
+    assert!(!got.contains("Worked for"), "status dropped:\n{got}");
+}
+
 /// 回归：TUI 归档保留 Markdown 源文，仅去掉交付标签（方案 2，前端 AgentMarkdown 渲染）。
 #[test]
 fn extract_tui_archive_preserves_markdown_source_for_frontend_render() {

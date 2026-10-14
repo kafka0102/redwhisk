@@ -4,7 +4,8 @@
 //! 本模块用轻量屏缓冲回放，在清屏 / 回原点时采样帧，合并去重后输出。
 
 const DEFAULT_ROWS: usize = 48;
-const DEFAULT_COLS: usize = 200;
+// Grok 全屏 TUI 会按窗口宽度重绘；列太窄会把一行正文拆成多行。
+const DEFAULT_COLS: usize = 400;
 const MAX_FRAMES: usize = 64;
 
 /// 把终端原始输出重放为按行纯文本（已去掉控制序列语义）。
@@ -70,9 +71,14 @@ impl Screen {
             }
             c if c.is_control() => {}
             c => {
-                if self.row < self.rows && self.col < self.cols {
+                let width = display_width(c);
+                if self.row < self.rows && self.col + width <= self.cols {
                     self.cells[self.row][self.col] = c;
-                    self.col += 1;
+                    // 宽字符占两列：第二格用占位，导出时丢掉，避免和原文空格叠成两个空格。
+                    if width == 2 && self.col + 1 < self.cols {
+                        self.cells[self.row][self.col + 1] = '\0';
+                    }
+                    self.col += width;
                     if self.col >= self.cols {
                         self.col = 0;
                         self.row = (self.row + 1).min(self.rows.saturating_sub(1));
@@ -146,7 +152,13 @@ impl Screen {
         let mut lines: Vec<String> = self
             .cells
             .iter()
-            .map(|row| row.iter().collect::<String>().trim_end().to_string())
+            .map(|row| {
+                row.iter()
+                    .filter(|cell| **cell != '\0')
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
             .collect();
         while lines.first().is_some_and(|line| line.trim().is_empty()) {
             lines.remove(0);
@@ -274,11 +286,17 @@ fn push_frame(frames: &mut Vec<String>, screen: &Screen) {
 }
 
 fn join_frames(frames: &[String]) -> String {
-    if frames.is_empty() {
-        return String::new();
+    // 全屏 TUI 每次重绘都是整屏快照。列宽变化后字节不完全相同，
+    // 但内容是同一屏的更新版本，只保留最后一帧。
+    frames.last().cloned().unwrap_or_default()
+}
+
+fn display_width(c: char) -> usize {
+    if is_cjk(c) {
+        2
+    } else {
+        1
     }
-    let start = frames.len().saturating_sub(12);
-    frames[start..].join("\n\n")
 }
 
 fn collapse_cjk_cell_padding(text: &str) -> String {
@@ -330,6 +348,40 @@ mod tests {
     fn collapse_cjk_padding_joins_spaced_han() {
         let got = collapse_cjk_cell_padding("下 一 决 策");
         assert_eq!(got, "下一决策");
+    }
+
+    /// 回归：Grok 全屏 TUI 按不同列宽反复清屏重绘同一会话。
+    /// 每次重绘内容相同但行宽不同，逐字节去重认不出是同一屏；
+    /// 拼接最近多帧会让同一条用户 prompt 在归档里重复出现。
+    #[test]
+    fn fullscreen_redraws_keep_latest_frame_only() {
+        let narrow = format!(
+            "{}\n{}",
+            "❯ 使用 skill diagnosing-bugs 执行任务", "父会话停在 get_command_or_subagent_output。"
+        );
+        let wide = format!(
+            "{}\n{}",
+            "❯ 使用 skill diagnosing-bugs 执行任务：补充说明",
+            "父会话停在 get_command_or_subagent_output。已经修好。"
+        );
+        let raw = format!(
+            "\u{1b}[2J\u{1b}[H{narrow}\nShift+Tab:mode\u{1b}[2J\u{1b}[H{wide}\nShift+Tab:mode"
+        );
+        let got = render_terminal_snapshot_text(&raw);
+        let prompt = "使用 skill diagnosing-bugs 执行任务";
+        assert_eq!(
+            got.matches(prompt).count(),
+            1,
+            "user prompt must appear once, got:\n{got}"
+        );
+        assert!(
+            got.contains("已经修好"),
+            "latest redraw must win, got:\n{got}"
+        );
+        assert!(
+            !got.contains("使用  skill"),
+            "wide chars must not insert a padding space, got:\n{got}"
+        );
     }
 
     #[test]
