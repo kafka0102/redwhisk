@@ -1270,6 +1270,11 @@
         "path": "required"
       }
     },
+    "SaveAgentDisplayOrderInput": {
+      "fields": {
+        "profileIds": "required"
+      }
+    },
     "SaveAgentProfileInput": {
       "fields": {
         "agentType": "required",

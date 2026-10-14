@@ -2,8 +2,10 @@ use super::*;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::types::agent_profile::{
-    AgentScope, AgentType, DeleteAgentProfileInput, ListAgentProfilesInput, SaveAgentProfileInput,
+    AgentScope, AgentType, DeleteAgentProfileInput, ListAgentProfilesInput,
+    SaveAgentDisplayOrderInput, SaveAgentProfileInput,
 };
+use crate::types::errors::CommandErrorCode;
 use rusqlite::{params, Connection};
 
 use super::seed_preview_tests::{
@@ -318,4 +320,134 @@ fn list_backfills_legacy_rows_inserted_before_display_order_column() {
         listed_names(&service, AgentScope::Global, None),
         vec!["enabled-low-id", "enabled-high-id", "disabled-low-id"]
     );
+}
+
+#[test]
+fn saving_the_full_id_order_reorders_interleaved_and_disabled_profiles() {
+    let connection = migrated_in_memory_connection();
+    let project_a = insert_project(&connection);
+    let project_b = ProjectRepository::new(&connection)
+        .insert("Other", "/tmp/other")
+        .expect("insert second project")
+        .id;
+    let service = test_settings_service(&connection, SeedTestDetector::new());
+
+    let global_enabled = save_named(&service, "global-enabled", AgentScope::Global, None, true);
+    let project_disabled = save_named(
+        &service,
+        "project-disabled",
+        AgentScope::Project,
+        Some(project_a),
+        false,
+    );
+    let global_disabled = save_named(&service, "global-disabled", AgentScope::Global, None, false);
+    let project_enabled = save_named(
+        &service,
+        "project-enabled",
+        AgentScope::Project,
+        Some(project_a),
+        true,
+    );
+    let other_project = save_named(
+        &service,
+        "other-project",
+        AgentScope::Project,
+        Some(project_b),
+        true,
+    );
+
+    service
+        .save_agent_display_order(SaveAgentDisplayOrderInput {
+            profile_ids: vec![
+                project_disabled,
+                other_project,
+                global_enabled,
+                project_enabled,
+                global_disabled,
+            ],
+        })
+        .expect("save display order");
+
+    assert_eq!(
+        listed_names(&service, AgentScope::Global, None),
+        vec!["global-enabled", "global-disabled"]
+    );
+    assert_eq!(
+        listed_names(&service, AgentScope::Project, Some(project_a)),
+        vec!["project-disabled", "project-enabled"]
+    );
+    assert_eq!(
+        listed_names(&service, AgentScope::Project, Some(project_b)),
+        vec!["other-project"]
+    );
+    assert_eq!(
+        shared_order_names(&connection),
+        vec![
+            "project-disabled",
+            "other-project",
+            "global-enabled",
+            "project-enabled",
+            "global-disabled",
+        ]
+    );
+}
+
+fn shared_order_names(connection: &Connection) -> Vec<String> {
+    let mut statement = connection
+        .prepare("SELECT name FROM agent_profiles WHERE del = 0 ORDER BY display_order ASC, id ASC")
+        .expect("prepare shared order");
+    statement
+        .query_map([], |row| row.get(0))
+        .expect("query shared order")
+        .collect::<Result<Vec<String>, _>>()
+        .expect("read shared order")
+}
+
+#[test]
+fn saving_an_incomplete_duplicate_unknown_or_deleted_id_keeps_the_previous_order() {
+    let connection = migrated_in_memory_connection();
+    let project_id = insert_project(&connection);
+    let service = test_settings_service(&connection, SeedTestDetector::new());
+
+    let first = save_named(&service, "first", AgentScope::Global, None, true);
+    let second = save_named(
+        &service,
+        "second",
+        AgentScope::Project,
+        Some(project_id),
+        false,
+    );
+    let third = save_named(&service, "third", AgentScope::Global, None, true);
+    let deleted = save_named(&service, "deleted", AgentScope::Global, None, true);
+    service
+        .delete_agent_profile(DeleteAgentProfileInput { id: deleted })
+        .expect("soft delete");
+
+    let before_global = listed_names(&service, AgentScope::Global, None);
+    let before_project = listed_names(&service, AgentScope::Project, Some(project_id));
+    assert_eq!(before_global, vec!["first", "third"]);
+    assert_eq!(before_project, vec!["second"]);
+
+    let cases = [
+        vec![first, third],
+        vec![second, first, third, second],
+        vec![first, second, third, 9_999_999],
+        vec![deleted, first, second, third],
+        vec![first, second, third, deleted],
+    ];
+
+    for profile_ids in cases {
+        let error = service
+            .save_agent_display_order(SaveAgentDisplayOrderInput { profile_ids })
+            .expect_err("reject invalid order");
+        assert_eq!(error.code, CommandErrorCode::AgentProfileValidationFailed);
+        assert_eq!(
+            listed_names(&service, AgentScope::Global, None),
+            before_global
+        );
+        assert_eq!(
+            listed_names(&service, AgentScope::Project, Some(project_id)),
+            before_project
+        );
+    }
 }

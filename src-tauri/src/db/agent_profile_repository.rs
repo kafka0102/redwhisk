@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::types::agent_profile::{AgentScope, AgentType};
@@ -177,6 +179,35 @@ impl<'connection> AgentProfileRepository<'connection> {
         }
     }
 
+    /// 用提交的 id 顺序覆盖全部未删除 profile 的显示顺序。
+    /// 不匹配时回滚且返回 `false`，不改已有顺序。
+    pub fn replace_active_display_order(&self, profile_ids: &[i64]) -> rusqlite::Result<bool> {
+        let transaction = self.connection.unchecked_transaction()?;
+        self.backfill_missing_display_orders()?;
+
+        let mut statement = self
+            .connection
+            .prepare("SELECT id FROM agent_profiles WHERE del = 0")?;
+        let active_ids = statement
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<i64>>>()?;
+        drop(statement);
+
+        if !submitted_ids_cover_active(&active_ids, profile_ids) {
+            return Ok(false);
+        }
+
+        for (index, id) in profile_ids.iter().enumerate() {
+            self.connection.execute(
+                "UPDATE agent_profiles SET display_order = ?1 WHERE id = ?2 AND del = 0",
+                params![index as i64 + 1, id],
+            )?;
+        }
+
+        transaction.commit()?;
+        Ok(true)
+    }
+
     pub fn soft_delete_profile(&self, id: i64) -> rusqlite::Result<bool> {
         let affected = self.connection.execute(
             "UPDATE agent_profiles SET del = 1 WHERE id = ?1 AND del = 0",
@@ -236,6 +267,22 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         enabled: sqlite_to_bool(row.get(12)?),
         display_order: row.get(13)?,
     })
+}
+
+fn submitted_ids_cover_active(active_ids: &[i64], submitted_ids: &[i64]) -> bool {
+    if active_ids.len() != submitted_ids.len() {
+        return false;
+    }
+
+    let active: HashSet<i64> = active_ids.iter().copied().collect();
+    if active.len() != active_ids.len() {
+        return false;
+    }
+
+    let mut seen = HashSet::with_capacity(submitted_ids.len());
+    submitted_ids
+        .iter()
+        .all(|id| active.contains(id) && seen.insert(*id))
 }
 
 fn scope_to_str(scope: &AgentScope) -> &'static str {

@@ -30,6 +30,7 @@ import {
   detectCodexCommand,
   previewAgentCommandArgs,
   listAgentProfiles,
+  saveAgentDisplayOrder,
   saveAgentProfile,
   testAgentCommand,
 } from "../../features/settings/settings-commands";
@@ -787,6 +788,17 @@ describe("command client", () => {
         displayMode: "json",
         enabled: true,
       },
+    });
+  });
+
+  it("invokes Rust Core through the save agent display order command", async () => {
+    invokeMock.mockResolvedValue(null);
+
+    await expect(
+      saveAgentDisplayOrder({ profileIds: [3, 1, 2] }),
+    ).resolves.toBeNull();
+    expect(invokeMock).toHaveBeenCalledWith("save_agent_display_order", {
+      input: { profileIds: [3, 1, 2] },
     });
   });
 

@@ -11,7 +11,7 @@ use crate::db::saved_agent_skill_repository::SavedAgentSkillRepository;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, AgentScope, AgentType,
     DeleteAgentProfileInput, ListAgentProfilesInput, PreviewAgentCommandArgsInput,
-    SaveAgentProfileInput, TestAgentCommandInput,
+    SaveAgentDisplayOrderInput, SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::agent_skill::AgentSkillScope;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -282,6 +282,25 @@ where
         Ok(project_label_record_from_row(row))
     }
 
+    pub fn save_agent_display_order(
+        &self,
+        input: SaveAgentDisplayOrderInput,
+    ) -> Result<(), CommandError> {
+        let applied = self
+            .repository
+            .replace_active_display_order(&input.profile_ids)
+            .map_err(settings_database_error)?;
+        if applied {
+            return Ok(());
+        }
+
+        Err(CommandError::new(
+            CommandErrorCode::AgentProfileValidationFailed,
+            "智能体显示顺序必须正好覆盖全部未删除的智能体。",
+        )
+        .with_reason("agentDisplayOrderMismatch"))
+    }
+
     pub fn delete_agent_profile(&self, input: DeleteAgentProfileInput) -> Result<(), CommandError> {
         let deleted = self
             .repository
@@ -529,6 +548,25 @@ impl SettingsService<'_, ShellAgentCommandDetector> {
             ShellAgentCommandDetector::new(),
         )
         .save_agent_profile(input)
+    }
+
+    pub fn save_agent_display_order_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        input: SaveAgentDisplayOrderInput,
+    ) -> Result<(), CommandError> {
+        let database = open_settings_database(data_dir)?;
+        let repository = AgentProfileRepository::new(&database.connection);
+        let project_label_repository = ProjectLabelRepository::new(&database.connection);
+        let saved_agent_skill_repository = SavedAgentSkillRepository::new(&database.connection);
+        let project_repository = ProjectRepository::new(&database.connection);
+        SettingsService::new(
+            repository,
+            project_label_repository,
+            saved_agent_skill_repository,
+            project_repository,
+            ShellAgentCommandDetector::new(),
+        )
+        .save_agent_display_order(input)
     }
 
     pub fn delete_agent_profile_in_data_dir(

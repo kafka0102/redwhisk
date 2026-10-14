@@ -67,6 +67,10 @@ export interface DeleteAgentProfileInput {
   id: number;
 }
 
+export interface SaveAgentDisplayOrderInput {
+  profileIds: number[];
+}
+
 export interface AgentSkillRecord {
   name: string;
   path: string;
@@ -249,6 +253,14 @@ export function previewAgentCommandArgs(
   input: PreviewAgentCommandArgsInput,
 ): Promise<string[]> {
   return invokeCommand<string[]>("preview_agent_command_args", {
+    input,
+  });
+}
+
+export function saveAgentDisplayOrder(
+  input: SaveAgentDisplayOrderInput,
+): Promise<void> {
+  return invokeCommand("save_agent_display_order", {
     input,
   });
 }

@@ -114,6 +114,13 @@ pub struct DeleteAgentProfileInput {
     pub id: i64,
 }
 
+/// 拖拽松手后提交的整份智能体显示顺序（ADR-0051）。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveAgentDisplayOrderInput {
+    pub profile_ids: Vec<i64>,
+}
+
 /// 参数预览入参（ADR-0020）：依据 profile 的启动相关字段计算命令行参数。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]

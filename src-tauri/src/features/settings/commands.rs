@@ -4,8 +4,8 @@ use super::service::SettingsService;
 use crate::app_state::AppState;
 use crate::types::agent_profile::{
     AgentCommandCheckResult, AgentProfileListResponse, AgentProfileRecord, DeleteAgentProfileInput,
-    ListAgentProfilesInput, PreviewAgentCommandArgsInput, SaveAgentProfileInput,
-    TestAgentCommandInput,
+    ListAgentProfilesInput, PreviewAgentCommandArgsInput, SaveAgentDisplayOrderInput,
+    SaveAgentProfileInput, TestAgentCommandInput,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_label::{
@@ -55,6 +55,16 @@ pub fn save_agent_profile(
 ) -> Result<AgentProfileRecord, CommandError> {
     let data_dir = prepare_settings_data_dir(&app, &state)?;
     SettingsService::save_agent_profile_in_data_dir(data_dir, input)
+}
+
+#[tauri::command]
+pub fn save_agent_display_order(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SaveAgentDisplayOrderInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_settings_data_dir(&app, &state)?;
+    SettingsService::save_agent_display_order_in_data_dir(data_dir, input)
 }
 
 #[tauri::command]

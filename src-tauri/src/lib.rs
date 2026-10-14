@@ -213,6 +213,7 @@ pub fn run() {
             features::settings::commands::test_agent_command,
             features::settings::commands::list_agent_profiles,
             features::settings::commands::save_agent_profile,
+            features::settings::commands::save_agent_display_order,
             features::settings::commands::delete_agent_profile,
             features::settings::commands::preview_agent_command_args,
             features::settings::commands::list_project_labels,
