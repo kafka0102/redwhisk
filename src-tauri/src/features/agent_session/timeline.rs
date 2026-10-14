@@ -1,6 +1,4 @@
 use serde_json::Value;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use crate::agent::pty_session_manager::read_terminal_snapshot;
@@ -10,6 +8,7 @@ use crate::types::agent_session_stream::{
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
+use super::session_log_tail::{read_session_log_tail_lines, SESSION_LOG_TAIL_LINES};
 
 #[path = "timeline_tool_merge.rs"]
 mod timeline_tool_merge;
@@ -35,20 +34,20 @@ pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
     )
 }
 
-/// 按 `turn_id` 从 session log 读取该 turn 全部助手答复正文（按日志顺序）。
+/// 按 `turn_id` 从 session log 末尾读取助手答复正文（按日志顺序）。
+/// 只取最近 100 行，避免把逐帧快照整文件读进内存。
 /// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`。
 /// log 路径空或文件不可读返回空 Vec。供交付评论：标签扫描与兜底正文。
 pub(crate) fn read_assistant_texts_for_turn(log_path: &str, turn_id: &str) -> Vec<String> {
     if log_path.trim().is_empty() {
         return Vec::new();
     }
-    let Ok(file) = File::open(log_path) else {
+    let Ok(lines) = read_session_log_tail_lines(Path::new(log_path), SESSION_LOG_TAIL_LINES) else {
         return Vec::new();
     };
-    BufReader::new(file)
-        .lines()
-        .filter_map(|line| line.ok())
-        .filter_map(|line| structured_events_from_log_line(&line))
+    lines
+        .iter()
+        .filter_map(|line| structured_events_from_log_line(line))
         .flatten()
         .filter_map(|event| match event {
             AgentStreamEvent::Timeline {
@@ -87,20 +86,18 @@ pub(crate) fn read_timeline_from_log_path(
 fn read_structured_timeline_log(
     path: &Path,
 ) -> Result<Option<StructuredTimelineHistory>, CommandError> {
-    let file = match File::open(path) {
-        Ok(file) => file,
+    let lines = match read_session_log_tail_lines(path, SESSION_LOG_TAIL_LINES) {
+        Ok(lines) => lines,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Some(StructuredTimelineHistory::default()));
         }
         Err(error) => return Err(agent_session_start_error(error)),
     };
-    let reader = BufReader::new(file);
     let mut saw_structured_line = false;
     let mut history = StructuredTimelineHistory::default();
     let mut pending_reasoning_started_at: Option<i64> = None;
 
-    for line in reader.lines() {
-        let line = line.map_err(agent_session_start_error)?;
+    for line in lines {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;

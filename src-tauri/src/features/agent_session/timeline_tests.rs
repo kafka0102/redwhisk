@@ -1,5 +1,6 @@
 use std::fs;
 
+use crate::features::agent_session::read_assistant_texts_for_turn;
 use crate::features::agent_session::timeline::read_timeline_from_log_path;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, SubagentRosterStatus,
@@ -112,6 +113,70 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
             subagent_id: None,
         })
     );
+}
+
+#[test]
+fn read_timeline_loads_only_the_last_100_log_lines() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("tail.jsonl");
+    let lines = (0..150)
+        .map(|index| {
+            serde_json::to_string(&envelope(
+                index + 1,
+                AgentTimelineItem::UserMessage {
+                    text: format!("message-{index}"),
+                    message_id: Some(format!("user-{index}")),
+                },
+            ))
+            .expect("serialize")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&log_path, format!("{lines}\n")).expect("write log");
+
+    let history =
+        read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
+    assert_eq!(history.items.len(), 100);
+    assert_eq!(
+        history.items.first(),
+        Some(&AgentTimelineItem::UserMessage {
+            text: "message-50".to_string(),
+            message_id: Some("user-50".to_string()),
+        })
+    );
+    assert_eq!(
+        history.items.last(),
+        Some(&AgentTimelineItem::UserMessage {
+            text: "message-149".to_string(),
+            message_id: Some("user-149".to_string()),
+        })
+    );
+}
+
+#[test]
+fn read_assistant_texts_for_turn_keeps_only_the_last_100_snapshots() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("assistant-tail.jsonl");
+    let lines = (0..150)
+        .map(|index| {
+            serde_json::to_string(&envelope(
+                index + 1,
+                AgentTimelineItem::AssistantMessage {
+                    text: format!("snapshot-{index}"),
+                    message_id: Some("grok-msg-1".to_string()),
+                    subagent_id: Some("child".to_string()),
+                },
+            ))
+            .expect("serialize")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&log_path, format!("{lines}\n")).expect("write log");
+
+    let texts = read_assistant_texts_for_turn(log_path.to_str().expect("utf8 path"), "turn-1");
+    assert_eq!(texts.len(), 100);
+    assert_eq!(texts.first().map(String::as_str), Some("snapshot-50"));
+    assert_eq!(texts.last().map(String::as_str), Some("snapshot-149"));
 }
 
 #[test]
