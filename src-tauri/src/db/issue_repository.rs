@@ -1199,9 +1199,7 @@ mod tests {
         insert_project(&connection, 1, "p1");
         insert_agent_profile(&connection, 100);
         let repo = IssueRepository::new(&connection);
-        let issue = repo
-            .insert(1, "done", "desc", "[]")
-            .expect("insert issue");
+        let issue = repo.insert(1, "done", "desc", "[]").expect("insert issue");
         connection
             .execute(
                 "INSERT INTO agent_sessions (

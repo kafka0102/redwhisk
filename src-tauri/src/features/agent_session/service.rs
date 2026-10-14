@@ -1716,9 +1716,7 @@ impl AgentSessionService<'_> {
             IssueActionActor::User { profile_id: 1 },
         )
         .map_err(agent_session_database_error)?;
-        transaction
-            .commit()
-            .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
         Ok(())
     }
 
@@ -1808,9 +1806,11 @@ impl AgentSessionService<'_> {
             )
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        if let Err(error) =
-            self.mark_structured_session_resumed(&session, &resumed_thread_id, Some(log_path.as_str()))
-        {
+        if let Err(error) = self.mark_structured_session_resumed(
+            &session,
+            &resumed_thread_id,
+            Some(log_path.as_str()),
+        ) {
             agent_registry.unmark_starting(session.id);
             started.handle.shutdown();
             return Err(error);
@@ -2035,7 +2035,9 @@ impl AgentSessionService<'_> {
         requested_branch: Option<&str>,
     ) -> Result<crate::types::agent_session::AgentSessionRecord, CommandError> {
         let mut session = session.clone();
-        let Some(requested_branch) = requested_branch.map(str::trim).filter(|value| !value.is_empty())
+        let Some(requested_branch) = requested_branch
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
         else {
             return Ok(session);
         };
@@ -2089,9 +2091,7 @@ impl AgentSessionService<'_> {
             .with_reason("restoreFailed")
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
         }
-        transaction
-            .commit()
-            .map_err(agent_session_database_error)?;
+        transaction.commit().map_err(agent_session_database_error)?;
         session.workspace_path = Some(workspace_path.clone());
         session.working_dir = workspace_path;
         Ok(session)

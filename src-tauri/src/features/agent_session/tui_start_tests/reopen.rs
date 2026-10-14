@@ -27,7 +27,9 @@ fn point_session_at_worktree(connection: &Connection, session_id: i64, worktree_
 
 fn issue_status(connection: &Connection) -> String {
     connection
-        .query_row("SELECT status FROM issues WHERE id = 11", [], |row| row.get(0))
+        .query_row("SELECT status FROM issues WHERE id = 11", [], |row| {
+            row.get(0)
+        })
         .expect("issue status")
 }
 
@@ -101,13 +103,9 @@ fn reopen_completed_tui_session_prefixes_runtime_log_with_archive_and_keeps_arch
         "closed",
         "completed",
     );
-    let archive_path = crate::features::agent_session::build_issue_archive_log_path(
-        temp_dir.path(),
-        1,
-        1,
-        1,
-    )
-    .expect("archive path");
+    let archive_path =
+        crate::features::agent_session::build_issue_archive_log_path(temp_dir.path(), 1, 1, 1)
+            .expect("archive path");
     let archive_body = "prior conclusion\n";
     fs::write(&archive_path, archive_body).expect("write archive");
     database
@@ -405,7 +403,10 @@ fn reopen_completed_tui_rebuilds_missing_worktree_from_given_existing_branch() {
         )
         .expect("rebuild missing worktree from existing branch");
 
-    assert!(worktree_dir.is_dir(), "worktree directory must be recreated");
+    assert!(
+        worktree_dir.is_dir(),
+        "worktree directory must be recreated"
+    );
     let head = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(&worktree_dir)

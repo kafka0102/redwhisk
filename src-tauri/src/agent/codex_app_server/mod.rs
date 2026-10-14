@@ -12,8 +12,8 @@
 //!
 //! PTY + xterm 仅保留给项目终端；agent 会话改走本模块的结构化事件流。
 
-mod collab_item;
 pub mod client;
+mod collab_item;
 pub mod notification;
 pub mod session;
 pub mod thread_item;
