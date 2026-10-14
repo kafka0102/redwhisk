@@ -747,4 +747,72 @@ describe("AgentSessionView 输出来源", () => {
     ).not.toHaveTextContent("All");
     expect(screen.getByText("子路正文")).toBeInTheDocument();
   });
+
+  it("Grok json 花名册没有任务描述时用子智能体序号切换消息流", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "主路正文",
+        messageId: "parent",
+      } as never,
+      {
+        type: "subagent_roster",
+        subagentId: "child-session",
+        status: "ended",
+      } as never,
+      {
+        type: "assistant_message",
+        text: "子路正文",
+        messageId: "child",
+        subagentId: "child-session",
+      } as never,
+    ]);
+    const user = userEvent.setup();
+    const first = render(
+      <AgentSessionView projectId={1} sessionId={10} agentType="grok" />,
+    );
+
+    const source = await screen.findByRole("combobox", {
+      name: "Output source",
+    });
+    expect(source).toHaveTextContent("All");
+    await user.click(source);
+    expect(
+      screen.getByRole("option", { name: "Main agent" }),
+    ).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("option", { name: "Subagent 1 · Ended" }),
+    );
+
+    expect(screen.getByText("子路正文")).toBeInTheDocument();
+    expect(screen.queryByText("主路正文")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Output source" }));
+    await user.click(await screen.findByRole("option", { name: "Main agent" }));
+    expect(screen.getByText("主路正文")).toBeInTheDocument();
+    expect(screen.queryByText("子路正文")).not.toBeInTheDocument();
+
+    first.unmount();
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="grok" />);
+    expect(
+      await screen.findByRole("combobox", { name: "Output source" }),
+    ).toHaveTextContent("All");
+  });
+
+  it("Grok json 没有子智能体时不出现输出来源 select", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "只有主路",
+        messageId: "parent",
+      } as never,
+    ]);
+
+    render(<AgentSessionView projectId={1} sessionId={10} agentType="grok" />);
+
+    await screen.findByText("只有主路");
+    expect(
+      screen.queryByRole("combobox", { name: "Output source" }),
+    ).not.toBeInTheDocument();
+  });
 });
