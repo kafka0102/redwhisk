@@ -14,6 +14,9 @@ mod launch;
 mod lifecycle;
 mod log_path;
 mod service;
+mod session_log_archive;
+mod session_log_line;
+mod session_log_lookup;
 mod session_log_tail;
 pub mod session_monitor_commands;
 mod startup_model;
@@ -48,7 +51,9 @@ pub(crate) use log_path::{
 };
 pub(crate) use service::agent_session_error_to_command_error;
 pub use service::AgentSessionService;
-pub(crate) use timeline::read_assistant_texts_for_turn;
+pub(crate) use session_log_lookup::{
+    read_assistant_texts_for_turn, read_timeline_item_at_log_offset,
+};
 
 #[cfg(test)]
 mod timeline_tests;

@@ -1,6 +1,7 @@
 use std::fs;
 
 use crate::features::agent_session::read_assistant_texts_for_turn;
+use crate::features::agent_session::read_timeline_item_at_log_offset;
 use crate::features::agent_session::timeline::read_timeline_from_log_path;
 use crate::types::agent_session_stream::{
     AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, SubagentRosterStatus,
@@ -8,6 +9,10 @@ use crate::types::agent_session_stream::{
 };
 
 fn envelope(seq: u64, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
+    envelope_for_turn(seq, "turn-1", item)
+}
+
+fn envelope_for_turn(seq: u64, turn_id: &str, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
     AgentStreamEventEnvelope {
         project_id: 8,
         session_id: 183,
@@ -15,11 +20,32 @@ fn envelope(seq: u64, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
         epoch: "epoch-test".to_string(),
         event: AgentStreamEvent::Timeline {
             item,
-            turn_id: Some("turn-1".to_string()),
+            turn_id: Some(turn_id.to_string()),
             seq: 0,
             timestamp: seq as i64,
         },
     }
+}
+
+fn turn_started(seq: u64, turn_id: &str) -> AgentStreamEventEnvelope {
+    AgentStreamEventEnvelope {
+        project_id: 8,
+        session_id: 183,
+        seq,
+        epoch: "epoch-test".to_string(),
+        event: AgentStreamEvent::TurnStarted {
+            turn_id: Some(turn_id.to_string()),
+        },
+    }
+}
+
+fn write_envelopes(path: &std::path::Path, events: &[AgentStreamEventEnvelope]) {
+    let lines = events
+        .iter()
+        .map(|event| serde_json::to_string(event).expect("serialize"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(path, format!("{lines}\n")).expect("write log");
 }
 
 /// Grok 整轮共用一个 messageId。正文先出现，工具插在中间，随后同一条正文
@@ -116,67 +142,217 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
 }
 
 #[test]
-fn read_timeline_loads_only_the_last_100_log_lines() {
+fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let log_path = temp_dir.path().join("tail.jsonl");
-    let lines = (0..150)
-        .map(|index| {
-            serde_json::to_string(&envelope(
-                index + 1,
-                AgentTimelineItem::UserMessage {
-                    text: format!("message-{index}"),
-                    message_id: Some(format!("user-{index}")),
+    let log_path = temp_dir.path().join("turns.jsonl");
+    let mut events = Vec::new();
+    let mut seq = 1u64;
+    for turn in 0..60 {
+        let turn_id = format!("turn-{turn}");
+        events.push(turn_started(seq, &turn_id));
+        seq += 1;
+        events.push(envelope_for_turn(
+            seq,
+            &turn_id,
+            AgentTimelineItem::AssistantMessage {
+                text: format!("draft-{turn}"),
+                message_id: Some(format!("msg-{turn}")),
+                subagent_id: None,
+            },
+        ));
+        seq += 1;
+        events.push(envelope_for_turn(
+            seq,
+            &turn_id,
+            AgentTimelineItem::AssistantMessage {
+                text: format!("final-{turn}"),
+                message_id: Some(format!("msg-{turn}")),
+                subagent_id: None,
+            },
+        ));
+        seq += 1;
+        events.push(envelope_for_turn(
+            seq,
+            &turn_id,
+            AgentTimelineItem::ToolCall {
+                call_id: format!("call-{turn}"),
+                name: "shell".to_string(),
+                detail: ToolCallDetail::Shell {
+                    command: "echo".to_string(),
+                    output: Some(format!("partial-{turn}")),
+                    exit_code: None,
                 },
-            ))
-            .expect("serialize")
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    fs::write(&log_path, format!("{lines}\n")).expect("write log");
+                status: ToolCallStatus::Running,
+                error: None,
+                subagent_id: None,
+            },
+        ));
+        seq += 1;
+        events.push(envelope_for_turn(
+            seq,
+            &turn_id,
+            AgentTimelineItem::ToolCall {
+                call_id: format!("call-{turn}"),
+                name: "shell".to_string(),
+                detail: ToolCallDetail::Shell {
+                    command: "echo".to_string(),
+                    output: Some(format!("done-{turn}")),
+                    exit_code: Some(0),
+                },
+                status: ToolCallStatus::Completed,
+                error: None,
+                subagent_id: None,
+            },
+        ));
+        seq += 1;
+    }
+    write_envelopes(&log_path, &events);
 
     let history =
         read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
     assert_eq!(history.items.len(), 100);
     assert_eq!(
         history.items.first(),
-        Some(&AgentTimelineItem::UserMessage {
-            text: "message-50".to_string(),
-            message_id: Some("user-50".to_string()),
+        Some(&AgentTimelineItem::AssistantMessage {
+            text: "final-10".to_string(),
+            message_id: Some("msg-10".to_string()),
+            subagent_id: None,
         })
     );
+    assert!(history.items.iter().all(|item| match item {
+        AgentTimelineItem::AssistantMessage { text, .. } => text.starts_with("final-"),
+        AgentTimelineItem::ToolCall { detail, .. } => {
+            matches!(detail, ToolCallDetail::Shell { output: Some(output), .. } if output.starts_with("done-"))
+        }
+        _ => false,
+    }));
+}
+
+#[test]
+fn read_timeline_keeps_every_turn_when_fewer_than_50_including_unfinished() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("short.jsonl");
+    let events = vec![
+        turn_started(1, "turn-0"),
+        envelope_for_turn(
+            2,
+            "turn-0",
+            AgentTimelineItem::UserMessage {
+                text: "第一轮".to_string(),
+                message_id: Some("u0".to_string()),
+            },
+        ),
+        turn_started(3, "turn-1"),
+        envelope_for_turn(
+            4,
+            "turn-1",
+            AgentTimelineItem::UserMessage {
+                text: "未结束".to_string(),
+                message_id: Some("u1".to_string()),
+            },
+        ),
+    ];
+    write_envelopes(&log_path, &events);
+    let history =
+        read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
+    assert_eq!(history.items.len(), 2);
     assert_eq!(
         history.items.last(),
         Some(&AgentTimelineItem::UserMessage {
-            text: "message-149".to_string(),
-            message_id: Some("user-149".to_string()),
+            text: "未结束".to_string(),
+            message_id: Some("u1".to_string()),
         })
     );
 }
 
 #[test]
-fn read_assistant_texts_for_turn_keeps_only_the_last_100_snapshots() {
+fn read_assistant_texts_for_turn_keeps_last_snapshot_inside_the_window() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let log_path = temp_dir.path().join("assistant-tail.jsonl");
-    let lines = (0..150)
-        .map(|index| {
-            serde_json::to_string(&envelope(
-                index + 1,
-                AgentTimelineItem::AssistantMessage {
-                    text: format!("snapshot-{index}"),
-                    message_id: Some("grok-msg-1".to_string()),
-                    subagent_id: Some("child".to_string()),
-                },
-            ))
-            .expect("serialize")
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    fs::write(&log_path, format!("{lines}\n")).expect("write log");
+    let log_path = temp_dir.path().join("assistant-window.jsonl");
+    let mut events = Vec::new();
+    for turn in 0..55 {
+        let turn_id = format!("turn-{turn}");
+        events.push(turn_started(turn * 3 + 1, &turn_id));
+        events.push(envelope_for_turn(
+            turn * 3 + 2,
+            &turn_id,
+            AgentTimelineItem::AssistantMessage {
+                text: format!("draft-{turn}"),
+                message_id: Some("same".to_string()),
+                subagent_id: None,
+            },
+        ));
+        events.push(envelope_for_turn(
+            turn * 3 + 3,
+            &turn_id,
+            AgentTimelineItem::AssistantMessage {
+                text: format!("final-{turn}"),
+                message_id: Some("same".to_string()),
+                subagent_id: None,
+            },
+        ));
+    }
+    write_envelopes(&log_path, &events);
 
-    let texts = read_assistant_texts_for_turn(log_path.to_str().expect("utf8 path"), "turn-1");
-    assert_eq!(texts.len(), 100);
-    assert_eq!(texts.first().map(String::as_str), Some("snapshot-50"));
-    assert_eq!(texts.last().map(String::as_str), Some("snapshot-149"));
+    let path = log_path.to_str().expect("utf8 path");
+    assert_eq!(
+        read_assistant_texts_for_turn(path, "turn-54"),
+        vec!["final-54".to_string()]
+    );
+    assert!(read_assistant_texts_for_turn(path, "turn-0").is_empty());
+}
+
+#[test]
+fn read_timeline_item_at_log_offset_returns_that_line_only() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("offset.jsonl");
+    let events = [
+        envelope(
+            1,
+            AgentTimelineItem::UserMessage {
+                text: "前面".to_string(),
+                message_id: Some("u0".to_string()),
+            },
+        ),
+        envelope(
+            2,
+            AgentTimelineItem::ToolCall {
+                call_id: "call-1".to_string(),
+                name: "shell".to_string(),
+                detail: ToolCallDetail::Shell {
+                    command: "echo".to_string(),
+                    output: Some("完整输出".to_string()),
+                    exit_code: Some(0),
+                },
+                status: ToolCallStatus::Completed,
+                error: None,
+                subagent_id: None,
+            },
+        ),
+    ];
+    write_envelopes(&log_path, &events);
+    let body = fs::read_to_string(&log_path).expect("read");
+    let needle = serde_json::to_string(&events[1]).expect("needle");
+    let offset = body.find(&needle).expect("offset") as u64;
+    let item = read_timeline_item_at_log_offset(log_path.to_str().expect("utf8 path"), offset)
+        .expect("item");
+    assert_eq!(
+        item,
+        AgentTimelineItem::ToolCall {
+            call_id: "call-1".to_string(),
+            name: "shell".to_string(),
+            detail: ToolCallDetail::Shell {
+                command: "echo".to_string(),
+                output: Some("完整输出".to_string()),
+                exit_code: Some(0),
+            },
+            status: ToolCallStatus::Completed,
+            error: None,
+            subagent_id: None,
+        }
+    );
+    let error = read_timeline_item_at_log_offset(log_path.to_str().expect("utf8 path"), offset + 4);
+    assert!(error.is_err());
 }
 
 #[test]

@@ -8,13 +8,12 @@ use crate::types::errors::CommandError;
 
 use super::codex_tui_archive::{codex_session_archive_text, TuiSessionLogSource};
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
+use super::session_log_archive::read_json_archive_items;
 use super::terminal_archive_clean::{
     extract_tui_archive_conclusion_text, latest_output_from_archive_text,
 };
 use super::terminal_archive_render::render_terminal_snapshot_text;
-use super::timeline::{
-    latest_output_from_timeline_item, read_timeline_from_log_path, should_archive_timeline_item,
-};
+use super::timeline::latest_output_from_timeline_item;
 
 const TUI_ARCHIVE_SNAPSHOT_MAX_BYTES: usize = 262_144;
 
@@ -225,12 +224,7 @@ fn build_json_issue_session_archive(
     session_id: i64,
     runtime_log_path: &str,
 ) -> Result<IssueSessionArchive, CommandError> {
-    let history = read_timeline_from_log_path(runtime_log_path)?;
-    let items = history
-        .items
-        .into_iter()
-        .filter(should_archive_timeline_item)
-        .collect::<Vec<_>>();
+    let items = read_json_archive_items(runtime_log_path)?;
     let archive_path =
         build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
     let payload = items
@@ -300,3 +294,7 @@ pub(crate) fn remove_session_log_file(log_path: Option<&str>) {
 #[cfg(test)]
 #[path = "log_path_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "session_log_archive_tests.rs"]
+mod archive_tests;

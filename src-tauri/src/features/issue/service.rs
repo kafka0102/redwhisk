@@ -2217,27 +2217,25 @@ mod tests {
         use crate::features::agent_session::read_assistant_texts_for_turn;
         let temp = tempdir().expect("temp dir");
         let log = temp.path().join("session.log");
-        let line = |turn_id: &str, text: &str| -> String {
+        let line = |turn_id: &str, message_id: &str, text: &str| -> String {
             format!(
-                "{{\"projectId\":1,\"sessionId\":30,\"seq\":1,\"epoch\":\"e\",\"event\":{{\"type\":\"timeline\",\"item\":{{\"type\":\"assistant_message\",\"text\":\"{text}\"}},\"turnId\":\"{turn_id}\",\"seq\":1,\"timestamp\":1}}}}"
+                "{{\"projectId\":1,\"sessionId\":30,\"seq\":1,\"epoch\":\"e\",\"event\":{{\"type\":\"timeline\",\"item\":{{\"type\":\"assistant_message\",\"text\":\"{text}\",\"messageId\":\"{message_id}\"}},\"turnId\":\"{turn_id}\",\"seq\":1,\"timestamp\":1}}}}"
             )
         };
         fs::write(
             &log,
             format!(
-                "{}\n{}\n{}\n",
-                line("t1", "first in t1"),
-                line("t2", "other turn"),
-                line("t1", "last in t1 <issue-comment>x</issue-comment>"),
+                "{}\n{}\n{}\n{}\n",
+                r#"{"projectId":1,"sessionId":30,"seq":1,"epoch":"e","event":{"type":"turn_started","turnId":"t1"}}"#,
+                line("t1", "a1", "first in t1"),
+                line("t2", "a2", "other turn"),
+                line("t1", "a1", "last in t1 <issue-comment>x</issue-comment>"),
             ),
         )
         .expect("write log");
         assert_eq!(
             read_assistant_texts_for_turn(log.to_string_lossy().as_ref(), "t1"),
-            vec![
-                "first in t1".to_string(),
-                "last in t1 <issue-comment>x</issue-comment>".to_string(),
-            ]
+            vec!["last in t1 <issue-comment>x</issue-comment>".to_string()]
         );
         assert!(
             read_assistant_texts_for_turn(log.to_string_lossy().as_ref(), "missing").is_empty()

@@ -8,7 +8,7 @@ use crate::types::agent_session_stream::{
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
-use super::session_log_tail::{read_session_log_tail_lines, SESSION_LOG_TAIL_LINES};
+use super::session_log_tail::{read_session_log_turn_window, OPEN_REPLAY_TURN_LIMIT};
 
 #[path = "timeline_tool_merge.rs"]
 mod timeline_tool_merge;
@@ -23,44 +23,6 @@ pub(crate) struct StructuredTimelineHistory {
     pub(crate) items: Vec<AgentTimelineItem>,
     pub(crate) effort: Option<String>,
     pub(crate) model: Option<String>,
-}
-
-pub(super) fn should_archive_timeline_item(item: &AgentTimelineItem) -> bool {
-    matches!(
-        item,
-        AgentTimelineItem::UserMessage { .. }
-            | AgentTimelineItem::AssistantMessage { .. }
-            | AgentTimelineItem::Error { .. }
-    )
-}
-
-/// 按 `turn_id` 从 session log 末尾读取助手答复正文（按日志顺序）。
-/// 只取最近 100 行，避免把逐帧快照整文件读进内存。
-/// log 每行是 `AgentStreamEventEnvelope` JSON；匹配 `Timeline { item: AssistantMessage, turn_id }`。
-/// log 路径空或文件不可读返回空 Vec。供交付评论：标签扫描与兜底正文。
-pub(crate) fn read_assistant_texts_for_turn(log_path: &str, turn_id: &str) -> Vec<String> {
-    if log_path.trim().is_empty() {
-        return Vec::new();
-    }
-    let Ok(lines) = read_session_log_tail_lines(Path::new(log_path), SESSION_LOG_TAIL_LINES) else {
-        return Vec::new();
-    };
-    lines
-        .iter()
-        .filter_map(|line| structured_events_from_log_line(line))
-        .flatten()
-        .filter_map(|event| match event {
-            AgentStreamEvent::Timeline {
-                item,
-                turn_id: Some(t),
-                ..
-            } if t == turn_id => match item {
-                AgentTimelineItem::AssistantMessage { text, .. } => Some(text),
-                _ => None,
-            },
-            _ => None,
-        })
-        .collect()
 }
 
 pub(crate) fn read_timeline_from_log_path(
@@ -86,7 +48,7 @@ pub(crate) fn read_timeline_from_log_path(
 fn read_structured_timeline_log(
     path: &Path,
 ) -> Result<Option<StructuredTimelineHistory>, CommandError> {
-    let lines = match read_session_log_tail_lines(path, SESSION_LOG_TAIL_LINES) {
+    let lines = match read_session_log_turn_window(path, OPEN_REPLAY_TURN_LIMIT) {
         Ok(lines) => lines,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Some(StructuredTimelineHistory::default()));
@@ -163,7 +125,7 @@ fn read_structured_timeline_log(
     }
 }
 
-fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
+pub(super) fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
     let stream = serde_json::Deserializer::from_str(line).into_iter::<Value>();
     let mut saw_value = false;
     let mut events = Vec::new();
