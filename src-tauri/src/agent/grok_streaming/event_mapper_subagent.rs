@@ -2,6 +2,7 @@
 //! `subagent_id`，花名册记录启动与结束。这些更新不写进父助手缓冲。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -64,46 +65,41 @@ impl GrokStreamMapper {
             .filter(|session_id| self.child_session_ids.contains(session_id))
     }
 
+    /// 缓冲与事件共享当前完整正文。下一帧追加时才复制，上一份不再由映射器持有。
     pub(super) fn append_assistant_text(
         &mut self,
         subagent_id: Option<&str>,
         delta: &str,
-    ) -> String {
+    ) -> Arc<str> {
         match subagent_id {
             Some(child_session_id) => {
                 Self::append_child_text(&mut self.child_assistant_text, child_session_id, delta)
             }
-            None => {
-                self.assistant_text.push_str(delta);
-                self.assistant_text.clone()
-            }
+            None => append_shared_text(&mut self.assistant_text, delta),
         }
     }
 
+    /// 推理与助手正文同一规则。
     pub(super) fn append_reasoning_text(
         &mut self,
         subagent_id: Option<&str>,
         delta: &str,
-    ) -> String {
+    ) -> Arc<str> {
         match subagent_id {
             Some(child_session_id) => {
                 Self::append_child_text(&mut self.child_reasoning_text, child_session_id, delta)
             }
-            None => {
-                self.reasoning_text.push_str(delta);
-                self.reasoning_text.clone()
-            }
+            None => append_shared_text(&mut self.reasoning_text, delta),
         }
     }
 
     pub(super) fn append_child_text(
-        buffer: &mut HashMap<String, String>,
+        buffer: &mut HashMap<String, Arc<str>>,
         child_session_id: &str,
         delta: &str,
-    ) -> String {
+    ) -> Arc<str> {
         let text = buffer.entry(child_session_id.to_string()).or_default();
-        text.push_str(delta);
-        text.clone()
+        append_shared_text(text, delta)
     }
 
     fn subagent_roster_event(
@@ -121,8 +117,81 @@ impl GrokStreamMapper {
             timestamp: 0,
         }
     }
+
+    #[cfg(test)]
+    pub(super) fn child_text_is(
+        &self,
+        child_session_id: &str,
+        assistant: &str,
+        reasoning: &str,
+    ) -> bool {
+        self.child_assistant_text
+            .get(child_session_id)
+            .map(|text| text.as_ref())
+            == Some(assistant)
+            && self
+                .child_reasoning_text
+                .get(child_session_id)
+                .map(|text| text.as_ref())
+                == Some(reasoning)
+    }
 }
 
 pub(super) fn new_child_ids() -> HashSet<String> {
     HashSet::new()
 }
+
+/// 把 delta 接到当前快照后面。缓冲与返回值指向同一份 `Arc`；
+/// 事件仍持有上一份时，这里复制出的是下一帧，映射器不再留旧正文。
+fn append_shared_text(current: &mut Arc<str>, delta: &str) -> Arc<str> {
+    let mut next = String::with_capacity(current.len() + delta.len());
+    next.push_str(current);
+    next.push_str(delta);
+    let shared: Arc<str> = Arc::from(next);
+    *current = Arc::clone(&shared);
+    shared
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::GrokStreamMapper;
+    use serde_json::json;
+
+    #[test]
+    fn child_text_buffer_releases_previous_snapshot() {
+        let mut mapper = GrokStreamMapper::new();
+        mapper.begin_turn("t".into());
+        let child = "child-1";
+        mapper.on_notification(
+            "_x.ai/session/update",
+            &json!({
+                "update": {
+                    "sessionUpdate": "subagent_spawned",
+                    "child_session_id": child
+                }
+            }),
+        );
+        mapper.on_notification(
+            "session/update",
+            &json!({
+                "sessionId": child,
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "先写"}
+                }
+            }),
+        );
+        mapper.on_notification(
+            "session/update",
+            &json!({
+                "sessionId": child,
+                "update": {
+                    "sessionUpdate": "agent_thought_chunk",
+                    "content": {"type": "text", "text": "看规格"}
+                }
+            }),
+        );
+        assert!(mapper.child_text_is(child, "先写", "看规格"));
+    }
+}
+

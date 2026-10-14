@@ -204,6 +204,37 @@ fn replayed_child_session_output_stays_on_its_own_timeline() {
         assistant_text(message.last().expect("child text")),
         Some("先写失败测试。".into())
     );
+    let continued = mapper.on_notification(
+        "session/update",
+        &json!({
+            "sessionId": child,
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "再补实现。"}
+            }
+        }),
+    );
+    assert_eq!(
+        assistant_text(continued.last().expect("child text")),
+        Some("先写失败测试。再补实现。".into())
+    );
+    let thought = mapper.on_notification(
+        "session/update",
+        &json!({
+            "sessionId": child,
+            "update": {
+                "sessionUpdate": "agent_thought_chunk",
+                "content": {"type": "text", "text": "先看规格。"}
+            }
+        }),
+    );
+    assert!(matches!(
+        thought.last(),
+        Some(AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::Reasoning { text, subagent_id: Some(id), .. },
+            ..
+        }) if text == "先看规格。" && id == child
+    ));
     assert_eq!(
         subagent_id_of(message.last().unwrap()).as_deref(),
         Some(child)
@@ -245,6 +276,7 @@ fn replayed_child_session_output_stays_on_its_own_timeline() {
         Some("实现还在跑。".into())
     );
     assert_eq!(subagent_id_of(parent.last().unwrap()), None);
+    assert_eq!(&*mapper.assistant_text, "实现还在跑。");
 
     let finished = mapper.on_notification(
         "_x.ai/session/update",

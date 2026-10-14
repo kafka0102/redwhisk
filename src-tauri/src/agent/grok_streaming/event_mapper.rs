@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -45,11 +46,12 @@ pub(crate) struct GrokStreamMapper {
     follow_up_open: bool,
     /// 用户已点终止。与 prompt 正常返回不同，之后的工具 / 正文 / 推理都丢弃。
     user_canceled: bool,
-    pub(super) assistant_text: String,
-    pub(super) reasoning_text: String,
+    /// 当前完整正文。与刚发出的事件共享同一份 `Arc`，下一帧追加前才复制。
+    pub(super) assistant_text: Arc<str>,
+    pub(super) reasoning_text: Arc<str>,
     /// 子会话正文 / 推理按 `child_session_id` 分开累积，避免并进父缓冲。
-    child_assistant_text: HashMap<String, String>,
-    child_reasoning_text: HashMap<String, String>,
+    child_assistant_text: HashMap<String, Arc<str>>,
+    child_reasoning_text: HashMap<String, Arc<str>>,
     message_index: usize,
     /// 每个 toolCallId 跨更新累积的状态（工具名 + 最近一次完整入参 / locations）。
     tool_calls: HashMap<String, ToolCallState>,
@@ -65,6 +67,7 @@ pub(crate) struct GrokStreamMapper {
 /// `docs/survey/grok-build-cli-probe-notes.md` §3.5）。若每帧只按当前 update
 /// 现算详情，完成帧会退化成空壳（丢 path、未知工具丢 rawInput），故在此按
 /// call id 累积入参（对多次 `rawInput` 做浅合并）与 locations，供后续帧复用。
+/// 完整输出只放进刚发出的事件，这里不另留一份。
 #[derive(Default)]
 struct ToolCallState {
     name: Option<String>,
@@ -88,8 +91,8 @@ impl GrokStreamMapper {
             turn_id_frozen: false,
             follow_up_open: false,
             user_canceled: false,
-            assistant_text: String::new(),
-            reasoning_text: String::new(),
+            assistant_text: Arc::from(""),
+            reasoning_text: Arc::from(""),
             child_assistant_text: HashMap::new(),
             child_reasoning_text: HashMap::new(),
             message_index: 0,
@@ -108,8 +111,8 @@ impl GrokStreamMapper {
         self.turn_id_frozen = false;
         self.follow_up_open = false;
         self.user_canceled = false;
-        self.assistant_text.clear();
-        self.reasoning_text.clear();
+        self.assistant_text = Arc::from("");
+        self.reasoning_text = Arc::from("");
         self.child_assistant_text.clear();
         self.child_reasoning_text.clear();
         self.message_index = 0;
@@ -273,7 +276,7 @@ impl GrokStreamMapper {
                         None => format!("grok-msg-{}", self.turn_id.as_deref().unwrap_or("turn")),
                     };
                     events.push(self.timeline(AgentTimelineItem::AssistantMessage {
-                        text,
+                        text: snapshot_text(text),
                         message_id: Some(message_id),
                         subagent_id,
                     }));
@@ -286,7 +289,7 @@ impl GrokStreamMapper {
                     }
                     let text = self.append_reasoning_text(subagent_id.as_deref(), &delta);
                     events.push(self.timeline(AgentTimelineItem::Reasoning {
-                        text,
+                        text: snapshot_text(text),
                         duration_ms: None,
                         subagent_id,
                     }));
@@ -344,38 +347,33 @@ impl GrokStreamMapper {
         if subagent_id.is_none() && !self.note_output_while_closed() {
             return None;
         }
-        let incoming_input = update
-            .get("rawInput")
-            .filter(|value| !value.is_null())
-            .cloned();
-        let incoming_locations = location_paths(update);
-        let (tool_name, input, locations) = {
+        // 入参和 locations 只留在 state，供完成帧复用。这里按引用读取，
+        // 不再为本次事件额外克隆一份 Value。完整输出不进 state。
+        let output = tool_output_text(update);
+        let status = tool_status(update.get("status").and_then(Value::as_str));
+        let failed = status == ToolCallStatus::Failed;
+        let (detail, display_name) = {
             let state = self.tool_calls.entry(call_id.clone()).or_default();
             if state.name.is_none() {
                 state.name = non_empty(&tool_name_from_update(update))
                     .or_else(|| string_field(update, "kind"));
             }
-            if let Some(input) = incoming_input {
-                state.raw_input = merge_tool_input(&state.raw_input, &input);
+            if let Some(input) = update.get("rawInput").filter(|value| !value.is_null()) {
+                state.raw_input = merge_tool_input(&state.raw_input, input);
             }
+            let incoming_locations = location_paths(update);
             if !incoming_locations.is_empty() {
                 state.locations = incoming_locations;
             }
-            (
-                state.name.clone().unwrap_or_default(),
-                state.raw_input.clone(),
-                state.locations.clone(),
+            let tool_name = state.name.clone().unwrap_or_default();
+            map_grok_tool_detail(
+                &tool_name,
+                &state.raw_input,
+                (!failed).then_some(output.as_deref()).flatten(),
+                &state.locations,
             )
         };
-        let output = tool_output_text(update);
-        let status = tool_status(update.get("status").and_then(Value::as_str));
-        let (detail, display_name) =
-            map_grok_tool_detail(&tool_name, &input, output.as_deref(), &locations);
-        let error = if status == ToolCallStatus::Failed {
-            output.clone()
-        } else {
-            None
-        };
+        let error = failed.then_some(output).flatten();
         self.message_index = self.message_index.saturating_add(1);
         Some(self.timeline(AgentTimelineItem::ToolCall {
             call_id,
@@ -454,6 +452,11 @@ fn tool_status(status: Option<&str>) -> ToolCallStatus {
 
 fn string_field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
+/// 时间轴事件仍要拥有一份 `String`。`Arc<str>` 不能拆成 `String`，这里复制正文。
+fn snapshot_text(text: Arc<str>) -> String {
+    text.to_string()
 }
 
 fn non_empty(text: &str) -> Option<String> {

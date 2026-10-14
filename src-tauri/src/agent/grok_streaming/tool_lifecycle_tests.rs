@@ -195,6 +195,53 @@ fn partial_update_input_does_not_drop_earlier_arguments() {
     }
 }
 
+/// 同一 callId 的下一次完整输出替换上一份：后一帧带新正文，状态不再另留输出。
+#[test]
+fn later_tool_output_replaces_the_previous_snapshot() {
+    let mut mapper = GrokStreamMapper::new();
+    mapper.begin_turn("t".into());
+    mapper.on_notification(
+        "session/update",
+        &json!({
+            "update": {
+                "sessionUpdate": "tool_call",
+                "toolCallId": "call-1",
+                "title": "read_file",
+                "rawInput": {"target_file": "/tmp/hello.txt"},
+                "_meta": {"x.ai/tool": {"name": "read_file", "kind": "read"}}
+            },
+            "_meta": prompt_meta("p-1")
+        }),
+    );
+    mapper.on_notification(
+        "session/update",
+        &json!({
+            "update": {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "call-1",
+                "content": [{"type": "content", "content": {"type": "text", "text": "hel"}}]
+            },
+            "_meta": prompt_meta("p-1")
+        }),
+    );
+    let events = mapper.on_notification(
+        "session/update",
+        &json!({
+            "update": {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": "call-1",
+                "status": "completed",
+                "content": [{"type": "content", "content": {"type": "text", "text": "hello\n"}}]
+            },
+            "_meta": prompt_meta("p-1")
+        }),
+    );
+    match last_tool_call(&events).detail {
+        ToolCallDetail::Read { content, .. } => assert_eq!(content.as_deref(), Some("hello\n")),
+        other => panic!("unexpected detail {other:?}"),
+    }
+}
+
 /// 同一 toolCallId 的重复更新只累积到同一张卡片：每条事件都复用同一 call_id，
 /// 由 provider 无关的前端 reducer 按 callId upsert（不产生重复卡片）。
 #[test]

@@ -148,6 +148,29 @@ fn accumulates_assistant_text_across_chunks() {
         }
         other => panic!("unexpected {other:?}"),
     }
+    assert_eq!(&*mapper.assistant_text, "Hello");
+}
+
+#[test]
+fn replaces_reasoning_snapshot_without_keeping_previous_text() {
+    let mut mapper = GrokStreamMapper::new();
+    mapper.begin_turn("t".into());
+    mapper.on_notification(
+        "session/update",
+        &json!({"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"thi"}}}),
+    );
+    let events = mapper.on_notification(
+        "session/update",
+        &json!({"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"nk"}}}),
+    );
+    match events.as_slice() {
+        [AgentStreamEvent::Timeline {
+            item: AgentTimelineItem::Reasoning { text, .. },
+            ..
+        }] => assert_eq!(text, "think"),
+        other => panic!("unexpected {other:?}"),
+    }
+    assert_eq!(&*mapper.reasoning_text, "think");
 }
 
 // 工具调用生命周期 / 增量裁决 / 未知工具兜底的断言见 `tool_lifecycle_tests.rs`，
