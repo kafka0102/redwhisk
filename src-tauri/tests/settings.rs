@@ -49,6 +49,8 @@ fn settings_migration_creates_restructured_agent_profiles_table() {
             // ADR-0020：display_mode/enabled 列由 migration 0047 引入。
             "display_mode",
             "enabled",
+            // ADR-0051：display_order 由 migration 0054 引入。
+            "display_order",
         ],
     );
 

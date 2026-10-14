@@ -16,13 +16,14 @@ impl<'connection> AgentProfileRepository<'connection> {
         scope: &AgentScope,
         project_id: Option<i64>,
     ) -> rusqlite::Result<Vec<AgentProfileRow>> {
+        self.backfill_missing_display_orders()?;
         match scope {
             AgentScope::Global => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled, display_order
                      FROM agent_profiles
                      WHERE scope = 'global' AND del = 0
-                     ORDER BY id ASC",
+                     ORDER BY display_order ASC, id ASC",
                 )?;
                 let rows = statement
                     .query_map([], agent_profile_from_row)?
@@ -31,10 +32,10 @@ impl<'connection> AgentProfileRepository<'connection> {
             }
             AgentScope::Project => {
                 let mut statement = self.connection.prepare(
-                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
+                    "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled, display_order
                      FROM agent_profiles
                      WHERE scope = 'project' AND project_id = ?1 AND del = 0
-                     ORDER BY id ASC",
+                     ORDER BY display_order ASC, id ASC",
                 )?;
                 let rows = statement
                     .query_map(params![project_id], agent_profile_from_row)?
@@ -47,13 +48,37 @@ impl<'connection> AgentProfileRepository<'connection> {
     pub fn find_profile_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentProfileRow>> {
         self.connection
             .query_row(
-                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
+                "SELECT id, name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled, display_order
                  FROM agent_profiles
                  WHERE id = ?1",
                 params![id],
                 agent_profile_from_row,
             )
             .optional()
+    }
+
+    /// 还没有显示顺序的未删除 profile，按升级前规则排一次并写入。
+    /// 启用在前，同组按 id 升序，接在已有最大顺序之后。软删行不参与。
+    fn backfill_missing_display_orders(&self) -> rusqlite::Result<()> {
+        self.connection.execute(
+            "UPDATE agent_profiles
+             SET display_order = ranked.position + (
+                 SELECT COALESCE(MAX(display_order), 0)
+                 FROM agent_profiles
+                 WHERE del = 0 AND display_order IS NOT NULL
+             )
+             FROM (
+                 SELECT id,
+                        ROW_NUMBER() OVER (
+                            ORDER BY CASE WHEN enabled = 1 THEN 0 ELSE 1 END ASC, id ASC
+                        ) AS position
+                 FROM agent_profiles
+                 WHERE del = 0 AND display_order IS NULL
+             ) AS ranked
+             WHERE agent_profiles.id = ranked.id",
+            [],
+        )?;
+        Ok(())
     }
 
     pub fn save_profile(
@@ -75,6 +100,8 @@ impl<'connection> AgentProfileRepository<'connection> {
         let scope_str = scope_to_str(scope);
         let dangerous_int = bool_to_sqlite(dangerous);
         let enabled_int = bool_to_sqlite(enabled);
+        // 新建和软删后重新出现都要接在当前表尾，先把尚无顺序的存量行落位。
+        self.backfill_missing_display_orders()?;
 
         match id {
             Some(id) => {
@@ -91,7 +118,15 @@ impl<'connection> AgentProfileRepository<'connection> {
                          prompt_template = ?9,
                          del = 0,
                          display_mode = ?10,
-                         enabled = ?11
+                         enabled = ?11,
+                         display_order = CASE
+                             WHEN del = 1 THEN (
+                                 SELECT COALESCE(MAX(display_order), 0) + 1
+                                 FROM agent_profiles
+                                 WHERE del = 0
+                             )
+                             ELSE display_order
+                         END
                      WHERE id = ?12",
                     params![
                         name,
@@ -115,8 +150,11 @@ impl<'connection> AgentProfileRepository<'connection> {
             None => {
                 self.connection.execute(
                     "INSERT INTO agent_profiles (
-                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled
-                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11)",
+                       name, agent_type, command, scope, project_id, mode, dangerous, default_skill, prompt_template, del, display_mode, enabled, display_order
+                     ) VALUES (
+                       ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, ?11,
+                       (SELECT COALESCE(MAX(display_order), 0) + 1 FROM agent_profiles WHERE del = 0)
+                     )",
                     params![
                         name,
                         agent_type_str,
@@ -177,6 +215,7 @@ pub struct AgentProfileRow {
     pub del: i64,
     pub display_mode: String,
     pub enabled: bool,
+    pub display_order: Option<i64>,
 }
 
 fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProfileRow> {
@@ -195,6 +234,7 @@ fn agent_profile_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentProf
         del: row.get(10)?,
         display_mode: row.get(11)?,
         enabled: sqlite_to_bool(row.get(12)?),
+        display_order: row.get(13)?,
     })
 }
 

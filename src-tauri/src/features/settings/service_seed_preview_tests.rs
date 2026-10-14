@@ -35,7 +35,7 @@ impl SeedTestDetector {
         detector
     }
 
-    fn with_detect_results(entries: &[(&str, Result<&str, &str>)]) -> Self {
+    pub(super) fn with_detect_results(entries: &[(&str, Result<&str, &str>)]) -> Self {
         let mut detector = Self::new();
         for (command, result) in entries {
             detector.detect_results.insert(

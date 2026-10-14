@@ -5246,6 +5246,7 @@ mod tests {
             del: 0,
             display_mode: String::from("json"),
             enabled: true,
+            display_order: Some(1),
         }
     }
 

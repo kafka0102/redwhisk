@@ -933,3 +933,7 @@ mod seed_preview_tests;
 #[cfg(test)]
 #[path = "service_seed_deepseek_tests.rs"]
 mod seed_deepseek_tests;
+
+#[cfg(test)]
+#[path = "service_display_order_tests.rs"]
+mod display_order_tests;

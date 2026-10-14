@@ -47,6 +47,7 @@ mod tests {
             del: 0,
             display_mode: "tui".to_string(),
             enabled: true,
+            display_order: Some(1),
         }
     }
 
