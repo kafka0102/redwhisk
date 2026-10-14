@@ -55,6 +55,7 @@ use super::log_path::{
     is_archived_issue_log_path, remove_session_log_file,
 };
 use super::timeline::latest_output_from_session_log;
+use super::tui_hook_env::tui_hook_spawn_env;
 use super::validation::{
     validate_injected_prompt, validate_profile_not_deleted, validate_profile_scope,
     validate_prompt_snapshot, validate_session_title,
@@ -468,27 +469,9 @@ impl<'connection> AgentSessionService<'connection> {
             &prompt_snapshot,
         );
 
-        let pending_pty = if let Some(pty_sessions) = pty_sessions {
-            Some(
-                pty_sessions
-                    .spawn_pending(&PtySpawnRequest {
-                        mode: PtyCommandMode::ExecReplace,
-                        command: prompt_plan.spawn_command.clone(),
-                        working_dir: launch.working_dir.clone(),
-                        log_path: launch.log_path.clone(),
-                        initial_prompt: prompt_plan.trailing_prompt.clone(),
-                        rows: 32,
-                        cols: 120,
-                        startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
-                        startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
-                    })
-                    .map_err(agent_session_start_error)?,
-            )
-        } else {
-            None
-        };
         let normalized_prompt = normalize_submitted_prompt(&prompt_snapshot);
-        let mut child = if pending_pty.is_none() {
+        // session id 在事务提交后才存在。hook 环境要这个 id，所以 PTY 在提交后再拉起。
+        let mut child = if pty_sessions.is_none() {
             let mut child = match spawn_agent_process(
                 &launch.profile,
                 &launch.working_dir,
@@ -508,7 +491,6 @@ impl<'connection> AgentSessionService<'connection> {
         // 注意：不得在 register（启动 master reader）之前向 pending PTY write_input。
         // 仅 StdinSubmit 回退路径会在 register 后写 stdin；若子进程已大量写 stdout
         // 却无人 drain，再写 stdin 会因 PTY 双向缓冲回压死锁。
-        let pending_pty = pending_pty;
         let startup_model = super::startup_model::resolve_startup_model(
             &launch.profile.agent_type,
             super::startup_model::user_home_for_startup_model(data_dir.as_ref()),
@@ -615,22 +597,68 @@ impl<'connection> AgentSessionService<'connection> {
                 }
 
                 if let Some(pty_sessions) = pty_sessions {
-                    if let Some(pending_pty) = pending_pty {
-                        let data_dir = data_dir.as_ref().to_path_buf();
-                        let data_dir_for_exit = data_dir.clone();
-                        if let Err(error) = pty_sessions.register_for_project(
-                            input.project_id,
+                    let extra_env = tui_hook_spawn_env(
+                        launch.profile.agent_type.as_db_str(),
+                        result.session_id,
+                    )
+                    .into_iter()
+                    .collect();
+                    let pending_pty = match pty_sessions.spawn_pending(&PtySpawnRequest {
+                        mode: PtyCommandMode::ExecReplace,
+                        command: prompt_plan.spawn_command.clone(),
+                        working_dir: launch.working_dir.clone(),
+                        log_path: launch.log_path.clone(),
+                        initial_prompt: prompt_plan.trailing_prompt.clone(),
+                        rows: 32,
+                        cols: 120,
+                        startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
+                        startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                        extra_env,
+                    }) {
+                        Ok(pending) => pending,
+                        Err(error) => {
+                            let _ = self.rollback_failed_structured_issue_session(
+                                input.project_id,
+                                input.issue_id,
+                                result.session_id,
+                            );
+                            return Err(agent_session_start_error(error));
+                        }
+                    };
+                    let data_dir = data_dir.as_ref().to_path_buf();
+                    let data_dir_for_exit = data_dir.clone();
+                    if let Err(error) = pty_sessions.register_for_project(
+                        input.project_id,
+                        result.session_id,
+                        pending_pty,
+                        move |exit_status| {
+                            let _ = AgentSessionService::record_session_termination_in_data_dir(
+                                &data_dir_for_exit,
+                                result.session_id,
+                                exit_status,
+                            );
+                        },
+                    ) {
+                        error.pending.terminate();
+                        let _ = AgentSessionService::record_session_termination_in_data_dir(
+                            &data_dir,
                             result.session_id,
-                            pending_pty,
-                            move |exit_status| {
-                                let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                    &data_dir_for_exit,
-                                    result.session_id,
-                                    exit_status,
-                                );
-                            },
-                        ) {
-                            error.pending.terminate();
+                            PtyExitStatus { exit_code: None },
+                        );
+                        let _ = self.rollback_failed_structured_issue_session(
+                            input.project_id,
+                            input.issue_id,
+                            result.session_id,
+                        );
+                        return Err(agent_session_start_error(error.message));
+                    }
+
+                    // reader 已启动后再注入首条 prompt（仅 CLI 无法携带时），避免 PTY 回压死锁。
+                    if prompt_plan.inject_stdin_after_register {
+                        if let Err(error) =
+                            pty_sessions.write_input(result.session_id, &normalized_prompt)
+                        {
+                            let _ = pty_sessions.kill(result.session_id);
                             let _ = AgentSessionService::record_session_termination_in_data_dir(
                                 &data_dir,
                                 result.session_id,
@@ -641,27 +669,7 @@ impl<'connection> AgentSessionService<'connection> {
                                 input.issue_id,
                                 result.session_id,
                             );
-                            return Err(agent_session_start_error(error.message));
-                        }
-
-                        // reader 已启动后再注入首条 prompt（仅 CLI 无法携带时），避免 PTY 回压死锁。
-                        if prompt_plan.inject_stdin_after_register {
-                            if let Err(error) =
-                                pty_sessions.write_input(result.session_id, &normalized_prompt)
-                            {
-                                let _ = pty_sessions.kill(result.session_id);
-                                let _ = AgentSessionService::record_session_termination_in_data_dir(
-                                    &data_dir,
-                                    result.session_id,
-                                    PtyExitStatus { exit_code: None },
-                                );
-                                let _ = self.rollback_failed_structured_issue_session(
-                                    input.project_id,
-                                    input.issue_id,
-                                    result.session_id,
-                                );
-                                return Err(agent_session_start_error(error));
-                            }
+                            return Err(agent_session_start_error(error));
                         }
                     }
                 } else if let Some(child) = child.take() {
@@ -686,9 +694,6 @@ impl<'connection> AgentSessionService<'connection> {
                 Ok(result)
             }
             Err(error) => {
-                if let Some(pending_pty) = pending_pty {
-                    pending_pty.terminate();
-                }
                 if let Some(mut child) = child.take() {
                     let _ = child.kill();
                     let _ = child.wait();
@@ -1890,6 +1895,9 @@ impl AgentSessionService<'_> {
             cols: 120,
             startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
             startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+            extra_env: tui_hook_spawn_env(profile.agent_type.as_db_str(), session.id)
+                .into_iter()
+                .collect(),
         }) {
             Ok(pending) => pending,
             Err(error) => {

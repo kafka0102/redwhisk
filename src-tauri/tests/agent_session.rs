@@ -3405,6 +3405,7 @@ fn pty_session_manager_forwards_input_resizes_and_persists_output() {
             cols: 80,
             startup_check_total_ms: 500,
             startup_check_interval_ms: 25,
+            extra_env: Vec::new(),
         })
         .expect("spawn pending pty");
     manager
@@ -3452,6 +3453,7 @@ fn pty_session_manager_broadcasts_output_bytes_while_persisting_log() {
             cols: 80,
             startup_check_total_ms: 500,
             startup_check_interval_ms: 25,
+            extra_env: Vec::new(),
         })
         .expect("spawn pending pty");
     manager
@@ -3510,6 +3512,7 @@ fn pty_session_manager_restores_complete_output_chunks_for_active_session() {
             cols: 80,
             startup_check_total_ms: 500,
             startup_check_interval_ms: 25,
+            extra_env: Vec::new(),
         })
         .expect("spawn pending pty");
     manager
@@ -3578,6 +3581,7 @@ fn inject_session_prompt_records_event_and_writes_into_running_terminal() {
             cols: 80,
             startup_check_total_ms: 500,
             startup_check_interval_ms: 25,
+            extra_env: Vec::new(),
         })
         .expect("spawn pending pty");
     manager
@@ -3679,6 +3683,7 @@ fn inject_session_prompt_keeps_review_issue_in_same_session_and_log() {
             cols: 80,
             startup_check_total_ms: 500,
             startup_check_interval_ms: 25,
+            extra_env: Vec::new(),
         })
         .expect("spawn pending pty");
     manager

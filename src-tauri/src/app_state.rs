@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
@@ -23,6 +24,8 @@ pub struct AppState {
     /// 若目标项目已显示在某窗口（含被 main 占用的），聚焦该窗口而非新开。
     /// 在 `open_project` 成功后按调用方窗口登记；窗口销毁时清除指向它的条目。
     project_windows: Mutex<HashMap<i64, String>>,
+    /// listener 绑定失败时为 false：本机状态通道不可用。
+    tui_hook_channel_available: AtomicBool,
 }
 
 impl AppState {
@@ -36,7 +39,18 @@ impl AppState {
             agent_event_broadcaster: AgentEventBroadcaster::new(),
             agent_sessions: AgentSessionRegistry::new(),
             project_windows: Mutex::new(HashMap::new()),
+            tui_hook_channel_available: AtomicBool::new(false),
         }
+    }
+
+    pub fn set_tui_hook_channel_available(&self, available: bool) {
+        self.tui_hook_channel_available
+            .store(available, Ordering::Relaxed);
+    }
+
+    /// listener 绑定失败时为 false：本机状态通道不可用。
+    pub fn tui_hook_channel_available(&self) -> bool {
+        self.tui_hook_channel_available.load(Ordering::Relaxed)
     }
 
     /// 登记「项目当前显示在哪个窗口」，并返回被本次登记顶掉（displaced）的项目 id（升序）。

@@ -19,6 +19,13 @@ mod startup_model;
 mod terminal_archive_clean;
 mod terminal_archive_render;
 mod timeline;
+mod tui_hook_dispatch;
+mod tui_hook_env;
+mod tui_hook_install;
+mod tui_hook_socket;
+pub use tui_hook_dispatch::run_tui_hook_command_from_process;
+pub(crate) use tui_hook_dispatch::spawn_tui_hook_listener;
+pub(crate) use tui_hook_socket::tui_hook_socket_path;
 mod tui_hook_turn;
 mod tui_session_metrics_sync;
 mod tui_terminal;
@@ -53,8 +60,14 @@ pub(crate) use timeline::read_assistant_texts_for_turn;
 #[cfg(test)]
 mod timeline_tests;
 #[cfg(test)]
+mod tui_hook_env_tests;
+#[cfg(test)]
+mod tui_hook_install_tests;
+#[cfg(test)]
+mod tui_hook_socket_tests;
+#[cfg(test)]
 mod tui_hook_turn_fallback_tests;
 #[cfg(test)]
-mod tui_hook_turn_tests;
+pub(crate) mod tui_hook_turn_tests;
 #[cfg(test)]
 mod tui_start_tests;

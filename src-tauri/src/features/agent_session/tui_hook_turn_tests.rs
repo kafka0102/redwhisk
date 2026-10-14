@@ -5,7 +5,7 @@ use super::tui_hook_turn::{apply_tui_hook_event, ResolvedTuiHookEvent, TuiHookSo
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::migrations::MigrationRunner;
 
-pub(super) fn database() -> Connection {
+pub(crate) fn database() -> Connection {
     let connection = Connection::open_in_memory().expect("open database");
     MigrationRunner::default()
         .run(&connection)
@@ -31,7 +31,7 @@ pub(super) fn database() -> Connection {
     connection
 }
 
-pub(super) struct SessionSeed {
+pub(crate) struct SessionSeed {
     pub id: i64,
     pub agent_type: &'static str,
     pub display_mode: &'static str,
@@ -44,7 +44,7 @@ pub(super) struct SessionSeed {
     pub attention: &'static str,
 }
 
-pub(super) fn insert_session(connection: &Connection, seed: SessionSeed) {
+pub(crate) fn insert_session(connection: &Connection, seed: SessionSeed) {
     let profile_id = match seed.agent_type {
         "codex" => 101,
         "grok" => 102,
