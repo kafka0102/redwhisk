@@ -12,7 +12,7 @@ export interface AgentSessionNotificationCopy {
   sessionStatusLine: (title: string, status: string) => string;
   sessionSummaryLabel: string;
   sessionUpdatedTitle: (projectName: string) => string;
-  turnCompletedBody: (sessionId: number) => string;
+  turnCompletedBody: (projectName: string, issueNumber?: number) => string;
   turnFailedFallbackBody: string;
 }
 
@@ -26,6 +26,7 @@ export interface AgentSessionNotificationIntent {
 
 interface AgentSessionNotificationContext {
   copy: AgentSessionNotificationCopy;
+  issueNumber?: number;
   projectName: string;
 }
 
@@ -47,7 +48,10 @@ export function createAgentSessionNotificationIntent(
       };
     case "turn_completed":
       return {
-        body: context.copy.turnCompletedBody(envelope.sessionId),
+        body: context.copy.turnCompletedBody(
+          context.projectName,
+          context.issueNumber,
+        ),
         key,
         level: "normal",
         title: context.copy.sessionUpdatedTitle(context.projectName),

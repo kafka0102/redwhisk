@@ -144,7 +144,9 @@ const TEST_COPY = {
   sessionSummaryLabel: "Summary",
   sessionUpdatedTitle: (projectName: string) =>
     `${projectName} session updated`,
-  turnCompletedBody: (sessionId: number) =>
-    `Session #${sessionId} has finished the latest turn.`,
+  turnCompletedBody: (projectName: string, issueNumber?: number) =>
+    issueNumber == null
+      ? `${projectName} has finished the latest turn.`
+      : `${projectName} · #${issueNumber} has finished the latest turn.`,
   turnFailedFallbackBody: "The latest agent turn failed.",
 };

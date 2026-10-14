@@ -52,10 +52,12 @@ export function useAgentSessionNotifications({
   const sessionStatusByIdRef = useRef<
     Map<number, AgentSessionListItem["status"]>
   >(new Map());
+  const issueNumberBySessionIdRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     notifiedKeysRef.current.clear();
     sessionStatusByIdRef.current.clear();
+    issueNumberBySessionIdRef.current.clear();
   }, [projectId]);
 
   useTauriEvent<AgentStreamEventEnvelope>(
@@ -67,6 +69,7 @@ export function useAgentSessionNotifications({
 
       const intent = createAgentSessionNotificationIntent(envelope, {
         copy: messages.agentNotifications,
+        issueNumber: issueNumberBySessionIdRef.current.get(envelope.sessionId),
         projectName,
       });
       if (!intent) {
@@ -117,10 +120,17 @@ export function useAgentSessionNotifications({
           number,
           AgentSessionListItem["status"]
         >();
+        const nextIssueNumberBySessionId = new Map<number, number>();
 
         response.sessions.forEach((session) => {
           const previousStatus = previousStatusById.get(session.sessionId);
           nextStatusById.set(session.sessionId, session.status);
+          if (session.issueNumber != null) {
+            nextIssueNumberBySessionId.set(
+              session.sessionId,
+              session.issueNumber,
+            );
+          }
 
           // [notify] 诊断：打印所有 running 切出转换；若落到 stopped 等未覆盖状态，
           // 命中门控=false 会被静默跳过（当前只认 closed/crashed）。
@@ -147,6 +157,7 @@ export function useAgentSessionNotifications({
         });
 
         sessionStatusByIdRef.current = nextStatusById;
+        issueNumberBySessionIdRef.current = nextIssueNumberBySessionId;
       } catch {
         // 状态轮询失败不影响主工作台；下次轮询会重新同步状态。
       } finally {

@@ -77,7 +77,7 @@ export interface I18nMessages {
     sessionStatusLine: (title: string, status: string) => string;
     sessionSummaryLabel: string;
     sessionUpdatedTitle: (projectName: string) => string;
-    turnCompletedBody: (sessionId: number) => string;
+    turnCompletedBody: (projectName: string, issueNumber?: number) => string;
     turnFailedFallbackBody: string;
   };
   settings: {

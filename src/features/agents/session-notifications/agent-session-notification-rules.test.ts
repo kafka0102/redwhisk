@@ -53,7 +53,30 @@ describe("createAgentSessionNotificationIntent", () => {
     expect(intent?.body).toBe("Agent is waiting for approval or input.");
   });
 
-  it("creates a normal notification when a turn completes", () => {
+  it("creates a normal notification when a turn completes for a linked issue", () => {
+    const intent = createAgentSessionNotificationIntent(
+      eventEnvelope({
+        event: {
+          type: "turn_completed",
+          turnId: "turn-1",
+          usage: null,
+        },
+      }),
+      {
+        copy: TEST_COPY,
+        issueNumber: 12,
+        projectName: "RedWhisk",
+      },
+    );
+
+    expect(intent).toMatchObject({
+      body: "RedWhisk · #12 has finished the latest turn.",
+      level: "normal",
+      title: "RedWhisk session updated",
+    });
+  });
+
+  it("omits the issue number when a completed turn has no linked issue", () => {
     const intent = createAgentSessionNotificationIntent(
       eventEnvelope({
         event: {
@@ -69,7 +92,7 @@ describe("createAgentSessionNotificationIntent", () => {
     );
 
     expect(intent).toMatchObject({
-      body: "Session #2 has finished the latest turn.",
+      body: "RedWhisk has finished the latest turn.",
       level: "normal",
       title: "RedWhisk session updated",
     });
@@ -142,7 +165,9 @@ const TEST_COPY = {
   sessionSummaryLabel: "Summary",
   sessionUpdatedTitle: (projectName: string) =>
     `${projectName} session updated`,
-  turnCompletedBody: (sessionId: number) =>
-    `Session #${sessionId} has finished the latest turn.`,
+  turnCompletedBody: (projectName: string, issueNumber?: number) =>
+    issueNumber == null
+      ? `${projectName} has finished the latest turn.`
+      : `${projectName} · #${issueNumber} has finished the latest turn.`,
   turnFailedFallbackBody: "The latest agent turn failed.",
 };

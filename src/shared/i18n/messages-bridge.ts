@@ -53,6 +53,17 @@ function makeBranch(t: TFunction, path: string, node: Branch): Branch {
       if (nextPath === "agentsFeature.taskStatusLabel") {
         return makeTaskStatusLabel(t);
       }
+      if (nextPath === "agentNotifications.turnCompletedBody") {
+        return (projectName: string, issueNumber?: number) => {
+          if (issueNumber == null) {
+            return t("agentNotifications.turnCompletedBody", { projectName });
+          }
+          return t("agentNotifications.turnCompletedBodyWithIssue", {
+            issueNumber,
+            projectName,
+          });
+        };
+      }
       const next = target[key];
       if (next && typeof next === "object") {
         return makeBranch(t, nextPath, next as Branch);

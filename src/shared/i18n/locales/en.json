@@ -97,7 +97,8 @@
     "sessionStatusLine": "{{title}} finished with status {{status}}.",
     "sessionSummaryLabel": "Summary",
     "sessionUpdatedTitle": "{{projectName}} session updated",
-    "turnCompletedBody": "Session #{{sessionId}} has finished the latest turn.",
+    "turnCompletedBody": "{{projectName}} has finished the latest turn.",
+    "turnCompletedBodyWithIssue": "{{projectName}} · #{{issueNumber}} has finished the latest turn.",
     "turnFailedFallbackBody": "The latest agent turn failed."
   },
   "settings": {

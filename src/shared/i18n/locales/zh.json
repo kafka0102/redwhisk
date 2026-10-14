@@ -97,7 +97,8 @@
     "sessionStatusLine": "{{title}} 已结束，状态为 {{status}}。",
     "sessionSummaryLabel": "总结",
     "sessionUpdatedTitle": "{{projectName}} 会话已更新",
-    "turnCompletedBody": "会话 #{{sessionId}} 已完成最新一轮输出。",
+    "turnCompletedBody": "{{projectName}} 已完成最新一轮输出。",
+    "turnCompletedBodyWithIssue": "{{projectName}} · #{{issueNumber}} 已完成最新一轮输出。",
     "turnFailedFallbackBody": "智能体最新一轮执行失败。"
   },
   "settings": {

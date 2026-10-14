@@ -89,6 +89,7 @@ async function renderProbe({
 
   await act(async () => {
     await Promise.resolve();
+    await Promise.resolve();
   });
 
   return result;
@@ -141,8 +142,11 @@ describe("useAgentSessionNotifications", () => {
     expect(transport.requestAttention).not.toHaveBeenCalled();
   });
 
-  it("sends a system notification and requests attention in the background", async () => {
+  it("sends a system notification naming the project and issue number", async () => {
     const transport = createTransport({ isWindowFocused: false });
+    listAgentSessionsMock.mockResolvedValue({
+      sessions: [session({ sessionId: 2, status: "running", issueNumber: 12 })],
+    });
     await renderProbe({ transport });
 
     await emit({
@@ -159,7 +163,7 @@ describe("useAgentSessionNotifications", () => {
 
     expect(transport.sendSystemNotification).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: "Session #2 has finished the latest turn.",
+        body: "RedWhisk · #12 has finished the latest turn.",
         level: "normal",
         title: "RedWhisk session updated",
       }),
@@ -440,9 +444,11 @@ async function emit(envelope: AgentStreamEventEnvelope): Promise<void> {
 }
 
 function session({
+  issueNumber = null,
   sessionId,
   status,
 }: {
+  issueNumber?: number | null;
   sessionId: number;
   status: "running" | "closed" | "crashed" | "stopped";
 }) {
@@ -452,7 +458,7 @@ function session({
     attention: "none" as const,
     closedAt: status === "running" ? null : 1_780_638_000_000,
     issueId: null,
-    issueNumber: null,
+    issueNumber,
     issueTitle: null,
     issueStatus: null,
     projectId: 1,
