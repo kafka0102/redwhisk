@@ -182,6 +182,14 @@ pub struct ProjectWorktreeFileTreeResponse {
     pub signature: String,
 }
 
+/// 可视文件预览类别。省略或 `null` 表示不可视预览。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspacePreviewKind {
+    Image,
+    Pdf,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceFileContent {
@@ -192,6 +200,18 @@ pub struct WorkspaceFileContent {
     pub size_bytes: u64,
     pub is_binary: bool,
     pub is_too_large: bool,
+    /// 扩展名判定的预览类别；非图片、非 PDF 时为 `null`。
+    pub preview_kind: Option<WorkspacePreviewKind>,
+    /// 可预览字节的标准 base64；无预览时为空字符串。
+    pub preview_bytes_base64: String,
+    /// 按原 1MB 文本规则判断，供差异对比保持旧行为。不进入前端契约。
+    #[serde(skip)]
+    pub legacy_diff_binary: bool,
+    #[serde(skip)]
+    pub legacy_diff_too_large: bool,
+    /// 公开 `content` 为空时，差异对比仍使用的旧正文。不进入前端契约。
+    #[serde(skip)]
+    pub legacy_diff_content: String,
 }
 
 /// 工作区单文件轻量元数据（不读正文），供前端构造 size:mtime 签名。

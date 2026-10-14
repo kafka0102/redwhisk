@@ -182,6 +182,8 @@ function buildTab(overrides: Partial<CodeFileTab> = {}): CodeFileTab {
       sizeBytes: 24,
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      previewBytesBase64: "",
     },
     ...overrides,
   };
@@ -579,6 +581,8 @@ describe("CodeContent edit interactions", () => {
             sizeBytes: 5,
             isBinary: false,
             isTooLarge: false,
+            previewKind: null,
+            previewBytesBase64: "",
           },
         })}
         contentFontSize={14}

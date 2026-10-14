@@ -26,6 +26,8 @@ const fileContent = {
   filePath: "src/file.ts",
   isBinary: false,
   isTooLarge: false,
+  previewKind: null,
+  previewBytesBase64: "",
   language: "typescript",
   modifiedAt: 1,
   sizeBytes: 24,

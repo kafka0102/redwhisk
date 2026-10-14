@@ -24,6 +24,8 @@ use crate::types::session_workspace::{
 use super::workspace_diff::{read_workspace_commit_diff, read_workspace_diff};
 
 pub(super) const MAX_TEXT_FILE_BYTES: u64 = 1_000_000;
+
+pub(super) use super::workspace_preview::read_workspace_file;
 const HIDDEN_DIRS: &[&str] = &[
     ".git",
     "node_modules",
@@ -991,49 +993,6 @@ fn stat_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFileStat
     })
 }
 
-pub(super) fn read_workspace_file(
-    root: &Path,
-    file_path: &str,
-) -> Result<WorkspaceFileContent, CommandError> {
-    let workspace_file = resolve_workspace_file(root, file_path)?;
-    let size_bytes = workspace_file.metadata.len();
-    let language = language_from_path(file_path);
-    if size_bytes > MAX_TEXT_FILE_BYTES {
-        return Ok(WorkspaceFileContent {
-            file_path: file_path.to_string(),
-            language,
-            content: String::new(),
-            modified_at: modified_at_millis(&workspace_file.metadata),
-            size_bytes,
-            is_binary: false,
-            is_too_large: true,
-        });
-    }
-
-    let bytes = fs::read(&workspace_file.absolute_path).map_err(workspace_io_error)?;
-    if is_binary_bytes(&bytes) {
-        return Ok(WorkspaceFileContent {
-            file_path: file_path.to_string(),
-            language,
-            content: String::new(),
-            modified_at: modified_at_millis(&workspace_file.metadata),
-            size_bytes,
-            is_binary: true,
-            is_too_large: false,
-        });
-    }
-
-    Ok(WorkspaceFileContent {
-        file_path: file_path.to_string(),
-        language,
-        content: String::from_utf8_lossy(&bytes).to_string(),
-        modified_at: modified_at_millis(&workspace_file.metadata),
-        size_bytes,
-        is_binary: false,
-        is_too_large: false,
-    })
-}
-
 fn write_workspace_file(
     root: &Path,
     file_path: &str,
@@ -1072,12 +1031,15 @@ fn write_workspace_file(
     read_workspace_file(root, file_path)
 }
 
-struct WorkspaceFile {
-    absolute_path: PathBuf,
-    metadata: fs::Metadata,
+pub(super) struct WorkspaceFile {
+    pub(super) absolute_path: PathBuf,
+    pub(super) metadata: fs::Metadata,
 }
 
-fn resolve_workspace_file(root: &Path, file_path: &str) -> Result<WorkspaceFile, CommandError> {
+pub(super) fn resolve_workspace_file(
+    root: &Path,
+    file_path: &str,
+) -> Result<WorkspaceFile, CommandError> {
     let absolute_path = resolve_workspace_relative_path(root, file_path)?;
     // 跟随仓库内文件软链（如 CLAUDE.md -> AGENTS.md）；越界目标已在
     // resolve_workspace_relative_path 用 canonicalize 拒绝。
@@ -1228,7 +1190,7 @@ pub(super) fn workspace_persistence_error(error: rusqlite::Error) -> CommandErro
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-fn workspace_io_error(error: std::io::Error) -> CommandError {
+pub(super) fn workspace_io_error(error: std::io::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::AgentSessionValidationFailed,
         "工作区文件读取失败。",
@@ -1262,7 +1224,7 @@ fn file_metadata_signature(root: &Path, path: &str) -> String {
         .unwrap_or_else(|_| "missing".to_string())
 }
 
-fn modified_at_millis(metadata: &fs::Metadata) -> Option<i64> {
+pub(super) fn modified_at_millis(metadata: &fs::Metadata) -> Option<i64> {
     metadata
         .modified()
         .ok()

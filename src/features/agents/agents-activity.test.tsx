@@ -781,6 +781,8 @@ describe("AgentsActivity", () => {
       sizeBytes: 0,
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      previewBytesBase64: "",
     });
   });
 
@@ -1313,6 +1315,8 @@ describe("AgentsActivity", () => {
       sizeBytes: 23,
       isBinary: false,
       isTooLarge: false,
+      previewKind: null,
+      previewBytesBase64: "",
     });
     listAgentSessionsMock.mockResolvedValue({
       sessions: [runningSession(301)],

@@ -45,6 +45,9 @@ export interface ProjectWorktreeFileTreeResponse {
   signature: string;
 }
 
+/** 与 Rust `WorkspacePreviewKind` 对齐；`null` 表示不可视预览。 */
+export type WorkspacePreviewKind = "image" | "pdf";
+
 export interface WorkspaceFileContent {
   filePath: string;
   language: string | null;
@@ -53,6 +56,10 @@ export interface WorkspaceFileContent {
   sizeBytes: number;
   isBinary: boolean;
   isTooLarge: boolean;
+  /** 扩展名判定的预览类别；非图片、非 PDF 时为 `null`。 */
+  previewKind: WorkspacePreviewKind | null;
+  /** 可预览字节的标准 base64；无预览时为空字符串。 */
+  previewBytesBase64: string;
 }
 
 /** 工作区单文件轻量元数据（不读正文），用于构造 size:mtime 签名。 */

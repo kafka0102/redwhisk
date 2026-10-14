@@ -128,7 +128,10 @@ pub(super) fn read_workspace_diff(
         WorkspaceChangeKind::Deleted => String::new(),
         _ => {
             let content = read_workspace_file(root, &change.file_path)?;
-            if content.is_binary || content.is_too_large {
+            // 预览字节不进入差异对比。标记仍按 1MB 文本规则，两侧字节留给后续票。
+            let (is_binary, is_too_large) =
+                (content.legacy_diff_binary, content.legacy_diff_too_large);
+            if is_binary || is_too_large {
                 return Ok(WorkspaceDiffContent {
                     file_path: change.file_path,
                     old_path: change.old_path,
@@ -136,11 +139,15 @@ pub(super) fn read_workspace_diff(
                     language: language_from_path(file_path),
                     original_content: String::new(),
                     modified_content: String::new(),
-                    is_binary: content.is_binary,
-                    is_too_large: content.is_too_large,
+                    is_binary,
+                    is_too_large,
                 });
             }
-            content.content
+            if content.content.is_empty() && !content.legacy_diff_content.is_empty() {
+                content.legacy_diff_content
+            } else {
+                content.content
+            }
         }
     };
 

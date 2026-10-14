@@ -119,6 +119,8 @@ const fileTab: SessionWorkspaceFileTab = {
     filePath: "src/file.ts",
     isBinary: false,
     isTooLarge: false,
+    previewKind: null,
+    previewBytesBase64: "",
     language: "typescript",
     modifiedAt: null,
     sizeBytes: 24,

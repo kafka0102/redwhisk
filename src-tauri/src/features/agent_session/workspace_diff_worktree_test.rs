@@ -141,6 +141,25 @@ fn worktree_diff_marks_binary_change() {
 }
 
 #[test]
+fn worktree_diff_keeps_ascii_pdf_text_on_the_legacy_diff() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let root = temp_dir.path();
+    init_git_repo(root);
+    let original = "%PDF-1.4\noriginal page\n";
+    let modified = "%PDF-1.4\nmodified page\n";
+    fs::write(root.join("notes.pdf"), original).expect("write pdf");
+    commit_all(root, "base");
+    fs::write(root.join("notes.pdf"), modified).expect("modify pdf");
+
+    let diff = read_workspace_diff(root, "notes.pdf").expect("read pdf diff");
+
+    assert!(!diff.is_binary);
+    assert!(!diff.is_too_large);
+    assert_eq!(diff.original_content, original);
+    assert_eq!(diff.modified_content, modified);
+}
+
+#[test]
 fn worktree_diff_reports_missing_change_without_touching_unrelated_ones() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let root = temp_dir.path();
