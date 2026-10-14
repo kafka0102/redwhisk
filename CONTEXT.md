@@ -199,8 +199,8 @@ Agent Session 中一次用户消息触发的回复轮次；停止与运行态只
 _Avoid_: 把子智能体的子轮次当成可停止的当前 Turn
 
 **子智能体**：
-同一条 Codex json Agent Session 里，由主智能体拉起、用另一条 thread 产出输出的协作方。不是另一条 Agent Session，也不是用户发起的 Turn。
-_Avoid_: 协作子代理、子 Session、子 Turn
+同一条 json Agent Session 里，由主智能体拉起、在这条消息流里单独产出输出的协作方。Codex json 与 Grok json 都算。不是另一条 Agent Session，也不是用户发起的 Turn。
+_Avoid_: 协作子代理、子 Session、子 Turn、只适用于 Codex
 
 **主智能体**：
 同一条 Agent Session 里拉起子智能体的那一方。
