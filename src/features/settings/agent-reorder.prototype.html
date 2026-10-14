@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>PROTOTYPE · 智能体排序方案</title>
+<style>
+  :root {
+    --background: #ffffff;
+    --foreground: #17181a;
+    --card: #ffffff;
+    --muted: #f1f2f4;
+    --muted-foreground: #5f6368;
+    --border: #e3e5e8;
+    --destructive: #b42318;
+    --radius-card: 5px;
+    --sidebar: #f7f7f8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--foreground);
+    background: var(--background);
+    font-size: 14px;
+  }
+  .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
+  aside {
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    padding: 20px 12px;
+  }
+  aside h1 { font-size: 13px; margin: 0 16px 16px; font-weight: 650; }
+  aside button.nav {
+    display: block; width: 100%; text-align: left;
+    border: 0; background: transparent; border-radius: 4px;
+    padding: 8px 12px; color: var(--foreground); cursor: default; font: inherit;
+  }
+  aside button.nav.active { background: #e9eaee; font-weight: 600; }
+  aside button.nav.dim { color: var(--muted-foreground); }
+  main { padding: 20px 28px 120px; min-width: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .head button {
+    border: 1px solid var(--border); background: #fff; border-radius: 4px;
+    padding: 6px 12px; font: inherit; cursor: default;
+  }
+  .banner {
+    margin: 0 0 14px; padding: 10px 12px; border: 1px dashed var(--border);
+    border-radius: var(--radius-card); background: #fafafa; color: var(--muted-foreground);
+    font-size: 12px; line-height: 1.5;
+  }
+  .banner strong { color: var(--foreground); font-weight: 650; }
+  .table-wrap {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card);
+  }
+  table { width: 100%; border-collapse: collapse; min-width: 960px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+  th { color: var(--muted-foreground); font-weight: 550; font-size: 13px; background: #fafafa; }
+  tr:last-child td { border-bottom: 0; }
+  tr.disabled { background: color-mix(in srgb, var(--muted) 50%, transparent); color: #8b9096; }
+  .name { font-weight: 650; }
+  .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted-foreground); }
+  .logo {
+    width: 22px; height: 22px; border-radius: 4px; display: grid; place-items: center;
+    color: #fff; font-size: 11px; font-weight: 700;
+  }
+  .actions { display: flex; gap: 12px; }
+  .actions span { font-weight: 650; }
+  .actions .del { color: var(--destructive); }
+  .grip, .updown button, .num input {
+    font: inherit;
+  }
+  .grip {
+    width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px;
+    color: #8b9096; cursor: grab; display: grid; place-items: center;
+  }
+  .grip:active { cursor: grabbing; }
+  .grip svg { width: 16px; height: 16px; }
+  tr.dragging { opacity: 0.45; }
+  tr.over td { box-shadow: inset 0 2px 0 #111; }
+  .updown { display: flex; flex-direction: column; gap: 2px; }
+  .updown button {
+    width: 22px; height: 16px; border: 1px solid var(--border); background: #fff;
+    border-radius: 3px; cursor: pointer; line-height: 1; padding: 0; color: #333;
+  }
+  .updown button:disabled { opacity: 0.35; cursor: default; }
+  .num input {
+    width: 42px; border: 1px solid var(--input, #d1d5db); border-radius: 3px;
+    padding: 4px 6px; font-variant-numeric: tabular-nums;
+  }
+  .state {
+    margin-top: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; color: var(--muted-foreground); white-space: pre-wrap;
+  }
+  .switcher {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px;
+    background: #111; color: #fff; border-radius: 999px; padding: 8px 10px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 22%); z-index: 20;
+  }
+  .switcher button {
+    width: 28px; height: 28px; border-radius: 999px; border: 0; background: #2a2a2a;
+    color: #fff; cursor: pointer; font: inherit;
+  }
+  .switcher .label { min-width: 280px; text-align: center; font-size: 13px; }
+  .kbd { opacity: 0.65; font-size: 11px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <h1>设置</h1>
+    <button class="nav dim" type="button">通用</button>
+    <button class="nav active" type="button">智能体</button>
+    <button class="nav dim" type="button">标签</button>
+    <button class="nav dim" type="button">技能</button>
+  </aside>
+  <main>
+    <div class="head">
+      <h2>智能体</h2>
+      <button type="button">新建智能体</button>
+    </div>
+    <p class="banner" id="banner"></p>
+    <div class="table-wrap">
+      <table aria-label="已配置的智能体">
+        <thead>
+          <tr id="head-row"></tr>
+        </thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+    <div class="state" id="state"></div>
+  </main>
+</div>
+<div class="switcher" id="switcher">
+  <button type="button" id="prev" aria-label="上一个方案">←</button>
+  <div class="label" id="switch-label"></div>
+  <button type="button" id="next" aria-label="下一个方案">→</button>
+</div>
+<script>
+const VARIANTS = [
+  {
+    key: "A",
+    name: "Grip 拖拽",
+    note: "业界常见（Linear / Notion / GitHub Projects）：第一列只放六点握柄，整行跟随拖拽，松手即换序。键盘用户仍可用上下方向键在聚焦握柄时移动。",
+  },
+  {
+    key: "B",
+    name: "握柄 + 上下按钮",
+    note: "Jira / 部分设置表：拖拽为主，握柄旁保留上移 / 下移，不依赖指针也能逐步调整。适合配置页这种低频、要精确落位的列表。",
+  },
+  {
+    key: "C",
+    name: "序号输入",
+    note: "Confluence 页面排序 / 部分 CMS：第一列是可编辑序号，改数字后失焦即重排。没有拖拽，顺序完全由数字决定，适合一次性指定目标位置。",
+  },
+];
+
+const SEED = [
+  { id: 2, type: "Codex", color: "#111", letter: "C", name: "Codex", command: "codex", mode: "JSON", enabled: true, scope: "全局" },
+  { id: 4, type: "Claude", color: "#d97757", letter: "A", name: "Claude", command: "claude", mode: "JSON", enabled: true, scope: "全局" },
+  { id: 7, type: "OpenCode", color: "#3b6cff", letter: "O", name: "OpenCode", command: "opencode", mode: "TUI", enabled: true, scope: "全局" },
+  { id: 9, type: "Grok", color: "#111", letter: "G", name: "Grok", command: "grok", mode: "JSON", enabled: true, scope: "项目" },
+  { id: 11, type: "DeepSeek", color: "#4d6bfe", letter: "D", name: "DeepSeek", command: "deepseek", mode: "JSON", enabled: false, scope: "全局" },
+];
+
+const params = new URLSearchParams(location.search);
+let variant = (params.get("variant") || "A").toUpperCase();
+if (!VARIANTS.some((item) => item.key === variant)) variant = "A";
+let rows = SEED.map((row) => ({ ...row }));
+let dragId = null;
+
+const body = document.getElementById("body");
+const head = document.getElementById("head-row");
+const banner = document.getElementById("banner");
+const state = document.getElementById("state");
+const switchLabel = document.getElementById("switch-label");
+
+function current() {
+  return VARIANTS.find((item) => item.key === variant);
+}
+
+function move(id, delta) {
+  const index = rows.findIndex((row) => row.id === id);
+  const next = index + delta;
+  if (index < 0 || next < 0 || next >= rows.length) return;
+  const [item] = rows.splice(index, 1);
+  rows.splice(next, 0, item);
+  render();
+}
+
+function placeByNumber(id, raw) {
+  const target = Number(raw);
+  if (!Number.isInteger(target)) return;
+  const index = rows.findIndex((row) => row.id === id);
+  const clamped = Math.min(rows.length, Math.max(1, target)) - 1;
+  const [item] = rows.splice(index, 1);
+  rows.splice(clamped, 0, item);
+  render();
+}
+
+function renderHead() {
+  const orderLabel = variant === "C" ? "序号" : "排序";
+  head.innerHTML = ["", "类型", "名称", "命令", "展示模式", "启用", "范围", "操作"]
+    .map((label, index) => `<th>${index === 0 ? orderLabel : label}</th>`)
+    .join("");
+}
+
+function orderCell(row, index) {
+  if (variant === "C") {
+    return `<td><input aria-label="序号 ${row.name}" type="number" min="1" max="${rows.length}" value="${index + 1}" data-num="${row.id}" /></td>`;
+  }
+  const grip = `<button class="grip" type="button" draggable="true" data-grip="${row.id}" aria-label="拖动排序 ${row.name}" title="拖动排序">
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3.5" r="1.2"/><circle cx="11" cy="3.5" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12.5" r="1.2"/><circle cx="11" cy="12.5" r="1.2"/></svg>
+  </button>`;
+  if (variant === "B") {
+    return `<td><div style="display:flex;align-items:center;gap:6px">${grip}<div class="updown">
+      <button type="button" data-move="${row.id}" data-delta="-1" aria-label="上移 ${row.name}" ${index === 0 ? "disabled" : ""}>↑</button>
+      <button type="button" data-move="${row.id}" data-delta="1" aria-label="下移 ${row.name}" ${index === rows.length - 1 ? "disabled" : ""}>↓</button>
+    </div></div></td>`;
+  }
+  return `<td>${grip}</td>`;
+}
+
+function render() {
+  const spec = current();
+  banner.innerHTML = `<strong>${spec.key} · ${spec.name}</strong> — ${spec.note} 拖拽 / 改序只改内存，刷新回到种子数据。`;
+  switchLabel.innerHTML = `${spec.key}（${spec.name}）<span class="kbd">← →</span>`;
+  renderHead();
+  body.innerHTML = rows.map((row, index) => `
+    <tr data-id="${row.id}" class="${row.enabled ? "" : "disabled"}">
+      ${orderCell(row, index)}
+      <td><span class="logo" style="background:${row.color}">${row.letter}</span></td>
+      <td class="name">${row.name}</td>
+      <td class="cmd">${row.command}</td>
+      <td>${row.mode}</td>
+      <td>${row.enabled ? "是" : "否"}</td>
+      <td>${row.scope}</td>
+      <td><div class="actions"><span>编辑</span><span class="del">删除</span></div></td>
+    </tr>
+  `).join("");
+  state.textContent = "当前顺序: " + rows.map((row, index) => `${index + 1}.${row.name}${row.enabled ? "" : "(禁用)"}`).join("  →  ");
+  history.replaceState(null, "", `?variant=${variant}`);
+}
+
+body.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-move]");
+  if (!button) return;
+  move(Number(button.dataset.move), Number(button.dataset.delta));
+});
+
+body.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-num]");
+  if (!input) return;
+  placeByNumber(Number(input.dataset.num), input.value);
+});
+
+body.addEventListener("dragstart", (event) => {
+  const grip = event.target.closest("[data-grip]");
+  if (!grip || variant === "C") return;
+  dragId = Number(grip.dataset.grip);
+  grip.closest("tr").classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+});
+
+body.addEventListener("dragover", (event) => {
+  if (dragId == null || variant === "C") return;
+  const tr = event.target.closest("tr");
+  if (!tr) return;
+  event.preventDefault();
+  body.querySelectorAll("tr").forEach((row) => row.classList.remove("over"));
+  if (Number(tr.dataset.id) !== dragId) tr.classList.add("over");
+});
+
+body.addEventListener("drop", (event) => {
+  const tr = event.target.closest("tr");
+  if (!tr || dragId == null) return;
+  event.preventDefault();
+  const from = rows.findIndex((row) => row.id === dragId);
+  const to = rows.findIndex((row) => row.id === Number(tr.dataset.id));
+  if (from >= 0 && to >= 0 && from !== to) {
+    const [item] = rows.splice(from, 1);
+    rows.splice(to, 0, item);
+  }
+  dragId = null;
+  render();
+});
+
+body.addEventListener("dragend", () => {
+  dragId = null;
+  render();
+});
+
+function cycle(step) {
+  const index = VARIANTS.findIndex((item) => item.key === variant);
+  variant = VARIANTS[(index + step + VARIANTS.length) % VARIANTS.length].key;
+  rows = SEED.map((row) => ({ ...row }));
+  render();
+}
+
+document.getElementById("prev").addEventListener("click", () => cycle(-1));
+document.getElementById("next").addEventListener("click", () => cycle(1));
+document.addEventListener("keydown", (event) => {
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  if (event.key === "ArrowLeft") cycle(-1);
+  if (event.key === "ArrowRight") cycle(1);
+});
+
+render();
+</script>
+</body>
+</html>
