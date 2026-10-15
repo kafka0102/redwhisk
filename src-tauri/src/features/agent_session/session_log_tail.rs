@@ -3,6 +3,7 @@
 //! Grok 会把同一条正文的完整快照逐帧追加，整文件可达几十 GB。
 //! 打开回放和交付评论都不能把整份日志读进内存。
 
+#[cfg(test)]
 use std::cell::Cell;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
@@ -41,6 +42,7 @@ const TAIL_CHUNK_START: u64 = 64 * 1024;
 const TAIL_CHUNK_MAX: u64 = 1024 * 1024;
 
 /// 会话日志一行，以及它在文件中的起始字节。
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SessionLogLine {
     pub offset: u64,
@@ -60,6 +62,7 @@ pub(super) fn read_session_log_turn_window(
         .collect())
 }
 
+#[cfg(test)]
 pub(super) fn read_session_log_turn_window_located(
     path: &Path,
     turn_limit: usize,
@@ -79,6 +82,7 @@ pub(super) fn for_each_session_log_line_in_turn_window(
     for_each_session_log_line_in_turn_window_chunked(path, turn_limit, TAIL_CHUNK_START, visit)
 }
 
+#[cfg(test)]
 fn read_session_log_turn_window_chunked(
     path: &Path,
     turn_limit: usize,
