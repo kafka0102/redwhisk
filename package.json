@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
-    "format": "prettier --write .vscode/extensions.json index.html package.json pnpm-lock.yaml prettier.config.mjs eslint.config.js vite.config.ts vitest.config.ts tsconfig.json tsconfig.node.json \"src/**/*.{ts,tsx,css}\" src-tauri/tauri.conf.json \"src-tauri/capabilities/**/*.json\"",
+    "format": "prettier --write .vscode/extensions.json index.html package.json pnpm-lock.yaml prettier.config.mjs eslint.config.js vite.config.ts vitest.config.ts tsconfig.json tsconfig.node.json \"src/**/*.{ts,tsx,css}\" \"src-tauri/capabilities/**/*.json\"",
     "lint": "eslint src eslint.config.js vite.config.ts vitest.config.ts",
     "preview": "vite preview",
     "test": "vitest run",

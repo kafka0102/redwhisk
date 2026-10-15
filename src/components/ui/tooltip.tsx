@@ -1,5 +1,8 @@
 "use client";
 
+// 调用方包一层 TooltipProvider。触发器直接用按钮。
+// 测试断言悬停或聚焦后的可见文案；popup 没有 role="tooltip"。
+
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { cn } from "@/lib/utils";

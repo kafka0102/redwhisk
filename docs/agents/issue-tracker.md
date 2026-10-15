@@ -24,6 +24,8 @@
 - 实现 ticket：`.scratch/<feature-slug>/issues/<NN>-<slug>.md`，从 `01` 起编号；**一个 ticket 一个文件**，绝不合并成单个 tickets 文件
 - triage 状态记录在文件顶部附近的 `Status:` 行（角色字符串见 `triage-labels.md`）
 - 评论与对话历史追加到文件底部 `## Comments` 标题下
+- `.gitignore` 忽略整个 `.scratch/`。spec 与 ticket 只留在本机工作区，Status 以工作区文件为准
+- 提交时不要 `git add -f .scratch`
 
 ## 技能操作映射
 
