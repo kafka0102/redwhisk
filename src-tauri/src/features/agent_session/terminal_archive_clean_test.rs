@@ -402,6 +402,26 @@ fn indented_grok_style_user_prompt_is_kept() {
     assert!(got.contains("最终结论"), "got={got:?}");
 }
 
+/// 回归：Grok 全屏帧底部输入框里未提交的残句不是结论。
+#[test]
+fn grok_composer_fragment_is_not_a_conclusion() {
+    let input = "\
+     ❯ 上述问题修复                                          4:41 PM
+
+                                    ▲
+ ┆   接用按钮，测试看悬停或聚焦后的可见文案，popup 没有               ┆
+";
+    let got = extract_tui_archive_conclusion_text(input);
+    assert!(
+        got.contains("上述问题修复"),
+        "submitted prompt stays: {got:?}"
+    );
+    assert!(
+        !got.contains("接用按钮"),
+        "composer fragment dropped: {got:?}"
+    );
+}
+
 /// 回归：archive-project-1-issue-277-session-328。
 /// 同一屏被按不同宽度重绘后整段拼接，用户 prompt 重复，且夹着状态栏。
 #[test]

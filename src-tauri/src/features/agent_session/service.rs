@@ -2986,7 +2986,9 @@ fn refresh_provider_session_id_in_data_dir(
     session.provider_session_id
 }
 
-fn preferred_session_cwd(session: &crate::types::agent_session::AgentSessionRecord) -> String {
+pub(super) fn preferred_session_cwd(
+    session: &crate::types::agent_session::AgentSessionRecord,
+) -> String {
     session
         .workspace_path
         .as_deref()

@@ -17,7 +17,7 @@ use crate::db::project_label_repository::ProjectLabelRepository;
 use crate::db::project_repository::ProjectRepository;
 use crate::features::agent_session::{
     build_issue_session_archive, is_archived_issue_log_path, remove_session_log_file,
-    resolve_codex_home, IssueSessionArchive, TuiSessionLogSource,
+    resolve_codex_home, IssueSessionArchive, TuiArchiveSource,
 };
 use crate::git::operation_state::{
     format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext,
@@ -72,6 +72,8 @@ pub struct IssueService<'connection> {
     issue_attachment_repository: IssueAttachmentRepository<'connection>,
     project_repository: ProjectRepository<'connection>,
     data_dir: PathBuf,
+    /// 测试注入的 Grok 会话根。生产为 `None`，归档使用 `~/.grok/sessions`。
+    grok_sessions_root_override: Option<PathBuf>,
 }
 
 struct AgentCommitContext {
@@ -93,7 +95,15 @@ impl<'connection> IssueService<'connection> {
             issue_repository,
             project_repository,
             data_dir,
+            grok_sessions_root_override: None,
         }
+    }
+
+    /// 仅测试：用临时目录代替 `~/.grok/sessions`，避免完成归档读本机真实会话。
+    #[cfg(test)]
+    pub(crate) fn with_grok_sessions_root(mut self, root: PathBuf) -> Self {
+        self.grok_sessions_root_override = Some(root);
+        self
     }
 
     pub fn list_issues(&self, project_id: i64) -> Result<IssueListResponse, CommandError> {
@@ -2045,6 +2055,14 @@ impl<'connection> IssueService<'connection> {
             .map_err(issue_database_error)?
             .map(|profile| profile.agent_type);
 
+        let user_home = production_grok_user_home(&self.data_dir);
+        let source = TuiArchiveSource::new(
+            agent_type,
+            session,
+            resolve_codex_home(),
+            user_home.as_deref(),
+            self.grok_sessions_root_override.clone(),
+        );
         let archive = build_issue_session_archive(
             &self.data_dir,
             issue.project_id,
@@ -2053,11 +2071,7 @@ impl<'connection> IssueService<'connection> {
             session.id,
             &session.log_path,
             &session.display_mode,
-            TuiSessionLogSource::new(
-                agent_type.as_ref(),
-                session.provider_session_id.as_deref(),
-                resolve_codex_home().as_deref(),
-            ),
+            source.as_log_source(),
         )?;
         AgentSessionRepository::update_log_path_and_latest_output_in_transaction(
             transaction,
@@ -2079,6 +2093,17 @@ impl<'connection> IssueService<'connection> {
 
         Ok(Some(archive))
     }
+}
+
+/// 生产 data dir 是 `$HOME/.redwhisk` 时，home 即其父目录。
+/// 内存库与测试临时目录不是 `.redwhisk`，不回退 `$HOME`，避免读本机真实会话。
+fn production_grok_user_home(data_dir: &Path) -> Option<PathBuf> {
+    if data_dir.file_name().and_then(|name| name.to_str())
+        != Some(crate::local_data_path::REDWHISK_DATA_DIR_NAME)
+    {
+        return None;
+    }
+    data_dir.parent().map(Path::to_path_buf)
 }
 
 /// 仅当 session 为 RedWhisk 管理且具备完整 worktree 路径/分支信息时返回清理上下文。
@@ -2855,6 +2880,138 @@ mod tests {
         assert!(!archived_content.contains("tool_call"));
         assert!(archived_content.contains("user_message"));
         assert!(archived_content.contains("assistant_message"));
+    }
+
+    #[test]
+    fn complete_issue_flow_archives_grok_tui_from_session_store_not_composer() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let worktree = temp_dir.path().join("issue-4-worktree");
+        let data_dir = temp_dir.path().join("data");
+        let sessions_root = temp_dir.path().join("grok-sessions");
+        create_git_repo(&repo_dir);
+        fs::create_dir_all(&data_dir).expect("create data dir");
+        fs::create_dir_all(&worktree).expect("create worktree");
+
+        let connection = setup_issue_completion_database_on_disk(&data_dir, &repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_profiles SET agent_type = 'grok', name = 'Grok', command = 'grok' WHERE id = 101",
+                [],
+            )
+            .expect("switch profile to grok");
+        let provider_session_id = "019d8b4d-2998-7913-889d-fb3c32971610";
+        let runtime_log_path = data_dir.join("runtime.log");
+        fs::write(
+            &runtime_log_path,
+            "\
+     ❯ 上述问题修复                                          4:41 PM
+
+                                    ▲
+ ┆   接用按钮，测试看悬停或聚焦后的可见文案，popup 没有               ┆
+",
+        )
+        .expect("write composer runtime");
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET display_mode = 'tui',
+                     provider_session_id = ?1,
+                     workspace_path = ?2,
+                     working_dir = ?3,
+                     log_path = ?4
+                 WHERE id = 30",
+                params![
+                    provider_session_id,
+                    worktree.to_string_lossy().to_string(),
+                    repo_dir.to_string_lossy().to_string(),
+                    runtime_log_path.to_string_lossy().to_string(),
+                ],
+            )
+            .expect("point session at grok worktree");
+
+        let encoded_cwd = encode_percent(&worktree.to_string_lossy());
+        let history = sessions_root
+            .join(encoded_cwd)
+            .join(provider_session_id)
+            .join("chat_history.jsonl");
+        fs::create_dir_all(history.parent().expect("history parent")).expect("history dir");
+        let user = serde_json::json!({
+            "type": "user",
+            "prompt_index": 1,
+            "content": "<user_query>\n上述问题修复\n</user_query>",
+        });
+        let progress = serde_json::json!({
+            "type": "assistant",
+            "content": "正在改按钮",
+            "tool_calls": [{"name": "edit"}],
+        });
+        let conclusion = serde_json::json!({
+            "type": "assistant",
+            "content": "悬停文案已补上",
+        });
+        fs::write(&history, format!("{user}\n{progress}\n{conclusion}\n"))
+            .expect("write grok history");
+
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        )
+        .with_grok_sessions_root(sessions_root);
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                &data_dir,
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete grok issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        let archived_log_path: String = connection
+            .query_row(
+                "SELECT log_path FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("archived path");
+        let content = fs::read_to_string(&archived_log_path).expect("read archive");
+        assert!(content.contains("上述问题修复"), "{content:?}");
+        assert!(content.contains("悬停文案已补上"), "{content:?}");
+        assert!(!content.contains("正在改按钮"), "{content:?}");
+        assert!(
+            !content.contains("接用按钮"),
+            "composer must not win: {content:?}"
+        );
+        let latest_output: Option<String> = connection
+            .query_row(
+                "SELECT latest_output FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("latest output");
+        assert_eq!(latest_output.as_deref(), Some("悬停文案已补上"));
+    }
+
+    fn encode_percent(cwd: &str) -> String {
+        let mut encoded = String::new();
+        for byte in cwd.as_bytes() {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+                encoded.push(*byte as char);
+            } else {
+                encoded.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        encoded
     }
 
     #[test]

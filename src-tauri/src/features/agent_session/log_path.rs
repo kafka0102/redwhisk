@@ -7,6 +7,7 @@ use crate::types::agent_session_stream::{AgentStreamEvent, AgentStreamEventEnvel
 use crate::types::errors::CommandError;
 
 use super::codex_tui_archive::{codex_session_archive_text, TuiSessionLogSource};
+use super::grok_tui_archive::grok_session_archive_text;
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
 use super::session_log_archive::read_json_archive_items;
 use super::terminal_archive_clean::{
@@ -150,14 +151,15 @@ fn build_tui_issue_session_archive(
 ) -> Result<IssueSessionArchive, CommandError> {
     let archive_path =
         build_issue_archive_log_path(data_dir, project_id, issue_number, session_number)?;
-    // TUI + Codex 优先取自 provider session log；解析不到回退既有 PTY 提取路径。
-    let body = match codex_session_archive_text(source) {
-        Some(text) => text,
-        None => {
-            let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
-            extract_tui_archive_text_from_snapshot(&snapshot)
-        }
-    };
+    // Codex 优先 session log；Grok 优先本机会话存储。都解析不到再回退终端提取。
+    let body =
+        match codex_session_archive_text(source).or_else(|| grok_session_archive_text(source)) {
+            Some(text) => text,
+            None => {
+                let snapshot = read_terminal_snapshot_for_archive(runtime_log_path)?;
+                extract_tui_archive_text_from_snapshot(&snapshot)
+            }
+        };
     let file_content = if body.is_empty() {
         String::new()
     } else {
@@ -303,3 +305,7 @@ mod subagent_archive_tests;
 #[cfg(test)]
 #[path = "session_log_archive_tests.rs"]
 mod archive_tests;
+
+#[cfg(test)]
+#[path = "log_path_grok_archive_tests.rs"]
+mod grok_archive_tests;

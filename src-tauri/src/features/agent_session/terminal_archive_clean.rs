@@ -302,6 +302,7 @@ fn light_clean_terminal_archive_text(text: &str) -> String {
                 || is_tool_start_line(trimmed)
                 || is_tree_output_line(trimmed)
                 || is_fold_line(trimmed)
+                || is_grok_composer_fragment_line(trimmed)
                 || is_process_or_chrome_line(trimmed))
         {
             continue;

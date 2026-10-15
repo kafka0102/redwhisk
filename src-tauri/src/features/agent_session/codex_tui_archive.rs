@@ -19,6 +19,10 @@ pub(crate) struct TuiSessionLogSource<'a> {
     pub(crate) agent_type: Option<&'a AgentType>,
     pub(crate) provider_session_id: Option<&'a str>,
     pub(crate) codex_home: Option<&'a Path>,
+    /// TUI 进程工作目录。Grok 会话存储按它编码目录名；Codex 不用。
+    pub(crate) session_cwd: Option<&'a Path>,
+    /// Grok 会话存储根。生产为 `~/.grok/sessions`；测试传入临时目录。
+    pub(crate) grok_sessions_root: Option<&'a Path>,
 }
 
 impl<'a> TuiSessionLogSource<'a> {
@@ -32,7 +36,20 @@ impl<'a> TuiSessionLogSource<'a> {
             agent_type,
             provider_session_id,
             codex_home,
+            session_cwd: None,
+            grok_sessions_root: None,
         }
+    }
+
+    /// Grok TUI 完成归档的会话目录与存储根。缺任一项则回退终端提取。
+    pub(crate) fn with_grok_session(
+        mut self,
+        session_cwd: Option<&'a Path>,
+        grok_sessions_root: Option<&'a Path>,
+    ) -> Self {
+        self.session_cwd = session_cwd;
+        self.grok_sessions_root = grok_sessions_root;
+        self
     }
 }
 
@@ -73,7 +90,7 @@ fn push_normalized_block(blocks: &mut Vec<String>, text: &str) {
 ///
 /// 有意保留行尾空白（含 Markdown 两空格硬换行），故不复用
 /// `terminal_archive_clean::finalize_archive_text`——后者会 trim 行尾。
-fn normalize_archive_block(text: &str) -> String {
+pub(super) fn normalize_archive_block(text: &str) -> String {
     let without_tags = text
         .replace("<issue-comment>", "")
         .replace("</issue-comment>", "");

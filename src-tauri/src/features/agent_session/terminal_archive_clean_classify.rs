@@ -72,6 +72,7 @@ pub(super) fn is_user_continuation_line(line: &str) -> bool {
     if is_process_or_chrome_line(trimmed)
         || is_tool_start_line(trimmed)
         || is_assistant_speech_lead_line(trimmed)
+        || is_grok_composer_fragment_line(trimmed)
     {
         return false;
     }
@@ -160,6 +161,10 @@ pub(super) fn is_process_or_chrome_line(line: &str) -> bool {
     if trimmed.starts_with('⚠') || trimmed.starts_with("Warning:") {
         return true;
     }
+    // Grok 输入框上方的光标提示，不是正文。
+    if trimmed == "▲" {
+        return true;
+    }
     if trimmed.starts_with("Tip:") {
         return true;
     }
@@ -167,6 +172,9 @@ pub(super) fn is_process_or_chrome_line(line: &str) -> bool {
         return true;
     }
     if is_tui_footer_chrome_line(trimmed) {
+        return true;
+    }
+    if is_grok_composer_fragment_line(trimmed) {
         return true;
     }
     if is_status_header_prompt(trimmed) {
@@ -315,6 +323,16 @@ pub(super) fn is_decorative_line(line: &str) -> bool {
 
 pub(super) fn is_tui_footer_chrome_line(line: &str) -> bool {
     line.contains("Shift+Tab") || line.contains("Ctrl+x:shortcuts")
+}
+
+/// Grok 全屏帧底部输入框：左右 `┆` 包住未提交残句。
+/// 已提交的 `›` / `❯` 用户行没有这对边框，不在这里丢。
+pub(super) fn is_grok_composer_fragment_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    let Some(rest) = trimmed.strip_prefix('┆') else {
+        return false;
+    };
+    rest.contains('┆')
 }
 
 pub(super) fn contains_sticky_status_chrome(line: &str) -> bool {

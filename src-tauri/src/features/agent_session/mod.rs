@@ -10,6 +10,7 @@ mod codex_tui_archive;
 mod command_snapshot;
 pub mod commands;
 mod content_search;
+mod grok_tui_archive;
 mod launch;
 mod lifecycle;
 mod log_path;
@@ -31,9 +32,9 @@ mod tui_hook_settings;
 mod tui_hook_socket;
 pub use tui_hook_dispatch::run_tui_hook_command_from_process;
 pub(crate) use tui_hook_dispatch::spawn_tui_hook_listener;
-pub(crate) use tui_hook_install::{query_codex_hooks_feature, CodexHooksFeature};
 #[cfg(test)]
 pub(crate) use tui_hook_install::parse_codex_hooks_feature;
+pub(crate) use tui_hook_install::{query_codex_hooks_feature, CodexHooksFeature};
 pub(crate) use tui_hook_settings::{
     apply_tui_hook_registration, channel_unavailable_error,
     detect_tui_hook_registration_with_feature, enable_codex_hooks_feature_file,
@@ -61,6 +62,7 @@ mod worktree_setup;
 
 pub(crate) use codex_session_id_capture::resolve_codex_home;
 pub(crate) use codex_tui_archive::TuiSessionLogSource;
+pub(crate) use grok_tui_archive::TuiArchiveSource;
 #[cfg(test)]
 pub(crate) use log_path::build_issue_archive_log_path;
 pub(crate) use log_path::{
