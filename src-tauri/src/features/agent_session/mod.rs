@@ -61,6 +61,7 @@ mod workspace_remote_ops;
 mod worktree_setup;
 
 pub(crate) use codex_session_id_capture::resolve_codex_home;
+#[cfg(test)]
 pub(crate) use codex_tui_archive::TuiSessionLogSource;
 pub(crate) use grok_tui_archive::TuiArchiveSource;
 #[cfg(test)]
