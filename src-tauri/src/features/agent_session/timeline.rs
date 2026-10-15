@@ -9,10 +9,12 @@ use crate::types::agent_session_stream::{
 use crate::types::errors::CommandError;
 
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
-use super::session_log_tail::{read_session_log_turn_window_located, OPEN_REPLAY_TURN_LIMIT};
-
+#[path = "timeline_replay.rs"]
+mod timeline_replay;
 #[path = "timeline_tool_merge.rs"]
 mod timeline_tool_merge;
+
+use timeline_replay::read_structured_timeline_log;
 
 use timeline_tool_merge::merge_tool_call_timeline_item;
 
@@ -51,103 +53,6 @@ pub(crate) fn read_timeline_from_log_path(
         effort: None,
         model: None,
     })
-}
-
-fn read_structured_timeline_log(
-    path: &Path,
-) -> Result<Option<StructuredTimelineHistory>, CommandError> {
-    let lines = match read_session_log_turn_window_located(path, OPEN_REPLAY_TURN_LIMIT) {
-        Ok(lines) => lines,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Some(StructuredTimelineHistory::default()));
-        }
-        Err(error) => return Err(agent_session_start_error(error)),
-    };
-    let mut saw_structured_line = false;
-    let mut history = StructuredTimelineHistory::default();
-    let mut pending_reasoning_started_at: Option<i64> = None;
-    let mut current_turn_id: Option<String> = None;
-
-    for line in lines {
-        let trimmed = line.text.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let Some(events) = structured_events_from_log_line(trimmed) else {
-            if saw_structured_line {
-                continue;
-            }
-            return Ok(None);
-        };
-        saw_structured_line = true;
-        for event in events {
-            match event {
-                AgentStreamEvent::TurnStarted { turn_id } => {
-                    current_turn_id = turn_id.or(current_turn_id);
-                }
-                AgentStreamEvent::Timeline {
-                    item,
-                    turn_id,
-                    timestamp,
-                    ..
-                } => {
-                    if turn_id.is_some() {
-                        current_turn_id = turn_id;
-                    }
-                    if !matches!(item, AgentTimelineItem::Reasoning { .. }) {
-                        finalize_pending_reasoning_duration(
-                            &mut history.items,
-                            pending_reasoning_started_at.take(),
-                            timestamp,
-                        );
-                    }
-
-                    let starts_reasoning_without_duration = matches!(
-                        &item,
-                        AgentTimelineItem::Reasoning {
-                            duration_ms: None,
-                            ..
-                        }
-                    );
-                    let has_explicit_reasoning_duration = matches!(
-                        &item,
-                        AgentTimelineItem::Reasoning {
-                            duration_ms: Some(_),
-                            ..
-                        }
-                    );
-
-                    push_compacted_timeline_item(
-                        &mut history.items,
-                        TimelineHistoryItem {
-                            item,
-                            log_offset: Some(line.offset),
-                            turn_id: current_turn_id.clone(),
-                        },
-                    );
-
-                    if has_explicit_reasoning_duration {
-                        pending_reasoning_started_at = None;
-                    } else if starts_reasoning_without_duration
-                        && pending_reasoning_started_at.is_none()
-                        && timestamp > 0
-                    {
-                        pending_reasoning_started_at = Some(timestamp);
-                    }
-                }
-                AgentStreamEvent::EffortChanged { effort } => history.effort = effort,
-                AgentStreamEvent::ModelChanged { model_id } => history.model = Some(model_id),
-                _ => {}
-            }
-        }
-    }
-
-    if saw_structured_line {
-        Ok(Some(history))
-    } else {
-        Ok(None)
-    }
 }
 
 pub(super) fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {

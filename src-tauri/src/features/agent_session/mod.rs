@@ -15,6 +15,7 @@ mod lifecycle;
 mod log_path;
 mod service;
 mod session_log_archive;
+mod session_log_assistant;
 mod session_log_line;
 mod session_log_lookup;
 mod session_log_tail;
@@ -55,6 +56,8 @@ pub(crate) use session_log_lookup::{
     read_assistant_texts_for_turn, read_timeline_item_at_log_offset,
 };
 
+#[cfg(test)]
+mod timeline_replay_tests;
 #[cfg(test)]
 mod timeline_tests;
 #[cfg(test)]
