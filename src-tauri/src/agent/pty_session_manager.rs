@@ -129,6 +129,8 @@ pub struct PtySpawnRequest {
     pub cols: u16,
     pub startup_check_total_ms: u64,
     pub startup_check_interval_ms: u64,
+    /// 仅 Codex / Grok TUI 传入 session 身份。项目终端保持空。
+    pub extra_env: Vec<(String, String)>,
 }
 
 pub struct PendingPtySession {
@@ -519,6 +521,9 @@ impl PtySessionManager {
         // 否则 nvm 在无 TTY 管道里 timeout，2s 截断后注入失败。解析失败回退继承 PATH。
         if let Some(resolved_path) = self.resolved_interactive_path() {
             command.env("PATH", resolved_path);
+        }
+        for (key, value) in &request.extra_env {
+            command.env(key, value);
         }
 
         let mut child = pair
@@ -1269,6 +1274,7 @@ fn ensure_child_started(
     interval_ms: u64,
 ) -> Result<(), String> {
     let iterations = total_ms / interval_ms;
+    let deadline = Instant::now() + Duration::from_millis(total_ms);
 
     for _ in 0..iterations {
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
@@ -1278,7 +1284,11 @@ fn ensure_child_started(
             ));
         }
 
-        thread::sleep(Duration::from_millis(interval_ms));
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(interval_ms)));
     }
 
     Ok(())
@@ -1523,6 +1533,7 @@ mod tests {
                     cols: 80,
                     startup_check_total_ms: 200,
                     startup_check_interval_ms: 20,
+                    extra_env: Vec::new(),
                 })
                 .expect("spawn pending")
         };
@@ -1703,6 +1714,7 @@ mod tests {
             cols: 80,
             startup_check_total_ms: 200,
             startup_check_interval_ms: 20,
+            extra_env: Vec::new(),
         }) {
             Ok(pending) => pending,
             Err(error) => {
@@ -1827,6 +1839,7 @@ mod tests {
             cols: 80,
             startup_check_total_ms: 200,
             startup_check_interval_ms: 20,
+            extra_env: Vec::new(),
         }) {
             Ok(pending) => pending,
             Err(error) => {

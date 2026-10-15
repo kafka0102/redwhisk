@@ -8,17 +8,55 @@
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::AppHandle;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
 
 use super::active_time::{active_ms_between, ActiveTimeSample};
 use super::resolve_codex_home;
+use super::tui_hook_turn::expire_recorded_silent_tui_hook_turns;
 use super::tui_session_metrics_sync::TuiSessionMetricsSync;
+use crate::agent::agent_event_broadcaster::AGENT_SESSION_LIST_CHANGED_EVENT;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::local_data_path::redwhisk_data_dir;
 
 /// 心跳间隔：每 5 秒推进一次活跃时长。
 const ACTIVE_TIME_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentSessionListChangedPayload {
+    project_id: i64,
+    session_id: Option<i64>,
+    reason: &'static str,
+}
+
+fn expire_silent_tui_turns(
+    app_handle: &AppHandle,
+    repository: &AgentSessionRepository<'_>,
+    now_ms: i64,
+) {
+    let expired = match expire_recorded_silent_tui_hook_turns(repository, now_ms) {
+        Ok(expired) => expired,
+        Err(error) => {
+            eprintln!("[agent_session] TUI hook 静默兜底写入失败：{error:?}");
+            return;
+        }
+    };
+    for session_id in expired {
+        let Ok(Some(project_id)) = repository.find_session_project_id(session_id) else {
+            continue;
+        };
+        let _ = app_handle.emit(
+            AGENT_SESSION_LIST_CHANGED_EVENT,
+            AgentSessionListChangedPayload {
+                project_id,
+                session_id: Some(session_id),
+                reason: "tui_hook_turn",
+            },
+        );
+    }
+}
 
 /// 启动活跃时长心跳后台线程；应用 setup 阶段调用一次。
 pub fn spawn_active_time_heartbeat(app_handle: AppHandle) {
@@ -43,6 +81,7 @@ fn run_active_time_heartbeat(app_handle: AppHandle) {
         let active_ms = active_ms_between(previous, current);
         previous = current;
         // 挂起 / 墙钟跳变的间隔零写入：json 活跃时长只对「运行中且 Turn 在跑」的会话累加。
+        // TUI 的 is_turn_running 由 hook 维护，不在这里累加墙钟。
         if active_ms > 0 {
             if let Err(error) =
                 repository.accumulate_active_time_ms(active_ms, current.wall_clock_ms)
@@ -50,6 +89,7 @@ fn run_active_time_heartbeat(app_handle: AppHandle) {
                 eprintln!("[agent_session] 活跃时长心跳写入失败：{error:?}");
             }
         }
+        expire_silent_tui_turns(&app_handle, &repository, current.wall_clock_ms);
         // 同一循环内推进 TUI + Codex session log 用量同步；与 json 活跃时长按
         // `display_mode` 互斥（本路径只覆盖 tui）。失败静默跳过、不中断线程。
         tui_metrics_sync.sync_once(&repository, codex_home.as_deref());

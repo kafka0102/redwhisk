@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { type AgentProfileRecord } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
+import { TuiHookRegistrationCard } from "./tui-hook-registration-card";
 import { useAgentCommandArgs } from "./use-agent-command-args";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -302,6 +303,8 @@ export function AgentsSettingsPanel({
           onSaved={onProfileSaved}
         />
       ) : null}
+
+      <TuiHookRegistrationCard />
     </>
   );
 }

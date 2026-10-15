@@ -74,11 +74,12 @@ fn local_data_initialization_creates_database_and_records_migration() {
             "0052_agent_sessions_session_token_usage",
             "0053_agent_profiles_deepseek",
             "0054_agent_profiles_display_order",
+            "0055_tui_hook_registration_preference",
         ]
     );
     assert_eq!(
         status.current_version,
-        Some("0054_agent_profiles_display_order".to_string())
+        Some("0055_tui_hook_registration_preference".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -161,12 +162,13 @@ fn migrations_are_idempotent_after_first_run() {
             "0052_agent_sessions_session_token_usage",
             "0053_agent_profiles_deepseek",
             "0054_agent_profiles_display_order",
+            "0055_tui_hook_registration_preference",
         ]
     );
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0054_agent_profiles_display_order".to_string())
+        Some("0055_tui_hook_registration_preference".to_string())
     );
 
     let schema_migrations_count: i64 = database
@@ -175,7 +177,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 54);
+    assert_eq!(schema_migrations_count, 55);
 }
 
 #[test]

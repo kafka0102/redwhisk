@@ -52,6 +52,7 @@ fn answers_osc_11_before_register_within_codex_probe_budget() {
             cols: 80,
             startup_check_total_ms: 0,
             startup_check_interval_ms: 1,
+            extra_env: Vec::new(),
         })
         .expect("spawn probe");
 

@@ -118,6 +118,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                     cols: 120,
                     startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
                     startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                    extra_env: Vec::new(),
                 }) {
                     Ok(pending) => pending,
                     Err(error) => {
@@ -240,6 +241,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                 cols: 120,
                 startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
                 startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                extra_env: Vec::new(),
             })
             .map_err(project_terminal_start_error)?;
 
@@ -1001,6 +1003,7 @@ impl<'connection> ProjectTerminalService<'connection> {
                 cols: 120,
                 startup_check_total_ms: STARTUP_CHECK_TOTAL_MS,
                 startup_check_interval_ms: STARTUP_CHECK_INTERVAL_MS,
+                extra_env: Vec::new(),
             })
             .map_err(project_terminal_start_error)?;
 

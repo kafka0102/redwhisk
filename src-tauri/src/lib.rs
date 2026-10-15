@@ -15,6 +15,8 @@ use app_state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use features::settings::agent_skill_commands::trigger_global_skill_refresh;
 use local_data_path::redwhisk_data_dir;
+
+pub use features::agent_session::run_tui_hook_command_from_process;
 use local_data_service::LocalDataService;
 use logging::Logger;
 use serde::Serialize;
@@ -71,6 +73,9 @@ pub fn run() {
             features::agent_session::active_time_heartbeat::spawn_active_time_heartbeat(
                 app.handle().clone(),
             );
+            state.set_tui_hook_channel_available(features::agent_session::spawn_tui_hook_listener(
+                app.handle().clone(),
+            ));
             // 异步播种内置 agent（ADR-0020）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
             // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；
             // 失败仅记日志，不影响应用可用性。
@@ -224,6 +229,10 @@ pub fn run() {
             features::settings::commands::delete_saved_agent_skill,
             features::settings::commands::get_user_profile,
             features::settings::commands::update_user_profile,
+            features::settings::tui_hook_commands::detect_tui_hook_registration,
+            features::settings::tui_hook_commands::install_tui_hook,
+            features::settings::tui_hook_commands::uninstall_tui_hook,
+            features::settings::tui_hook_commands::enable_codex_hooks_feature,
             features::app_update::commands::get_update_status,
             features::app_update::commands::dismiss_update_prompt,
             features::code_language::commands::ensure_code_language_host,
@@ -246,6 +255,10 @@ pub fn run() {
                         &[("projectId", &project_id.to_string())],
                     );
                 }
+            }
+            if let Ok(data_dir) = redwhisk_data_dir(app_handle) {
+                let _ =
+                    std::fs::remove_file(features::agent_session::tui_hook_socket_path(&data_dir));
             }
         }
     });

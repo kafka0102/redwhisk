@@ -348,3 +348,43 @@ export function deleteSavedAgentSkill(
     input,
   });
 }
+
+export type TuiHookAgentKind = "codex" | "grok";
+
+export interface TuiHookRegistrationStatus {
+  codexRegistered: boolean;
+  grokRegistered: boolean;
+  codexHooksFeatureEnabled: boolean;
+  channelAvailable: boolean;
+  registrationAllowed: boolean;
+}
+
+export interface TuiHookAgentInput {
+  agent: TuiHookAgentKind;
+}
+
+export function detectTuiHookRegistration(): Promise<TuiHookRegistrationStatus> {
+  return invokeCommand<TuiHookRegistrationStatus>(
+    "detect_tui_hook_registration",
+  );
+}
+
+export function installTuiHook(
+  input: TuiHookAgentInput,
+): Promise<TuiHookRegistrationStatus> {
+  return invokeCommand<TuiHookRegistrationStatus>("install_tui_hook", {
+    input,
+  });
+}
+
+export function uninstallTuiHook(
+  input: TuiHookAgentInput,
+): Promise<TuiHookRegistrationStatus> {
+  return invokeCommand<TuiHookRegistrationStatus>("uninstall_tui_hook", {
+    input,
+  });
+}
+
+export function enableCodexHooksFeature(): Promise<TuiHookRegistrationStatus> {
+  return invokeCommand<TuiHookRegistrationStatus>("enable_codex_hooks_feature");
+}

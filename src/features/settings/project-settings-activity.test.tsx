@@ -60,6 +60,16 @@ vi.mock("./settings-commands", async (importOriginal) => {
     saveAgentDisplayOrder: vi.fn(),
     saveAgentProfile: vi.fn(),
     saveProjectLabel: vi.fn(),
+    detectTuiHookRegistration: vi.fn(async () => ({
+      codexRegistered: false,
+      grokRegistered: false,
+      codexHooksFeatureEnabled: true,
+      channelAvailable: true,
+      registrationAllowed: false,
+    })),
+    installTuiHook: vi.fn(),
+    uninstallTuiHook: vi.fn(),
+    enableCodexHooksFeature: vi.fn(),
   };
 });
 
