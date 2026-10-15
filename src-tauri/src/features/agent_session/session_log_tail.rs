@@ -1,10 +1,12 @@
-//! 按 Turn 从 session log 末尾开窗。
+//! 从 session log 末尾开窗。
 //!
 //! Grok 会把同一条正文的完整快照逐帧追加，整文件可达几十 GB。
 //! 打开回放和交付评论都不能把整份日志读进内存。
+//! 打开回放按工具调用次数开窗；交付评论仍按 Turn 开窗。
 
 #[cfg(test)]
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -35,8 +37,14 @@ pub(super) fn tail_peak_bytes() -> usize {
     TAIL_PEAK.with(|peak| peak.get())
 }
 
-/// 打开回放与交付评论保留的 Turn 数（以 `turn_started` 计，含未结束的当前 Turn）。
+/// 交付评论保留的 Turn 数（以 `turn_started` 计，含未结束的当前 Turn）。
 pub(super) const OPEN_REPLAY_TURN_LIMIT: usize = 50;
+
+/// 打开回放保留的工具调用次数。
+///
+/// 一次命令行、搜索或其它工具调用算一次。同一次调用的多帧快照只算一次。
+/// 这不是 session Turn：一个 Turn 里可以有远超 50 次工具调用。
+pub(super) const OPEN_REPLAY_TOOL_CALL_LIMIT: usize = 50;
 
 const TAIL_CHUNK_START: u64 = 64 * 1024;
 const TAIL_CHUNK_MAX: u64 = 1024 * 1024;
@@ -72,7 +80,7 @@ pub(super) fn read_session_log_turn_window_located(
 
 const SESSION_LOG_LINE_MAX_BYTES: usize = 32 * 1024 * 1024;
 
-/// 逐行访问打开回放窗口。回调里的行字节只在本次调用期间有效。
+/// 逐行访问交付评论用的 Turn 窗口。回调里的行字节只在本次调用期间有效。
 /// 倒序定位 Turn 时只保留当前块和跨块的半行，不会把整份日志留在内存里。
 pub(super) fn for_each_session_log_line_in_turn_window(
     path: &Path,
@@ -80,6 +88,28 @@ pub(super) fn for_each_session_log_line_in_turn_window(
     visit: impl FnMut(u64, &[u8]) -> io::Result<()>,
 ) -> io::Result<()> {
     for_each_session_log_line_in_turn_window_chunked(path, turn_limit, TAIL_CHUNK_START, visit)
+}
+
+/// 逐行访问打开回放窗口：从文件末尾凑满 `tool_call_limit` 次不同的工具调用。
+/// 窗口起点是这第 N 次调用的最新一帧；更早的快照帧不会被读入。
+pub(super) fn for_each_session_log_line_in_tool_call_window(
+    path: &Path,
+    tool_call_limit: usize,
+    mut visit: impl FnMut(u64, &[u8]) -> io::Result<()>,
+) -> io::Result<()> {
+    if tool_call_limit == 0 {
+        return Ok(());
+    }
+    let mut seen = HashSet::<Vec<u8>>::new();
+    for_each_from_rewind(path, TAIL_CHUNK_START, &mut visit, |line| {
+        let Some(call_id) = tool_call_id(line) else {
+            return false;
+        };
+        if !seen.insert(call_id.to_vec()) {
+            return false;
+        }
+        seen.len() == tool_call_limit
+    })
 }
 
 #[cfg(test)]
@@ -118,26 +148,41 @@ fn for_each_session_log_line_in_turn_window_chunked(
     if turn_limit == 0 {
         return Ok(());
     }
+    let mut seen = 0usize;
+    for_each_from_rewind(path, chunk_start, &mut visit, |line| {
+        if !line_is_turn_started(line) {
+            return false;
+        }
+        seen += 1;
+        seen == turn_limit
+    })
+}
+
+/// 从文件末尾按块倒序找窗口起点。`is_window_start` 为真的那一行就是起点；
+/// 一路到文件头都没有，则从 0 开始。完整行数完即丢，内存只留下一块和至多一行的跨块残余。
+fn for_each_from_rewind(
+    path: &Path,
+    chunk_start: u64,
+    visit: &mut impl FnMut(u64, &[u8]) -> io::Result<()>,
+    mut is_window_start: impl FnMut(&[u8]) -> bool,
+) -> io::Result<()> {
     let mut file = File::open(path)?;
     let len = file.metadata()?.len();
     if len == 0 {
         return Ok(());
     }
-    let start = find_turn_window_start(&mut file, len, turn_limit, chunk_start.max(1))?;
-    read_lines_forward(&mut file, start, &mut visit)
+    let start = find_rewind_start(&mut file, len, chunk_start.max(1), &mut is_window_start)?;
+    read_lines_forward(&mut file, start, visit)
 }
 
-/// 从文件末尾按块倒序数 `turn_started`。凑满 `turn_limit` 时返回该行起点；
-/// 不足则返回 0。完整行数完即丢，内存只留下一块和至多一行的跨块残余。
-fn find_turn_window_start(
+fn find_rewind_start(
     file: &mut File,
     len: u64,
-    turn_limit: usize,
     mut chunk_size: u64,
+    is_window_start: &mut impl FnMut(&[u8]) -> bool,
 ) -> io::Result<u64> {
     let mut end = len;
     let mut carry: Vec<u8> = Vec::new();
-    let mut seen = 0usize;
     while end > 0 {
         let read_size = chunk_size.min(end);
         let start = end - read_size;
@@ -146,8 +191,7 @@ fn find_turn_window_start(
         file.read_exact(&mut buf)?;
         buf.append(&mut carry);
         note_tail_peak(buf.len());
-        if let Some(offset) = take_turn_window_start(&buf, start, start == 0, turn_limit, &mut seen)
-        {
+        if let Some(offset) = take_window_start(&buf, start, start == 0, is_window_start) {
             return Ok(offset);
         }
         if start == 0 {
@@ -170,12 +214,11 @@ fn find_turn_window_start(
     Ok(0)
 }
 
-fn take_turn_window_start(
+fn take_window_start(
     data: &[u8],
     data_offset: u64,
     at_file_start: bool,
-    turn_limit: usize,
-    seen: &mut usize,
+    is_window_start: &mut impl FnMut(&[u8]) -> bool,
 ) -> Option<u64> {
     let mut line_start = if at_file_start {
         0
@@ -196,15 +239,33 @@ fn take_turn_window_start(
         ranges.push((line_start, data.len()));
     }
     for (start, end) in ranges.into_iter().rev() {
-        if !line_is_turn_started(&data[start..end]) {
-            continue;
-        }
-        *seen += 1;
-        if *seen == turn_limit {
+        if is_window_start(&data[start..end]) {
             return Some(data_offset + start as u64);
         }
     }
     None
+}
+
+/// 结构化工具调用行的 `callId`。正文里的转义引号不会被当成字段。
+fn tool_call_id(line: &[u8]) -> Option<&[u8]> {
+    const TYPE_MARK: &[u8] = b"\"type\":\"tool_call\"";
+    const ID_MARK: &[u8] = b"\"callId\":\"";
+    if find_slice(line, TYPE_MARK).is_none() {
+        return None;
+    }
+    let start = find_slice(line, ID_MARK)?;
+    let value = &line[start + ID_MARK.len()..];
+    let end = value.iter().position(|byte| *byte == b'"')?;
+    if end == 0 {
+        return None;
+    }
+    Some(&value[..end])
+}
+
+fn find_slice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn read_lines_forward(

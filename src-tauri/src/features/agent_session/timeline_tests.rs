@@ -144,7 +144,7 @@ fn grok_same_message_update_after_tool_moves_conclusion_after_tools() {
 }
 
 #[test]
-fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
+fn read_timeline_opens_from_the_50th_tool_call_and_keeps_the_last_snapshot() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let log_path = temp_dir.path().join("turns.jsonl");
     let mut events = Vec::new();
@@ -212,12 +212,19 @@ fn read_timeline_opens_from_the_50th_turn_and_keeps_the_last_snapshot() {
 
     let history =
         read_timeline_from_log_path(log_path.to_str().expect("utf8 path")).expect("read timeline");
-    assert_eq!(history.items.len(), 100);
+    assert_eq!(history.items.len(), 99);
     assert_eq!(
         history.items.first().map(|entry| &entry.item),
-        Some(&AgentTimelineItem::AssistantMessage {
-            text: ("final-10".to_string()).into(),
-            message_id: Some("msg-10".to_string()),
+        Some(&AgentTimelineItem::ToolCall {
+            call_id: "call-10".to_string(),
+            name: "shell".to_string(),
+            detail: ToolCallDetail::Shell {
+                command: "echo".to_string(),
+                output: Some("done-10".to_string()),
+                exit_code: Some(0),
+            },
+            status: ToolCallStatus::Completed,
+            error: None,
             subagent_id: None,
         })
     );

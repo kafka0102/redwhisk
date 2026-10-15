@@ -1,4 +1,4 @@
-//! 打开回放：按 Turn 窗口流式折叠，不把快照帧留在内存里。
+//! 打开回放：按最近的工具调用开窗，流式折叠，不把快照帧留在内存里。
 
 use std::io;
 use std::path::Path;
@@ -11,7 +11,7 @@ use super::super::service::agent_session_start_error;
 use super::super::session_log_assistant::assistant_snapshot_meta;
 use super::super::session_log_line::read_session_log_line_at;
 use super::super::session_log_tail::{
-    for_each_session_log_line_in_turn_window, OPEN_REPLAY_TURN_LIMIT,
+    for_each_session_log_line_in_tool_call_window, OPEN_REPLAY_TOOL_CALL_LIMIT,
 };
 use super::{
     finalize_pending_reasoning_duration, push_compacted_timeline_item,
@@ -22,9 +22,11 @@ pub(super) fn read_structured_timeline_log(
     path: &Path,
 ) -> Result<Option<StructuredTimelineHistory>, CommandError> {
     let mut replay = OpenReplay::default();
-    match for_each_session_log_line_in_turn_window(path, OPEN_REPLAY_TURN_LIMIT, |offset, line| {
-        replay.apply_line(offset, line)
-    }) {
+    match for_each_session_log_line_in_tool_call_window(
+        path,
+        OPEN_REPLAY_TOOL_CALL_LIMIT,
+        |offset, line| replay.apply_line(offset, line),
+    ) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(Some(StructuredTimelineHistory::default()));
