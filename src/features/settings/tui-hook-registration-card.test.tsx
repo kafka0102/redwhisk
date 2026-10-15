@@ -52,30 +52,59 @@ describe("TuiHookRegistrationCard", () => {
     enableMock.mockResolvedValue(status({ codexHooksFeatureEnabled: true }));
   });
 
-  it("shows registered as not trusted and not in effect", async () => {
+  it("shows one compact row per agent without a TUI hook subtitle", async () => {
     renderCard();
 
-    expect(await screen.findByText("已注册")).toBeInTheDocument();
-    expect(screen.getByText("注册后 CLI 仍可能要求信任")).toBeInTheDocument();
+    expect(await screen.findByText("Codex")).toBeInTheDocument();
+    expect(screen.getByText("Grok")).toBeInTheDocument();
+    expect(screen.queryByText(/TUI hook/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Grok" })).toBeInTheDocument();
+  });
+
+  it("keeps long notices in the help tooltip instead of the card body", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    const registered = await screen.findByText("已注册");
     expect(screen.getByText("未注册")).toBeInTheDocument();
     expect(screen.queryByText("已信任")).not.toBeInTheDocument();
     expect(screen.queryByText("已生效")).not.toBeInTheDocument();
+    expect(screen.queryByText(/仍可能要求信任/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/只影响本机 RedWhisk 拉起的 Codex \/ Grok TUI/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/\/hooks/)).toBeInTheDocument();
-    expect(screen.getByText(/不会删除其它产品/)).toBeInTheDocument();
+      screen.queryByText(/只影响本机 RedWhisk 拉起的 Codex \/ Grok TUI/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/不会删除其它产品/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/hooks/)).not.toBeInTheDocument();
+
+    await user.hover(registered);
+    expect(await screen.findByText(/仍可能要求信任/)).toBeInTheDocument();
+
+    const help = screen.getByRole("button", { name: "说明" });
+    help.focus();
+    const helpTip = await screen.findByText(
+      /只影响本机 RedWhisk 拉起的 Codex \/ Grok TUI/,
+    );
+    expect(helpTip).toHaveTextContent(/\/hooks/);
+    expect(helpTip).toHaveTextContent(/不会删除其它产品/);
   });
 
-  it("disables install and shows channel unavailable without calling it active", async () => {
+  it("disables install and shows a short channel banner without calling it active", async () => {
     detectMock.mockResolvedValue(status({ channelAvailable: false }));
     renderCard();
 
-    expect(await screen.findByText("本机状态通道不可用")).toBeInTheDocument();
+    expect(await screen.findByText("通道不可用")).toBeInTheDocument();
+    expect(screen.getAllByText("通道不可用")).toHaveLength(1);
+    expect(screen.getByText("已注册")).toBeInTheDocument();
+    expect(screen.getByText("未注册")).toBeInTheDocument();
     expect(screen.queryByText("已生效")).not.toBeInTheDocument();
+    expect(screen.queryByText(/安装暂时无法完成/)).not.toBeInTheDocument();
     for (const button of screen.getAllByRole("button", { name: "安装" })) {
       expect(button).toBeDisabled();
     }
+
+    screen.getByRole("button", { name: "说明" }).focus();
+    expect(await screen.findByText(/安装暂时无法完成/)).toBeInTheDocument();
   });
 
   it("keeps enable-hooks separate from install", async () => {
@@ -89,9 +118,18 @@ describe("TuiHookRegistrationCard", () => {
     installMock.mockResolvedValue(featureOff);
     renderCard();
 
+    expect(screen.queryByText(/左侧 running 不会出现/)).not.toBeInTheDocument();
     const enable = await screen.findByRole("button", {
-      name: "允许写入 [features] hooks = true",
+      name: "开启 hooks",
     });
+    await user.hover(screen.getByText("hooks 未开启"));
+    expect(
+      await screen.findByText(/左侧 running 不会出现/),
+    ).toBeInTheDocument();
+    await user.hover(enable);
+    expect(
+      await screen.findByText("允许写入 [features] hooks = true"),
+    ).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "安装" })[0]);
     expect(installMock).toHaveBeenCalledWith({ agent: "codex" });
     expect(enableMock).not.toHaveBeenCalled();
@@ -114,6 +152,33 @@ describe("TuiHookRegistrationCard", () => {
     await user.click(screen.getAllByRole("button", { name: "安装" })[0]);
 
     expect(await screen.findByText("本机状态通道不可用")).toBeInTheDocument();
+  });
+
+  it("shows the same short labels and help tooltip in English", async () => {
+    detectMock.mockResolvedValue(
+      status({
+        channelAvailable: false,
+        codexHooksFeatureEnabled: false,
+        registrationAllowed: false,
+      }),
+    );
+    renderCard("en");
+
+    expect(await screen.findByText("Channel unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Hooks off")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enable hooks" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/running indicator will not appear/),
+    ).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: "About" }).focus();
+    expect(
+      await screen.findByText(
+        /Codex \/ Grok TUI sessions launched by RedWhisk/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("recheck only calls detect", async () => {

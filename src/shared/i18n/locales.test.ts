@@ -60,8 +60,12 @@ describe("locale resources", () => {
       "settings.tuiHookStatusRegistered",
       "settings.tuiHookStatusTrustMayBeRequired",
       "settings.tuiHookChannelUnavailable",
+      "settings.tuiHookChannelShort",
       "settings.tuiHookFeatureDisabled",
+      "settings.tuiHookFeatureShort",
+      "settings.tuiHookHelpLabel",
       "settings.tuiHookEnableFeature",
+      "settings.tuiHookEnableFeatureShort",
       "settings.tuiHookInstall",
       "settings.tuiHookUninstall",
       "settings.tuiHookRecheck",
@@ -85,6 +89,17 @@ describe("locale resources", () => {
     );
     expect(zhFlat["settings.tuiHookChannelUnavailable"]).toContain(
       "本机状态通道不可用",
+    );
+    expect(zhFlat["settings.tuiHookChannelShort"]).toBe("通道不可用");
+    expect(enFlat["settings.tuiHookChannelShort"]).toBe("Channel unavailable");
+    expect(zhFlat["settings.tuiHookFeatureShort"]).toBe("hooks 未开启");
+    expect(enFlat["settings.tuiHookFeatureShort"]).toBe("Hooks off");
+    expect(zhFlat["settings.tuiHookEnableFeatureShort"]).toBe("开启 hooks");
+    expect(enFlat["settings.tuiHookEnableFeatureShort"]).toBe("Enable hooks");
+    expect(zhFlat["settings.tuiHookHelpLabel"]).toBe("说明");
+    expect(enFlat["settings.tuiHookHelpLabel"]).toBe("About");
+    expect(zhFlat["settings.tuiHookEnableFeature"].length).toBeGreaterThan(
+      zhFlat["settings.tuiHookEnableFeatureShort"].length,
     );
   });
 
