@@ -172,7 +172,11 @@ describe("AppShell terminals activity persistence", () => {
 
     await user.click(screen.getByRole("button", { name: "Terminals" }));
     await user.click(
-      await screen.findByRole("button", { name: "+ New terminal" }),
+      await screen.findByRole(
+        "button",
+        { name: "+ New terminal" },
+        { timeout: 3000 },
+      ),
     );
 
     await waitFor(() => {

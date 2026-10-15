@@ -1274,6 +1274,7 @@ fn ensure_child_started(
     interval_ms: u64,
 ) -> Result<(), String> {
     let iterations = total_ms / interval_ms;
+    let deadline = Instant::now() + Duration::from_millis(total_ms);
 
     for _ in 0..iterations {
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
@@ -1283,7 +1284,11 @@ fn ensure_child_started(
             ));
         }
 
-        thread::sleep(Duration::from_millis(interval_ms));
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(interval_ms)));
     }
 
     Ok(())

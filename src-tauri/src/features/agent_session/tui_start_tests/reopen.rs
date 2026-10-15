@@ -347,10 +347,17 @@ fn reopen_completed_tui_resumes_in_existing_worktree_directory() {
         .expect("resume in existing worktree");
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    while !marker.exists() && std::time::Instant::now() < deadline {
+    let mut cwd = String::new();
+    while std::time::Instant::now() < deadline {
+        if let Ok(body) = fs::read_to_string(&marker) {
+            if !body.trim().is_empty() {
+                cwd = body;
+                break;
+            }
+        }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-    let cwd = fs::read_to_string(&marker).expect("cwd marker");
+    assert!(!cwd.trim().is_empty(), "cwd marker");
     let actual = std::fs::canonicalize(cwd.trim()).expect("canonicalize resumed cwd");
     let expected = std::fs::canonicalize(&worktree_dir).expect("canonicalize worktree");
     assert_eq!(actual, expected);
