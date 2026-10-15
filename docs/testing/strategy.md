@@ -16,10 +16,10 @@
 | 改动                         | 至少新增/调整                                                | 建议运行                                                  |
 | ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------- |
 | TS/TSX 行为                  | 同 feature 或 command client 测试                            | `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test` |
-| Rust 后端 / repository / Git | 同模块 unit 或 `src-tauri/tests/`                            | `cargo test`         |
-| Tauri DTO / command          | Rust command/service 测试 + 前端 command client/feature 测试 | 两端相应测试                                              |
-| migration                    | migration runner 或 repository 升级测试                      | `cargo test`，并检查旧数据回填                            |
-| provider stream / reducer    | Rust event mapper + 前端 reducer/卡片测试                    | 相应 Rust 与 Vitest 测试                                  |
+| Rust 后端 / repository / Git | 同模块 unit 或 `src-tauri/tests/`                            | `bash scripts/check-rust-compile.sh`；行为变更再跑对应 `cargo test` 过滤 |
+| Tauri DTO / command          | Rust command/service 测试 + 前端 command client/feature 测试 | `bash scripts/check-rust-compile.sh`，再跑两端相应测试    |
+| migration                    | migration runner 或 repository 升级测试                      | `bash scripts/check-rust-compile.sh`，再跑对应 `cargo test` 并检查旧数据回填 |
+| provider stream / reducer    | Rust event mapper + 前端 reducer/卡片测试                    | `bash scripts/check-rust-compile.sh`，再跑相应 Rust 与 Vitest 测试 |
 | 纯文档                       | 相对链接、索引、引用与路径                                   | `rg` / 链接检查；无需 lint/typecheck/test                 |
 | 依赖变更（`package.json` / lockfile） | 引用该依赖的模块与测试可解析；必要时补 mock                 | 先 `pnpm install`，再 `pnpm format`、`lint`、`typecheck`、相关 `test`，并必跑 `pnpm build` |
 
@@ -30,6 +30,12 @@
 - event 测试覆盖乱序/重复、`epoch` 变化或 provider 不支持语义的安全降级。
 - migration 测试不能只验证空库；涉及变更/回填时必须验证历史数据。
 
+## 正式构建与测试构建
+
+`src-tauri/Cargo.toml` 把 `warnings` 设为 `deny`。桌面应用编译库和二进制时没有 `cfg(test)`，只被测试引用的 `use` / `pub use` 会变成编译错误。`cargo test` 与 `cargo check --tests` 打开 `cfg(test)`，发现不了这类错误。
+
+改动 Rust 后用 [scripts/check-rust-compile.sh](../../scripts/check-rust-compile.sh) 做增量 `cargo check --offline --lib --bins`。不要用全量测试或 `tauri build` / `pnpm build:macos` 代替。行为是否正确仍靠过滤后的 `cargo test`。
+
 ## 完成前
 
-按 [AGENTS.md](../../AGENTS.md) 的门禁执行。依赖变更或切换含依赖 diff 的提交后先 `pnpm install`。运行 `pnpm format`、lint、typecheck、test、（按需）build 后都要复查 `git status --short`；文档改动至少核对内部相对链接、索引和引用。测试命令可能改写快照或生成文件时，同样复查工作区。注意：`vi.mock` 通过不代表真实依赖已安装，`typecheck`/`build` 仍会检查模块解析。
+按 [AGENTS.md](../../AGENTS.md) 的门禁执行。依赖变更或切换含依赖 diff 的提交后先 `pnpm install`。运行 `pnpm format`、lint、typecheck、test、（按需）build 后都要复查 `git status --short`；文档改动至少核对内部相对链接、索引和引用。测试命令可能改写快照或生成文件时，同样复查工作区。注意：`vi.mock` 通过不代表真实依赖已安装，`typecheck`/`build` 仍会检查模块解析。Rust 改动还要通过 `scripts/check-rust-compile.sh`，不能只跑 `cargo test`。

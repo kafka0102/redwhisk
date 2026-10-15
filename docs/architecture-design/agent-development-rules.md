@@ -103,6 +103,7 @@ service 通过统一入口开 `Transaction`，把 `&Transaction` 传给 reposito
 - 常规 `.rs` 文件原则上不得超过 500 行；编排主文件（`features/*/service.rs`、`features/*/commands.rs`）不得超过 800 行；任何文件硬上限 1000 行。
 - 新增或修改 Rust 功能时，如果目标文件接近或超过上述阈值，必须优先按职责聚簇拆分为同 feature 下的子模块，而不是继续追加代码。
 - 每次改动 Rust 后必须运行 `bash scripts/check-rust-file-size.sh`（见 `AGENTS.md` §5 质量门禁），越界且未在 `scripts/rust-file-size-allowlist.txt` 登记的文件会让脚本非零退出，任务不算完成。
+- 每次改动 Rust 后还必须运行 `bash scripts/check-rust-compile.sh`。这只检查正式构建会编译的库和二进制，不打包；口径见下文「测试与验证规则」。
 
 例外要求：
 
@@ -395,11 +396,21 @@ pnpm build
 
 （`pnpm build` = `typecheck + vite build`，用于捕获仅类型检查抓不到的模块解析与打包失败；与 `AGENTS.md` §5 第 5 项一致。）
 
-改动 Rust / Tauri / SQLite migrations 后，至少运行：
+改动 Rust / Tauri / SQLite migrations 后，必须运行：
 
 ```bash
-cd src-tauri && cargo test
+bash scripts/check-rust-compile.sh
 ```
+
+该脚本在 `src-tauri` 执行 `cargo check --offline --lib --bins`（dev profile）。它类型检查并借用检查桌面应用实际会编译的库和二进制，不生成机器码、不链接、不跑测试、不打 Tauri 或 macOS 安装包。依赖已缓存时是增量检查，用来代替做完再编一整包。
+
+检查实际代码，不能只看测试能否编过：
+
+- 新增或移动的 `use` / `pub use` / `pub(crate) use` 必须有同一 `cfg` 下的非测试调用方。只有 `#[cfg(test)]` 模块或测试函数引用时，重导出本身必须标 `#[cfg(test)]`。
+- 禁止用 `#[allow(unused_imports)]` 或 `#[allow(dead_code)]` 压掉 `src-tauri/Cargo.toml` 中 `warnings = "deny"` 造成的正式构建失败。
+- `cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替上面的脚本。这些命令以 `cfg(test)` 编译库，测试里的引用会藏住正式构建中的未使用导入。
+- 行为变更仍要跑相关的 `cargo test <filter>` 或 `cargo test --lib <module>`。这是测行为，不是测能否按正式口径编译。不要为了编译检查跑全量 `cargo test`，也不要跑 `pnpm build:macos`、`tauri build` 或 `cargo build --release`。
+- `--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。不要改跑整包构建。
 
 改动文档时，至少检查：
 

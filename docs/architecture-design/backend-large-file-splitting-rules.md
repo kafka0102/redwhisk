@@ -39,6 +39,7 @@
 
 ## 验收要求
 
-- 拆分后运行 `cargo test --lib`（集成测试有预存失败，回归判定用 `--lib`）。
+- 拆分后运行 `bash scripts/check-rust-compile.sh`。`cargo test --lib` 以 `cfg(test)` 编译，不能发现正式构建里的 unused import。
+- 拆分后运行 `cargo test --lib`（集成测试有预存失败，回归判定用 `--lib`）。这只覆盖行为回归。
 - 拆分后运行 `bash scripts/check-rust-file-size.sh --files <被拆分的主文件>`，确认主文件与新子文件均不再越界（除非新子文件本身进白名单，但新建文件不得入白名单，故必须直接达标）。
 - 提交说明记录新增子模块边界，便于后续继续拆同类文件。
