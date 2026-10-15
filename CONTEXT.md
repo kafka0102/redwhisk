@@ -299,7 +299,7 @@ Agent Session 启动瞬间从所属 Agent profile 拷贝并持久化的 displayM
 _Avoid_: 实时跟随 profile、内存-only 运行时标记
 
 **Issue Session 归档**：
-Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为整份会话日志逐行过滤后的 timeline JSONL，保留全部 Turn 的用户消息、助手消息和错误，不把工具输出留在内存，也不截成最近 50 个 Turn；同一 messageId 的助手消息只留最后一次完整正文；tui 为纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考与 TUI chrome 不入档），并按固定块间距排版；其中 Codex TUI 以本机 Codex session log 为事实源逐 turn 提取，定位或解析不到时回退终端提取。历史错误形态的 TUI 归档不自动迁移。
+Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为整份会话日志逐行过滤后的 timeline JSONL，保留全部 Turn 的用户消息、助手消息和错误，不把工具输出留在内存，也不截成最近 50 个 Turn；同一 messageId 的助手消息只留最后一次完整正文；tui 为纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考、输入框里未写完的残句与 TUI chrome 不入档），并按固定块间距排版。Codex TUI 以本机 Codex session log 为事实源逐 turn 提取；Grok TUI 以本机 `~/.grok/sessions` 中已提交的用户消息与助手正文为事实源，每轮只留最后一条已写完且其后不再调工具的助手正文，没有这种正文时该轮只留用户输入。两者定位或解析不到时都回退终端提取。历史错误形态的 TUI 归档不自动迁移。
 _Avoid_: 运行中 live log、完整审计仓、完整过程 transcript、SQLite 中的会话正文
 
 **Agent TUI 会话视图**：
