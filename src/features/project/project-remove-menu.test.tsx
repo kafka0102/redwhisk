@@ -14,6 +14,20 @@ vi.mock("./project-commands", () => ({
 const removeProjectFromListMock = vi.mocked(removeProjectFromList);
 const deleteProjectMock = vi.mocked(deleteProject);
 
+async function openMenuItem(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("button", { name: "更多操作" }));
+  const menuItem = await screen.findByRole("menuitem", { name });
+  // Base UI 弹层在定位完成前会把菜单项设为 pointer-events: none。
+  // userEvent.click 在元素不可点时会抛错；真实点击会落在遮罩上，菜单关闭且动作不触发。
+  await waitFor(() => {
+    expect(window.getComputedStyle(menuItem).pointerEvents).not.toBe("none");
+  });
+  await user.click(menuItem);
+}
+
 function renderMenu(
   overrides: {
     onOpenInCurrentWindow?: () => Promise<void>;
@@ -57,8 +71,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onOpenInCurrentWindow, onOpenInNewWindow } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("在当前窗口打开"));
+    await openMenuItem(user, "在当前窗口打开");
 
     await waitFor(() => {
       expect(onOpenInCurrentWindow).toHaveBeenCalledTimes(1);
@@ -70,8 +83,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onOpenInCurrentWindow, onOpenInNewWindow } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("在新窗口打开"));
+    await openMenuItem(user, "在新窗口打开");
 
     await waitFor(() => {
       expect(onOpenInNewWindow).toHaveBeenCalledTimes(1);
@@ -83,8 +95,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onRemoved } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("从列表中移除"));
+    await openMenuItem(user, "从列表中移除");
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
 
@@ -96,8 +107,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onRemoved } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("从列表中移除"));
+    await openMenuItem(user, "从列表中移除");
     const dialog = await screen.findByRole("dialog");
     await user.click(
       within(dialog).getByRole("button", { name: "从列表中移除" }),
@@ -115,8 +125,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onRemoved } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("删除项目"));
+    await openMenuItem(user, "删除项目");
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(
       "删除项目将移除该项目的所有数据，确定要删除项目吗？",
@@ -131,8 +140,7 @@ describe("ProjectRemoveMenu", () => {
     const user = userEvent.setup();
     const { onRemoved } = renderMenu();
 
-    await user.click(screen.getByRole("button", { name: "更多操作" }));
-    await user.click(await screen.findByText("删除项目"));
+    await openMenuItem(user, "删除项目");
     const dialog = await screen.findByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: "删除项目" }));
 

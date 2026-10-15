@@ -63,9 +63,23 @@ export function ProjectSwitcher({
     }
 
     function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setIsOpen(false);
+        return;
+      }
+
+      if (switcherRef.current?.contains(target)) {
+        return;
+      }
+
+      // 更多菜单通过 Portal 挂到 body，不在 switcher 节点内。
+      // 点菜单项时若先把弹层卸掉，菜单项的 click 不会触发。
       if (
-        event.target instanceof Node &&
-        switcherRef.current?.contains(event.target)
+        target instanceof Element &&
+        target.closest(
+          "[data-slot='dropdown-menu-content'], [data-slot='dialog-content'], [data-slot='dialog-overlay']",
+        )
       ) {
         return;
       }
