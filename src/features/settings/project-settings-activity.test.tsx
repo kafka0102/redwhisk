@@ -1253,6 +1253,49 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("saves the visible row order when dragend runs before drop", async () => {
+    const user = userEvent.setup();
+    const first: AgentProfileRecord = {
+      ...projectProfile,
+      id: 11,
+      name: "First Agent",
+      displayOrder: 1,
+    };
+    const second: AgentProfileRecord = {
+      ...globalProfile,
+      id: 22,
+      name: "Second Agent",
+      displayOrder: 2,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [first] };
+      return { profiles: [second] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    dropAgentRow("First Agent", "Second Agent", { dragEndBeforeDrop: true });
+
+    await waitFor(() =>
+      expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
+        profileIds: [22, 11],
+      }),
+    );
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Second Agent",
+      "First Agent",
+    ]);
+  });
+
   it("saves the visible row order when a reorder handle is dropped", async () => {
     const user = userEvent.setup();
     const first: AgentProfileRecord = {
@@ -2122,7 +2165,11 @@ function agentRowNames(rows: HTMLElement[]): string[] {
   });
 }
 
-function dropAgentRow(draggedName: string, targetName: string): void {
+function dropAgentRow(
+  draggedName: string,
+  targetName: string,
+  options?: { dragEndBeforeDrop?: boolean },
+): void {
   const dragged = screen.getByRole("button", {
     name: `Reorder ${draggedName}`,
   });
@@ -2132,15 +2179,22 @@ function dropAgentRow(draggedName: string, targetName: string): void {
   if (!targetRow) {
     throw new Error(`missing row for ${targetName}`);
   }
+  const store = new Map<string, string>();
   const dataTransfer = {
     effectAllowed: "move",
-    dropEffect: "move",
-    setData: () => {},
-    getData: () => "",
+    dropEffect: "copy",
+    setData: (type: string, value: string) => {
+      store.set(type, value);
+    },
+    getData: (type: string) => store.get(type) ?? "",
   };
   fireEvent.dragStart(dragged, { dataTransfer });
   fireEvent.dragOver(targetRow, { dataTransfer });
+  if (options?.dragEndBeforeDrop) {
+    fireEvent.dragEnd(dragged, { dataTransfer });
+  }
   fireEvent.drop(targetRow, { dataTransfer });
+  expect(dataTransfer.dropEffect).toBe("move");
 }
 
 function skillResponse(

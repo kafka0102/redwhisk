@@ -142,10 +142,21 @@ export function AgentsSettingsPanel({
                     className={profile.enabled ? undefined : "bg-muted/50"}
                     onDragOver={(event) => {
                       event.preventDefault();
+                      // 默认 dropEffect 是 copy，macOS 会显示绿色加号，且部分 WebKit
+                      // 不会把这次松手当成行内移动提交。
+                      event.dataTransfer.dropEffect = "move";
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      const draggedId = draggedProfileIdRef.current;
+                      const rawDraggedId =
+                        event.dataTransfer.getData("text/plain");
+                      const transferredId = Number(rawDraggedId);
+                      // WebKit 会在 drop 之前派发 dragend。优先读 dataTransfer，
+                      // 避免 dragend 先把 ref 清掉后这次松手被当成无效拖动。
+                      const draggedId =
+                        rawDraggedId !== "" && Number.isInteger(transferredId)
+                          ? transferredId
+                          : draggedProfileIdRef.current;
                       draggedProfileIdRef.current = null;
                       if (draggedId === null || draggedId === profile.id) {
                         return;
@@ -180,7 +191,9 @@ export function AgentsSettingsPanel({
                           );
                         }}
                         onDragEnd={() => {
-                          draggedProfileIdRef.current = null;
+                          window.setTimeout(() => {
+                            draggedProfileIdRef.current = null;
+                          }, 0);
                         }}
                       >
                         <GripVertical aria-hidden="true" className="size-4" />
