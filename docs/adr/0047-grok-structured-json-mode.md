@@ -62,7 +62,8 @@ Codex / Claude / OpenCode 同档的消息流渲染、turn 状态、用量统计�
    （session 快照仍是唯一事实源）。清理所有 locale 的 `displayModeTuiLocked` 锁定文案与只读分支。
 9. **明确的本期边界**：不做可回复审批卡（不注入 `--always-approve` 时不回复权限反向请求）、
    不做会话内模型 / reasoning effort 切换（能力位保持关闭）、不落库 `apiDurationMs` / 首 token
-   延迟、不读 `~/.grok/sessions` 做归档或补数、不做其它 `agent serve` / `leader` / `headless` 拓扑。
+   延迟、结构化模式不读 `~/.grok/sessions` 做归档或补数、不做其它 `agent serve` / `leader` / `headless` 拓扑。
+   Grok TUI 的 Issue 完成归档改由 ADR-0052 读取该存储；本条不再覆盖那条路径。
 10. **子进程 spawn 复用既有交互式 PATH**：抽出 `src-tauri/src/agent/provider_spawn.rs` 作为
     opencode / grok 共用的 spawn 命令构造，交互式 PATH 探测仍唯一来自 `command_detector`
     （见 agent-development-rules「交互式 PATH 三条不变量」），不新增第二套 PATH 逻辑。
