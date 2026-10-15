@@ -1263,6 +1263,47 @@ describe("messageStreamReducer", () => {
       expect(state.interruptedStopReason).toBe("max_tokens");
     });
 
+    it("end_turn 先于同轮收尾正文到达时，正文不把提交按钮留在执行中", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t1" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "c1",
+          name: "edit",
+          detail: { type: "edit", path: "CONTEXT.md" },
+          status: "completed",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_completed",
+          turnId: "t1",
+          usage: null,
+          stopReason: "end_turn",
+        },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "回复「开始」或「go」，我就出 spec、拆票并实现。",
+          messageId: "grok-msg-t1",
+        }),
+      });
+
+      expect(state.turnStatus).toBe("idle");
+      expect(state.turnInterrupted).toBe(false);
+      expect(state.entries[state.entries.length - 1]?.kind).toBe(
+        "assistant_message",
+      );
+    });
+
     it("turn_completed 末条为已完成 tool_call（无收尾消息）即使 end_turn 也判异常", () => {
       let state = createInitialState();
       state = messageStreamReducer(state, {
@@ -1289,8 +1330,7 @@ describe("messageStreamReducer", () => {
         },
       });
       expect(state.turnInterrupted).toBe(true);
-      // 启发式命中但 stop_reason 本身正常时，不展示误导性的 end_turn
-      expect(state.interruptedStopReason).toBeNull();
+      expect(state.interruptedStopReason).toBe("end_turn");
     });
 
     it("turn_started 清空上一轮的异常中断标记", () => {

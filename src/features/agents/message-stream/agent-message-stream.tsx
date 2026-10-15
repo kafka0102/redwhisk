@@ -23,6 +23,7 @@ import {
 
 import type { AgentTimelineItem } from "../agent-stream-types";
 import type { AgentType } from "../agent-session-commands";
+import { isCleanStopReason } from "./message-stream-reducer";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { useExpandTimelineEntry } from "./use-expand-timeline-entry";
@@ -364,7 +365,8 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
         {turnInterrupted ? (
           <div className="agents-message__entry agents-message__entry--interrupted">
             <p className="agents-message-stream__interrupted" role="status">
-              {interruptedStopReason
+              {interruptedStopReason &&
+              !isCleanStopReason(interruptedStopReason)
                 ? messages.agentsFeature.turnInterruptedWithReason(
                     interruptedStopReason,
                   )

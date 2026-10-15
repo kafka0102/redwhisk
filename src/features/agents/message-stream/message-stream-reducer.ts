@@ -62,7 +62,7 @@ export function createInitialState(): MessageStreamState {
 /** 视为「正常完成」的 SDK stop_reason。null（后端未上报）也算正常，避免误判。 */
 const CLEAN_STOP_REASONS = new Set(["end_turn", "stop_sequence"]);
 
-function isCleanStopReason(stopReason: string | null): boolean {
+export function isCleanStopReason(stopReason: string | null): boolean {
   return stopReason === null || CLEAN_STOP_REASONS.has(stopReason);
 }
 
@@ -295,7 +295,9 @@ function applyEvent(
         turnStatus: "idle",
         usage,
         turnInterrupted: interrupted,
-        interruptedStopReason: reasonAbnormal ? stopReason : null,
+        // 正常 end_turn 但末条还是已完成工具时也记下 stopReason。
+        // 紧随其后的收尾正文据此保持 idle，只清横幅，不恢复执行中。
+        interruptedStopReason: interrupted ? stopReason : null,
       };
     }
 
@@ -323,21 +325,30 @@ function applyEvent(
       // 收到「有产出」事件说明 turn 实际仍在跑。若此前被 spurious turn_completed
       // 误置异常中断态（含子代理被取消留下的 subagentInterrupted 横幅），恢复
       // running 并清红条，避免活动进行中却挂着「异常中断 / 工作流可能已暂停」。
-      const turnPatch =
+      // end_turn 先于收尾正文到达时，末条还是已完成工具，会被标成异常中断。
+      // 随后的正文只补进时间线并清掉横幅，不再把提交按钮拉回执行中。
+      // stop_reason 异常（如 max_tokens）的 idle 仍按产出恢复 running。
+      const activeWorkClearsInterrupt =
         (state.turnInterrupted || state.subagentInterrupted) &&
-        timelineItemIndicatesActiveWork(event.item)
-          ? ({
-              turnStatus: "running",
+        timelineItemIndicatesActiveWork(event.item);
+      const settlesCleanLateReply =
+        activeWorkClearsInterrupt &&
+        state.turnStatus === "idle" &&
+        state.interruptedStopReason !== null &&
+        isCleanStopReason(state.interruptedStopReason);
+      const turnPatch = settlesCleanLateReply
+        ? {
+            turnInterrupted: false,
+            interruptedStopReason: null,
+            subagentInterrupted: false,
+          }
+        : activeWorkClearsInterrupt
+          ? {
+              turnStatus: "running" as const,
               turnInterrupted: false,
               interruptedStopReason: null,
               subagentInterrupted: false,
-            } as Pick<
-              MessageStreamState,
-              | "turnStatus"
-              | "turnInterrupted"
-              | "interruptedStopReason"
-              | "subagentInterrupted"
-            >)
+            }
           : {};
       if (event.item.type === "subagent_roster") {
         const lastSeq =
