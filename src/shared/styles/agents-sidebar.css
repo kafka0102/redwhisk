@@ -23,6 +23,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
+  overflow: clip;
   padding: 14px 0 12px;
   background: var(--color-surface);
 }
@@ -142,11 +143,12 @@
   text-align: center;
 }
 
+/* 滚动只放在 .agents-sidebar__body。列表再设 overflow:auto 时高度仍随内容增长，
+   WebKit 会把超出视口的列表算进文档滚动高度。 */
 .agents-session-list {
   display: grid;
   align-content: start;
   min-height: 0;
-  overflow: auto;
 }
 
 .agents-session-list__empty {

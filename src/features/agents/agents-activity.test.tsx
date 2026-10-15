@@ -1818,14 +1818,17 @@ describe("AgentsActivity", () => {
     // 运行中的 session 会持续改消息流和列表高度；壳层必须退出锚定，并且 session
     // 列表必须在自己的有界滚动盒里，不能把高度变化溢出到活动栏所在的外壳。
     expect(appCss).toMatch(
-      /html,\s*body,\s*#root\s*\{[^}]*overflow-anchor:\s*none;/s,
+      /html,\s*body,\s*#root\s*\{[^}]*overflow:\s*hidden;[^}]*overflow:\s*clip;[^}]*overflow-anchor:\s*none;/s,
     );
     expect(appCss).toMatch(/\.app-shell\s*\{[^}]*overflow-anchor:\s*none;/s);
     expect(appCss).toMatch(
       /\.activity-bar__activities\s*\{[^}]*overflow-anchor:\s*none;/s,
     );
     expect(appCss).toMatch(
-      /\.agents-sidebar\s*\{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[^}]*overflow:\s*hidden;/s,
+      /\.agents-sidebar\s*\{[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[^}]*overflow:\s*hidden;[^}]*overflow:\s*clip;/s,
+    );
+    expect(appCss).toMatch(
+      /\.agents-session-list\s*\{(?![^}]*overflow\s*:)[^}]*\}/s,
     );
     expect(appCss).toMatch(
       /\.agents-sidebar__body\s*\{[^}]*min-height:\s*0;[^}]*overflow:\s*auto;[^}]*overflow-anchor:\s*none;/s,
