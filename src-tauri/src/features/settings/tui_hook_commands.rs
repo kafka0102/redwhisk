@@ -8,8 +8,9 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::tui_hook_preference_repository::TuiHookPreferenceRepository;
 use crate::features::agent_session::{
     apply_tui_hook_registration, channel_unavailable_error,
-    detect_tui_hook_registration_with_flags, enable_codex_hooks_feature_file,
-    uninstall_tui_hook_registration, TuiHookAgentKind, TuiHookRegistrationStatus,
+    detect_tui_hook_registration_with_feature, enable_codex_hooks_feature_file,
+    parse_codex_hooks_feature, query_codex_hooks_feature, uninstall_tui_hook_registration,
+    CodexHooksFeature, TuiHookAgentKind, TuiHookRegistrationStatus,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -25,7 +26,7 @@ pub fn detect_tui_hook_registration(
     state: State<'_, AppState>,
 ) -> Result<TuiHookRegistrationStatus, CommandError> {
     let data_dir = prepare_data_dir(&app, &state)?;
-    detect_in_data_dir(
+    detect_with_live_feature(
         &data_dir,
         &user_home()?,
         &current_exe_path()?,
@@ -49,6 +50,7 @@ pub fn install_tui_hook(
         &current_exe_path()?,
         input.agent,
         true,
+        query_codex_hooks_feature(Path::new("codex")),
     )
 }
 
@@ -65,6 +67,7 @@ pub fn uninstall_tui_hook(
         &current_exe_path()?,
         input.agent,
         state.tui_hook_channel_available(),
+        query_codex_hooks_feature(Path::new("codex")),
     )
 }
 
@@ -79,6 +82,7 @@ pub fn enable_codex_hooks_feature(
         &user_home()?,
         &current_exe_path()?,
         state.tui_hook_channel_available(),
+        query_codex_hooks_feature(Path::new("codex")),
     )
 }
 
@@ -87,13 +91,20 @@ pub(crate) fn detect_in_data_dir(
     home: &Path,
     command_path: &str,
     channel_available: bool,
+    codex_hooks_feature: Option<CodexHooksFeature>,
 ) -> Result<TuiHookRegistrationStatus, CommandError> {
     let database = open_database(data_dir)?;
     let allowed = TuiHookPreferenceRepository::new(&database.connection)
         .registration_allowed()
         .map_err(preference_error)?;
-    detect_tui_hook_registration_with_flags(home, command_path, channel_available, allowed)
-        .map_err(hook_io_error)
+    detect_tui_hook_registration_with_feature(
+        home,
+        command_path,
+        channel_available,
+        allowed,
+        codex_hooks_feature,
+    )
+    .map_err(hook_io_error)
 }
 
 pub(crate) fn install_in_data_dir(
@@ -102,13 +113,20 @@ pub(crate) fn install_in_data_dir(
     command_path: &str,
     agent: TuiHookAgentKind,
     channel_available: bool,
+    codex_hooks_feature: Option<CodexHooksFeature>,
 ) -> Result<TuiHookRegistrationStatus, CommandError> {
     apply_tui_hook_registration(home, agent, command_path, channel_available)?;
     let database = open_database(data_dir)?;
     TuiHookPreferenceRepository::new(&database.connection)
         .set_registration_allowed(true)
         .map_err(preference_error)?;
-    detect_in_data_dir(data_dir, home, command_path, channel_available)
+    detect_in_data_dir(
+        data_dir,
+        home,
+        command_path,
+        channel_available,
+        codex_hooks_feature,
+    )
 }
 
 pub(crate) fn uninstall_in_data_dir(
@@ -117,9 +135,16 @@ pub(crate) fn uninstall_in_data_dir(
     command_path: &str,
     agent: TuiHookAgentKind,
     channel_available: bool,
+    codex_hooks_feature: Option<CodexHooksFeature>,
 ) -> Result<TuiHookRegistrationStatus, CommandError> {
     uninstall_tui_hook_registration(home, agent, command_path).map_err(hook_io_error)?;
-    detect_in_data_dir(data_dir, home, command_path, channel_available)
+    detect_in_data_dir(
+        data_dir,
+        home,
+        command_path,
+        channel_available,
+        codex_hooks_feature,
+    )
 }
 
 pub(crate) fn enable_feature_in_data_dir(
@@ -127,10 +152,38 @@ pub(crate) fn enable_feature_in_data_dir(
     home: &Path,
     command_path: &str,
     channel_available: bool,
+    codex_hooks_feature: Option<CodexHooksFeature>,
 ) -> Result<TuiHookRegistrationStatus, CommandError> {
     enable_codex_hooks_feature_file(&home.join(".codex").join("config.toml"))
         .map_err(hook_io_error)?;
-    detect_in_data_dir(data_dir, home, command_path, channel_available)
+    detect_in_data_dir(
+        data_dir,
+        home,
+        command_path,
+        channel_available,
+        codex_hooks_feature,
+    )
+}
+
+fn detect_with_live_feature(
+    data_dir: &Path,
+    home: &Path,
+    command_path: &str,
+    channel_available: bool,
+) -> Result<TuiHookRegistrationStatus, CommandError> {
+    detect_in_data_dir(
+        data_dir,
+        home,
+        command_path,
+        channel_available,
+        query_codex_hooks_feature(Path::new("codex")),
+    )
+}
+
+/// 测试注入 `codex features list` 文本，避免依赖本机 Codex。
+#[cfg(test)]
+pub(crate) fn codex_feature_from_list(features_list: &str) -> Option<CodexHooksFeature> {
+    parse_codex_hooks_feature(features_list)
 }
 
 fn current_exe_path() -> Result<String, CommandError> {

@@ -1,10 +1,17 @@
 use std::fs;
 
-use super::tui_hook_install::codex_hooks_feature_enabled;
+use super::tui_hook_install::{parse_codex_hooks_feature, CodexHooksFeature};
 use super::tui_hook_settings::{
-    detect_tui_hook_registration, enable_codex_hooks_feature_file, install_tui_hook_registration,
-    uninstall_tui_hook_registration, TuiHookAgentKind,
+    detect_tui_hook_registration_with_feature, enable_codex_hooks_feature_file,
+    install_tui_hook_registration, uninstall_tui_hook_registration, TuiHookAgentKind,
 };
+
+fn detect(
+    home: &std::path::Path,
+    feature: Option<CodexHooksFeature>,
+) -> super::tui_hook_settings::TuiHookRegistrationStatus {
+    detect_tui_hook_registration_with_feature(home, COMMAND, false, false, feature).expect("detect")
+}
 
 const COMMAND: &str = "/Applications/RedWhisk.app/Contents/MacOS/redwhisk";
 
@@ -20,7 +27,10 @@ fn home_with_codex_config(config: &str) -> tempfile::TempDir {
 fn detect_reads_hook_files_without_spawning_and_reports_unregistered() {
     let home = home_with_codex_config("[features]\nhooks = false\n");
 
-    let status = detect_tui_hook_registration(home.path(), COMMAND).expect("detect");
+    let status = detect(
+        home.path(),
+        parse_codex_hooks_feature("hooks stable false\n"),
+    );
 
     assert!(!status.codex_registered);
     assert!(!status.grok_registered);
@@ -37,7 +47,10 @@ fn install_codex_does_not_write_config_when_hooks_feature_is_false() {
     install_tui_hook_registration(home.path(), TuiHookAgentKind::Codex, COMMAND).expect("install");
 
     assert_eq!(fs::read_to_string(&config_path).expect("config"), original);
-    let status = detect_tui_hook_registration(home.path(), COMMAND).expect("detect");
+    let status = detect(
+        home.path(),
+        parse_codex_hooks_feature("hooks stable false\n"),
+    );
     assert!(status.codex_registered);
     assert!(!status.codex_hooks_feature_enabled);
     assert!(!status.grok_registered);
@@ -51,7 +64,6 @@ fn enable_codex_hooks_feature_writes_only_after_separate_confirm() {
     enable_codex_hooks_feature_file(&config_path).expect("enable");
 
     let updated = fs::read_to_string(&config_path).expect("config");
-    assert!(codex_hooks_feature_enabled(&updated));
     assert!(updated.contains("hooks = true") || updated.contains("hooks=true"));
 }
 
@@ -79,8 +91,12 @@ fn uninstall_codex_keeps_other_product_hooks() {
     let text = fs::read_to_string(&hooks).expect("hooks");
     assert!(text.contains("open-island"));
     assert!(!text.contains(COMMAND));
-    let status = detect_tui_hook_registration(home.path(), COMMAND).expect("detect");
+    let status = detect(
+        home.path(),
+        parse_codex_hooks_feature("hooks stable true\n"),
+    );
     assert!(!status.codex_registered);
+    assert!(status.codex_hooks_feature_enabled);
 }
 
 #[test]
@@ -97,7 +113,7 @@ fn grok_install_and_uninstall_only_touch_redwhisk_json() {
         fs::read(hooks_dir.join("open-island.json")).expect("bytes"),
         open_island
     );
-    let status = detect_tui_hook_registration(home.path(), COMMAND).expect("detect");
+    let status = detect(home.path(), None);
     assert!(status.grok_registered);
     assert!(!status.codex_registered);
 

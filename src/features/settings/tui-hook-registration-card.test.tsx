@@ -101,6 +101,21 @@ describe("TuiHookRegistrationCard", () => {
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 
+  it("shows an alert when install fails", async () => {
+    const user = userEvent.setup();
+    installMock.mockRejectedValue({
+      code: "SETTINGS_PERSISTENCE_FAILED",
+      message: "Failed to update the TUI hook registration.",
+      reason: "channelUnavailable",
+    });
+    renderCard();
+    await screen.findByText("已注册");
+
+    await user.click(screen.getAllByRole("button", { name: "安装" })[0]);
+
+    expect(await screen.findByText("本机状态通道不可用")).toBeInTheDocument();
+  });
+
   it("recheck only calls detect", async () => {
     const user = userEvent.setup();
     renderCard();

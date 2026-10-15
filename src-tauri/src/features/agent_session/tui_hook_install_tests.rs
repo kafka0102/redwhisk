@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use super::tui_hook_install::{
-    codex_hooks_feature_enabled, install_codex_hooks, install_grok_hooks, uninstall_codex_hooks,
+    install_codex_hooks, install_grok_hooks, parse_codex_hooks_feature, uninstall_codex_hooks,
     uninstall_grok_hooks,
 };
 
@@ -169,7 +169,6 @@ fn codex_hooks_already_enabled_does_not_rewrite_config_even_when_confirm_is_set(
     let original = "model = \"gpt-5\"\n";
     fs::write(&config, original).expect("config");
 
-    assert!(codex_hooks_feature_enabled(original));
     install_codex_hooks(&hooks, &config, COMMAND, true).expect("install");
 
     assert_eq!(fs::read_to_string(&config).expect("config"), original);
@@ -185,14 +184,11 @@ fn codex_hooks_false_writes_feature_only_after_confirm() {
     let config = dir.path().join("config.toml");
     let disabled = "model = \"gpt-5\"\n[features]\nhooks = false\n";
     fs::write(&config, disabled).expect("config");
-    assert!(!codex_hooks_feature_enabled(disabled));
-
     install_codex_hooks(&hooks, &config, COMMAND, false).expect("install without confirm");
     assert_eq!(fs::read_to_string(&config).expect("config"), disabled);
 
     install_codex_hooks(&hooks, &config, COMMAND, true).expect("install with confirm");
     let updated = fs::read_to_string(&config).expect("config");
-    assert!(codex_hooks_feature_enabled(&updated));
     assert!(updated.contains("hooks = true") || updated.contains("hooks=true"));
     assert!(!updated.contains("codex_hooks"));
 }
@@ -281,4 +277,20 @@ fn grok_uninstall_keeps_foreign_commands_and_deletes_file_only_when_empty() {
             "{event}"
         );
     }
+}
+
+#[test]
+fn features_list_marks_stable_hooks_enabled_and_explicit_false() {
+    let listed = "\
+hooks                                    stable             true
+plugin_hooks                             removed            false
+";
+    let stable = parse_codex_hooks_feature(listed).expect("hooks row");
+    assert!(stable.is_stable_and_enabled());
+    assert!(!stable.effective_value_is_false());
+
+    let disabled = parse_codex_hooks_feature("hooks  under development  false\n").expect("row");
+    assert!(!disabled.is_stable_and_enabled());
+    assert!(disabled.effective_value_is_false());
+    assert!(parse_codex_hooks_feature("apps stable true\n").is_none());
 }

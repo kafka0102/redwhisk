@@ -1,9 +1,15 @@
 use std::fs;
 
 use super::tui_hook_commands::{
-    detect_in_data_dir, enable_feature_in_data_dir, install_in_data_dir, uninstall_in_data_dir,
+    codex_feature_from_list, detect_in_data_dir, enable_feature_in_data_dir, install_in_data_dir,
+    uninstall_in_data_dir,
 };
+
 use crate::features::agent_session::TuiHookAgentKind;
+
+fn feature_off() -> Option<crate::features::agent_session::CodexHooksFeature> {
+    codex_feature_from_list("hooks stable false\n")
+}
 
 const COMMAND: &str = "/tmp/redwhisk-test-bin";
 
@@ -22,18 +28,21 @@ fn install_records_preference_and_does_not_rewrite_disabled_hooks_feature() {
     let config = home.path().join(".codex/config.toml");
     let original = fs::read_to_string(&config).expect("config");
 
-    let status = install_in_data_dir(
+    install_in_data_dir(
         data.path(),
         home.path(),
         COMMAND,
         TuiHookAgentKind::Codex,
         true,
+        feature_off(),
     )
     .expect("install");
 
-    assert!(status.codex_registered);
-    assert!(status.registration_allowed);
-    assert!(!status.codex_hooks_feature_enabled);
+    let detected =
+        detect_in_data_dir(data.path(), home.path(), COMMAND, true, feature_off()).expect("detect");
+    assert!(detected.codex_registered);
+    assert!(detected.registration_allowed);
+    assert!(!detected.codex_hooks_feature_enabled);
     assert_eq!(fs::read_to_string(&config).expect("config"), original);
     let hooks = fs::read_to_string(home.path().join(".codex/hooks.json")).expect("hooks");
     assert!(hooks.contains("hook --source codex"));
@@ -50,6 +59,7 @@ fn install_refuses_when_channel_unavailable_and_keeps_preference_false() {
         COMMAND,
         TuiHookAgentKind::Codex,
         false,
+        feature_off(),
     )
     .expect_err("channel");
 
@@ -66,10 +76,12 @@ fn detect_reads_installed_hook_without_spawning() {
         COMMAND,
         TuiHookAgentKind::Grok,
         true,
+        feature_off(),
     )
     .expect("install grok");
 
-    let status = detect_in_data_dir(data.path(), home.path(), COMMAND, true).expect("detect");
+    let status =
+        detect_in_data_dir(data.path(), home.path(), COMMAND, true, feature_off()).expect("detect");
 
     assert!(status.grok_registered);
     assert!(!status.codex_registered);
@@ -85,6 +97,7 @@ fn uninstall_removes_only_the_requested_agent() {
         COMMAND,
         TuiHookAgentKind::Codex,
         true,
+        feature_off(),
     )
     .expect("install codex");
     install_in_data_dir(
@@ -93,18 +106,22 @@ fn uninstall_removes_only_the_requested_agent() {
         COMMAND,
         TuiHookAgentKind::Grok,
         true,
+        feature_off(),
     )
     .expect("install grok");
 
-    let status = uninstall_in_data_dir(
+    uninstall_in_data_dir(
         data.path(),
         home.path(),
         COMMAND,
         TuiHookAgentKind::Codex,
         true,
+        feature_off(),
     )
     .expect("uninstall");
 
+    let status =
+        detect_in_data_dir(data.path(), home.path(), COMMAND, true, feature_off()).expect("detect");
     assert!(!status.codex_registered);
     assert!(status.grok_registered);
     assert!(status.registration_allowed);
@@ -117,10 +134,24 @@ fn uninstall_removes_only_the_requested_agent() {
 fn enable_feature_is_separate_from_install() {
     let (data, home) = roots();
 
-    let status =
-        enable_feature_in_data_dir(data.path(), home.path(), COMMAND, true).expect("enable");
+    enable_feature_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        true,
+        codex_feature_from_list("hooks stable true\n"),
+    )
+    .expect("enable");
 
-    assert!(status.codex_hooks_feature_enabled);
-    assert!(!status.codex_registered);
+    let detected = detect_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        true,
+        codex_feature_from_list("hooks stable true\n"),
+    )
+    .expect("detect after enable");
+    assert!(detected.codex_hooks_feature_enabled);
+    assert!(!detected.codex_registered);
     assert!(!home.path().join(".codex/hooks.json").exists());
 }

@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 use super::tui_hook_install::{
-    codex_hooks_feature_enabled, enable_codex_hooks_feature, install_codex_hooks,
-    install_grok_hooks, uninstall_codex_hooks, uninstall_grok_hooks,
+    enable_codex_hooks_feature, install_codex_hooks, install_grok_hooks, is_redwhisk_hook_command,
+    uninstall_codex_hooks, uninstall_grok_hooks,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,25 +38,24 @@ impl TuiHookRegistrationStatus {
     }
 }
 
-pub fn detect_tui_hook_registration(
-    home: &Path,
-    command_path: &str,
-) -> io::Result<TuiHookRegistrationStatus> {
-    detect_tui_hook_registration_with_flags(home, command_path, false, false)
-}
-
-pub fn detect_tui_hook_registration_with_flags(
+/// 注册状态只读 hook 文件。`codex_hooks_feature` 来自调用方已跑过的 `codex features list`，
+/// 本函数不再读 `config.toml`，也不启动 Codex agent。
+pub fn detect_tui_hook_registration_with_feature(
     home: &Path,
     command_path: &str,
     channel_available: bool,
     registration_allowed: bool,
+    codex_hooks_feature: Option<super::tui_hook_install::CodexHooksFeature>,
 ) -> io::Result<TuiHookRegistrationStatus> {
-    let codex_hooks = codex_hooks_path(home);
-    let config = read_optional(&codex_config_path(home))?;
     Ok(TuiHookRegistrationStatus {
-        codex_registered: file_contains_our_command(&codex_hooks, command_path, "codex")?,
+        codex_registered: file_contains_our_command(
+            &codex_hooks_path(home),
+            command_path,
+            "codex",
+        )?,
         grok_registered: file_contains_our_command(&grok_hook_path(home), command_path, "grok")?,
-        codex_hooks_feature_enabled: codex_hooks_feature_enabled(&config),
+        codex_hooks_feature_enabled: codex_hooks_feature
+            .is_none_or(|feature| !feature.effective_value_is_false()),
         channel_available,
         registration_allowed,
     })
@@ -136,16 +135,9 @@ fn file_contains_our_command(path: &Path, command_path: &str, source: &str) -> i
         return Ok(false);
     }
     let text = std::fs::read_to_string(path)?;
-    let needle = format!("{command_path} hook --source {source}");
-    Ok(text.contains(&needle))
-}
-
-fn read_optional(path: &Path) -> io::Result<String> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(text),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
-        Err(error) => Err(error),
-    }
+    Ok(text
+        .lines()
+        .any(|line| is_redwhisk_hook_command(line, command_path, source)))
 }
 
 fn hook_io_error(error: io::Error) -> CommandError {

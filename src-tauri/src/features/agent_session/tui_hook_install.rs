@@ -6,6 +6,7 @@
 use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
@@ -112,24 +113,77 @@ pub fn uninstall_grok_hooks(hooks_dir: &Path, command_path: &str) -> io::Result<
     }
 }
 
-/// 只读 `config.toml` 文本。`[features] hooks` 缺省或非 false 视为已开启。
-/// 不读 `codex_hooks`，不 spawn agent。
-pub fn codex_hooks_feature_enabled(config_toml: &str) -> bool {
-    let mut in_features = false;
-    for line in config_toml.split('\n') {
-        let trimmed = line.trim().trim_end_matches('\r');
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            in_features = trimmed == "[features]";
-            continue;
-        }
-        if !in_features {
-            continue;
-        }
-        if let Some(value) = hooks_assignment_value(trimmed) {
-            return value != "false";
-        }
+/// `codex features list` 一行：`name  stage  enabled`。
+/// `hooks` 已是 stable 且当前为 true 时视为默认开启，调用方不得改 `config.toml`。
+/// 不解析 `codex_hooks`。这是只读查询，不是启动 Codex agent。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CodexHooksFeature {
+    pub stage: CodexFeatureStage,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CodexFeatureStage {
+    Stable,
+    Other,
+}
+
+impl CodexHooksFeature {
+    pub fn is_stable_and_enabled(self) -> bool {
+        self.stage == CodexFeatureStage::Stable && self.enabled
     }
-    true
+
+    /// 设置页只在有效值为 false 时给出单独的写入动作。
+    pub fn effective_value_is_false(self) -> bool {
+        !self.enabled
+    }
+}
+
+pub fn parse_codex_hooks_feature(features_list: &str) -> Option<CodexHooksFeature> {
+    for line in features_list.split('\n') {
+        let mut parts = line.split_whitespace();
+        let Some(name) = parts.next() else {
+            continue;
+        };
+        if name != "hooks" {
+            continue;
+        }
+        let stage = parts.next().unwrap_or("");
+        let enabled = parts.next().unwrap_or("");
+        return Some(CodexHooksFeature {
+            stage: if stage == "stable" {
+                CodexFeatureStage::Stable
+            } else {
+                CodexFeatureStage::Other
+            },
+            enabled: enabled == "true",
+        });
+    }
+    None
+}
+
+/// 跑 `codex features list`。命令缺失、非 0、或输出里没有 `hooks` 行时返回 `None`。
+/// 不启动 Codex agent 会话。
+pub fn query_codex_hooks_feature(codex_bin: &Path) -> Option<CodexHooksFeature> {
+    let output = Command::new(codex_bin)
+        .args(["features", "list"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    parse_codex_hooks_feature(&text)
+}
+
+/// 识别 RedWhisk 自己的 hook command。安装、卸载、检测共用这一处。
+pub fn is_redwhisk_hook_command(command: &str, command_path: &str, source: &str) -> bool {
+    !command_path.is_empty()
+        && command.contains(command_path)
+        && command.contains(&format!("--source {source}"))
 }
 
 pub fn enable_codex_hooks_feature(config_path: &Path) -> io::Result<()> {
@@ -138,7 +192,7 @@ pub fn enable_codex_hooks_feature(config_path: &Path) -> io::Result<()> {
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error),
     };
-    if codex_hooks_feature_enabled(&text) {
+    if !config_hooks_explicitly_false(&text) {
         return Ok(());
     }
     let updated = rewrite_features_hooks_true(&text);
@@ -183,6 +237,21 @@ fn replace_hooks_false(line: &str) -> String {
     format!("{key}={}", value.replacen("false", "true", 1))
 }
 
+fn config_hooks_explicitly_false(config_toml: &str) -> bool {
+    let mut in_features = false;
+    for line in config_toml.split('\n') {
+        let trimmed = line.trim().trim_end_matches('\r');
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_features = trimmed == "[features]";
+            continue;
+        }
+        if in_features && hooks_assignment_value(trimmed) == Some("false") {
+            return true;
+        }
+    }
+    false
+}
+
 fn hooks_assignment_value(trimmed: &str) -> Option<&str> {
     let without_comment = trimmed.split('#').next().unwrap_or(trimmed).trim();
     let (key, value) = without_comment.split_once('=')?;
@@ -220,9 +289,7 @@ fn hook_command(command_path: &str, source: &str) -> String {
 }
 
 fn is_our_command(command: &str, command_path: &str, source: &str) -> bool {
-    command.contains(command_path)
-        && command.contains(&format!("--source {source}"))
-        && !command_path.is_empty()
+    is_redwhisk_hook_command(command, command_path, source)
 }
 
 fn command_hook(command: &str, timeout: Option<u64>) -> Value {

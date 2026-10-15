@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui";
+import { useAlertDialog } from "@/components/ui/use-alert-dialog";
+import { getCommandErrorMessage } from "@/shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import {
   detectTuiHookRegistration,
@@ -13,11 +15,19 @@ import {
 
 export function TuiHookRegistrationCard() {
   const { t } = useI18n();
+  const { alertDialog, showAlert } = useAlertDialog();
   const [status, setStatus] = useState<TuiHookRegistrationStatus | null>(null);
 
+  const reportFailure = useCallback(
+    (error: unknown) => {
+      showAlert({ message: getCommandErrorMessage(error, t), type: "error" });
+    },
+    [showAlert, t],
+  );
+
   const refresh = useCallback(() => {
-    void detectTuiHookRegistration().then(setStatus);
-  }, []);
+    void detectTuiHookRegistration().then(setStatus).catch(reportFailure);
+  }, [reportFailure]);
 
   useEffect(() => {
     refresh();
@@ -27,6 +37,7 @@ export function TuiHookRegistrationCard() {
 
   return (
     <section className="mt-4 min-w-0 rounded-[var(--radius-card)] border border-border bg-card p-4">
+      {alertDialog}
       <h3 className="text-sm font-medium text-foreground">
         {t("settings.tuiHookTitle")}
       </h3>
@@ -47,6 +58,7 @@ export function TuiHookRegistrationCard() {
             installDisabled={installDisabled}
             showFeatureAction={!status.codexHooksFeatureEnabled}
             onChanged={setStatus}
+            onFailed={reportFailure}
             onRecheck={refresh}
           />
           <TuiHookAgentRow
@@ -56,6 +68,7 @@ export function TuiHookRegistrationCard() {
             installDisabled={installDisabled}
             showFeatureAction={false}
             onChanged={setStatus}
+            onFailed={reportFailure}
             onRecheck={refresh}
           />
         </ul>
@@ -71,6 +84,7 @@ interface TuiHookAgentRowProps {
   installDisabled: boolean;
   showFeatureAction: boolean;
   onChanged: (status: TuiHookRegistrationStatus) => void;
+  onFailed: (error: unknown) => void;
   onRecheck: () => void;
 }
 
@@ -81,6 +95,7 @@ function TuiHookAgentRow({
   installDisabled,
   showFeatureAction,
   onChanged,
+  onFailed,
   onRecheck,
 }: TuiHookAgentRowProps) {
   const { t } = useI18n();
@@ -103,7 +118,7 @@ function TuiHookAgentRow({
             type="button"
             variant="outline"
             onClick={() => {
-              void enableCodexHooksFeature().then(onChanged);
+              void enableCodexHooksFeature().then(onChanged).catch(onFailed);
             }}
           >
             {t("settings.tuiHookEnableFeature")}
@@ -115,7 +130,7 @@ function TuiHookAgentRow({
         variant="outline"
         disabled={installDisabled}
         onClick={() => {
-          void installTuiHook({ agent }).then(onChanged);
+          void installTuiHook({ agent }).then(onChanged).catch(onFailed);
         }}
       >
         {t("settings.tuiHookInstall")}
@@ -124,7 +139,7 @@ function TuiHookAgentRow({
         type="button"
         variant="outline"
         onClick={() => {
-          void uninstallTuiHook({ agent }).then(onChanged);
+          void uninstallTuiHook({ agent }).then(onChanged).catch(onFailed);
         }}
       >
         {t("settings.tuiHookUninstall")}

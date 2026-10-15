@@ -92,8 +92,12 @@ pub fn apply_tui_hook_event(
     if snapshot.agent_type != event.source.as_db_str() {
         return Ok(unchanged);
     }
-    match decide_turn_flag(event.source, &event.event_name, &event.payload, snapshot.is_turn_running)
-    {
+    match decide_turn_flag(
+        event.source,
+        &event.event_name,
+        &event.payload,
+        snapshot.is_turn_running,
+    ) {
         TurnFlagDecision::Ignore => Ok(unchanged),
         TurnFlagDecision::Start => {
             repository.mark_tui_hook_turn_started(event.session_id, now)?;
@@ -105,7 +109,7 @@ pub fn apply_tui_hook_event(
             })
         }
         TurnFlagDecision::Stop => {
-            let changed = repository.clear_tui_hook_turn(event.session_id, now)?;
+            let changed = repository.clear_tui_hook_turn(event.session_id)?;
             if changed {
                 forget_tui_hook_turn_clock(event.session_id);
             }
@@ -125,7 +129,8 @@ pub fn resolve_tui_hook_session(
     repository: &AgentSessionRepository<'_>,
     correlation: &TuiHookCorrelation,
 ) -> rusqlite::Result<Result<i64, TuiHookCorrelationFailure>> {
-    if let (Some(session_id), Some(kind)) = (correlation.redwhisk_session_id, correlation.agent_kind)
+    if let (Some(session_id), Some(kind)) =
+        (correlation.redwhisk_session_id, correlation.agent_kind)
     {
         if repository.tui_hook_session_matches_kind(session_id, kind.as_db_str())? {
             return Ok(Ok(session_id));
@@ -205,7 +210,7 @@ pub fn expire_silent_tui_hook_turns(
         if now_ms.saturating_sub(*marked_at) < window_ms {
             continue;
         }
-        if repository.clear_tui_hook_turn(*session_id, now_ms)? {
+        if repository.clear_tui_hook_turn(*session_id)? {
             expired.push(*session_id);
         } else {
             stale.push(*session_id);

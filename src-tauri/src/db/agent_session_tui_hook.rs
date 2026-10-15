@@ -91,8 +91,7 @@ impl AgentSessionRepository<'_> {
             "UPDATE agent_sessions
              SET is_turn_running = 1,
                  turn_ended_at = NULL,
-                 turn_started_at = ?2,
-                 last_active_at = MAX(last_active_at + 1, ?2)
+                 turn_started_at = ?2
              WHERE id = ?1
                AND status = 'running'
                AND display_mode = 'tui'
@@ -114,18 +113,17 @@ impl AgentSessionRepository<'_> {
 
     /// 置 0：立即结束，`turn_ended_at` 保持 NULL，不走 json grace。
     /// 当前已是 0 且没有 grace 时间戳时不改，返回 false。
-    pub fn clear_tui_hook_turn(&self, session_id: i64, now: i64) -> rusqlite::Result<bool> {
+    pub fn clear_tui_hook_turn(&self, session_id: i64) -> rusqlite::Result<bool> {
         let changed = self.connection.execute(
             "UPDATE agent_sessions
              SET is_turn_running = 0,
-                 turn_ended_at = NULL,
-                 last_active_at = MAX(last_active_at + 1, ?2)
+                 turn_ended_at = NULL
              WHERE id = ?1
                AND status = 'running'
                AND display_mode = 'tui'
                AND del = 0
                AND (is_turn_running = 1 OR turn_ended_at IS NOT NULL)",
-            params![session_id, now],
+            params![session_id],
         )?;
         Ok(changed > 0)
     }

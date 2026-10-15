@@ -1005,7 +1005,9 @@
       "terminalUnavailable": "Project Terminal is unavailable."
     },
     "SETTINGS_PERSISTENCE_FAILED": {
-      "default": "Failed to save settings."
+      "channelUnavailable": "The local status channel is unavailable",
+      "default": "Failed to save settings.",
+      "homeUnavailable": "The home directory is unavailable, so the TUI hook registration was not updated."
     },
     "USER_PROFILE_PERSISTENCE_FAILED": {
       "default": "Failed to save profile."
