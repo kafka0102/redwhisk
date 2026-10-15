@@ -1,6 +1,8 @@
 use std::fs;
 
-use super::tui_hook_commands::{enable_feature_in_data_dir, install_in_data_dir};
+use super::tui_hook_commands::{
+    detect_in_data_dir, enable_feature_in_data_dir, install_in_data_dir, uninstall_in_data_dir,
+};
 use crate::features::agent_session::TuiHookAgentKind;
 
 const COMMAND: &str = "/tmp/redwhisk-test-bin";
@@ -53,6 +55,62 @@ fn install_refuses_when_channel_unavailable_and_keeps_preference_false() {
 
     assert_eq!(error.reason.as_deref(), Some("channelUnavailable"));
     assert!(!home.path().join(".codex/hooks.json").exists());
+}
+
+#[test]
+fn detect_reads_installed_hook_without_spawning() {
+    let (data, home) = roots();
+    install_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        TuiHookAgentKind::Grok,
+        true,
+    )
+    .expect("install grok");
+
+    let status = detect_in_data_dir(data.path(), home.path(), COMMAND, true).expect("detect");
+
+    assert!(status.grok_registered);
+    assert!(!status.codex_registered);
+    assert!(status.registration_allowed);
+}
+
+#[test]
+fn uninstall_removes_only_the_requested_agent() {
+    let (data, home) = roots();
+    install_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        TuiHookAgentKind::Codex,
+        true,
+    )
+    .expect("install codex");
+    install_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        TuiHookAgentKind::Grok,
+        true,
+    )
+    .expect("install grok");
+
+    let status = uninstall_in_data_dir(
+        data.path(),
+        home.path(),
+        COMMAND,
+        TuiHookAgentKind::Codex,
+        true,
+    )
+    .expect("uninstall");
+
+    assert!(!status.codex_registered);
+    assert!(status.grok_registered);
+    assert!(status.registration_allowed);
+    let codex_hooks = fs::read_to_string(home.path().join(".codex/hooks.json")).expect("hooks");
+    assert!(!codex_hooks.contains("hook --source codex"));
+    assert!(home.path().join(".grok/hooks/redwhisk.json").exists());
 }
 
 #[test]

@@ -85,9 +85,7 @@ pub fn uninstall_tui_hook_registration(
     command_path: &str,
 ) -> io::Result<()> {
     match kind {
-        TuiHookAgentKind::Codex => {
-            uninstall_codex_hooks(&codex_hooks_path(home), command_path)
-        }
+        TuiHookAgentKind::Codex => uninstall_codex_hooks(&codex_hooks_path(home), command_path),
         TuiHookAgentKind::Grok => uninstall_grok_hooks(&grok_hooks_dir(home), command_path),
     }
 }
@@ -112,7 +110,7 @@ pub fn apply_tui_hook_registration(
 pub fn channel_unavailable_error() -> CommandError {
     CommandError::new(
         CommandErrorCode::SettingsPersistenceFailed,
-        "本机状态通道不可用。",
+        "The local status channel is unavailable.",
     )
     .with_reason("channelUnavailable")
 }
@@ -153,7 +151,7 @@ fn read_optional(path: &Path) -> io::Result<String> {
 fn hook_io_error(error: io::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::SettingsPersistenceFailed,
-        "TUI hook 注册失败。",
+        "Failed to update the TUI hook registration.",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

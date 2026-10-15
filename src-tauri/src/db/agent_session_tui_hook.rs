@@ -84,11 +84,21 @@ impl AgentSessionRepository<'_> {
             .optional()
     }
 
-    /// 置 1：与 broadcaster 处理 `TurnStarted` 的三步一致。不写 `current_turn_id`。
+    /// 置 1：与 broadcaster 处理 `TurnStarted` 的三步一致，但每步都锁 `display_mode='tui'`。
+    /// 不写 `current_turn_id`。json 行的 turn 标志仍只由 broadcaster 写。
     pub fn mark_tui_hook_turn_started(&self, session_id: i64, now: i64) -> rusqlite::Result<()> {
-        self.update_turn_running(session_id, true, now)?;
-        self.clear_turn_ended_at(session_id)?;
-        self.update_turn_started_at(session_id, now)?;
+        self.connection.execute(
+            "UPDATE agent_sessions
+             SET is_turn_running = 1,
+                 turn_ended_at = NULL,
+                 turn_started_at = ?2,
+                 last_active_at = MAX(last_active_at + 1, ?2)
+             WHERE id = ?1
+               AND status = 'running'
+               AND display_mode = 'tui'
+               AND del = 0",
+            params![session_id, now],
+        )?;
         Ok(())
     }
 

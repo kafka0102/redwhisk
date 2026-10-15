@@ -7,9 +7,9 @@ use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::tui_hook_preference_repository::TuiHookPreferenceRepository;
 use crate::features::agent_session::{
-    apply_tui_hook_registration, channel_unavailable_error, detect_tui_hook_registration_with_flags,
-    enable_codex_hooks_feature_file, uninstall_tui_hook_registration, TuiHookAgentKind,
-    TuiHookRegistrationStatus,
+    apply_tui_hook_registration, channel_unavailable_error,
+    detect_tui_hook_registration_with_flags, enable_codex_hooks_feature_file,
+    uninstall_tui_hook_registration, TuiHookAgentKind, TuiHookRegistrationStatus,
 };
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -146,7 +146,7 @@ fn user_home() -> Result<PathBuf, CommandError> {
         .ok_or_else(|| {
             CommandError::new(
                 CommandErrorCode::SettingsPersistenceFailed,
-                "TUI hook 注册失败。",
+                "Failed to update the TUI hook registration.",
             )
             .with_reason("homeUnavailable")
         })
@@ -172,7 +172,7 @@ fn open_database(data_dir: &Path) -> Result<crate::db::connection::Database, Com
 fn preference_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::SettingsPersistenceFailed,
-        "设置保存失败。",
+        "Failed to save settings.",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
@@ -180,7 +180,7 @@ fn preference_error(error: impl std::fmt::Display) -> CommandError {
 fn hook_io_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::SettingsPersistenceFailed,
-        "TUI hook 注册失败。",
+        "Failed to update the TUI hook registration.",
     )
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
