@@ -92,7 +92,7 @@ export function AgentsSettingsPanel({
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-12">
-                  {messages.settings.agentOrder}
+                  {t("settings.agentOrder")}
                 </TableHead>
                 <TableHead className="w-14">{messages.settings.type}</TableHead>
                 <TableHead className="w-[300px]">
@@ -165,10 +165,10 @@ export function AgentsSettingsPanel({
                       <button
                         type="button"
                         draggable
-                        aria-label={messages.settings.reorderAgent(
-                          profile.name,
-                        )}
-                        title={messages.settings.agentOrder}
+                        aria-label={t("settings.reorderAgent", {
+                          profileName: profile.name,
+                        })}
+                        title={t("settings.agentOrder")}
                         className="grid size-7 cursor-grab place-items-center rounded-sm text-muted-foreground active:cursor-grabbing"
                         onDragStart={(event) => {
                           draggedProfileIdRef.current = profile.id;

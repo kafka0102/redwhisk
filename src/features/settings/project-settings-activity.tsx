@@ -38,8 +38,11 @@ import { GeneralSettingsPanel } from "./settings-general-panel";
 import { AgentsSettingsPanel } from "./settings-agents-panel";
 import { LabelsSettingsPanel } from "./settings-labels-panel";
 import { SkillsSettingsPanel } from "./settings-skills-panel";
+import {
+  persistAgentDisplayOrder,
+  placeSavedAgentProfile,
+} from "./agent-profile-order";
 import { mergeAgentProfilesByDisplayOrder } from "./merge-agent-profiles-by-display-order";
-import { saveAgentDisplayOrder } from "./settings-commands";
 
 export type SettingsMenu = "general" | "agents" | "labels" | "skills";
 
@@ -194,7 +197,6 @@ export function ProjectSettingsActivity({
     SETTINGS_MENU_ITEMS[0];
   const activeMenuLabel = getSettingsMenuLabel(activeMenuItem.key, messages);
   const isProfilesCurrent = profilesProjectId === projectId;
-  // ADR-0051：接口已按 displayOrder 返回。合并时穿插，不再按启用状态或 id 重排。
   const currentProfiles = useMemo(
     () =>
       mergeAgentProfilesByDisplayOrder(
@@ -401,25 +403,19 @@ export function ProjectSettingsActivity({
   }, [clearDragState]);
 
   async function handleReorderProfiles(orderedIds: number[]) {
-    const previousProjectProfiles = projectProfiles;
-    const previousGlobalProfiles = globalProfiles;
-    const rank = new Map(orderedIds.map((id, index) => [id, index]));
-    const reorder = (profiles: AgentProfileRecord[]) =>
-      profiles.map((profile) => {
-        const nextOrder = rank.get(profile.id);
-        return nextOrder === undefined
-          ? profile
-          : { ...profile, displayOrder: nextOrder };
-      });
-    setProjectProfiles(reorder(projectProfiles));
-    setGlobalProfiles(reorder(globalProfiles));
     setProfilesErrorMessage(null);
     try {
-      await saveAgentDisplayOrder({ profileIds: orderedIds });
+      await persistAgentDisplayOrder(
+        projectProfiles,
+        globalProfiles,
+        orderedIds,
+        ({ projectProfiles: nextProject, globalProfiles: nextGlobal }) => {
+          setProjectProfiles(nextProject);
+          setGlobalProfiles(nextGlobal);
+        },
+      );
     } catch {
-      setProjectProfiles(previousProjectProfiles);
-      setGlobalProfiles(previousGlobalProfiles);
-      setProfilesErrorMessage(messages.settings.agentOrderSaveFailed);
+      setProfilesErrorMessage(t("settings.agentOrderSaveFailed"));
     }
   }
 
@@ -427,12 +423,12 @@ export function ProjectSettingsActivity({
     setProjectProfiles((current) => {
       const remaining = removeProfile(current, savedProfile.id);
       if (savedProfile.scope !== "project") return remaining;
-      return mergeProfile(remaining, savedProfile);
+      return placeSavedAgentProfile(current, savedProfile);
     });
     setGlobalProfiles((current) => {
       const remaining = removeProfile(current, savedProfile.id);
       if (savedProfile.scope !== "global") return remaining;
-      return mergeProfile(remaining, savedProfile);
+      return placeSavedAgentProfile(current, savedProfile);
     });
     setAddForm(null);
     setEditingProfile(null);
@@ -853,28 +849,6 @@ function SettingsContentFrame({
       <div className="settings-section__body">{children}</div>
     </section>
   );
-}
-
-function mergeProfile(
-  currentProfiles: AgentProfileRecord[],
-  savedProfile: AgentProfileRecord,
-): AgentProfileRecord[] {
-  const remaining = removeProfile(currentProfiles, savedProfile.id);
-  const existing = currentProfiles.find(
-    (profile) => profile.id === savedProfile.id,
-  );
-  if (existing) {
-    return [
-      ...remaining,
-      { ...savedProfile, displayOrder: existing.displayOrder },
-    ];
-  }
-  const nextOrder =
-    remaining.reduce(
-      (maxOrder, profile) => Math.max(maxOrder, profile.displayOrder),
-      0,
-    ) + 1;
-  return [...remaining, { ...savedProfile, displayOrder: nextOrder }];
 }
 
 function removeProfile(

@@ -29,6 +29,7 @@ import {
   type AgentProfileRecord,
   type SavedAgentSkillRecord,
 } from "../../settings/settings-commands";
+import { mergeAgentProfilesByDisplayOrder } from "../../settings/merge-agent-profiles-by-display-order";
 import {
   listAgentSessions,
   resumeAgentSession,
@@ -144,12 +145,12 @@ export function IssueRunDialog({
           return;
         }
 
-        const mergedProfiles = filterLaunchVisibleAgentProfiles(
-          [
-            ...projectProfilesResponse.profiles,
-            ...globalProfilesResponse.profiles,
-          ].sort((left, right) => left.displayOrder - right.displayOrder),
+        const orderedProfiles = mergeAgentProfilesByDisplayOrder(
+          projectProfilesResponse.profiles,
+          globalProfilesResponse.profiles,
         );
+        const mergedProfiles =
+          filterLaunchVisibleAgentProfiles(orderedProfiles);
         const mergedSavedSkills = [
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,
