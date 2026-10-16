@@ -11,7 +11,12 @@ import { SessionFileViewer } from "./session-file-viewer";
 import { useSessionFileReadingPositionCleanup } from "./use-session-file-reading-position-cleanup";
 import { DiffViewer } from "../../../shared/workspace/diff-viewer";
 import { useI18n } from "../../../shared/i18n/i18n";
-import type { AgentType } from "../agent-session-commands";
+import type {
+  AgentSessionStatus,
+  AgentType,
+  IssueStatus,
+} from "../agent-session-commands";
+import { SessionDisplayModeSwitch } from "./session-display-mode-switch";
 import { getAgentLogoSrc } from "../agent-visuals";
 import { MultiDiffViewer } from "../../../shared/workspace/multi-diff-viewer";
 import type {
@@ -36,6 +41,9 @@ interface SessionWorkspaceTabsProps {
   projectId: number;
   sessionId: number;
   sessionAgentType: AgentType;
+  sessionDisplayMode?: "json" | "tui";
+  sessionIssueStatus?: IssueStatus | null;
+  sessionStatus?: AgentSessionStatus;
   sessionContent: ReactNode;
   toolTabs: SessionWorkspaceToolTab[];
   onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
@@ -51,6 +59,9 @@ export function SessionWorkspaceTabs({
   projectId,
   sessionId,
   sessionAgentType,
+  sessionDisplayMode,
+  sessionIssueStatus,
+  sessionStatus,
   sessionContent,
   toolTabs,
   onCloseTab,
@@ -146,6 +157,16 @@ export function SessionWorkspaceTabs({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {sessionDisplayMode && sessionStatus ? (
+          <SessionDisplayModeSwitch
+            agentType={sessionAgentType}
+            displayMode={sessionDisplayMode}
+            issueStatus={sessionIssueStatus ?? null}
+            projectId={projectId}
+            sessionId={sessionId}
+            sessionStatus={sessionStatus}
+          />
+        ) : null}
       </div>
       <div className="session-workspace-tabs__content" role="tabpanel">
         {/* 常驻渲染所有 tab 内容，用 hidden 属性切换显隐。

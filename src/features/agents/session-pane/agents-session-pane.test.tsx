@@ -24,8 +24,6 @@ vi.mock("./agent-tui-session-view", () => ({
     }),
 }));
 
-
-
 function buildSession(
   overrides: Partial<AgentSessionListItem> = {},
 ): AgentSessionListItem {
@@ -223,7 +221,7 @@ describe("AgentsSessionPane display mode switch button", () => {
       sessionStatus: "stopped",
       displayMode: "json",
     });
-    render(
+    return render(
       <AgentsSessionPane
         canRenderTransitionButton={false}
         canRenderTransitionMenu={false}

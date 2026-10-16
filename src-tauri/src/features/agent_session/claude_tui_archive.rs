@@ -14,6 +14,23 @@ use crate::types::agent_profile::AgentType;
 use super::codex_tui_archive::{normalize_archive_block, TuiSessionLogSource};
 
 pub(super) fn claude_session_archive_text(source: TuiSessionLogSource<'_>) -> Option<String> {
+    let turns = claude_session_turns(source)?;
+    if turns.is_empty() {
+        return None;
+    }
+    let mut blocks = Vec::new();
+    for turn in turns {
+        push_block(&mut blocks, &turn.user_text);
+        if let Some(conclusion) = turn.conclusion.as_deref() {
+            push_block(&mut blocks, conclusion);
+        }
+    }
+    let text = blocks.join("\n\n");
+    (!text.is_empty()).then_some(text)
+}
+
+/// 切换到 json 时回填已完成轮次。定位或解析失败返回 `None`。
+pub(super) fn claude_session_turns(source: TuiSessionLogSource<'_>) -> Option<Vec<ClaudeTurn>> {
     if source.agent_type != Some(&AgentType::Claude) {
         return None;
     }
@@ -28,8 +45,8 @@ pub(super) fn claude_session_archive_text(source: TuiSessionLogSource<'_>) -> Op
     let root = source.claude_projects_root?;
     let path = claude_transcript_path(root, cwd, provider_session_id);
     let raw = fs::read_to_string(path).ok()?;
-    let text = render_claude_archive_text(&raw)?;
-    (!text.is_empty()).then_some(text)
+    let records = parse_claude_records(&raw)?;
+    Some(claude_turns(&records))
 }
 
 fn claude_transcript_path(root: &Path, cwd: &Path, provider_session_id: &str) -> PathBuf {
@@ -50,26 +67,9 @@ fn encode_claude_project_dir(cwd: &str) -> String {
     encoded
 }
 
-fn render_claude_archive_text(raw: &str) -> Option<String> {
-    let records = parse_claude_records(raw)?;
-    let turns = claude_turns(&records);
-    if turns.is_empty() {
-        return None;
-    }
-    let mut blocks = Vec::new();
-    for turn in turns {
-        push_block(&mut blocks, &turn.user_text);
-        if let Some(conclusion) = turn.conclusion.as_deref() {
-            push_block(&mut blocks, conclusion);
-        }
-    }
-    let text = blocks.join("\n\n");
-    (!text.is_empty()).then_some(text)
-}
-
-struct ClaudeTurn {
-    user_text: String,
-    conclusion: Option<String>,
+pub(super) struct ClaudeTurn {
+    pub(super) user_text: String,
+    pub(super) conclusion: Option<String>,
 }
 
 struct ClaudeRecord {

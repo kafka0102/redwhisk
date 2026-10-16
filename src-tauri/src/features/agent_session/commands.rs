@@ -13,6 +13,7 @@ use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::app_state::AppState;
+use crate::features::agent_session::NativeSessionHomes;
 use crate::features::issue::{analyze_attachment, sanitize_attachment_file_name};
 use crate::logging::CommandResultExt;
 use crate::types::agent_profile::AgentType;
@@ -26,7 +27,8 @@ use crate::types::agent_session::{
     ResumeAgentSessionInput, ResumeAgentSessionResult, SaveAgentAttachmentInput,
     SaveAgentAttachmentResult, SendAgentMessageInput, SetAgentModeInput, SetAgentModelInput,
     SetAgentSessionAttentionInput, SetAgentSessionAttentionResult, SetAgentThinkingInput,
-    StartAgentSessionInput, StartAgentSessionResult, UpdateAgentSessionTitleInput,
+    StartAgentSessionInput, StartAgentSessionResult, SwitchAgentSessionDisplayModeInput,
+    SwitchAgentSessionDisplayModeResult, UpdateAgentSessionTitleInput,
     UpdateAgentSessionTitleResult,
 };
 use crate::types::agent_session_stream::AgentStreamEvent;
@@ -422,6 +424,61 @@ pub async fn resume_agent_session(
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
     .log_if_error("resume_agent_session")
+}
+
+#[tauri::command]
+pub async fn switch_agent_session_display_mode(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: SwitchAgentSessionDisplayModeInput,
+) -> Result<SwitchAgentSessionDisplayModeResult, CommandError> {
+    let data_dir = prepare_agent_session_data_dir(&app, &state)?;
+    let agent_sessions = state.agent_sessions.clone();
+    let agent_event_broadcaster = state.agent_event_broadcaster.clone();
+    let pty_sessions = state.pty_sessions.clone();
+    let project_id = input.project_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(|error| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "Agent Session 数据库迁移失败。",
+                )
+                .with_reason("migrationFailed")
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            })?;
+        let service = build_agent_session_service(&database.connection);
+        let result = service.switch_agent_session_display_mode(
+            &data_dir,
+            input,
+            &agent_sessions,
+            &agent_event_broadcaster,
+            &pty_sessions,
+            &crate::agent::provider_factory::DefaultAgentSessionProviderFactory,
+            NativeSessionHomes::default(),
+        )?;
+        emit_agent_session_list_changed(
+            &app,
+            project_id,
+            Some(result.session_id),
+            "display_mode_switched",
+        );
+        Ok(result)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "Agent Session 展示形式切换失败。",
+        )
+        .with_reason("displayModeSwitchFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+    .log_if_error("switch_agent_session_display_mode")
 }
 
 #[tauri::command]

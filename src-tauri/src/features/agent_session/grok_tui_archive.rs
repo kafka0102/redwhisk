@@ -89,6 +89,23 @@ fn default_opencode_db_path(home: &Path) -> PathBuf {
 }
 
 pub(super) fn grok_session_archive_text(source: TuiSessionLogSource<'_>) -> Option<String> {
+    let turns = grok_session_turns(source)?;
+    if turns.is_empty() {
+        return None;
+    }
+    let mut blocks = Vec::new();
+    for turn in turns {
+        push_block(&mut blocks, &turn.user_text);
+        if let Some(conclusion) = turn.conclusion.as_deref() {
+            push_block(&mut blocks, conclusion);
+        }
+    }
+    let text = blocks.join("\n\n");
+    (!text.is_empty()).then_some(text)
+}
+
+/// 切换到 json 时回填已完成轮次。定位或解析失败返回 `None`。
+pub(super) fn grok_session_turns(source: TuiSessionLogSource<'_>) -> Option<Vec<GrokTurn>> {
     if source.agent_type != Some(&AgentType::Grok) {
         return None;
     }
@@ -103,8 +120,8 @@ pub(super) fn grok_session_archive_text(source: TuiSessionLogSource<'_>) -> Opti
     let root = source.grok_sessions_root?;
     let path = grok_chat_history_path(root, cwd, provider_session_id);
     let raw = fs::read_to_string(path).ok()?;
-    let text = render_grok_archive_text(&raw)?;
-    (!text.is_empty()).then_some(text)
+    let records = parse_grok_records(&raw)?;
+    Some(grok_turns(&records))
 }
 
 fn grok_chat_history_path(root: &Path, cwd: &Path, provider_session_id: &str) -> PathBuf {
@@ -127,26 +144,9 @@ fn encode_grok_session_cwd(cwd: &str) -> String {
     encoded
 }
 
-fn render_grok_archive_text(raw: &str) -> Option<String> {
-    let records = parse_grok_records(raw)?;
-    let turns = grok_turns(&records);
-    if turns.is_empty() {
-        return None;
-    }
-    let mut blocks = Vec::new();
-    for turn in turns {
-        push_block(&mut blocks, &turn.user_text);
-        if let Some(conclusion) = turn.conclusion.as_deref() {
-            push_block(&mut blocks, conclusion);
-        }
-    }
-    let text = blocks.join("\n\n");
-    (!text.is_empty()).then_some(text)
-}
-
-struct GrokTurn {
-    user_text: String,
-    conclusion: Option<String>,
+pub(super) struct GrokTurn {
+    pub(super) user_text: String,
+    pub(super) conclusion: Option<String>,
 }
 
 struct GrokRecord {

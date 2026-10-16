@@ -5,6 +5,8 @@ mod display_mode;
 mod inject;
 mod observe;
 
-pub(crate) use display_mode::{runtime_transport_from_raw, RuntimeTransport};
+pub(crate) use display_mode::{
+    parse_session_display_mode, runtime_transport_from_raw, RuntimeTransport, SessionDisplayMode,
+};
 pub(crate) use inject::{inject_prompt, InjectRuntimePorts};
 pub(crate) use observe::read_timeline_for_session;

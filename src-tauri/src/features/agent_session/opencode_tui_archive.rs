@@ -14,19 +14,7 @@ use crate::types::agent_profile::AgentType;
 use super::codex_tui_archive::{normalize_archive_block, TuiSessionLogSource};
 
 pub(super) fn opencode_session_archive_text(source: TuiSessionLogSource<'_>) -> Option<String> {
-    if source.agent_type != Some(&AgentType::OpenCode) {
-        return None;
-    }
-    let provider_session_id = source.provider_session_id?;
-    if provider_session_id.trim().is_empty() {
-        return None;
-    }
-    let cwd = source.session_cwd?;
-    if cwd.as_os_str().is_empty() {
-        return None;
-    }
-    let db_path = source.opencode_db_path?;
-    let turns = read_opencode_turns(db_path, provider_session_id, &cwd.to_string_lossy())?;
+    let turns = opencode_session_turns(source)?;
     if turns.is_empty() {
         return None;
     }
@@ -41,9 +29,26 @@ pub(super) fn opencode_session_archive_text(source: TuiSessionLogSource<'_>) -> 
     (!text.is_empty()).then_some(text)
 }
 
-struct OpenCodeTurn {
-    user_text: String,
-    conclusion: Option<String>,
+/// 切换到 json 时回填已完成轮次。定位或解析失败返回 `None`。
+pub(super) fn opencode_session_turns(source: TuiSessionLogSource<'_>) -> Option<Vec<OpenCodeTurn>> {
+    if source.agent_type != Some(&AgentType::OpenCode) {
+        return None;
+    }
+    let provider_session_id = source.provider_session_id?;
+    if provider_session_id.trim().is_empty() {
+        return None;
+    }
+    let cwd = source.session_cwd?;
+    if cwd.as_os_str().is_empty() {
+        return None;
+    }
+    let db_path = source.opencode_db_path?;
+    read_opencode_turns(db_path, provider_session_id, &cwd.to_string_lossy())
+}
+
+pub(super) struct OpenCodeTurn {
+    pub(super) user_text: String,
+    pub(super) conclusion: Option<String>,
 }
 
 struct OpenCodeMessage {
@@ -114,10 +119,7 @@ fn message_from_row(
     Some(OpenCodeMessage { role, texts })
 }
 
-fn parts_for_message(
-    connection: &Connection,
-    message_id: &str,
-) -> rusqlite::Result<Vec<String>> {
+fn parts_for_message(connection: &Connection, message_id: &str) -> rusqlite::Result<Vec<String>> {
     let mut statement = connection
         .prepare("SELECT data FROM part WHERE message_id = ?1 ORDER BY time_created ASC, id ASC")?;
     let rows = statement.query_map(params![message_id], |row| row.get::<_, String>(0))?;

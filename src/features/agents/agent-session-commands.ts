@@ -271,6 +271,26 @@ export interface ReadAgentTimelineInput {
   sessionId: number;
 }
 
+export interface SwitchAgentSessionDisplayModeInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface SwitchAgentSessionDisplayModeResult {
+  sessionId: number;
+  displayMode: "json" | "tui";
+  providerSessionId: string;
+}
+
+export function switchAgentSessionDisplayMode(
+  input: SwitchAgentSessionDisplayModeInput,
+): Promise<SwitchAgentSessionDisplayModeResult> {
+  return invokeCommand<SwitchAgentSessionDisplayModeResult>(
+    "switch_agent_session_display_mode",
+    { input },
+  );
+}
+
 export function resumeAgentSession(
   input: ResumeAgentSessionInput,
 ): Promise<ResumeAgentSessionResult> {

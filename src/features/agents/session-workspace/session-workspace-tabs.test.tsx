@@ -17,11 +17,19 @@ vi.mock("../agent-visuals", () => ({
 }));
 
 vi.mock("../agent-session-commands", () => ({
-  switchAgentSessionDisplayMode: vi.fn(() => Promise.resolve({ displayMode: "tui" })),
+  switchAgentSessionDisplayMode: vi.fn(() =>
+    Promise.resolve({ displayMode: "tui" }),
+  ),
 }));
 
 function renderSwitchTabs(options: {
-  agentType: "codex" | "claude" | "claude_code" | "opencode" | "grok" | "deepseek";
+  agentType:
+    | "codex"
+    | "claude"
+    | "claude_code"
+    | "opencode"
+    | "grok"
+    | "deepseek";
   issueStatus: "running" | "review" | "completed" | "backlog" | null;
   sessionStatus: "running" | "stopped" | "closed" | "crashed";
 }) {
@@ -287,7 +295,13 @@ describe("SessionWorkspaceTabs", () => {
 
 describe("SessionWorkspaceTabs display mode switch", () => {
   it("shows the switch at the far right while a dual-mode issue is unfinished", () => {
-    for (const agentType of ["codex", "claude", "claude_code", "opencode", "grok"] as const) {
+    for (const agentType of [
+      "codex",
+      "claude",
+      "claude_code",
+      "opencode",
+      "grok",
+    ] as const) {
       const view = renderSwitchTabs({
         agentType,
         issueStatus: "running",
@@ -300,9 +314,9 @@ describe("SessionWorkspaceTabs display mode switch", () => {
       const switchButton = within(tablist).getByRole("button", {
         name: "Switch to terminal",
       });
-      expect(
-        addButton.compareDocumentPosition(switchButton),
-      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(addButton.compareDocumentPosition(switchButton)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
       view.unmount();
     }
   });

@@ -485,6 +485,10 @@ pub struct ReadAgentTimelineInput {
     pub session_id: i64,
 }
 
+pub use crate::types::agent_session_display_mode::{
+    SwitchAgentSessionDisplayModeInput, SwitchAgentSessionDisplayModeResult,
+};
+
 pub use crate::types::agent_session_timeline::{
     ReadAgentTimelineResult, ReadTimelineItemAtOffsetInput, TimelineHistoryItem,
 };

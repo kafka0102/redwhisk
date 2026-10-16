@@ -451,6 +451,9 @@ const SessionWorkspacePane = memo(function SessionWorkspacePane({
         changeTab={workspace.changeTab}
         fileTab={workspace.fileTab}
         sessionAgentType={workspace.agentType}
+        sessionDisplayMode={workspace.displayMode}
+        sessionIssueStatus={workspace.issueStatus}
+        sessionStatus={workspace.sessionStatus}
         sessionContent={
           workspace.displayMode === "tui" ? (
             <AgentTuiSessionView

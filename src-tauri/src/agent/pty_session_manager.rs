@@ -812,6 +812,16 @@ impl PtySessionManager {
         project_ids
     }
 
+    /// 从注册表摘掉会话，不等待进程退出。
+    ///
+    /// 展示形式切换先杀进程再按新形式拉起。退出回调是异步的，若仍留在注册表里，
+    /// 随后的 `contains` 会把已终止的旧进程当成还在跑。
+    pub fn forget(&self, session_id: i64) {
+        if let Ok(mut sessions) = self.store.sessions.lock() {
+            sessions.remove(&session_id);
+        }
+    }
+
     pub fn contains(&self, session_id: i64) -> bool {
         self.store
             .sessions
