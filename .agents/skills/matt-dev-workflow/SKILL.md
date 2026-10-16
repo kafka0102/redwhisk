@@ -43,6 +43,7 @@ disable-model-invocation: true
 
 运行 `/to-spec` 的流程，但**覆盖其 "check seams with user"**：不停下问用户，按其规则自动决策 ——
 
+- **先按改动类型读 docs，再写验收标准**：照仓库 `docs/README.md`「读取顺序建议」的任务类型表（TypeScript / UI / Rust / Tauri 契约 / Git 提交…）确定必读文档并读完。spec 里凡涉及**机制选择**的验收标准（国际化取值方式、文件大小与拆分、测试层级、命令与 DTO 契约、提交格式等），必须引用具体 docs 条款（文件 + 规则原话）；引不出条款的，就不要把它写成验收标准。文档与你的直觉冲突时以文档为准。
 - 选**最高**既有 seam，能用一个就不开新 seam；确需新 seam 时在最高点提议。
 - 把所选 seam、理由、以及「若用户复核后想改可改」的假设写进 spec 的 Testing Decisions。
 
@@ -84,10 +85,10 @@ frontier 上**每一张** ticket：
    - 在 spec 约定 seam 上 `/tdd`（红 → 绿；一片一片）
    - 定期类型检查 / 聚焦单测
    - **本票收尾跑全量测试**（前端 `pnpm test` 若本票动了 TS；Rust `cargo test` 若本票动了 Rust；两者都动则都跑。纯 docs 票除外）
-   - **跑 `/code-review`**（Standards + Spec 两轴，固定点 = 本票开始前的 HEAD）
+   - **跑 `/code-review`**（Standards + Spec 两轴，固定点 = 本票开始前的 HEAD）：**先读 `code-review` 的 SKILL.md**，按它的结构性要求派发，不要凭记忆复述「两轴」——两轴各一个只读子代理（或至少分两次派发）；Standards 提示里整段粘贴 smell baseline 并列全仓库规范文件清单；每轴先给通过/不通过，不通过逐条给必须修项 + 引用原文 + 文件行号，非阻断 nit 单独列。复审子代理禁止编辑/格式化/commit，格式核验用 `prettier --check` 之类不写盘命令。复审指出「ticket/spec 原话就这么写」但仓库 `docs/**` 另有规定时，按文档修。
    - review 有必须修的问题 → 在本票内修到过，再 commit
    - 在阶段 0 所定分支上 **commit**（标题遵守仓库 git 规范）
-4. 子代理回报必须含：交付、测试命令与结果、**review 两轴结论**、commit hash、改动文件。缺任一项 = 未完成。
+4. 子代理回报固定字段：交付、测试命令与结果、**review 两轴结论**、commit hash、改动文件、`git status --short`、未运行的命令与原因。缺任一项 = 未完成。
 5. 主会话核验回报与 `git log` / 测试输出后，才把 ticket 标 `done`，再启动下一张。
 
 一张未 green，**禁止**启动下一张。
