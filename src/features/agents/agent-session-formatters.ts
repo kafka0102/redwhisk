@@ -296,3 +296,66 @@ export function buildSessionTokenInfoItems(
     { label: labels[4], value: formatSessionTokenHitRate(input, cache) },
   ];
 }
+
+/**
+ * 「运行参数」卡片条目：agent、模型、工作流技能、开发模式；
+ * worktree 会话在开发模式之后补一行「分支目录」，展示 worktree 的完整本地路径。
+ *
+ * issue 详情右侧面板与 session side panel 共用这一份口径，避免两处实现漂移。
+ */
+export function buildRuntimeParameterItems(
+  session: AgentSessionListItem | null,
+  t: (key: string) => string,
+): Array<{ label: string; value: string }> {
+  const none = t("agentsFeature.none");
+  const items = [
+    {
+      label: t("agentsFeature.agent"),
+      value: session?.agentProfileName?.trim() || none,
+    },
+    {
+      label: t("agentsFeature.model"),
+      value: session?.startupModel?.trim() || t("agentsFeature.dash"),
+    },
+    {
+      label: t("agentsFeature.workflowSkill"),
+      value: session?.workflowSkillName?.trim() || none,
+    },
+    {
+      label: t("agentsFeature.developmentMode"),
+      value: formatDevelopmentMode(session, t),
+    },
+  ];
+
+  if (session?.workspaceMode === "worktree") {
+    items.push({
+      label: t("issues.worktreePath"),
+      value: formatWorktreePath(session, none),
+    });
+  }
+
+  return items;
+}
+
+function formatDevelopmentMode(
+  session: AgentSessionListItem | null,
+  t: (key: string) => string,
+): string {
+  if (!session?.workspaceMode) {
+    return t("agentsFeature.none");
+  }
+
+  const branchName = session.workspaceBranch || session.originBranch || "-";
+  if (session.workspaceMode === "current_branch") {
+    return `${t("issues.currentBranch")} (${branchName})`;
+  }
+
+  return `${t("issues.worktree")} (${branchName})`;
+}
+
+function formatWorktreePath(
+  session: AgentSessionListItem,
+  none: string,
+): string {
+  return session.workspacePath?.trim() || session.workingDir?.trim() || none;
+}

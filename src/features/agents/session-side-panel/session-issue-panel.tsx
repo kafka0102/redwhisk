@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  buildRuntimeParameterItems,
   buildSessionTokenInfoItems,
   formatProcessingDuration,
   getSessionEndedAt,
@@ -76,35 +77,10 @@ export function SessionIssuePanel({
     ? issue.description
     : messages.agentsFeature.noDetailsProvided;
   const labels = issue?.labels ?? [];
-  const runtimeParameters = useMemo(() => {
-    const workflowSkillName =
-      session?.workflowSkillName?.trim() || messages.agentsFeature.none;
-    const items = [
-      {
-        label: messages.agentsFeature.agent,
-        value: session?.agentProfileName?.trim() || messages.agentsFeature.none,
-      },
-      {
-        label: messages.agentsFeature.model,
-        value: session?.startupModel?.trim() || messages.agentsFeature.dash,
-      },
-      {
-        label: messages.agentsFeature.workflowSkill,
-        value: workflowSkillName,
-      },
-      {
-        label: messages.agentsFeature.developmentMode,
-        value: formatDevelopmentMode(session, messages),
-      },
-    ];
-    if (session?.workspaceMode === "worktree") {
-      items.push({
-        label: t("issues.worktreePath"),
-        value: formatWorktreePath(session, messages),
-      });
-    }
-    return items;
-  }, [messages, session, t]);
+  const runtimeParameters = useMemo(
+    () => buildRuntimeParameterItems(session, t),
+    [session, t],
+  );
   const sessionInfo = useMemo(
     () => [
       {
@@ -251,33 +227,6 @@ function formatTimestamp(value: number | null, locale: string): string {
     second: "2-digit",
     hour12: false,
   }).format(value);
-}
-
-function formatDevelopmentMode(
-  session: AgentSessionListItem | null,
-  messages: ReturnType<typeof useI18n>["messages"],
-): string {
-  if (!session?.workspaceMode) {
-    return messages.agentsFeature.none;
-  }
-
-  const branchName = session.workspaceBranch || session.originBranch || "-";
-  if (session.workspaceMode === "current_branch") {
-    return `${messages.issues.currentBranch} (${branchName})`;
-  }
-
-  return `${messages.issues.worktree} (${branchName})`;
-}
-
-function formatWorktreePath(
-  session: AgentSessionListItem,
-  messages: ReturnType<typeof useI18n>["messages"],
-): string {
-  return (
-    session.workspacePath?.trim() ||
-    session.workingDir?.trim() ||
-    messages.agentsFeature.none
-  );
 }
 
 function formatSessionStatus(
