@@ -39,3 +39,21 @@
 ## 完成前
 
 按 [AGENTS.md](../../AGENTS.md) 的门禁执行。依赖变更或切换含依赖 diff 的提交后先 `pnpm install`。运行 `pnpm format`、lint、typecheck、test、（按需）build 后都要复查 `git status --short`；文档改动至少核对内部相对链接、索引和引用。测试命令可能改写快照或生成文件时，同样复查工作区。注意：`vi.mock` 通过不代表真实依赖已安装，`typecheck`/`build` 仍会检查模块解析。Rust 改动还要通过 `scripts/check-rust-compile.sh`，不能只跑 `cargo test`。
+
+## 基线复现：区分「既有失败」与「本次引入」
+
+筛选运行（`vitest run <file> -t <name>`、只跑单个文件）出现失败时，先确认它在本次改动之前的基线上是否同样失败，再决定要不要修。做法是临时检出基线提交，不动当前工作区：
+
+```bash
+base=<基线提交 sha，如本次改动开始前的 HEAD>
+tmp="$(mktemp -d)"
+git worktree add --detach "$tmp/base" "$base"
+ln -s "$PWD/node_modules" "$tmp/base/node_modules"   # 复用当前依赖，不重新安装
+cd "$tmp/base" && pnpm vitest run <失败的文件> -t "<用例名>"
+
+cd - && git worktree remove --force "$tmp/base" && rmdir "$tmp"   # 清理用 worktree remove，不要 rm -rf
+```
+
+判据：基线同样失败 → 既有问题，写进回报但不纳入本次改动；基线通过 → 本次引入，必须在本次修掉。
+
+注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**全量** `pnpm test`，过滤运行只用于定位，不作为通过依据。
