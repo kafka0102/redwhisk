@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -24,14 +24,7 @@ vi.mock("./agent-tui-session-view", () => ({
     }),
 }));
 
-vi.mock("../session-workspace/session-workspace-tabs", () => ({
-  SessionWorkspaceTabs: ({ sessionContent }: { sessionContent: ReactNode }) =>
-    createElement(
-      "div",
-      { "data-testid": "session-workspace-tabs" },
-      sessionContent,
-    ),
-}));
+
 
 function buildSession(
   overrides: Partial<AgentSessionListItem> = {},
@@ -206,6 +199,82 @@ describe("AgentsSessionPane displayMode 视图分流", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("agent-session-view:22"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentsSessionPane display mode switch button", () => {
+  function renderSwitch(options: {
+    agentType: AgentSessionListItem["agentType"];
+    issueStatus: "running" | "completed";
+  }) {
+    const sessionId = 31;
+    const selectedSession = buildSession({
+      sessionId,
+      agentType: options.agentType,
+      issueStatus: options.issueStatus,
+      displayMode: "json",
+      status: "stopped",
+    });
+    const workspace = buildWorkspace({
+      sessionId,
+      agentType: options.agentType,
+      issueStatus: options.issueStatus,
+      sessionStatus: "stopped",
+      displayMode: "json",
+    });
+    render(
+      <AgentsSessionPane
+        canRenderTransitionButton={false}
+        canRenderTransitionMenu={false}
+        isTransitionMenuOpen={false}
+        isTransitionPending={false}
+        linkedIssue={null}
+        isDeletingSession={false}
+        isRenamingSessionTitle={false}
+        isSidePanelOpen={false}
+        onAcknowledgeSessionAttention={vi.fn()}
+        onCloseWorkspaceTab={vi.fn()}
+        onCreateBrowserTab={vi.fn()}
+        onCreateTerminalTab={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onRenameSessionTitle={vi.fn()}
+        onSelectWorkspaceTab={vi.fn()}
+        onToggleSidePanel={vi.fn()}
+        onToggleTransitionMenu={vi.fn()}
+        onTransitionAction={vi.fn()}
+        onTransitionMainAction={vi.fn()}
+        projectId={1}
+        selectedSession={selectedSession}
+        cachedSessionIds={[sessionId]}
+        sessionWorkspaces={[workspace]}
+        transitionButtonLabel={null}
+        transitionMenuOptions={[]}
+        transitionPhase={null}
+      />,
+    );
+  }
+
+  it("shows the switch for an unfinished Codex session", () => {
+    renderSwitch({ agentType: "codex", issueStatus: "running" });
+    expect(
+      screen.getByRole("button", { name: "Switch to terminal" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the switch for DeepSeek Harness and a completed issue", () => {
+    const deepseek = renderSwitch({
+      agentType: "deepseek",
+      issueStatus: "running",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Switch to terminal" }),
+    ).not.toBeInTheDocument();
+    deepseek.unmount();
+
+    renderSwitch({ agentType: "codex", issueStatus: "completed" });
+    expect(
+      screen.queryByRole("button", { name: "Switch to terminal" }),
     ).not.toBeInTheDocument();
   });
 });

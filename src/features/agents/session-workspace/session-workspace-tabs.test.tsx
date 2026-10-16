@@ -1,5 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { switchAgentSessionDisplayMode } from "../agent-session-commands";
 
 import {
   SessionWorkspaceTabs,
@@ -13,6 +15,36 @@ import type {
 vi.mock("../agent-visuals", () => ({
   getAgentLogoSrc: vi.fn((agentType: string) => `/logos/${agentType}.svg`),
 }));
+
+vi.mock("../agent-session-commands", () => ({
+  switchAgentSessionDisplayMode: vi.fn(() => Promise.resolve({ displayMode: "tui" })),
+}));
+
+function renderSwitchTabs(options: {
+  agentType: "codex" | "claude" | "claude_code" | "opencode" | "grok" | "deepseek";
+  issueStatus: "running" | "review" | "completed" | "backlog" | null;
+  sessionStatus: "running" | "stopped" | "closed" | "crashed";
+}) {
+  return render(
+    <SessionWorkspaceTabs
+      activeTab="session"
+      changeTab={null}
+      fileTab={null}
+      projectId={1}
+      sessionId={7}
+      sessionAgentType={options.agentType}
+      sessionDisplayMode="json"
+      sessionIssueStatus={options.issueStatus}
+      sessionStatus={options.sessionStatus}
+      sessionContent={<div>Session content</div>}
+      toolTabs={[]}
+      onCloseTab={vi.fn()}
+      onCreateBrowserTab={vi.fn()}
+      onCreateTerminalTab={vi.fn()}
+      onSelectTab={vi.fn()}
+    />,
+  );
+}
 
 describe("SessionWorkspaceTabs", () => {
   it("renders the add button after the last workspace tab", () => {
@@ -250,5 +282,102 @@ describe("SessionWorkspaceTabs", () => {
     expect(
       screen.getByText("This commit has no file changes."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("SessionWorkspaceTabs display mode switch", () => {
+  it("shows the switch at the far right while a dual-mode issue is unfinished", () => {
+    for (const agentType of ["codex", "claude", "claude_code", "opencode", "grok"] as const) {
+      const view = renderSwitchTabs({
+        agentType,
+        issueStatus: "running",
+        sessionStatus: "stopped",
+      });
+      const tablist = screen.getByRole("tablist");
+      const addButton = within(tablist).getByRole("button", {
+        name: "Add session tool",
+      });
+      const switchButton = within(tablist).getByRole("button", {
+        name: "Switch to terminal",
+      });
+      expect(
+        addButton.compareDocumentPosition(switchButton),
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      view.unmount();
+    }
+  });
+
+  it("hides the switch for DeepSeek Harness and completed issues", () => {
+    const deepseek = renderSwitchTabs({
+      agentType: "deepseek",
+      issueStatus: "running",
+      sessionStatus: "stopped",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Switch to terminal" }),
+    ).not.toBeInTheDocument();
+    deepseek.unmount();
+
+    renderSwitchTabs({
+      agentType: "codex",
+      issueStatus: "completed",
+      sessionStatus: "stopped",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Switch to terminal" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks before stopping a live process and leaves the session unchanged on cancel", () => {
+    renderSwitchTabs({
+      agentType: "codex",
+      issueStatus: "review",
+      sessionStatus: "running",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to terminal" }));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "A session cannot run two tasks at once",
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "enter a continue instruction yourself",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
+  });
+
+  it("stops the live process and switches only after confirmation", () => {
+    renderSwitchTabs({
+      agentType: "opencode",
+      issueStatus: "running",
+      sessionStatus: "running",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to terminal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop and switch" }));
+
+    expect(switchAgentSessionDisplayMode).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 7,
+    });
+  });
+
+  it("switches a stopped process without the termination dialog", () => {
+    renderSwitchTabs({
+      agentType: "claude",
+      issueStatus: "running",
+      sessionStatus: "stopped",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to terminal" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(switchAgentSessionDisplayMode).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 7,
+    });
   });
 });
