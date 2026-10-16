@@ -90,7 +90,26 @@ function lastEntryIsCompletedToolCall(entries: MessageStreamEntry[]): boolean {
  * 失败或取消的 tool_call 以及 user_message / error / todo / compaction 不计。
  * 用于在 spurious turn_completed 之后收到产出事件时恢复 running。
  */
+function timelineItemBelongsToSubagent(item: AgentTimelineItem): boolean {
+  if (
+    item.type !== "assistant_message" &&
+    item.type !== "reasoning" &&
+    item.type !== "tool_call" &&
+    item.type !== "compaction"
+  ) {
+    return false;
+  }
+  return Boolean(item.subagentId?.trim());
+}
+
 function timelineItemIndicatesActiveWork(item: AgentTimelineItem): boolean {
+  // 子智能体的产出和拉起记录都不代表用户 Turn 还在跑。
+  if (
+    timelineItemBelongsToSubagent(item) ||
+    (item.type === "tool_call" && item.detail.type === "collab_agent")
+  ) {
+    return false;
+  }
   return (
     item.type === "assistant_message" ||
     item.type === "reasoning" ||

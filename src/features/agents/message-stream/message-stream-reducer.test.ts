@@ -1927,6 +1927,91 @@ describe("输出来源", () => {
     expect(texts(state, "thr_a")).toEqual([]);
   });
 
+  it("父 Turn 结束后，花名册仍标明在跑的子智能体显示运行中", () => {
+    let state = messageStreamReducer(createInitialState(), {
+      type: "EVENT",
+      event: { type: "turn_started", turnId: "turn_parent" },
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "subagent_roster",
+        subagentId: "thr_live",
+        status: "running",
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "tool_call",
+        callId: "spawn",
+        name: "collabAgentToolCall",
+        status: "running",
+        detail: {
+          type: "collab_agent",
+          prompt: "/root/fact_automation_ref",
+          receiverThreadIds: ["thr_live"],
+        },
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: { type: "turn_completed", turnId: "turn_parent", usage: null },
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "assistant_message",
+        text: "子线程还在写",
+        messageId: "child-1",
+        subagentId: "thr_live",
+      }),
+    });
+
+    expect(state.turnStatus).toBe("idle");
+    expect(
+      projectMessageStream(state, "all").options.map((option) =>
+        formatOutputSourceOption(option, outputSourceLabels),
+      ),
+    ).toEqual(["全部", "主智能体", "/root/fact_automation_ref · 运行中"]);
+    expect(texts(state, "main")).toEqual(["tool_call"]);
+  });
+
+  it("子智能体的迟到正文不会把已结束的用户 Turn 拉回运行中", () => {
+    let state = messageStreamReducer(createInitialState(), {
+      type: "EVENT",
+      event: { type: "turn_started", turnId: "turn_parent" },
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "tool_call",
+        callId: "call_done",
+        name: "shell",
+        status: "completed",
+        detail: { type: "shell", command: "ls" },
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: { type: "turn_completed", turnId: "turn_parent", usage: null },
+    });
+    expect(state.turnStatus).toBe("idle");
+    expect(state.turnInterrupted).toBe(true);
+
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "assistant_message",
+        text: "子线程还在写",
+        messageId: "child-late",
+        subagentId: "thr_child",
+      }),
+    });
+    expect(state.turnStatus).toBe("idle");
+    expect(state.turnInterrupted).toBe(true);
+  });
+
   it("没有来源的旧项不出现 select", () => {
     const state = messageStreamReducer(createInitialState(), {
       type: "HYDRATE",

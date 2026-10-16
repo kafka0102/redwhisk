@@ -160,3 +160,132 @@ fn build_events_subagent_turn_end_records_roster_without_ending_parent_turn() {
         Some("turn_parent")
     );
 }
+
+#[test]
+fn subagent_activity_started_is_a_main_timeline_launch_and_roster_running() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    state.lock().unwrap().thread_id = Some("thr_parent".into());
+    state.lock().unwrap().current_turn_id = Some("turn_parent".into());
+
+    let started = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "SubAgentActivity",
+                "id": "call_spawn",
+                "kind": "started",
+                "agent_thread_id": "thr_child",
+                "agent_path": "/root/fact_automation_ref"
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    let started_json = serde_json::to_value(&started).expect("started");
+    assert_eq!(started_json[0]["item"]["type"], "tool_call");
+    assert!(started_json[0]["item"].get("subagentId").is_none());
+    assert_eq!(started_json[0]["item"]["detail"]["type"], "collab_agent");
+    assert_eq!(
+        started_json[0]["item"]["detail"]["prompt"],
+        "/root/fact_automation_ref"
+    );
+    assert_eq!(
+        started_json[0]["item"]["detail"]["receiverThreadIds"],
+        json!(["thr_child"])
+    );
+    assert_eq!(started_json[0]["item"]["status"], "running");
+    assert_eq!(started_json[1]["item"]["type"], "subagent_roster");
+    assert_eq!(started_json[1]["item"]["status"], "running");
+    assert_eq!(
+        state.lock().unwrap().current_turn_id.as_deref(),
+        Some("turn_parent")
+    );
+
+    let completed = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "subAgentActivity",
+                "id": "subagent-completed-other",
+                "kind": "completed",
+                "agentThreadId": "thr_child",
+                "agentPath": "/root/fact_automation_ref"
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    let completed_json = serde_json::to_value(&completed).expect("completed");
+    assert_eq!(completed_json[0]["item"]["callId"], "call_spawn");
+    assert_eq!(completed_json[0]["item"]["status"], "completed");
+    assert_eq!(completed_json[1]["item"]["status"], "ended");
+}
+
+#[test]
+fn empty_collab_wait_is_not_a_launch() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    state.lock().unwrap().thread_id = Some("thr_parent".into());
+    let events = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "CollabAgentToolCall",
+                "id": "call_wait",
+                "tool": "wait",
+                "sender_thread_id": "thr_parent",
+                "receiver_thread_ids": []
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    assert!(
+        events.iter().all(|event| !matches!(
+            event,
+            super::AgentStreamEvent::Timeline {
+                item: super::AgentTimelineItem::ToolCall { .. },
+                ..
+            }
+        )),
+        "没有 prompt、也没有子 thread 的 wait 不是拉起"
+    );
+}
+
+#[test]
+fn child_turn_stays_interruptible_after_parent_turn_completes() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    {
+        let mut guard = state.lock().unwrap();
+        guard.thread_id = Some("thr_parent".into());
+    }
+    super::build_events(
+        &state,
+        super::CodexNotification::TurnStarted {
+            turn_id: "turn_parent".into(),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    super::build_events(
+        &state,
+        super::CodexNotification::TurnStarted {
+            turn_id: "turn_child".into(),
+            thread_id: Some("thr_child".into()),
+        },
+    );
+    super::build_events(
+        &state,
+        super::CodexNotification::TurnCompleted {
+            turn_id: Some("turn_parent".into()),
+            thread_id: Some("thr_parent".into()),
+            status: "completed".into(),
+            error_message: None,
+        },
+    );
+
+    let guard = state.lock().unwrap();
+    assert_eq!(guard.current_turn_id, None);
+    assert_eq!(
+        guard
+            .active_child_turns
+            .get("thr_child")
+            .map(String::as_str),
+        Some("turn_child")
+    );
+}

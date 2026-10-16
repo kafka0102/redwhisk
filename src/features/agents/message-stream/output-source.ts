@@ -58,8 +58,10 @@ export function foldSubagentRoster(
     }
   }
   if (item.type === "subagent_roster") {
+    const ended = item.status === "ended";
     return upsertSubagent(next, item.subagentId, {
-      ended: item.status === "ended",
+      ended,
+      live: !ended,
     });
   }
   const source = outputSourceId(item);
@@ -116,8 +118,13 @@ function outputSourceOptions(
     { value: "all", kind: "all" },
     { value: "main", kind: "main" },
     ...roster.map((entry, index) => {
-      const status: "running" | "ended" =
-        turnRunning && !entry.ended ? "running" : "ended";
+      const status: "running" | "ended" = entry.ended
+        ? "ended"
+        : entry.live
+          ? "running"
+          : turnRunning
+            ? "running"
+            : "ended";
       return {
         value: entry.id,
         kind: "subagent" as const,
@@ -147,7 +154,7 @@ function subagentOptionName(
 function upsertSubagent(
   roster: readonly SubagentRosterEntry[],
   id: string,
-  patch: { prompt?: string; ended?: boolean },
+  patch: { prompt?: string; ended?: boolean; live?: boolean },
 ): SubagentRosterEntry[] {
   const trimmed = id.trim();
   if (!trimmed) {
@@ -156,16 +163,39 @@ function upsertSubagent(
   const prompt = patch.prompt?.trim() ? patch.prompt.trim() : null;
   const index = roster.findIndex((entry) => entry.id === trimmed);
   if (index < 0) {
-    return [...roster, { id: trimmed, prompt, ended: patch.ended ?? false }];
+    const ended = patch.ended ?? false;
+    return [
+      ...roster,
+      {
+        id: trimmed,
+        prompt,
+        ended,
+        live: ended ? false : patch.live === true,
+      },
+    ];
   }
   const current = roster[index];
   const nextPrompt = current.prompt ?? prompt;
   const nextEnded = patch.ended ?? current.ended;
-  if (nextPrompt === current.prompt && nextEnded === current.ended) {
+  const nextLive = nextEnded
+    ? false
+    : patch.live !== undefined
+      ? patch.live
+      : current.live === true;
+  if (
+    nextPrompt === current.prompt &&
+    nextEnded === current.ended &&
+    nextLive === (current.live === true)
+  ) {
     return [...roster];
   }
   const copy = [...roster];
-  copy[index] = { id: current.id, prompt: nextPrompt, ended: nextEnded };
+  copy[index] = {
+    id: current.id,
+    prompt: nextPrompt,
+    ended: nextEnded,
+    live: nextLive,
+  };
   return copy;
 }
 

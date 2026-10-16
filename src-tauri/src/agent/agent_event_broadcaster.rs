@@ -20,7 +20,7 @@ use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
 use crate::local_data_path::redwhisk_data_dir;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallStatus,
+    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
 };
 
 /// 结构化 Agent 事件流的 Tauri event 名。
@@ -469,21 +469,34 @@ enum TurnRunningDecision {
     None,
 }
 
-/// 判断 timeline item 是否代表 agent 正在产出（即 turn 实际仍在跑）。
+/// 判断 timeline item 是否代表当前用户 Turn 仍在产出。
 ///
-/// reasoning / assistant_message / 仍 running 的 tool_call 视为产出；
-/// 已完成、失败或取消的 tool_call 以及 user_message / error / todo /
-/// compaction 不计。
+/// reasoning / assistant_message / 仍 running 的 tool_call 视为产出。
+/// 子智能体那一路的输出、以及拉起记录本身，都不算用户 Turn：父 Turn 结束后
+/// 子线程还会继续写消息，不能据此把 `is_turn_running` 拉回去。
 fn timeline_item_indicates_active_work(item: &AgentTimelineItem) -> bool {
-    matches!(
-        item,
-        AgentTimelineItem::AssistantMessage { .. }
-            | AgentTimelineItem::Reasoning { .. }
-            | AgentTimelineItem::ToolCall {
-                status: ToolCallStatus::Running,
-                ..
-            }
-    )
+    if timeline_item_belongs_to_subagent(item) {
+        return false;
+    }
+    match item {
+        AgentTimelineItem::AssistantMessage { .. } | AgentTimelineItem::Reasoning { .. } => true,
+        AgentTimelineItem::ToolCall {
+            status: ToolCallStatus::Running,
+            detail,
+            ..
+        } => !matches!(detail, ToolCallDetail::CollabAgent { .. }),
+        _ => false,
+    }
+}
+
+fn timeline_item_belongs_to_subagent(item: &AgentTimelineItem) -> bool {
+    match item {
+        AgentTimelineItem::AssistantMessage { subagent_id, .. }
+        | AgentTimelineItem::Reasoning { subagent_id, .. }
+        | AgentTimelineItem::ToolCall { subagent_id, .. }
+        | AgentTimelineItem::Compaction { subagent_id, .. } => subagent_id.is_some(),
+        _ => false,
+    }
 }
 
 fn turn_running_from_stream_event(event: &AgentStreamEvent) -> TurnRunningDecision {
@@ -747,6 +760,40 @@ mod tests {
                 timestamp: 0,
             }),
             D::ContinueRunning
+        );
+        // 子智能体自己的正文不能把已经结束的用户 Turn 拉回运行中。
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::AssistantMessage {
+                    text: "子线程还在写".into(),
+                    message_id: None,
+                    subagent_id: Some("thr_child".into()),
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 0,
+            }),
+            D::None
+        );
+        assert_eq!(
+            turn_running_from_stream_event(&AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::ToolCall {
+                    call_id: "spawn".into(),
+                    name: "collabAgentToolCall".into(),
+                    detail: ToolCallDetail::CollabAgent {
+                        prompt: Some("/root/fact".into()),
+                        receiver_thread_ids: vec!["thr_child".into()],
+                        sender_thread_id: None,
+                    },
+                    status: ToolCallStatus::Running,
+                    error: None,
+                    subagent_id: None,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: 0,
+            }),
+            D::None
         );
         // 非产出 timeline（user_message）→ None：用户输入不等于 agent 在跑。
         assert_eq!(

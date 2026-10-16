@@ -24,6 +24,7 @@ use super::client::{
     PermissionDecision, SandboxPolicy, TurnInput, TurnStartParams,
 };
 use super::notification::{parse_notification, CodexNotification};
+use super::subagent_activity::{collab_launch_item, parse_subagent_activity, SubagentActivityKind};
 use super::thread_item::{extract_usage, map_thread_item};
 use super::transport::{CodexAppServerError, CodexTransport, RequestHandler};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
@@ -151,6 +152,11 @@ struct SessionState {
     /// best-effort。供完成流程解析 session 实际执行路径（识别运行中 worktree 漂移）。
     /// 纯文件编辑轮次不下发 cwd，此时保持 `None`，回退到启动快照。
     last_known_cwd: Option<String>,
+    /// 仍在跑的子 thread：thread id → 该子 thread 当前 turn id。父 Turn 结束后仍留着，
+    /// 停止时用来中断这些子线程。
+    active_child_turns: HashMap<String, String>,
+    /// `SubAgentActivity` started 的 call id。completed 用同一个 id 更新拉起卡片。
+    subagent_launch_call_ids: HashMap<String, String>,
 }
 
 struct PendingPermission {
@@ -218,6 +224,8 @@ impl CodexSessionHandle {
             pending_permissions: HashMap::new(),
             latest_usage: None,
             last_known_cwd: None,
+            active_child_turns: HashMap::new(),
+            subagent_launch_call_ids: HashMap::new(),
         }));
 
         // 注册 notification handler
@@ -301,19 +309,37 @@ impl CodexSessionHandle {
         Ok(())
     }
 
-    /// 中断当前用户 Turn。
+    /// 中断当前用户 Turn。父 Turn 已经结束、但子线程还在跑时，改中断这些子线程。
     ///
     /// 通过 codex `turn/interrupt` 请求实现；codex 随后会广播
     /// `turn/completed`（status 通常为 `canceled`）。
-    /// 没有父 Turn id 时收口本地运行态并返回错误，避免 `Ok(())` 空成功。
+    /// 父 Turn 和子线程都没有可中断 id 时收口本地运行态并返回错误，避免 `Ok(())` 空成功。
     pub fn cancel_turn(&self) -> Result<(), CodexAppServerError> {
-        let (thread_id, turn_id) = {
+        let (thread_id, turn_id, children) = {
             let state = self
                 .state
                 .lock()
                 .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
-            (state.thread_id.clone(), state.current_turn_id.clone())
+            (
+                state.thread_id.clone(),
+                state.current_turn_id.clone(),
+                state.active_child_turns.clone(),
+            )
         };
+        let stopped_children = self.interrupt_children(&children);
+        if !stopped_children.is_empty() {
+            if let Ok(mut state) = self.state.lock() {
+                for child_id in &stopped_children {
+                    state.active_child_turns.remove(child_id);
+                }
+            }
+            for child_id in &stopped_children {
+                self.emit_stream_event(subagent_roster_event(
+                    child_id.clone(),
+                    SubagentRosterStatus::Ended,
+                ));
+            }
+        }
         match resolve_turn_interrupt(thread_id.as_deref(), turn_id.as_deref()) {
             Ok((thread_id, turn_id)) => self.client.turn_interrupt(&thread_id, &turn_id),
             Err(error) => {
@@ -321,18 +347,40 @@ impl CodexSessionHandle {
                     error,
                     CodexAppServerError::Protocol(ref message) if message == NO_INTERRUPTIBLE_TURN
                 ) {
-                    self.config.broadcaster.emit_stream_event(
-                        self.config.project_id,
-                        self.config.session_id,
-                        AgentStreamEvent::TurnCanceled {
+                    if !stopped_children.is_empty() {
+                        self.emit_stream_event(AgentStreamEvent::TurnCanceled {
                             turn_id: None,
-                            reason: "no_interruptible_turn".into(),
-                        },
-                    );
+                            reason: "canceled".into(),
+                        });
+                        return Ok(());
+                    }
+                    self.emit_stream_event(AgentStreamEvent::TurnCanceled {
+                        turn_id: None,
+                        reason: "no_interruptible_turn".into(),
+                    });
                 }
                 Err(error)
             }
         }
+    }
+
+    fn emit_stream_event(&self, event: AgentStreamEvent) {
+        self.config.broadcaster.emit_stream_event(
+            self.config.project_id,
+            self.config.session_id,
+            event,
+        );
+    }
+
+    /// 中断仍在跑的子线程。返回实际发出 interrupt 的 thread id。
+    fn interrupt_children(&self, children: &HashMap<String, String>) -> Vec<String> {
+        let mut stopped = Vec::new();
+        for (thread_id, turn_id) in children {
+            if self.client.turn_interrupt(thread_id, turn_id).is_ok() {
+                stopped.push(thread_id.clone());
+            }
+        }
+        stopped
     }
 
     /// 回复一个挂起的权限请求。
@@ -827,6 +875,11 @@ fn build_events(
         }
         CodexNotification::TurnStarted { turn_id, thread_id } => {
             if let Some(subagent_id) = subagent_id_from_state(state, thread_id.as_deref()) {
+                if let Ok(mut session) = state.lock() {
+                    session
+                        .active_child_turns
+                        .insert(subagent_id.clone(), turn_id);
+                }
                 return vec![subagent_roster_event(
                     subagent_id,
                     SubagentRosterStatus::Running,
@@ -865,6 +918,11 @@ fn build_events(
                 .unwrap_or(true);
             if !is_user_turn {
                 let subagent_id = subagent_id_from_state(state, thread_id.as_deref());
+                if let Some(subagent_id) = subagent_id.as_ref() {
+                    if let Ok(mut session) = state.lock() {
+                        session.active_child_turns.remove(subagent_id);
+                    }
+                }
                 return subagent_id
                     .map(|subagent_id| {
                         vec![subagent_roster_event(
@@ -1057,6 +1115,69 @@ fn update_last_known_cwd(state: &Arc<Mutex<SessionState>>, item: &Value) {
     }
 }
 
+fn events_for_subagent_activity(
+    state: &Arc<Mutex<SessionState>>,
+    activity: super::subagent_activity::SubagentActivity,
+) -> Vec<AgentStreamEvent> {
+    let thread_id = activity.agent_thread_id;
+    let (call_id, prompt, status, roster) = {
+        let Ok(mut session) = state.lock() else {
+            return Vec::new();
+        };
+        let prompt = activity.agent_path.clone();
+        match activity.kind {
+            SubagentActivityKind::Started => {
+                session
+                    .subagent_launch_call_ids
+                    .insert(thread_id.clone(), activity.call_id.clone());
+                (
+                    activity.call_id,
+                    prompt,
+                    ToolCallStatus::Running,
+                    Some(SubagentRosterStatus::Running),
+                )
+            }
+            SubagentActivityKind::Completed => {
+                let call_id = session
+                    .subagent_launch_call_ids
+                    .get(&thread_id)
+                    .cloned()
+                    .unwrap_or(activity.call_id);
+                session.active_child_turns.remove(&thread_id);
+                (
+                    call_id,
+                    prompt,
+                    ToolCallStatus::Completed,
+                    Some(SubagentRosterStatus::Ended),
+                )
+            }
+            SubagentActivityKind::Interacted => (
+                String::new(),
+                None,
+                ToolCallStatus::Completed,
+                Some(SubagentRosterStatus::Running),
+            ),
+        }
+    };
+    let turn_id = state
+        .lock()
+        .ok()
+        .and_then(|session| session.current_turn_id.clone());
+    let mut events = Vec::new();
+    if !call_id.is_empty() {
+        events.push(AgentStreamEvent::Timeline {
+            item: collab_launch_item(call_id, prompt, thread_id.clone(), status),
+            turn_id,
+            seq: next_seq(),
+            timestamp: now_ms(),
+        });
+    }
+    if let Some(roster_status) = roster {
+        events.push(subagent_roster_event(thread_id, roster_status));
+    }
+    events
+}
+
 fn build_item_event(
     state: &Arc<Mutex<SessionState>>,
     item: &Value,
@@ -1076,6 +1197,10 @@ fn build_item_event(
     });
     // 新 item 开始或完成时，先冲出其他 item 未刷完的节流尾巴。
     let mut events = flush_pending_deltas_except(state, buffer_key.as_ref());
+    if let Some(activity) = parse_subagent_activity(item) {
+        events.extend(events_for_subagent_activity(state, activity));
+        return events;
+    }
 
     if !is_started {
         // item/completed 后清掉对应增量缓冲；映射失败也要清，避免残留拖到 turn 结束。
@@ -2201,6 +2326,8 @@ mod tests {
             pending_permissions: HashMap::new(),
             latest_usage: None,
             last_known_cwd: None,
+            active_child_turns: HashMap::new(),
+            subagent_launch_call_ids: HashMap::new(),
         }
     }
 

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
-import { AgentSessionView } from "./agent-session-view";
+import { AgentSessionView, turnStatusForComposer } from "./agent-session-view";
 import {
   resetMessageStreamScrollOffsetCacheForTests,
   writeMessageStreamScrollOffset,
@@ -818,5 +818,21 @@ describe("AgentSessionView 输出来源", () => {
     expect(
       screen.queryByRole("combobox", { name: "Output source" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("turnStatusForComposer", () => {
+  it("父 Turn 已结束但子智能体仍在跑时保留停止按钮", () => {
+    expect(
+      turnStatusForComposer("idle", [
+        { id: "thr_live", prompt: "/root/fact", ended: false, live: true },
+      ]),
+    ).toBe("running");
+    expect(
+      turnStatusForComposer("idle", [
+        { id: "thr_done", prompt: null, ended: true, live: false },
+      ]),
+    ).toBe("idle");
+    expect(turnStatusForComposer("canceled", [])).toBe("canceled");
   });
 });

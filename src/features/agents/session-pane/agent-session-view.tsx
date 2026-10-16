@@ -32,7 +32,10 @@ import {
   type AgentType,
   type IssueStatus,
 } from "../agent-session-commands";
-import type { TurnStatus } from "../message-stream/message-stream-types";
+import type {
+  SubagentRosterEntry,
+  TurnStatus,
+} from "../message-stream/message-stream-types";
 
 // 计算 effective turnStatus：reducer 已 running 直接 running；否则在
 // canUseExternalTurnRunning 生效时用外部 isTurnRunning 维持 running（grace 期），
@@ -47,6 +50,21 @@ export function computeEffectiveTurnStatus(
     (canUseExternalTurnRunning && isTurnRunning)
     ? "running"
     : turnStatus;
+}
+
+/** 父 Turn 已结束但花名册仍标明子智能体在跑时，停止按钮要留下。思考占位不跟这个走。 */
+// eslint-disable-next-line react-refresh/only-export-components -- 纯函数与组件同文件以便单测，参照 i18n.tsx 先例
+export function turnStatusForComposer(
+  turnStatus: TurnStatus,
+  subagents: readonly SubagentRosterEntry[],
+): TurnStatus {
+  if (
+    turnStatus !== "running" &&
+    subagents.some((entry) => entry.live === true && !entry.ended)
+  ) {
+    return "running";
+  }
+  return turnStatus;
 }
 
 interface AgentSessionViewProps {
@@ -155,7 +173,10 @@ export const AgentSessionView = memo(function AgentSessionView({
           key={sessionId}
           projectId={projectId}
           sessionId={sessionId}
-          turnStatus={effectiveTurnStatus}
+          turnStatus={turnStatusForComposer(
+            effectiveTurnStatus,
+            state.subagents ?? [],
+          )}
           usage={state.usage}
           currentModelId={state.model}
           currentEffort={state.effort}

@@ -10,13 +10,19 @@ use crate::types::agent_session_stream::{AgentTimelineItem, ToolCallDetail, Tool
 pub(super) fn map_collab_agent_tool_call(item: &Value) -> Option<AgentTimelineItem> {
     let call_id =
         text_field(item, &["id", "callId"]).unwrap_or_else(|| "collabAgentToolCall".to_string());
+    let prompt = text_field(item, &["prompt"]);
+    let receiver_thread_ids = receiver_thread_ids(item);
+    // `wait` 结束时 receiver 和 prompt 都是空的，不是一次拉起。
+    if prompt.is_none() && receiver_thread_ids.is_empty() {
+        return None;
+    }
     Some(AgentTimelineItem::ToolCall {
         call_id,
         name: "collabAgentToolCall".into(),
         detail: ToolCallDetail::CollabAgent {
-            prompt: text_field(item, &["prompt"]),
+            prompt,
             sender_thread_id: text_field(item, &["senderThreadId", "sender_thread_id"]),
-            receiver_thread_ids: receiver_thread_ids(item),
+            receiver_thread_ids,
         },
         status: ToolCallStatus::Completed,
         error: None,

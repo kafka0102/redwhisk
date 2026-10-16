@@ -19,6 +19,11 @@ export interface SubagentRosterEntry {
   id: string;
   prompt: string | null;
   ended: boolean;
+  /**
+   * 花名册明确说过这一路还在跑。父 Turn 结束后仍显示运行中。
+   * 只从输出里推断出来的子智能体没有这个标记，仍跟着用户 Turn 走。
+   */
+  live?: boolean;
 }
 
 /**

@@ -14,6 +14,7 @@
 
 pub mod client;
 mod collab_item;
+mod subagent_activity;
 pub mod notification;
 pub mod session;
 pub mod thread_item;
