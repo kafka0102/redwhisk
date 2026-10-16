@@ -301,7 +301,6 @@ export interface I18nMessages {
     currentBranch: string;
     targetBranch: string;
     worktree: string;
-    worktreePath: string;
     dialogStatus: string;
     agentProfile: string;
     completionDirtyTitle: string;

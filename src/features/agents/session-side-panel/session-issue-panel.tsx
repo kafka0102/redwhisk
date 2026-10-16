@@ -99,12 +99,12 @@ export function SessionIssuePanel({
     ];
     if (session?.workspaceMode === "worktree") {
       items.push({
-        label: messages.issues.worktreePath,
+        label: t("issues.worktreePath"),
         value: formatWorktreePath(session, messages),
       });
     }
     return items;
-  }, [messages, session]);
+  }, [messages, session, t]);
   const sessionInfo = useMemo(
     () => [
       {
