@@ -5,6 +5,7 @@ import type { AgentSessionListChangedEvent } from "../../agents/agent-session-ev
 import type { AgentSessionListItem } from "../../agents/agent-session-commands";
 import { listAgentSessions } from "../../agents/agent-session-commands";
 import { I18nProvider } from "../../../shared/i18n/i18n";
+import { makeAgentSession } from "../../../test/agent-session-fixture";
 import { IssueReadonlySessionPanel } from "./issue-readonly-session-panel";
 
 const eventMocks = vi.hoisted(() => ({
@@ -31,49 +32,6 @@ vi.mock("../../agents/agent-session-commands", () => ({
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
-
-function makeSession(
-  overrides: Partial<AgentSessionListItem> = {},
-): AgentSessionListItem {
-  return {
-    sessionId: 12,
-    number: 1,
-    projectId: 1,
-    issueId: 8,
-    issueNumber: 8,
-    issueTitle: "Demo",
-    issueStatus: "running",
-    agentProfileId: 3,
-    agentProfileName: "Codex",
-    workflowSkillName: null,
-    canCompleteClean: false,
-    canCompleteAgentCommit: false,
-    title: null,
-    agentType: "codex",
-    displayMode: "json",
-    status: "running",
-    attention: "none",
-    isTurnRunning: false,
-    workspaceMode: "current_branch",
-    workingDir: "/tmp/repo",
-    workspacePath: null,
-    originBranch: "main",
-    workspaceBranch: "main",
-    worktreeOwner: "redwhisk",
-    logPath: "/tmp/session.log",
-    latestOutput: null,
-    lastActiveAt: 0,
-    startedAt: 1_700_000_000_000,
-    closedAt: null,
-    processingMs: 0,
-    lastOutputAt: null,
-    startupModel: "gpt-5.5",
-    tokenInput: null,
-    tokenOutput: null,
-    tokenCache: null,
-    ...overrides,
-  };
-}
 
 function renderPanel(session: AgentSessionListItem): void {
   listAgentSessionsMock.mockResolvedValue({ sessions: [session] });
@@ -137,7 +95,7 @@ function runParameterValue(label: string): string {
 
 describe("IssueReadonlySessionPanel 运行参数模型", () => {
   it("shows startup model under agent", async () => {
-    renderPanel(makeSession());
+    renderPanel(makeAgentSession());
     await waitFor(() => {
       expect(screen.getByText("Codex")).toBeInTheDocument();
     });
@@ -147,7 +105,7 @@ describe("IssueReadonlySessionPanel 运行参数模型", () => {
   });
 
   it("shows a dash when startup model is empty", async () => {
-    renderPanel(makeSession({ startupModel: null }));
+    renderPanel(makeAgentSession({ startupModel: null }));
     await waitFor(() => {
       expect(screen.getByText("Codex")).toBeInTheDocument();
     });
@@ -158,7 +116,7 @@ describe("IssueReadonlySessionPanel 运行参数模型", () => {
 describe("IssueReadonlySessionPanel 开发模式", () => {
   it("shows the worktree branch and adds the 分支目录 row right after", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         workspaceMode: "worktree",
         workspaceBranch: "issue-299-redwhisk",
         workspacePath: "/tmp/repo/.worktrees/issue-299-redwhisk",
@@ -179,7 +137,7 @@ describe("IssueReadonlySessionPanel 开发模式", () => {
 
   it("falls back to the origin branch when the workspace branch is missing", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         workspaceMode: "worktree",
         workspaceBranch: null,
         originBranch: "issue-299-redwhisk",
@@ -193,7 +151,7 @@ describe("IssueReadonlySessionPanel 开发模式", () => {
 
   it("falls back to the working dir then 无 for the 分支目录 row", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         workspaceMode: "worktree",
         workspacePath: null,
         workingDir: "/tmp/fallback-repo",
@@ -207,7 +165,7 @@ describe("IssueReadonlySessionPanel 开发模式", () => {
 
   it("shows 无 for the 分支目录 row when both paths are empty", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         workspaceMode: "worktree",
         workspacePath: "   ",
         workingDir: "",
@@ -221,7 +179,7 @@ describe("IssueReadonlySessionPanel 开发模式", () => {
 
   it("keeps the current branch form and hides the 分支目录 row", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         workspaceMode: "current_branch",
         workspaceBranch: "main",
         workspacePath: "/tmp/repo/.worktrees/issue-299-redwhisk",
@@ -237,7 +195,7 @@ describe("IssueReadonlySessionPanel 开发模式", () => {
 
 describe("IssueReadonlySessionPanel Session Token 消耗", () => {
   it("shows five token rows under session status as dashes when usage is missing", async () => {
-    renderPanel(makeSession());
+    renderPanel(makeAgentSession());
     await waitFor(() => {
       expect(screen.getByText("Codex")).toBeInTheDocument();
     });
@@ -259,7 +217,7 @@ describe("IssueReadonlySessionPanel Session Token 消耗", () => {
 
   it("formats received usage including zero", async () => {
     renderPanel(
-      makeSession({
+      makeAgentSession({
         tokenInput: 3000,
         tokenOutput: 0,
         tokenCache: 1000,
@@ -277,8 +235,8 @@ describe("IssueReadonlySessionPanel Session Token 消耗", () => {
 
   it("refreshes token rows while the session is still running", async () => {
     eventMocks.listeners.length = 0;
-    const initial = makeSession();
-    const updated = makeSession({
+    const initial = makeAgentSession();
+    const updated = makeAgentSession({
       tokenInput: 3000,
       tokenOutput: 0,
       tokenCache: 1000,
