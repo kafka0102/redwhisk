@@ -1,4 +1,10 @@
-import { useRef, type DragEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { GripVertical, Info } from "lucide-react";
 
 import { Button, Empty, EmptyTitle } from "@/components/ui";
@@ -19,6 +25,12 @@ import { TuiHookRegistrationCard } from "./tui-hook-registration-card";
 import { useAgentCommandArgs } from "./use-agent-command-args";
 import { formatAgentTypeLabel, getAgentLogoSrc } from "../agents/agent-visuals";
 import { useI18n } from "../../shared/i18n/i18n";
+import {
+  agentRowIdAtPoint,
+  agentRowOrderChanged,
+  moveAgentRow,
+  type AgentRowReorderDrag,
+} from "./agent-row-reorder";
 
 interface AddFormState {
   projectId: number;
@@ -59,10 +71,20 @@ export function AgentsSettingsPanel({
   onReorderProfiles,
 }: AgentsSettingsPanelProps) {
   const { messages, t } = useI18n();
-  const draggedProfileIdRef = useRef<number | null>(null);
-  // drop 只发给指针下的元素，且要求该元素自己的 dragover 调过 preventDefault。
-  // 松手经常落在握柄上，行上的 drop 不会发生。悬停时记下目标行，dragend 提交。
-  const dropTargetIdRef = useRef<number | null>(null);
+  // Tauri 默认开启文件拖放，macOS WKWebView 不再把 dragover 交给页面。
+  // 排序改走指针事件：移动时整行换位，松手再保存。
+  const reorderDragRef = useRef<AgentRowReorderDrag | null>(null);
+  const [previewIds, setPreviewIds] = useState<number[] | null>(null);
+  const profilesRef = useRef(profiles);
+  const onReorderProfilesRef = useRef(onReorderProfiles);
+  useEffect(() => {
+    profilesRef.current = profiles;
+    onReorderProfilesRef.current = onReorderProfiles;
+  });
+  const orderedProfiles = useMemo(
+    () => applyPreviewOrder(profiles, previewIds),
+    [profiles, previewIds],
+  );
   // ADR-0020 决策 8：批量获取可见 profiles 的启动参数；codex/claude 返回非空、
   // opencode/grok 当前为空。仅非空时命令列渲染「i」图标。
   const { argsByProfileId } = useAgentCommandArgs(profiles);
@@ -120,7 +142,7 @@ export function AgentsSettingsPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {profiles.map((profile) => {
+              {orderedProfiles.map((profile) => {
                 const agentLabel = formatAgentTypeLabel(profile.agentType);
                 const handleEdit = () => {
                   onEditingProfileChange({
@@ -139,63 +161,98 @@ export function AgentsSettingsPanel({
                   ? messages.settings.enabledYes
                   : messages.settings.enabledNo;
 
-                const rememberDropTarget = (event: DragEvent<HTMLElement>) => {
+                const handleReorderPointerDown = (
+                  event: ReactPointerEvent<HTMLButtonElement>,
+                ) => {
+                  if (event.button !== 0) {
+                    return;
+                  }
                   event.preventDefault();
-                  // 默认 dropEffect 是 copy，macOS 会显示绿色加号。
-                  event.dataTransfer.dropEffect = "move";
-                  if (draggedProfileIdRef.current !== null) {
-                    dropTargetIdRef.current = profile.id;
+                  const handle = event.currentTarget;
+                  if (typeof handle.setPointerCapture === "function") {
+                    handle.setPointerCapture(event.pointerId);
+                  }
+                  const startOrderedIds = profilesRef.current.map(
+                    (item) => item.id,
+                  );
+                  reorderDragRef.current = {
+                    pointerId: event.pointerId,
+                    draggedId: profile.id,
+                    startOrderedIds,
+                    lastOrderedIds: startOrderedIds,
+                  };
+                };
+
+                const handleReorderPointerMove = (
+                  event: ReactPointerEvent<HTMLButtonElement>,
+                ) => {
+                  const drag = reorderDragRef.current;
+                  if (!drag || drag.pointerId !== event.pointerId) {
+                    return;
+                  }
+                  const targetId = agentRowIdAtPoint(
+                    event.clientX,
+                    event.clientY,
+                  );
+                  if (targetId === null) {
+                    return;
+                  }
+                  const nextIds = moveAgentRow(
+                    drag.lastOrderedIds,
+                    drag.draggedId,
+                    targetId,
+                  );
+                  if (!agentRowOrderChanged(drag.lastOrderedIds, nextIds)) {
+                    return;
+                  }
+                  drag.lastOrderedIds = nextIds;
+                  setPreviewIds(nextIds);
+                };
+
+                const handleReorderPointerEnd = (
+                  event: ReactPointerEvent<HTMLButtonElement>,
+                ) => {
+                  const drag = reorderDragRef.current;
+                  if (!drag || drag.pointerId !== event.pointerId) {
+                    return;
+                  }
+                  reorderDragRef.current = null;
+                  const handle = event.currentTarget;
+                  if (
+                    typeof handle.hasPointerCapture === "function" &&
+                    handle.hasPointerCapture(event.pointerId)
+                  ) {
+                    handle.releasePointerCapture(event.pointerId);
+                  }
+                  setPreviewIds(null);
+                  if (
+                    agentRowOrderChanged(
+                      drag.startOrderedIds,
+                      drag.lastOrderedIds,
+                    )
+                  ) {
+                    onReorderProfilesRef.current(drag.lastOrderedIds);
                   }
                 };
 
                 return (
                   <TableRow
                     key={profile.id}
+                    data-agent-profile-id={profile.id}
                     className={profile.enabled ? undefined : "bg-muted/50"}
-                    onDragOver={rememberDropTarget}
                   >
                     <TableCell>
                       <button
                         type="button"
-                        draggable
                         aria-label={t("settings.reorderAgent", {
                           profileName: profile.name,
                         })}
                         title={t("settings.agentOrder")}
-                        className="grid size-7 cursor-grab place-items-center rounded-sm text-muted-foreground active:cursor-grabbing"
-                        onDragOver={rememberDropTarget}
-                        onDragStart={(event) => {
-                          draggedProfileIdRef.current = profile.id;
-                          dropTargetIdRef.current = null;
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData(
-                            "text/plain",
-                            String(profile.id),
-                          );
-                        }}
-                        onDragEnd={() => {
-                          const draggedId = draggedProfileIdRef.current;
-                          const targetId = dropTargetIdRef.current;
-                          draggedProfileIdRef.current = null;
-                          dropTargetIdRef.current = null;
-                          if (
-                            draggedId === null ||
-                            targetId === null ||
-                            draggedId === targetId
-                          ) {
-                            return;
-                          }
-                          const ids = profiles.map((item) => item.id);
-                          const fromIndex = ids.indexOf(draggedId);
-                          const toIndex = ids.indexOf(targetId);
-                          if (fromIndex < 0 || toIndex < 0) {
-                            return;
-                          }
-                          const nextIds = [...ids];
-                          const [moved] = nextIds.splice(fromIndex, 1);
-                          nextIds.splice(toIndex, 0, moved);
-                          onReorderProfiles(nextIds);
-                        }}
+                        className="grid size-7 cursor-grab touch-none place-items-center rounded-sm text-muted-foreground active:cursor-grabbing"
+                        onPointerDown={handleReorderPointerDown}
+                        onPointerMove={handleReorderPointerMove}
+                        onPointerUp={handleReorderPointerEnd}
+                        onPointerCancel={handleReorderPointerEnd}
                       >
                         <GripVertical aria-hidden="true" className="size-4" />
                       </button>
@@ -321,6 +378,25 @@ export function AgentsSettingsPanel({
       <TuiHookRegistrationCard />
     </>
   );
+}
+
+function applyPreviewOrder(
+  profiles: AgentProfileRecord[],
+  previewIds: readonly number[] | null,
+): AgentProfileRecord[] {
+  if (!previewIds) {
+    return profiles;
+  }
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+  const previewed = previewIds.flatMap((id) => {
+    const profile = byId.get(id);
+    return profile ? [profile] : [];
+  });
+  const previewedIds = new Set(previewed.map((profile) => profile.id));
+  return [
+    ...previewed,
+    ...profiles.filter((profile) => !previewedIds.has(profile.id)),
+  ];
 }
 
 function formatCommandName(command: string): string {

@@ -1253,7 +1253,7 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("saves the visible row order when the pointer is released without a drop event", async () => {
+  it("moves the whole row while dragging and saves the order on release", async () => {
     const user = userEvent.setup();
     const first: AgentProfileRecord = {
       ...projectProfile,
@@ -1283,20 +1283,27 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    dropAgentRow("First Agent", "Second Agent", { releaseOn: "handle" });
+    const dragged = reorderHandle("First Agent");
+    pointAtAgentRow("Second Agent");
+    fireEvent.pointerDown(dragged, { button: 0, pointerId: 1, clientY: 0 });
+    fireEvent.pointerMove(dragged, { pointerId: 1, clientX: 8, clientY: 40 });
+
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Second Agent",
+      "First Agent",
+    ]);
+    expect(saveAgentDisplayOrderMock).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(dragged, { pointerId: 1, clientX: 8, clientY: 40 });
 
     await waitFor(() =>
       expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
         profileIds: [22, 11],
       }),
     );
-    expect(agentRowNames(agentTableRows())).toEqual([
-      "Second Agent",
-      "First Agent",
-    ]);
   });
 
-  it("saves the visible row order when the pointer is released on the reorder handle", async () => {
+  it("does not save when the pointer is released on the same row", async () => {
     const user = userEvent.setup();
     const first: AgentProfileRecord = {
       ...projectProfile,
@@ -1326,20 +1333,16 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    dropAgentRow("First Agent", "Second Agent", { releaseOn: "handle" });
+    dragAgentRow("First Agent", "First Agent");
 
-    await waitFor(() =>
-      expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
-        profileIds: [22, 11],
-      }),
-    );
+    expect(saveAgentDisplayOrderMock).not.toHaveBeenCalled();
     expect(agentRowNames(agentTableRows())).toEqual([
-      "Second Agent",
       "First Agent",
+      "Second Agent",
     ]);
   });
 
-  it("saves the visible row order when a reorder handle is dropped", async () => {
+  it("saves the visible row order when the pointer moves onto a later row", async () => {
     const user = userEvent.setup();
     const first: AgentProfileRecord = {
       ...projectProfile,
@@ -1376,7 +1379,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    dropAgentRow("First Agent", "Third Agent");
+    dragAgentRow("First Agent", "Third Agent");
 
     await waitFor(() =>
       expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
@@ -1421,7 +1424,7 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    dropAgentRow("First Agent", "Second Agent");
+    dragAgentRow("First Agent", "Second Agent");
 
     expect(
       await screen.findByRole("status", { name: "Settings status" }),
@@ -2208,38 +2211,25 @@ function agentRowNames(rows: HTMLElement[]): string[] {
   });
 }
 
-function dropAgentRow(
-  draggedName: string,
-  targetName: string,
-  options?: { releaseOn?: "row" | "handle" },
-): void {
-  const dragged = screen.getByRole("button", {
-    name: `Reorder ${draggedName}`,
-  });
-  const targetHandle = screen.getByRole("button", {
-    name: `Reorder ${targetName}`,
-  });
-  const targetRow = targetHandle.closest("tr");
+function reorderHandle(name: string): HTMLElement {
+  return screen.getByRole("button", { name: `Reorder ${name}` });
+}
+
+function pointAtAgentRow(name: string): void {
+  const targetRow = reorderHandle(name).closest("tr");
   if (!targetRow) {
-    throw new Error(`missing row for ${targetName}`);
+    throw new Error(`missing row for ${name}`);
   }
-  // 浏览器在松手时经常不派发 drop（落点是握柄，或 dragover 没被接受）。
-  // 顺序必须在悬停后的 dragend 里提交。
-  const hoverTarget =
-    options?.releaseOn === "handle" ? targetHandle : targetRow;
-  const store = new Map<string, string>();
-  const dataTransfer = {
-    effectAllowed: "move",
-    dropEffect: "copy",
-    setData: (type: string, value: string) => {
-      store.set(type, value);
-    },
-    getData: (type: string) => store.get(type) ?? "",
-  };
-  fireEvent.dragStart(dragged, { dataTransfer });
-  fireEvent.dragOver(hoverTarget, { dataTransfer });
-  fireEvent.dragEnd(dragged, { dataTransfer });
-  expect(dataTransfer.dropEffect).toBe("move");
+  // 指针捕获后事件仍发在握柄上，落点行要靠 elementsFromPoint。
+  document.elementsFromPoint = () => [targetRow];
+}
+
+function dragAgentRow(draggedName: string, targetName: string): void {
+  const dragged = reorderHandle(draggedName);
+  pointAtAgentRow(targetName);
+  fireEvent.pointerDown(dragged, { button: 0, pointerId: 1, clientY: 0 });
+  fireEvent.pointerMove(dragged, { pointerId: 1, clientX: 8, clientY: 40 });
+  fireEvent.pointerUp(dragged, { pointerId: 1, clientX: 8, clientY: 40 });
 }
 
 function skillResponse(
