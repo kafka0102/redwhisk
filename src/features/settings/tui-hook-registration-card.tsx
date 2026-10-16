@@ -157,7 +157,7 @@ function TuiHookAgentRow({
 
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-      <span className="flex w-24 min-w-0 items-center gap-2">
+      <span className="flex w-40 shrink-0 items-center gap-2">
         <img
           alt={label}
           className="block size-[22px]"
@@ -205,27 +205,30 @@ function TuiHookAgentRow({
             </TooltipContent>
           </Tooltip>
         ) : null}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={installDisabled}
-          onClick={() => {
-            void installTuiHook({ agent }).then(onChanged).catch(onFailed);
-          }}
-        >
-          {t("settings.tuiHookInstall")}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            void uninstallTuiHook({ agent }).then(onChanged).catch(onFailed);
-          }}
-        >
-          {t("settings.tuiHookUninstall")}
-        </Button>
+        {registered ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void uninstallTuiHook({ agent }).then(onChanged).catch(onFailed);
+            }}
+          >
+            {t("settings.tuiHookUninstall")}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={installDisabled}
+            onClick={() => {
+              void installTuiHook({ agent }).then(onChanged).catch(onFailed);
+            }}
+          >
+            {t("settings.tuiHookInstall")}
+          </Button>
+        )}
         <Button type="button" size="sm" variant="outline" onClick={onRecheck}>
           {t("settings.tuiHookRecheck")}
         </Button>

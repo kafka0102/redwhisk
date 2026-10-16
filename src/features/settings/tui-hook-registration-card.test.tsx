@@ -60,6 +60,8 @@ describe("TuiHookRegistrationCard", () => {
     expect(screen.queryByText(/TUI hook/i)).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Codex" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Grok" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "卸载" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "安装" })).toHaveLength(1);
   });
 
   it("keeps long notices in the help tooltip instead of the card body", async () => {
@@ -99,9 +101,10 @@ describe("TuiHookRegistrationCard", () => {
     expect(screen.getByText("未注册")).toBeInTheDocument();
     expect(screen.queryByText("已生效")).not.toBeInTheDocument();
     expect(screen.queryByText(/安装暂时无法完成/)).not.toBeInTheDocument();
-    for (const button of screen.getAllByRole("button", { name: "安装" })) {
-      expect(button).toBeDisabled();
-    }
+    const installButtons = screen.getAllByRole("button", { name: "安装" });
+    expect(installButtons).toHaveLength(1);
+    expect(installButtons[0]).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "卸载" })).toHaveLength(1);
 
     screen.getByRole("button", { name: "说明" }).focus();
     expect(await screen.findByText(/安装暂时无法完成/)).toBeInTheDocument();
@@ -130,6 +133,9 @@ describe("TuiHookRegistrationCard", () => {
     expect(
       await screen.findByText("允许写入 [features] hooks = true"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "卸载" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "安装" })[0]);
     expect(installMock).toHaveBeenCalledWith({ agent: "codex" });
     expect(enableMock).not.toHaveBeenCalled();
@@ -139,9 +145,9 @@ describe("TuiHookRegistrationCard", () => {
     expect(installMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows an alert when install fails", async () => {
+  it("shows an alert when uninstall fails", async () => {
     const user = userEvent.setup();
-    installMock.mockRejectedValue({
+    uninstallMock.mockRejectedValue({
       code: "SETTINGS_PERSISTENCE_FAILED",
       message: "Failed to update the TUI hook registration.",
       reason: "channelUnavailable",
@@ -149,7 +155,7 @@ describe("TuiHookRegistrationCard", () => {
     renderCard();
     await screen.findByText("已注册");
 
-    await user.click(screen.getAllByRole("button", { name: "安装" })[0]);
+    await user.click(screen.getByRole("button", { name: "卸载" }));
 
     expect(await screen.findByText("本机状态通道不可用")).toBeInTheDocument();
   });
