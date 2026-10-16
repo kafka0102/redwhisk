@@ -51,13 +51,15 @@ Grok 还会把 Claude 配置里的 hook 当 Claude hook 跑。那些进程没有
 
 ### 注册进 CLI 的形态
 
-RedWhisk 只注册观察事件，不注册 `PreToolUse`。状态不需要工具粒度，也避免短 timeout 干扰工具。
+RedWhisk 注册观察事件，外加 `PreToolUse` / `PostToolUse` 作为长 turn 的保活。这些命令仍是 fail-open：stdout 为空、退出码 0，不回 deny。timeout 5 秒，避免拖住工具。
 
 Codex，合并进 `~/.codex/hooks.json` 的 `hooks` 对象（官方格式，事件名在 `hooks` 下）。每个事件追加一个 matcher 组，不删除其它组：
 
 | 事件 | matcher | timeout |
 | --- | --- | --- |
 | `UserPromptSubmit` | 省略 | 5 |
+| `PreToolUse` | 省略 | 5 |
+| `PostToolUse` | 省略 | 5 |
 | `Stop` | 省略 | 5 |
 | `Interrupt` | 省略 | 不写；官方默认 1 秒，上限 3 秒 |
 
@@ -68,6 +70,9 @@ Grok，独占文件 `~/.grok/hooks/redwhisk.json`。官方发现规则是该目�
 | 事件 | matcher |
 | --- | --- |
 | `UserPromptSubmit` | 省略 |
+| `PreToolUse` | `*` |
+| `PostToolUse` | `*` |
+| `PostToolUseFailure` | `*` |
 | `Stop` | 省略 |
 | `StopFailure` | 省略 |
 | `StopCancelled` | 省略 |
@@ -86,6 +91,10 @@ Codex 的 feature flag：安装前读 `codex features list`。`hooks` 已是 sta
 | 输入 | `is_turn_running` |
 | --- | --- |
 | Codex / Grok `UserPromptSubmit` | 1，并清空 `turn_ended_at` |
+| Codex / Grok `PreToolUse`，当前为 0 | 1，并清空 `turn_ended_at` |
+| Codex / Grok `PreToolUse`，当前为 1 | 不改行，只刷新 3 分钟静默墙钟 |
+| Codex / Grok `PostToolUse` / `PostToolUseFailure`，当前为 1 | 不改行，只刷新静默墙钟 |
+| 上述 Post 事件，当前为 0 | 不改，避免 Stop 之后被补发的工具收尾重新点亮 |
 | Codex `Stop` | 0 |
 | Codex `Interrupt` | 0 |
 | Grok `Stop`，且 `reason` 缺省或等于 `end_turn` | 0 |
@@ -106,7 +115,7 @@ Codex 的 feature flag：安装前读 `codex features list`。`hooks` 已是 sta
 只清、不置的兜底，挂在现有 5 秒心跳循环旁，不新增定时器产品：
 
 - 记录该 TUI 行最后一次「hook 置为 running」的墙钟（内存即可，不必新列；进程重启后本来就不知道半截 turn）。
-- 若标志仍为 1，且之后 3 分钟没有任何会维持 running 的 hook（新的 `UserPromptSubmit`，或我们虽未订阅、但若以后加上的工具事件），就写 0。3 分钟只为吞掉丢失的 Stop，不表示 turn 的合法时长。长 turn 只要 CLI 仍按文档在 turn 结束时发 Stop，就不会误伤。
+- 若标志仍为 1，且之后 3 分钟没有任何会维持 running 的 hook（新的 `UserPromptSubmit`，或 `PreToolUse` / `PostToolUse` / `PostToolUseFailure`），就写 0。3 分钟只为吞掉丢失的 Stop，不表示 turn 的合法时长。工具事件只在已经是 1 时刷新墙钟，因此一次持续数分钟的工具循环不会在中途被清成蓝点。
 - 若产品验证发现 Codex / Grok 在长 turn 中完全静默、Stop 又经常丢，再把窗口调大；默认先短，避免死绿。
 
 进程退出路径保持权威：退出即 0，不受这个窗口影响。
@@ -172,8 +181,8 @@ card 展示两行，Codex 与 Grok 各一行：
 ## 验收
 
 - Codex TUI、hook 已注册且已信任：提交 prompt 后该 card 变为 `status-dot--running` 并出现 spinner；Stop 后恢复 `in-progress` 蓝点；`attention=requested` 时仍是 attention 色，不转圈。
-- Grok TUI：`UserPromptSubmit` 变绿；`Stop`（无 reason 或 `end_turn`）变蓝；`reason=shutdown` 不变；`StopCancelled` 与 `StopFailure` 变蓝；`idle_prompt` 只在当前为绿时变蓝。
-- 同一 `~/.codex/hooks.json` 里原有 Open Island command 还在；卸载后只少 RedWhisk 的三组。`~/.grok/hooks/open-island.json` 字节不变；卸载后没有 `redwhisk.json`。
+- Grok TUI：`UserPromptSubmit` 变绿；工具循环中的 `PreToolUse` 保持绿，若静默兜底已清掉则下一次 `PreToolUse` 再变绿；`Stop`（无 reason 或 `end_turn`）变蓝；`reason=shutdown` 不变；`StopCancelled` 与 `StopFailure` 变蓝；`idle_prompt` 只在当前为绿时变蓝。
+- 同一 `~/.codex/hooks.json` 里原有 Open Island command 还在；卸载后只少 RedWhisk 自己的事件组。`~/.grok/hooks/open-island.json` 字节不变；卸载后没有 `redwhisk.json`。
 - hook 命令在 socket 拒绝连接时 exit 0，stdout 为空。
 - 不带 `REDWHISK_SESSION_ID`、且 `provider_session_id` 也对不上的事件不改任何行。
 - 项目终端的 PTY 环境里没有这两个变量。
@@ -186,6 +195,6 @@ card 展示两行，Codex 与 Grok 各一行：
 
 - Codex 信任门会让「已安装」不等于「会收到事件」。设置文案和检测状态必须把这件事说成 CLI 侧状态，而不是 RedWhisk 故障。检测做不到「已信任」时，就不要显示成已生效。
 - 官方事件表会变。Grok 的 `StopCancelled` 已经比 2026-07-02 文档多一项。实现时把事件名集中在一个匹配表，未知事件忽略。
-- 长 turn 加 3 分钟静默兜底可能误清。误清的表现是绿点变回蓝点，下一次 `UserPromptSubmit` 或我们尚未订阅的事件都不会自动恢复；若用户仍看到 agent 在跑而点变蓝，应调大窗口，而不是改回「进程活着即绿」。
+- 长 turn 加 3 分钟静默兜底可能误清：一次工具本身超过 3 分钟、且中间没有新的工具 hook 时，绿点仍会变回蓝点。下一次 `PreToolUse` 会再点亮。不要改回「进程活着即绿」；若单条工具经常超过窗口，再调大窗口。
 - 用户主目录里的 hook 是全局的。其它途径启动的 Codex / Grok 也会执行这条 command。没有 `REDWHISK_SESSION_ID` 且对不上 `provider_session_id` 时必须无操作，这样额外启动只多一次失败的本机连接。
 - 多 RedWhisk 实例若同时听一个 socket，后启动的会失败。listener 绑定失败时应在设置 card 显示「本机状态通道不可用」，而不是安装一个必然丢事件的 hook。

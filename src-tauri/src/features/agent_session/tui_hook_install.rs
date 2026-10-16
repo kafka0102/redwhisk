@@ -25,6 +25,16 @@ const CODEX_EVENTS: &[HookEventSpec] = &[
         matcher: None,
     },
     HookEventSpec {
+        name: "PreToolUse",
+        timeout: Some(5),
+        matcher: None,
+    },
+    HookEventSpec {
+        name: "PostToolUse",
+        timeout: Some(5),
+        matcher: None,
+    },
+    HookEventSpec {
         name: "Stop",
         timeout: Some(5),
         matcher: None,
@@ -41,6 +51,21 @@ const GROK_EVENTS: &[HookEventSpec] = &[
         name: "UserPromptSubmit",
         timeout: Some(5),
         matcher: None,
+    },
+    HookEventSpec {
+        name: "PreToolUse",
+        timeout: Some(5),
+        matcher: Some("*"),
+    },
+    HookEventSpec {
+        name: "PostToolUse",
+        timeout: Some(5),
+        matcher: Some("*"),
+    },
+    HookEventSpec {
+        name: "PostToolUseFailure",
+        timeout: Some(5),
+        matcher: Some("*"),
     },
     HookEventSpec {
         name: "Stop",

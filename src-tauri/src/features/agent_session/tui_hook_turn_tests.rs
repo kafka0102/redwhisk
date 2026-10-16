@@ -170,6 +170,79 @@ fn user_prompt_submit_marks_codex_and_grok_tui_running() {
 }
 
 #[test]
+fn pre_tool_use_restarts_a_cleared_turn_for_codex_and_grok() {
+    let database = database();
+    insert_session(&database, tui(1, "codex"));
+    insert_session(&database, tui(2, "grok"));
+    let repository = AgentSessionRepository::new(&database);
+
+    for (id, source) in [(1, TuiHookSource::Codex), (2, TuiHookSource::Grok)] {
+        let outcome = apply_tui_hook_event(
+            &repository,
+            &event(id, source, "PreToolUse", json!({})),
+            4_000,
+        )
+        .expect("apply");
+        assert!(outcome.changed);
+        assert!(outcome.marked_running);
+        let row = read_turn(&database, id);
+        assert_eq!(row.is_turn_running, 1);
+        assert_eq!(row.turn_started_at, Some(4_000));
+        assert_eq!(row.turn_ended_at, None);
+    }
+}
+
+#[test]
+fn tool_events_keep_a_running_turn_without_rewriting_its_start() {
+    let database = database();
+    for id in [1, 2] {
+        insert_session(
+            &database,
+            SessionSeed {
+                is_turn_running: 1,
+                turn_started_at: Some(10),
+                ..tui(id, "codex")
+            },
+        );
+    }
+    let repository = AgentSessionRepository::new(&database);
+
+    for (id, name) in [(1, "PreToolUse"), (2, "PostToolUse")] {
+        let outcome = apply_tui_hook_event(
+            &repository,
+            &event(id, TuiHookSource::Codex, name, json!({})),
+            9_000,
+        )
+        .expect("apply");
+        assert!(!outcome.changed, "{name} 不应改已经在跑的行");
+        assert!(!outcome.marked_running);
+        assert!(outcome.list_changed_reason.is_none());
+        let row = read_turn(&database, id);
+        assert_eq!(row.is_turn_running, 1);
+        assert_eq!(row.turn_started_at, Some(10));
+    }
+}
+
+#[test]
+fn post_tool_use_does_not_revive_an_idle_turn() {
+    let database = database();
+    insert_session(&database, tui(1, "grok"));
+    let repository = AgentSessionRepository::new(&database);
+
+    for name in ["PostToolUse", "PostToolUseFailure"] {
+        let outcome = apply_tui_hook_event(
+            &repository,
+            &event(1, TuiHookSource::Grok, name, json!({})),
+            9_000,
+        )
+        .expect("apply");
+        assert!(!outcome.changed, "{name}");
+        assert_eq!(read_turn(&database, 1).is_turn_running, 0);
+        assert_eq!(read_turn(&database, 1).turn_started_at, None);
+    }
+}
+
+#[test]
 fn codex_stop_and_interrupt_clear_immediately_without_grace() {
     let database = database();
     for id in [1, 2] {

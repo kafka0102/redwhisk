@@ -5,8 +5,7 @@ use serde_json::json;
 use super::tui_hook_turn::{
     apply_tui_hook_event, expire_recorded_silent_tui_hook_turns, expire_silent_tui_hook_turns,
     note_tui_hook_turn_started, provider_session_id_from_payload, resolve_tui_hook_session,
-    tui_hook_turn_clock_contains,
-    TuiHookCorrelation, TuiHookSource, TUI_HOOK_SILENCE_WINDOW,
+    tui_hook_turn_clock_contains, TuiHookCorrelation, TuiHookSource, TUI_HOOK_SILENCE_WINDOW,
 };
 use super::tui_hook_turn_tests::{database, event, insert_session, read_turn, tui, SessionSeed};
 use crate::db::agent_session_repository::AgentSessionRepository;
@@ -241,14 +240,51 @@ fn successful_stop_forgets_the_silence_clock_so_heartbeat_does_not_rewrite() {
     assert_eq!(read_turn(&database, 41).is_turn_running, 0);
 
     let window_ms = TUI_HOOK_SILENCE_WINDOW.as_millis() as i64;
-    let expired = expire_recorded_silent_tui_hook_turns(&repository, 2_000 + window_ms)
-        .expect("expire");
+    let expired =
+        expire_recorded_silent_tui_hook_turns(&repository, 2_000 + window_ms).expect("expire");
     assert!(
         expired.is_empty(),
         "Stop 已清标志后，内存墙钟必须忘掉该 session，心跳不得再打空 UPDATE"
     );
     assert_eq!(read_turn(&database, 41).is_turn_running, 0);
     assert_eq!(read_turn(&database, 41).turn_ended_at, None);
+}
+
+#[test]
+fn pre_tool_use_refreshes_silence_clock_so_a_long_turn_is_not_cleared() {
+    let database = database();
+    insert_session(
+        &database,
+        SessionSeed {
+            is_turn_running: 1,
+            turn_started_at: Some(10),
+            ..tui(51, "grok")
+        },
+    );
+    let repository = AgentSessionRepository::new(&database);
+    note_tui_hook_turn_started(51, 1_000);
+    let kept = apply_tui_hook_event(
+        &repository,
+        &event(51, TuiHookSource::Grok, "PreToolUse", json!({})),
+        1_000 + 170_000,
+    )
+    .expect("apply");
+    assert!(!kept.changed);
+    assert_eq!(read_turn(&database, 51).turn_started_at, Some(10));
+
+    let window_ms = TUI_HOOK_SILENCE_WINDOW.as_millis() as i64;
+    let expired_from_original_submit =
+        expire_recorded_silent_tui_hook_turns(&repository, 1_000 + window_ms).expect("expire");
+    assert!(
+        expired_from_original_submit.is_empty(),
+        "工具事件必须把静默墙钟从 UserPromptSubmit 挪走"
+    );
+    assert_eq!(read_turn(&database, 51).is_turn_running, 1);
+
+    let expired = expire_recorded_silent_tui_hook_turns(&repository, 1_000 + 170_000 + window_ms)
+        .expect("expire");
+    assert_eq!(expired, vec![51]);
+    assert_eq!(read_turn(&database, 51).is_turn_running, 0);
 }
 
 #[test]
@@ -289,8 +325,8 @@ fn process_exit_still_clears_turn_flag_immediately() {
         .expect("last active");
 
     let window_ms = TUI_HOOK_SILENCE_WINDOW.as_millis() as i64;
-    let expired = expire_recorded_silent_tui_hook_turns(&repository, 5_000 + window_ms)
-        .expect("expire");
+    let expired =
+        expire_recorded_silent_tui_hook_turns(&repository, 5_000 + window_ms).expect("expire");
     assert!(
         expired.is_empty(),
         "进程退出已清标志后，内存墙钟必须忘掉该 session"

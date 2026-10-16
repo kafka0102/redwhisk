@@ -72,7 +72,7 @@ fn read_json(path: &Path) -> serde_json::Value {
 }
 
 #[test]
-fn codex_install_appends_three_groups_and_keeps_open_island() {
+fn codex_install_appends_turn_groups_and_keeps_open_island() {
     let dir = tempfile::tempdir().expect("temp");
     let hooks = dir.path().join("hooks.json");
     let config = dir.path().join("config.toml");
@@ -83,7 +83,13 @@ fn codex_install_appends_three_groups_and_keeps_open_island() {
     install_codex_hooks(&hooks, &config, COMMAND, false).expect("install");
 
     let doc = read_json(&hooks);
-    for event in ["UserPromptSubmit", "Stop", "Interrupt"] {
+    for event in [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "Interrupt",
+    ] {
         let commands = hook_commands(&doc, event);
         assert!(
             commands
@@ -101,11 +107,14 @@ fn codex_install_appends_three_groups_and_keeps_open_island() {
     assert!(hook_commands(&doc, "SessionStart")
         .iter()
         .any(|command| command == OPEN_ISLAND));
-    assert!(doc["hooks"].get("PreToolUse").is_none());
     assert_eq!(hook_timeout(&doc, "UserPromptSubmit", COMMAND), Some(5));
+    assert_eq!(hook_timeout(&doc, "PreToolUse", COMMAND), Some(5));
+    assert_eq!(hook_timeout(&doc, "PostToolUse", COMMAND), Some(5));
     assert_eq!(hook_timeout(&doc, "Stop", COMMAND), Some(5));
     assert!(hook_timeout(&doc, "Interrupt", COMMAND).is_none());
     assert!(!group_has_matcher(&doc, "UserPromptSubmit", COMMAND));
+    assert!(!group_has_matcher(&doc, "PreToolUse", COMMAND));
+    assert!(!group_has_matcher(&doc, "PostToolUse", COMMAND));
     assert!(!group_has_matcher(&doc, "Stop", COMMAND));
     assert!(!group_has_matcher(&doc, "Interrupt", COMMAND));
     assert_eq!(
@@ -142,7 +151,13 @@ fn codex_uninstall_removes_only_redwhisk_groups_even_if_timeout_changed() {
     uninstall_codex_hooks(&hooks, COMMAND).expect("uninstall");
 
     let doc = read_json(&hooks);
-    for event in ["UserPromptSubmit", "Stop", "Interrupt"] {
+    for event in [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "Interrupt",
+    ] {
         let commands = hook_commands(&doc, event);
         assert!(
             commands.iter().all(|command| !command.contains(COMMAND)),
@@ -208,6 +223,9 @@ fn grok_install_writes_only_redwhisk_json_and_leaves_open_island_bytes() {
     let doc = read_json(&dir.path().join("redwhisk.json"));
     for event in [
         "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
         "Stop",
         "StopFailure",
         "StopCancelled",
@@ -223,8 +241,10 @@ fn grok_install_writes_only_redwhisk_json_and_leaves_open_island_bytes() {
         assert_eq!(hook_timeout(&doc, event, COMMAND), Some(5));
     }
     assert!(group_has_matcher(&doc, "Notification", COMMAND));
+    assert!(group_has_matcher(&doc, "PreToolUse", COMMAND));
+    assert!(group_has_matcher(&doc, "PostToolUse", COMMAND));
+    assert!(group_has_matcher(&doc, "PostToolUseFailure", COMMAND));
     assert!(!group_has_matcher(&doc, "UserPromptSubmit", COMMAND));
-    assert!(doc["hooks"].get("PreToolUse").is_none());
     assert!(doc["hooks"].get("SessionStart").is_none());
 }
 
@@ -266,6 +286,9 @@ fn grok_uninstall_keeps_foreign_commands_and_deletes_file_only_when_empty() {
     assert_eq!(commands, vec!["/tmp/user-hook --source grok".to_string()]);
     for event in [
         "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
         "StopFailure",
         "StopCancelled",
         "Notification",

@@ -67,6 +67,8 @@ pub struct TuiHookApplyOutcome {
 enum TurnFlagDecision {
     Start,
     Stop,
+    /// 工具仍在进行。已经是 running 时只刷新静默墙钟，不改 `turn_started_at`。
+    KeepAlive,
     Ignore,
 }
 
@@ -107,6 +109,12 @@ pub fn apply_tui_hook_event(
                 list_changed_reason: Some(LIST_CHANGED_REASON),
                 marked_running: true,
             })
+        }
+        TurnFlagDecision::KeepAlive => {
+            if snapshot.is_turn_running {
+                note_tui_hook_turn_started(event.session_id, now);
+            }
+            Ok(unchanged)
         }
         TurnFlagDecision::Stop => {
             let changed = repository.clear_tui_hook_turn(event.session_id)?;
@@ -194,7 +202,8 @@ pub fn expire_recorded_silent_tui_hook_turns(
     Ok(expired)
 }
 
-/// 心跳旁路：标志仍为 1，且距最后一次「hook 置为 running」已满 3 分钟，则写 0。
+/// 心跳旁路：标志仍为 1，且距最后一次维持 running 的 hook 已满 3 分钟，则写 0。
+/// `PreToolUse` / `PostToolUse` 在 turn 仍为 1 时刷新这口墙钟，避免长任务中途被清成蓝点。
 /// 内存没有该行的墙钟（含进程重启）时不补半截 turn，也不置 1。
 /// 返回实际被清掉的 session id（每个都应发 list-changed），
 /// 以及窗口已满但行已不是 running tui 的 id（调用方应忘掉墙钟，不再空 UPDATE）。
@@ -242,6 +251,20 @@ fn decide_turn_flag(
 ) -> TurnFlagDecision {
     match (source, event_name) {
         (TuiHookSource::Codex | TuiHookSource::Grok, "UserPromptSubmit") => TurnFlagDecision::Start,
+        (TuiHookSource::Codex | TuiHookSource::Grok, "PreToolUse") => {
+            if is_turn_running {
+                TurnFlagDecision::KeepAlive
+            } else {
+                TurnFlagDecision::Start
+            }
+        }
+        (TuiHookSource::Codex | TuiHookSource::Grok, "PostToolUse" | "PostToolUseFailure") => {
+            if is_turn_running {
+                TurnFlagDecision::KeepAlive
+            } else {
+                TurnFlagDecision::Ignore
+            }
+        }
         (TuiHookSource::Codex, "Stop" | "Interrupt") => TurnFlagDecision::Stop,
         (TuiHookSource::Grok, "Stop") => {
             if grok_stop_ends_turn(payload) {
