@@ -131,15 +131,40 @@ check_allowlist_no_new_files() {
 }
 
 collect_changed_frontend_files() {
+  if [[ -n "$FROM_REF" ]]; then
+    git -C "$REPO_ROOT" diff --name-only "$FROM_REF" HEAD -- src 2>/dev/null || true
+    return
+  fi
   # pathspec 用目录前缀 src；非源码（测试文件、src/test/）由 is_counted_source 过滤。
   git -C "$REPO_ROOT" diff --name-only HEAD -- src 2>/dev/null || true
   git -C "$REPO_ROOT" ls-files --others --exclude-standard -- src 2>/dev/null || true
+}
+
+# 空转告警：git 模式只看未提交改动，提交后再跑将看不到任何文件而「通过」。
+# 若 HEAD 提交本身触及了受管源码，显式说明这次运行等于没检查，避免把空转当成门禁通过。
+warn_gate_noop() {
+  echo "  (无待检查的前端源码文件改动)"
+  # 仅默认模式（未指定 --from）下判断是否空转：HEAD 提交自身触及受管源码、
+  # 而工作区干净，说明门禁很可能是在 commit 之后才跑的。
+  [[ -z "$FROM_REF" ]] || return 0
+  local base recent
+  base="$(git -C "$REPO_ROOT" rev-parse --verify -q HEAD~1 2>/dev/null || true)"
+  [[ -n "$base" ]] || return 0
+  recent="$(
+    git -C "$REPO_ROOT" diff --name-only "$base" HEAD -- src 2>/dev/null | head -5 || true
+  )"
+  [[ -n "$recent" ]] || return 0
+  echo
+  echo "  [告警] HEAD 提交触及了前端源码，但工作区无未提交改动：本次运行属于空转，未检查任何文件。"
+  echo "         门禁须在 git commit 之前运行；改动已提交时用 --from 指定范围复查，例如："
+  echo "         bash scripts/check-frontend-file-size.sh --from HEAD~1"
 }
 
 usage() {
   cat <<'USAGE'
 用法:
   check-frontend-file-size.sh                     检查本次 git 改动触及的 .ts/.tsx 源码文件（门禁默认）
+  check-frontend-file-size.sh --from <ref>        检查 <ref>..HEAD 之间改动触及的 .ts/.tsx 源码文件
   check-frontend-file-size.sh --files f1 f2 ..    检查指定文件（测试用）
   check-frontend-file-size.sh --all               扫描全仓，打印报告（不阻断）
   check-frontend-file-size.sh --all --names-only  仅打印超阈值路径（维护白名单用）
@@ -151,11 +176,18 @@ USAGE
 
 mode=git
 names_only=0
+FROM_REF=""
 files=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --all) mode=all; shift;;
     --files) mode=files; shift;;
+    --from)
+      FROM_REF="${2:-}"
+      shift
+      [[ $# -gt 0 ]] && shift
+      ;;
+    --from=*) FROM_REF="${1#--from=}"; shift;;
     --names-only) names_only=1; shift;;
     -h|--help) usage; exit 0;;
     *) files+=("$1"); shift;;
@@ -186,10 +218,14 @@ case "$mode" in
     check_allowlist_no_new_files
     ;;
   git)
-    echo "检查本次 git 改动触及的前端源码文件:"
+    if [[ -n "$FROM_REF" ]]; then
+      echo "检查 $FROM_REF..HEAD 触及的前端源码文件:"
+    else
+      echo "检查本次 git 改动触及的前端源码文件:"
+    fi
     changed="$(collect_changed_frontend_files | sort -u)"
     if [[ -z "$changed" ]]; then
-      echo "  (无前端源码文件改动)"
+      warn_gate_noop
     else
       while IFS= read -r rel; do
         [[ -n "$rel" ]] || continue

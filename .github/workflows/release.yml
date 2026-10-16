@@ -52,6 +52,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # AGENTS.md 质量门禁要求前端行为改动必须跑全量 vitest；
+      # 只跑全量（不跑 -t 过滤），因为部分既有用例在过滤运行下依赖同文件其它用例的时序。
+      - name: 前端测试
+        run: pnpm test
+
       - name: 前端构建
         run: pnpm build
 
