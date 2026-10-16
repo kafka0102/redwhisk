@@ -147,15 +147,17 @@ warn_gate_noop() {
   # 仅默认模式（未指定 --from）下判断是否空转：HEAD 提交自身触及受管源码、
   # 而工作区干净，说明门禁很可能是在 commit 之后才跑的。
   [[ -z "$FROM_REF" ]] || return 0
-  local base recent
+  local base rel counted=0
   base="$(git -C "$REPO_ROOT" rev-parse --verify -q HEAD~1 2>/dev/null || true)"
   [[ -n "$base" ]] || return 0
-  recent="$(
-    git -C "$REPO_ROOT" diff --name-only "$base" HEAD -- src 2>/dev/null | head -5 || true
-  )"
-  [[ -n "$recent" ]] || return 0
+  # 只统计门禁真正管的文件，测试文件与 src/test/ 不计入。
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] || continue
+    is_counted_source "$rel" && counted=$((counted + 1))
+  done < <(git -C "$REPO_ROOT" diff --name-only "$base" HEAD -- src 2>/dev/null || true)
+  (( counted > 0 )) || return 0
   echo
-  echo "  [告警] HEAD 提交触及了前端源码，但工作区无未提交改动：本次运行属于空转，未检查任何文件。"
+  printf '  [告警] HEAD 提交触及 %s 个前端源码文件，但工作区无未提交改动：本次运行属于空转，未检查任何文件。\n' "$counted"
   echo "         门禁须在 git commit 之前运行；改动已提交时用 --from 指定范围复查，例如："
   echo "         bash scripts/check-frontend-file-size.sh --from HEAD~1"
 }
