@@ -155,6 +155,86 @@ describe("IssueReadonlySessionPanel 运行参数模型", () => {
   });
 });
 
+describe("IssueReadonlySessionPanel 开发模式", () => {
+  it("shows the worktree branch and adds the 分支目录 row right after", async () => {
+    renderPanel(
+      makeSession({
+        workspaceMode: "worktree",
+        workspaceBranch: "issue-299-redwhisk",
+        workspacePath: "/tmp/repo/.worktrees/issue-299-redwhisk",
+        workingDir: "/tmp/repo",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeInTheDocument();
+    });
+
+    const labels = runParameterLabels();
+    expect(runParameterValue("开发模式")).toBe("工作树 (issue-299-redwhisk)");
+    expect(labels[labels.indexOf("开发模式") + 1]).toBe("分支目录");
+    expect(runParameterValue("分支目录")).toBe(
+      "/tmp/repo/.worktrees/issue-299-redwhisk",
+    );
+  });
+
+  it("falls back to the origin branch when the workspace branch is missing", async () => {
+    renderPanel(
+      makeSession({
+        workspaceMode: "worktree",
+        workspaceBranch: null,
+        originBranch: "issue-299-redwhisk",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeInTheDocument();
+    });
+    expect(runParameterValue("开发模式")).toBe("工作树 (issue-299-redwhisk)");
+  });
+
+  it("falls back to the working dir then 无 for the 分支目录 row", async () => {
+    renderPanel(
+      makeSession({
+        workspaceMode: "worktree",
+        workspacePath: null,
+        workingDir: "/tmp/fallback-repo",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeInTheDocument();
+    });
+    expect(runParameterValue("分支目录")).toBe("/tmp/fallback-repo");
+  });
+
+  it("shows 无 for the 分支目录 row when both paths are empty", async () => {
+    renderPanel(
+      makeSession({
+        workspaceMode: "worktree",
+        workspacePath: "   ",
+        workingDir: "",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeInTheDocument();
+    });
+    expect(runParameterValue("分支目录")).toBe("无");
+  });
+
+  it("keeps the current branch form and hides the 分支目录 row", async () => {
+    renderPanel(
+      makeSession({
+        workspaceMode: "current_branch",
+        workspaceBranch: "main",
+        workspacePath: "/tmp/repo/.worktrees/issue-299-redwhisk",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeInTheDocument();
+    });
+    expect(runParameterValue("开发模式")).toBe("当前分支 (main)");
+    expect(runParameterLabels()).not.toContain("分支目录");
+  });
+});
+
 describe("IssueReadonlySessionPanel Session Token 消耗", () => {
   it("shows five token rows under session status as dashes when usage is missing", async () => {
     renderPanel(makeSession());

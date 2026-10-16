@@ -366,6 +366,7 @@
     "currentBranch": "当前分支",
     "targetBranch": "目标分支",
     "worktree": "工作树",
+    "worktreePath": "分支目录",
     "dialogStatus": "弹窗状态",
     "agentProfile": "智能体配置",
     "completionDirtyTitle": "存在未提交改动",

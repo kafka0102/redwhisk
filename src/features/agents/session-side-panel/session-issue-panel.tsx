@@ -79,7 +79,7 @@ export function SessionIssuePanel({
   const runtimeParameters = useMemo(() => {
     const workflowSkillName =
       session?.workflowSkillName?.trim() || messages.agentsFeature.none;
-    return [
+    const items = [
       {
         label: messages.agentsFeature.agent,
         value: session?.agentProfileName?.trim() || messages.agentsFeature.none,
@@ -97,6 +97,13 @@ export function SessionIssuePanel({
         value: formatDevelopmentMode(session, messages),
       },
     ];
+    if (session?.workspaceMode === "worktree") {
+      items.push({
+        label: messages.issues.worktreePath,
+        value: formatWorktreePath(session, messages),
+      });
+    }
+    return items;
   }, [messages, session]);
   const sessionInfo = useMemo(
     () => [
@@ -259,10 +266,18 @@ function formatDevelopmentMode(
     return `${messages.issues.currentBranch} (${branchName})`;
   }
 
-  const worktreeName = getWorktreeName(
-    session.workspacePath ?? session.workingDir,
+  return `${messages.issues.worktree} (${branchName})`;
+}
+
+function formatWorktreePath(
+  session: AgentSessionListItem,
+  messages: ReturnType<typeof useI18n>["messages"],
+): string {
+  return (
+    session.workspacePath?.trim() ||
+    session.workingDir?.trim() ||
+    messages.agentsFeature.none
   );
-  return `${messages.issues.worktree} (${branchName}) ${worktreeName}`.trim();
 }
 
 function formatSessionStatus(
@@ -281,13 +296,4 @@ function formatSessionStatus(
     default:
       return messages.agentsFeature.none;
   }
-}
-
-function getWorktreeName(path: string | null | undefined): string {
-  if (!path) {
-    return "";
-  }
-
-  const segments = path.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? "";
 }

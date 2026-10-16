@@ -5078,7 +5078,10 @@ describe("IssuesActivity", () => {
       within(sessionPanel).getByText("bmad-dev-story"),
     ).toBeInTheDocument();
     expect(
-      within(sessionPanel).getByText(/Worktree \(issue-25\) issue-25/),
+      within(sessionPanel).getByText("Worktree (issue-25)"),
+    ).toBeInTheDocument();
+    expect(
+      within(sessionPanel).getByText("/tmp/worktrees/issue-25"),
     ).toBeInTheDocument();
 
     await user.click(

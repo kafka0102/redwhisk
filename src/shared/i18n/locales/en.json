@@ -366,6 +366,7 @@
     "currentBranch": "Current branch",
     "targetBranch": "Target branch",
     "worktree": "Worktree",
+    "worktreePath": "Worktree path",
     "dialogStatus": "Dialog status",
     "agentProfile": "Agent profile",
     "completionDirtyTitle": "Uncommitted changes",
