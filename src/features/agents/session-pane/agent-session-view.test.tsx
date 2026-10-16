@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentStreamEventEnvelope } from "../agent-stream-types";
-import { AgentSessionView, turnStatusForComposer } from "./agent-session-view";
+import { turnStatusForComposer } from "../message-stream/output-source";
+import { AgentSessionView } from "./agent-session-view";
 import {
   resetMessageStreamScrollOffsetCacheForTests,
   writeMessageStreamScrollOffset,

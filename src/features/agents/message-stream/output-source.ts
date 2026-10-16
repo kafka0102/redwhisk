@@ -6,6 +6,7 @@ import type {
   MessageStreamEntry,
   MessageStreamState,
   SubagentRosterEntry,
+  TurnStatus,
 } from "./message-stream-types";
 
 /** 全部、主智能体，或某一个子智能体 thread id。 */
@@ -105,6 +106,20 @@ export function projectMessageStream(
     showSourceSelect: options.length > 0,
     options,
   };
+}
+
+/** 父 Turn 已结束但花名册仍标明子智能体在跑时，停止按钮保持可停止。思考占位不跟这个走。 */
+export function turnStatusForComposer(
+  turnStatus: TurnStatus,
+  subagents: readonly SubagentRosterEntry[],
+): TurnStatus {
+  if (
+    turnStatus !== "running" &&
+    subagents.some((entry) => entry.live === true && !entry.ended)
+  ) {
+    return "running";
+  }
+  return turnStatus;
 }
 
 function outputSourceOptions(

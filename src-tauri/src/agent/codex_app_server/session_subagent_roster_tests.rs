@@ -161,23 +161,34 @@ fn build_events_subagent_turn_end_records_roster_without_ending_parent_turn() {
     );
 }
 
+fn rollout_items() -> serde_json::Value {
+    serde_json::from_str(include_str!("subagent_activity_rollout_items.json"))
+        .expect("rollout fixture")
+}
+
 #[test]
-fn subagent_activity_started_is_a_main_timeline_launch_and_roster_running() {
+fn subagent_activity_rollout_items_map_to_launch_and_roster() {
+    let items = rollout_items();
+    assert_eq!(items["started"]["type"], "SubAgentActivity");
+    assert_eq!(items["completed"]["type"], "SubAgentActivity");
+    assert_eq!(items["wait"]["type"], "CollabAgentToolCall");
+
+    let parent_thread = items["wait"]["sender_thread_id"]
+        .as_str()
+        .expect("sender")
+        .to_string();
     let state = Arc::new(Mutex::new(super::tests::empty_state()));
-    state.lock().unwrap().thread_id = Some("thr_parent".into());
-    state.lock().unwrap().current_turn_id = Some("turn_parent".into());
+    {
+        let mut guard = state.lock().unwrap();
+        guard.thread_id = Some(parent_thread.clone());
+        guard.current_turn_id = Some("turn_parent".into());
+    }
 
     let started = super::build_events(
         &state,
         super::CodexNotification::ItemCompleted {
-            item: json!({
-                "type": "SubAgentActivity",
-                "id": "call_spawn",
-                "kind": "started",
-                "agent_thread_id": "thr_child",
-                "agent_path": "/root/fact_automation_ref"
-            }),
-            thread_id: Some("thr_parent".into()),
+            item: items["started"].clone(),
+            thread_id: Some(parent_thread.clone()),
         },
     );
     let started_json = serde_json::to_value(&started).expect("started");
@@ -186,12 +197,13 @@ fn subagent_activity_started_is_a_main_timeline_launch_and_roster_running() {
     assert_eq!(started_json[0]["item"]["detail"]["type"], "collab_agent");
     assert_eq!(
         started_json[0]["item"]["detail"]["prompt"],
-        "/root/fact_automation_ref"
+        items["started"]["agent_path"]
     );
     assert_eq!(
         started_json[0]["item"]["detail"]["receiverThreadIds"],
-        json!(["thr_child"])
+        json!([items["started"]["agent_thread_id"]])
     );
+    assert_eq!(started_json[0]["item"]["callId"], items["started"]["id"]);
     assert_eq!(started_json[0]["item"]["status"], "running");
     assert_eq!(started_json[1]["item"]["type"], "subagent_roster");
     assert_eq!(started_json[1]["item"]["status"], "running");
@@ -203,41 +215,28 @@ fn subagent_activity_started_is_a_main_timeline_launch_and_roster_running() {
     let completed = super::build_events(
         &state,
         super::CodexNotification::ItemCompleted {
-            item: json!({
-                "type": "subAgentActivity",
-                "id": "subagent-completed-other",
-                "kind": "completed",
-                "agentThreadId": "thr_child",
-                "agentPath": "/root/fact_automation_ref"
-            }),
-            thread_id: Some("thr_parent".into()),
+            item: items["completed"].clone(),
+            thread_id: Some(parent_thread.clone()),
         },
     );
     let completed_json = serde_json::to_value(&completed).expect("completed");
-    assert_eq!(completed_json[0]["item"]["callId"], "call_spawn");
+    assert_eq!(completed_json[0]["item"]["callId"], items["started"]["id"]);
     assert_eq!(completed_json[0]["item"]["status"], "completed");
+    assert_eq!(
+        completed_json[0]["item"]["detail"]["prompt"],
+        items["completed"]["agent_path"]
+    );
     assert_eq!(completed_json[1]["item"]["status"], "ended");
-}
 
-#[test]
-fn empty_collab_wait_is_not_a_launch() {
-    let state = Arc::new(Mutex::new(super::tests::empty_state()));
-    state.lock().unwrap().thread_id = Some("thr_parent".into());
-    let events = super::build_events(
+    let wait = super::build_events(
         &state,
         super::CodexNotification::ItemCompleted {
-            item: json!({
-                "type": "CollabAgentToolCall",
-                "id": "call_wait",
-                "tool": "wait",
-                "sender_thread_id": "thr_parent",
-                "receiver_thread_ids": []
-            }),
-            thread_id: Some("thr_parent".into()),
+            item: items["wait"].clone(),
+            thread_id: Some(parent_thread),
         },
     );
     assert!(
-        events.iter().all(|event| !matches!(
+        wait.iter().all(|event| !matches!(
             event,
             super::AgentStreamEvent::Timeline {
                 item: super::AgentTimelineItem::ToolCall { .. },

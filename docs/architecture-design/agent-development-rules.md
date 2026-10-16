@@ -306,6 +306,7 @@ Codex 与 Claude 的 **json** session 走结构化 provider，不走 PTY；**tui
 
 - Rust 后端负责按 session 快照分流：json 时 spawn structured provider、协议分发，并把 provider 私有输出归一化为 `AgentStreamEvent` 后广播；tui 时经 `AgentProviderDescriptor::build_tui_command_snapshot` 构造交互式命令并由 `PtySessionManager` 管理进程生命周期。
 - Codex 通过 `codex app-server` 的 NDJSON JSON-RPC 接入，维护 `threadId`、`currentTurnId`、待审批权限请求和 `seq`/`epoch` 游标；模型与 effort 经 `turn/start` 透传，token 用量来自 `thread/tokenUsage/updated`。
+- json 会话里子智能体状态或拉起记录对不上时，先读本机 rollout，再看 RedWhisk runtime jsonl。runtime jsonl 只保留映射后的事件；`map_thread_item` 不认识的 `item.type` 不会出现。rollout 在 `~/.codex/sessions/**/rollout-*<threadId>.jsonl`（也认 `profiles/*/sessions/**`），`threadId` 取 runtime 日志的 `thread_started`。对照 `src-tauri/src/agent/codex_app_server/thread_item.rs` 与 `subagent_activity.rs`。
 - Claude 通过 `claude -p --output-format stream-json` 的单向 NDJSON 接入，每轮进程结束后以 session ID 恢复；它没有等价的 JSON-RPC 审批请求。
 - 附件（图片/文件）先落盘到 app data dir，再以本地路径随 provider 输入传递；不内联文件字节。
 - 前端只发统一 command，不能把 Codex 私有字段或权限模型当成所有 provider 的契约。详情见 [Agent Provider 协议](./agent-provider-protocol.md)。

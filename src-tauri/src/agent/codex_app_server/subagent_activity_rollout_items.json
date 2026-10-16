@@ -1,0 +1,30 @@
+{
+  "wait": {
+    "type": "CollabAgentToolCall",
+    "id": "call_00_hv6ozrdql0n3ovmeb71zhvtq",
+    "tool": "wait",
+    "status": "completed",
+    "sender_thread_id": "01a14292-6076-7fa3-a621-f15731fd33ae",
+    "receiver_thread_ids": [],
+    "receiver_agents": [],
+    "agents_states": {}
+  },
+  "started": {
+    "type": "SubAgentActivity",
+    "model": "deepseek-flash",
+    "reasoning_effort": "high",
+    "id": "call_00_00sjntlqi7iqukz16pmez2o1",
+    "kind": "started",
+    "agent_thread_id": "01a14341-baf5-7911-9765-1e852ce78a0c",
+    "agent_path": "/root/fact_automation_ref"
+  },
+  "completed": {
+    "type": "SubAgentActivity",
+    "model": null,
+    "reasoning_effort": null,
+    "id": "subagent-completed-01a14341-bbb0-7d80-a4dd-04752d7b353d",
+    "kind": "completed",
+    "agent_thread_id": "01a14341-baf5-7911-9765-1e852ce78a0c",
+    "agent_path": "/root/fact_automation_ref"
+  }
+}
