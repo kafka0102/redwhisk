@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type DragEvent } from "react";
 import { GripVertical, Info } from "lucide-react";
 
 import { Button, Empty, EmptyTitle } from "@/components/ui";
@@ -60,6 +60,9 @@ export function AgentsSettingsPanel({
 }: AgentsSettingsPanelProps) {
   const { messages, t } = useI18n();
   const draggedProfileIdRef = useRef<number | null>(null);
+  // drop 只发给指针下的元素，且要求该元素自己的 dragover 调过 preventDefault。
+  // 松手经常落在握柄上，行上的 drop 不会发生。悬停时记下目标行，dragend 提交。
+  const dropTargetIdRef = useRef<number | null>(null);
   // ADR-0020 决策 8：批量获取可见 profiles 的启动参数；codex/claude 返回非空、
   // opencode/grok 当前为空。仅非空时命令列渲染「i」图标。
   const { argsByProfileId } = useAgentCommandArgs(profiles);
@@ -136,42 +139,20 @@ export function AgentsSettingsPanel({
                   ? messages.settings.enabledYes
                   : messages.settings.enabledNo;
 
+                const rememberDropTarget = (event: DragEvent<HTMLElement>) => {
+                  event.preventDefault();
+                  // 默认 dropEffect 是 copy，macOS 会显示绿色加号。
+                  event.dataTransfer.dropEffect = "move";
+                  if (draggedProfileIdRef.current !== null) {
+                    dropTargetIdRef.current = profile.id;
+                  }
+                };
+
                 return (
                   <TableRow
                     key={profile.id}
                     className={profile.enabled ? undefined : "bg-muted/50"}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      // 默认 dropEffect 是 copy，macOS 会显示绿色加号，且部分 WebKit
-                      // 不会把这次松手当成行内移动提交。
-                      event.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const rawDraggedId =
-                        event.dataTransfer.getData("text/plain");
-                      const transferredId = Number(rawDraggedId);
-                      // WebKit 会在 drop 之前派发 dragend。优先读 dataTransfer，
-                      // 避免 dragend 先把 ref 清掉后这次松手被当成无效拖动。
-                      const draggedId =
-                        rawDraggedId !== "" && Number.isInteger(transferredId)
-                          ? transferredId
-                          : draggedProfileIdRef.current;
-                      draggedProfileIdRef.current = null;
-                      if (draggedId === null || draggedId === profile.id) {
-                        return;
-                      }
-                      const ids = profiles.map((item) => item.id);
-                      const fromIndex = ids.indexOf(draggedId);
-                      const toIndex = ids.indexOf(profile.id);
-                      if (fromIndex < 0 || toIndex < 0) {
-                        return;
-                      }
-                      const nextIds = [...ids];
-                      const [moved] = nextIds.splice(fromIndex, 1);
-                      nextIds.splice(toIndex, 0, moved);
-                      onReorderProfiles(nextIds);
-                    }}
+                    onDragOver={rememberDropTarget}
                   >
                     <TableCell>
                       <button
@@ -182,8 +163,10 @@ export function AgentsSettingsPanel({
                         })}
                         title={t("settings.agentOrder")}
                         className="grid size-7 cursor-grab place-items-center rounded-sm text-muted-foreground active:cursor-grabbing"
+                        onDragOver={rememberDropTarget}
                         onDragStart={(event) => {
                           draggedProfileIdRef.current = profile.id;
+                          dropTargetIdRef.current = null;
                           event.dataTransfer.effectAllowed = "move";
                           event.dataTransfer.setData(
                             "text/plain",
@@ -191,9 +174,27 @@ export function AgentsSettingsPanel({
                           );
                         }}
                         onDragEnd={() => {
-                          window.setTimeout(() => {
-                            draggedProfileIdRef.current = null;
-                          }, 0);
+                          const draggedId = draggedProfileIdRef.current;
+                          const targetId = dropTargetIdRef.current;
+                          draggedProfileIdRef.current = null;
+                          dropTargetIdRef.current = null;
+                          if (
+                            draggedId === null ||
+                            targetId === null ||
+                            draggedId === targetId
+                          ) {
+                            return;
+                          }
+                          const ids = profiles.map((item) => item.id);
+                          const fromIndex = ids.indexOf(draggedId);
+                          const toIndex = ids.indexOf(targetId);
+                          if (fromIndex < 0 || toIndex < 0) {
+                            return;
+                          }
+                          const nextIds = [...ids];
+                          const [moved] = nextIds.splice(fromIndex, 1);
+                          nextIds.splice(toIndex, 0, moved);
+                          onReorderProfiles(nextIds);
                         }}
                       >
                         <GripVertical aria-hidden="true" className="size-4" />

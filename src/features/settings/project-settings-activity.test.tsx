@@ -1253,7 +1253,7 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("saves the visible row order when dragend runs before drop", async () => {
+  it("saves the visible row order when the pointer is released without a drop event", async () => {
     const user = userEvent.setup();
     const first: AgentProfileRecord = {
       ...projectProfile,
@@ -1283,7 +1283,50 @@ describe("ProjectSettingsActivity", () => {
     await user.click(screen.getByRole("button", { name: "Agents" }));
     await screen.findByRole("table", { name: "Configured agents" });
 
-    dropAgentRow("First Agent", "Second Agent", { dragEndBeforeDrop: true });
+    dropAgentRow("First Agent", "Second Agent", { releaseOn: "handle" });
+
+    await waitFor(() =>
+      expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
+        profileIds: [22, 11],
+      }),
+    );
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Second Agent",
+      "First Agent",
+    ]);
+  });
+
+  it("saves the visible row order when the pointer is released on the reorder handle", async () => {
+    const user = userEvent.setup();
+    const first: AgentProfileRecord = {
+      ...projectProfile,
+      id: 11,
+      name: "First Agent",
+      displayOrder: 1,
+    };
+    const second: AgentProfileRecord = {
+      ...globalProfile,
+      id: 22,
+      name: "Second Agent",
+      displayOrder: 2,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [first] };
+      return { profiles: [second] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    dropAgentRow("First Agent", "Second Agent", { releaseOn: "handle" });
 
     await waitFor(() =>
       expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
@@ -2168,17 +2211,22 @@ function agentRowNames(rows: HTMLElement[]): string[] {
 function dropAgentRow(
   draggedName: string,
   targetName: string,
-  options?: { dragEndBeforeDrop?: boolean },
+  options?: { releaseOn?: "row" | "handle" },
 ): void {
   const dragged = screen.getByRole("button", {
     name: `Reorder ${draggedName}`,
   });
-  const targetRow = screen
-    .getByRole("button", { name: `Edit ${targetName}` })
-    .closest("tr");
+  const targetHandle = screen.getByRole("button", {
+    name: `Reorder ${targetName}`,
+  });
+  const targetRow = targetHandle.closest("tr");
   if (!targetRow) {
     throw new Error(`missing row for ${targetName}`);
   }
+  // 浏览器在松手时经常不派发 drop（落点是握柄，或 dragover 没被接受）。
+  // 顺序必须在悬停后的 dragend 里提交。
+  const hoverTarget =
+    options?.releaseOn === "handle" ? targetHandle : targetRow;
   const store = new Map<string, string>();
   const dataTransfer = {
     effectAllowed: "move",
@@ -2189,11 +2237,8 @@ function dropAgentRow(
     getData: (type: string) => store.get(type) ?? "",
   };
   fireEvent.dragStart(dragged, { dataTransfer });
-  fireEvent.dragOver(targetRow, { dataTransfer });
-  if (options?.dragEndBeforeDrop) {
-    fireEvent.dragEnd(dragged, { dataTransfer });
-  }
-  fireEvent.drop(targetRow, { dataTransfer });
+  fireEvent.dragOver(hoverTarget, { dataTransfer });
+  fireEvent.dragEnd(dragged, { dataTransfer });
   expect(dataTransfer.dropEffect).toBe("move");
 }
 
