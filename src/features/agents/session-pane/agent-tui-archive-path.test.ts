@@ -49,4 +49,20 @@ describe("prepareTuiArchiveMarkdownForRender", () => {
     expect(got).not.toContain("<issue-comment>");
     expect(got).not.toContain("</issue-comment>");
   });
+
+  it("保留会话记录里的 ATX 标题和 fenced code", () => {
+    const input = [
+      "第二个问题",
+      "",
+      "## 标题",
+      "",
+      "```rust",
+      "fn answer() {}",
+      "```",
+      "",
+      "第二轮结论",
+    ].join("\n");
+
+    expect(prepareTuiArchiveMarkdownForRender(input)).toBe(input);
+  });
 });

@@ -4,6 +4,7 @@
 
 mod active_time;
 pub mod active_time_heartbeat;
+mod claude_tui_archive;
 mod codex_session_id_capture;
 mod codex_session_log;
 mod codex_tui_archive;
@@ -14,6 +15,7 @@ mod grok_tui_archive;
 mod launch;
 mod lifecycle;
 mod log_path;
+mod opencode_tui_archive;
 mod service;
 mod session_log_archive;
 mod session_log_assistant;

@@ -43,6 +43,38 @@ describe("AgentTuiArchiveMarkdownView", () => {
     expect(body).not.toContain("<issue-comment>");
   });
 
+  it("会话记录提取出的标题和代码块原样交给 AgentMarkdown", async () => {
+    const snapshot = [
+      "第一个问题",
+      "",
+      "第一轮结论",
+      "",
+      "第二个问题",
+      "",
+      "## 标题",
+      "",
+      "```rust",
+      "fn answer() {}",
+      "```",
+      "",
+      "第二轮结论",
+      "",
+    ].join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot,
+      isActive: false,
+    });
+
+    render(<AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-markdown")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("agent-markdown").textContent).toBe(
+      snapshot.trim(),
+    );
+  });
+
   it("空快照显示空态", async () => {
     commandMocks.readAgentSessionTerminal.mockResolvedValue({
       snapshot: "\n\n",

@@ -23,6 +23,10 @@ pub(crate) struct TuiSessionLogSource<'a> {
     pub(crate) session_cwd: Option<&'a Path>,
     /// Grok 会话存储根。生产为 `~/.grok/sessions`；测试传入临时目录。
     pub(crate) grok_sessions_root: Option<&'a Path>,
+    /// Claude 本机会话根。生产为 `~/.claude/projects`；测试传入临时目录。
+    pub(crate) claude_projects_root: Option<&'a Path>,
+    /// OpenCode sqlite。生产为 `~/.local/share/opencode/opencode.db`；测试传入临时库。
+    pub(crate) opencode_db_path: Option<&'a Path>,
 }
 
 impl<'a> TuiSessionLogSource<'a> {
@@ -38,6 +42,8 @@ impl<'a> TuiSessionLogSource<'a> {
             codex_home,
             session_cwd: None,
             grok_sessions_root: None,
+            claude_projects_root: None,
+            opencode_db_path: None,
         }
     }
 
@@ -49,6 +55,28 @@ impl<'a> TuiSessionLogSource<'a> {
     ) -> Self {
         self.session_cwd = session_cwd;
         self.grok_sessions_root = grok_sessions_root;
+        self
+    }
+
+    /// Claude Code 本机会话根。缺 cwd 或根目录则回退终端提取。
+    pub(crate) fn with_claude_projects(
+        mut self,
+        session_cwd: Option<&'a Path>,
+        claude_projects_root: Option<&'a Path>,
+    ) -> Self {
+        self.session_cwd = session_cwd;
+        self.claude_projects_root = claude_projects_root;
+        self
+    }
+
+    /// OpenCode 本机会话库。缺 cwd 或库路径则回退终端提取。
+    pub(crate) fn with_opencode_db(
+        mut self,
+        session_cwd: Option<&'a Path>,
+        opencode_db_path: Option<&'a Path>,
+    ) -> Self {
+        self.session_cwd = session_cwd;
+        self.opencode_db_path = opencode_db_path;
         self
     }
 }

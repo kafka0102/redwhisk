@@ -2042,11 +2042,16 @@ impl<'connection> IssueService<'connection> {
         issue: &IssueRecord,
         session: &AgentSessionRecord,
     ) -> Result<Option<IssueSessionArchive>, CommandError> {
-        if session.issue_id != Some(issue.id)
-            || session.log_path.trim().is_empty()
-            || is_archived_issue_log_path(&self.data_dir, &session.log_path)
-        {
+        if session.issue_id != Some(issue.id) || session.log_path.trim().is_empty() {
             return Ok(None);
+        }
+        // 已落盘归档不重写。运行路径与归档路径相同，完成后的清理也不会删掉它。
+        if is_archived_issue_log_path(&self.data_dir, &session.log_path) {
+            return Ok(Some(IssueSessionArchive {
+                archive_path: session.log_path.clone(),
+                runtime_path: session.log_path.clone(),
+                latest_output: session.latest_output.clone(),
+            }));
         }
 
         // agent_type 不在 Agent Session 记录上，按启动时的 agent_profile_id 回读快照。
@@ -3000,6 +3005,71 @@ mod tests {
             )
             .expect("latest output");
         assert_eq!(latest_output.as_deref(), Some("悬停文案已补上"));
+    }
+
+    #[test]
+    fn complete_issue_flow_does_not_rewrite_landed_tui_archive() {
+        let temp_dir = tempdir().expect("create temp dir");
+        let repo_dir = temp_dir.path().join("repo");
+        let data_dir = temp_dir.path().join("data");
+        create_git_repo(&repo_dir);
+        fs::create_dir_all(&data_dir).expect("create data dir");
+
+        let connection = setup_issue_completion_database_on_disk(&data_dir, &repo_dir);
+        connection
+            .execute(
+                "UPDATE agent_profiles SET agent_type = 'claude', name = 'Claude', command = 'claude' WHERE id = 101",
+                [],
+            )
+            .expect("switch profile to claude");
+        let service = IssueService::new(
+            IssueRepository::new(&connection),
+            ProjectRepository::new(&connection),
+        );
+        // 用 service 推断出的 data dir，避免 /var 与 /private/var 前缀对不上。
+        let archive_path =
+            build_issue_archive_log_path(&service.data_dir, 1, 4, 7).expect("archive path");
+        fs::write(&archive_path, "旧归档正文，不应被重写\n").expect("write landed archive");
+        connection
+            .execute(
+                "UPDATE agent_sessions
+                 SET display_mode = 'tui',
+                     provider_session_id = '39acacac-0cea-4c69-b279-febfc3e046ac',
+                     log_path = ?1
+                 WHERE id = 30",
+                params![archive_path.clone()],
+            )
+            .expect("point session at landed archive");
+
+        let result = service
+            .complete_issue_flow(
+                CompleteIssueFlowInput {
+                    project_id: 1,
+                    issue_id: 16,
+                    ignore_dirty: None,
+                    dirty_decision: None,
+                    branch_name: None,
+                    actual_path: None,
+                    continue_after_commit: None,
+                    worktree_cleanup_decision: None,
+                },
+                &data_dir,
+                &PtySessionManager::new(),
+                &AgentSessionRegistry::new(),
+            )
+            .expect("complete already archived issue");
+
+        assert_eq!(result.action, CompleteIssueFlowAction::Completed);
+        let content = fs::read_to_string(&archive_path).expect("read landed archive");
+        assert_eq!(content, "旧归档正文，不应被重写\n");
+        let log_path: String = connection
+            .query_row(
+                "SELECT log_path FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("log path");
+        assert_eq!(log_path, archive_path);
     }
 
     fn encode_percent(cwd: &str) -> String {

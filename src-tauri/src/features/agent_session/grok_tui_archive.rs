@@ -26,12 +26,14 @@ pub(crate) struct TuiArchiveSource {
     codex_home: Option<PathBuf>,
     session_cwd: PathBuf,
     grok_sessions_root: Option<PathBuf>,
+    claude_projects_root: Option<PathBuf>,
+    opencode_db_path: Option<PathBuf>,
 }
 
 impl TuiArchiveSource {
     /// cwd 与启动 TUI 相同：`workspace_path` 非空则用它，否则 `working_dir`。
     /// `grok_sessions_root` 缺省为 `~/.grok/sessions`；home 缺失则为 `None`，回退终端提取。
-    /// 测试传入临时根，避免读用户本机真实会话。
+    /// Claude 与 OpenCode 同样只在 home 存在时指向各自本机会话；测试传入临时根。
     pub(crate) fn new(
         agent_type: Option<AgentType>,
         session: &AgentSessionRecord,
@@ -39,17 +41,19 @@ impl TuiArchiveSource {
         user_home: Option<&Path>,
         grok_sessions_root: Option<PathBuf>,
     ) -> Self {
-        let grok_sessions_root = grok_sessions_root.or_else(|| {
-            user_home
-                .filter(|home| !home.as_os_str().is_empty())
-                .map(|home| home.join(GROK_SESSIONS_DIR))
-        });
+        let home = user_home.filter(|home| !home.as_os_str().is_empty());
+        let grok_sessions_root =
+            grok_sessions_root.or_else(|| home.map(|home| home.join(GROK_SESSIONS_DIR)));
+        let claude_projects_root = home.map(|home| home.join(CLAUDE_PROJECTS_DIR));
+        let opencode_db_path = home.map(default_opencode_db_path);
         Self {
             agent_type,
             provider_session_id: session.provider_session_id.clone(),
             codex_home,
             session_cwd: PathBuf::from(preferred_session_cwd(session)),
             grok_sessions_root,
+            claude_projects_root,
+            opencode_db_path,
         }
     }
 
@@ -63,7 +67,25 @@ impl TuiArchiveSource {
             Some(self.session_cwd.as_path()),
             self.grok_sessions_root.as_deref(),
         )
+        .with_claude_projects(
+            Some(self.session_cwd.as_path()),
+            self.claude_projects_root.as_deref(),
+        )
+        .with_opencode_db(
+            Some(self.session_cwd.as_path()),
+            self.opencode_db_path.as_deref(),
+        )
     }
+}
+
+const CLAUDE_PROJECTS_DIR: &str = ".claude/projects";
+
+fn default_opencode_db_path(home: &Path) -> PathBuf {
+    let data_home = std::env::var_os("XDG_DATA_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local/share"));
+    data_home.join("opencode").join("opencode.db")
 }
 
 pub(super) fn grok_session_archive_text(source: TuiSessionLogSource<'_>) -> Option<String> {
