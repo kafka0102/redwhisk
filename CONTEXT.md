@@ -299,8 +299,8 @@ Agent Session 上持久化的 displayMode。启动时从所属 Agent profile 拷
 _Avoid_: 实时跟随 profile、内存-only 运行时标记
 
 **展示形式切换**：
-用户在同一 Agent Session 上把 json 与 tui 对调。切换会终止正在运行的进程，再用同一 Provider 会话标识按新展示形式拉起；切换后用户需自行输入「继续」一类指令恢复执行。仅当该 Agent 类型同时支持两种展示形式时可用。
-_Avoid_: 双进程并行、不终止进程的热切换、改 profile 默认值来代替本次切换
+用户在同一 Agent Session 上把 json 与 tui 对调。切换会终止正在运行的进程，再用同一 Provider 会话标识按新展示形式拉起；切换后用户需自行输入「继续」一类指令恢复执行。切到 json 时，从该 Agent 本机会话记录回填切换前已完成的轮次到消息流。仅当该 Agent 类型同时支持两种展示形式时可用。
+_Avoid_: 双进程并行、不终止进程的热切换、改 profile 默认值来代替本次切换、切到 json 后消息流从空白开始
 
 **Issue Session 归档**：
 Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为整份会话日志逐行过滤后的 timeline JSONL，保留全部 Turn 的用户消息、助手消息和错误，不把工具输出留在内存，也不截成最近 50 个 Turn；同一 messageId 的助手消息只留最后一次完整正文；tui 为纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考、输入框里未写完的残句与 TUI chrome 不入档）。回看时两种形态共用同一套标题与代码块排版。Codex、Claude Code、OpenCode、Grok 的 TUI 都以该 Agent 自己的本机会话记录为事实源逐轮提取；定位或解析不到时回退终端提取。历史错误形态的 TUI 归档不自动迁移。
