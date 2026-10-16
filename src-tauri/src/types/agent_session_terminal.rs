@@ -47,6 +47,9 @@ pub struct ReadAgentSessionTerminalInput {
     pub project_id: i64,
     pub session_id: i64,
     pub max_bytes: Option<usize>,
+    /// 缺省读归档或当前会话日志。`runtimeReplay` 读完成后留下的运行日志副本。
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

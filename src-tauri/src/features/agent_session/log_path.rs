@@ -27,6 +27,8 @@ const SESSION_ARCHIVE_LOG_DIR_NAME: &str = "archive";
 pub(crate) struct IssueSessionArchive {
     pub archive_path: String,
     pub runtime_path: String,
+    /// 只读终端回放用的原始运行日志。与归档正文不同，完成时复制一份，清理原路径不影响它。
+    pub replay_path: String,
     pub latest_output: Option<String>,
 }
 
@@ -171,10 +173,12 @@ fn build_tui_issue_session_archive(
         format!("{body}\n")
     };
     fs::write(&archive_path, file_content).map_err(agent_session_start_error)?;
+    let replay_path = copy_runtime_log_for_replay(data_dir, project_id, runtime_log_path)?;
 
     Ok(IssueSessionArchive {
         archive_path,
         runtime_path: runtime_log_path.to_string(),
+        replay_path,
         latest_output: latest_output_from_archive_text(&body),
     })
 }
@@ -261,15 +265,40 @@ fn build_json_issue_session_archive(
         format!("{payload}\n")
     };
     fs::write(&archive_path, file_content).map_err(agent_session_start_error)?;
+    let replay_path = copy_runtime_log_for_replay(data_dir, project_id, runtime_log_path)?;
 
     Ok(IssueSessionArchive {
         archive_path,
         runtime_path: runtime_log_path.to_string(),
+        replay_path,
         latest_output: items
             .iter()
             .rev()
             .find_map(latest_output_from_timeline_item),
     })
+}
+
+fn copy_runtime_log_for_replay(
+    data_dir: &Path,
+    project_id: i64,
+    runtime_log_path: &str,
+) -> Result<String, CommandError> {
+    let source = Path::new(runtime_log_path);
+    let file_name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "session.log".to_string());
+    let destination_dir = session_log_root_dir(data_dir)
+        .join("replay")
+        .join(format!("project-{project_id}"));
+    fs::create_dir_all(&destination_dir).map_err(agent_session_start_error)?;
+    let destination = destination_dir.join(file_name);
+    match fs::copy(source, &destination) {
+        Ok(_) => Ok(destination.to_string_lossy().to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(agent_session_start_error(error)),
+    }
 }
 
 fn read_terminal_snapshot_for_archive(runtime_log_path: &str) -> Result<String, CommandError> {

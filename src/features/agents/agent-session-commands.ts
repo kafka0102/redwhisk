@@ -55,6 +55,8 @@ export interface AgentSessionListItem {
   // Rust WorktreeOwner（Redwhisk / External）→ "redwhisk" / "external"。
   worktreeOwner: WorktreeOwner;
   logPath: string;
+  /** 完成后保留的运行日志。只读回放用它；未完成为 null。 */
+  runtimeLogPath: string | null;
   latestOutput: string | null;
   lastActiveAt: number;
   startedAt: number;
@@ -410,6 +412,8 @@ export interface ReadAgentSessionTerminalInput {
   projectId: number;
   sessionId: number;
   maxBytes?: number;
+  /** 缺省读归档或当前会话日志。runtimeReplay 读完成后留下的运行日志副本。 */
+  source?: "log" | "runtimeReplay";
 }
 
 export interface ReadAgentSessionTerminalResult {

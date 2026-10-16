@@ -4,7 +4,7 @@ import { AgentMarkdown } from "../message-stream/agent-markdown";
 import { readAgentSessionTerminal } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
-  prepareTuiArchiveMarkdownForRender,
+  prepareArchiveMarkdownForRender,
   TUI_ARCHIVE_READ_MAX_BYTES,
 } from "./agent-tui-archive-path";
 
@@ -52,7 +52,7 @@ export function AgentTuiArchiveMarkdownView({
         if (cancelled) {
           return;
         }
-        const markdown = prepareTuiArchiveMarkdownForRender(result.snapshot);
+        const markdown = prepareArchiveMarkdownForRender(result.snapshot);
         if (markdown.trim() === "") {
           setState({ kind: "empty" });
           return;

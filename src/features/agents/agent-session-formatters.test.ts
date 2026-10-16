@@ -380,6 +380,7 @@ function makeSession(
     workspaceBranch: null,
     worktreeOwner: "redwhisk",
     logPath: "/tmp/session.log",
+    runtimeLogPath: null,
     latestOutput: null,
     lastActiveAt: 0,
     startedAt: 0,

@@ -36,6 +36,7 @@ import {
   isCopyShortcut,
   supportsXtermRuntime,
 } from "./terminal-surface-runtime";
+import { installTerminalSurfaceDataHandler } from "./terminal-surface-data-handler";
 import { getTerminalTheme } from "./terminal-theme";
 import type { TerminalTransport } from "./terminal-types";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -57,6 +58,8 @@ export type { TerminalSurfaceHandle };
 
 interface TerminalSurfaceProps {
   ariaLabel: string;
+  /** 只读回放：不接收键盘输入，也不把按键写回进程。 */
+  disableInput?: boolean;
   ref?: Ref<TerminalSurfaceHandle | null>;
   shellClassName?: string;
   terminalClassName?: string;
@@ -66,6 +69,7 @@ interface TerminalSurfaceProps {
 
 export function TerminalSurface({
   ariaLabel,
+  disableInput = false,
   ref,
   shellClassName = "terminal-surface-shell",
   terminalClassName = "terminal-surface",
@@ -164,6 +168,7 @@ export function TerminalSurface({
       terminal = new Terminal(
         createTerminalXtermOptions({
           contentFontSize: contentFontSizeRef.current,
+          disableStdin: disableInput,
           theme: themeRef.current,
         }),
       );
@@ -252,19 +257,12 @@ export function TerminalSurface({
       }
       inputWriter.push(data);
     };
-    const disposeData = terminal.onData((data) => {
-      if (suppressPtyInput) {
-        return;
-      }
-      if (imeInputGuard) {
-        const filtered = imeInputGuard.filterData(data);
-        if (filtered === null) {
-          return;
-        }
-        inputWriter.push(filtered);
-        return;
-      }
-      inputWriter.push(data);
+    const disposeData = installTerminalSurfaceDataHandler({
+      disableInput,
+      inputWriter,
+      isSuppressed: () => suppressPtyInput,
+      imeInputGuard,
+      terminal,
     });
     terminal.attachCustomKeyEventHandler((event) => {
       if (isCopyShortcut(event) && terminal.hasSelection()) {
@@ -479,7 +477,7 @@ export function TerminalSurface({
       fitAddonRef.current = null;
       statusSourceRef.current = null;
     };
-  }, [canBootXterm, transportKey, t]);
+  }, [canBootXterm, disableInput, transportKey, t]);
 
   return (
     <div className={shellClassName}>

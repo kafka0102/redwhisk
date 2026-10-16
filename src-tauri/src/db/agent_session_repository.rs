@@ -31,6 +31,7 @@ pub struct AgentSessionListRow {
     pub workspace_branch: Option<String>,
     pub worktree_owner: WorktreeOwner,
     pub log_path: String,
+    pub runtime_log_path: Option<String>,
     pub latest_output: Option<String>,
     pub workflow_skill_name: Option<String>,
     pub list_inserted_at: i64,
@@ -70,7 +71,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
                  FROM agent_sessions
                  WHERE id = ?1 AND del = 0",
                 params![id],
@@ -111,7 +112,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     pub fn find_by_issue_id(&self, issue_id: i64) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
                  FROM agent_sessions
                  WHERE issue_id = ?1 AND del = 0",
                 params![issue_id],
@@ -126,7 +127,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
                  FROM agent_sessions
                  WHERE issue_id = ?1
                  ORDER BY id DESC
@@ -148,7 +149,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
                  FROM agent_sessions
                  WHERE issue_id = ?1 AND workspace_mode = 'worktree'
                  ORDER BY id DESC
@@ -173,7 +174,7 @@ impl<'connection> AgentSessionRepository<'connection> {
     ) -> rusqlite::Result<Option<AgentSessionRecord>> {
         self.connection
             .query_row(
-                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+                "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
                  FROM agent_sessions
                  WHERE project_id = ?1 AND workspace_path = ?2 AND del = 0
                  ORDER BY started_at DESC, id DESC
@@ -225,7 +226,8 @@ impl<'connection> AgentSessionRepository<'connection> {
                 agent_sessions.startup_model,
                 agent_sessions.token_input,
                 agent_sessions.token_output,
-                agent_sessions.token_cache
+                agent_sessions.token_cache,
+                agent_sessions.runtime_log_path
              FROM agent_sessions
              LEFT JOIN issues
                ON issues.id = agent_sessions.issue_id
@@ -338,7 +340,7 @@ impl<'connection> AgentSessionRepository<'connection> {
         project_id: i64,
     ) -> rusqlite::Result<Vec<AgentSessionRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
              FROM agent_sessions
              WHERE project_id = ?1 AND status = 'running' AND del = 0
              ORDER BY last_active_at DESC, started_at DESC, id DESC",
@@ -772,6 +774,19 @@ impl<'connection> AgentSessionRepository<'connection> {
         find_by_id_on_connection(transaction, session_id)
     }
 
+    pub fn update_runtime_log_path_in_transaction(
+        transaction: &Transaction<'_>,
+        session_id: i64,
+        runtime_log_path: &str,
+    ) -> rusqlite::Result<usize> {
+        transaction.execute(
+            "UPDATE agent_sessions
+             SET runtime_log_path = ?1
+             WHERE id = ?2 AND del = 0",
+            params![runtime_log_path, session_id],
+        )
+    }
+
     pub fn update_latest_output(
         &self,
         session_id: i64,
@@ -975,7 +990,7 @@ fn find_by_id_on_connection(
 ) -> rusqlite::Result<Option<AgentSessionRecord>> {
     connection
         .query_row(
-            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode
+            "SELECT id, project_id, issue_id, title, agent_profile_id, workflow_skill_name, provider_session_id, status, attention, working_dir, command_snapshot, prompt_snapshot, workspace_mode, target_branch, workspace_branch, workspace_path, origin_branch, worktree_owner, worktree_root_path, worktree_setup_command, log_path, latest_output, last_active_at, started_at, closed_at, number, display_mode, runtime_log_path
              FROM agent_sessions
              WHERE id = ?1 AND del = 0",
             params![id],
@@ -1008,6 +1023,7 @@ fn agent_session_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentSess
         worktree_root_path: row.get(18)?,
         worktree_setup_command: row.get(19)?,
         log_path: row.get(20)?,
+        runtime_log_path: row.get(27)?,
         latest_output: row.get(21)?,
         last_active_at: row.get(22)?,
         started_at: row.get(23)?,
@@ -1046,6 +1062,7 @@ fn agent_session_list_row_from_row(
         workspace_branch: row.get(18)?,
         worktree_owner: worktree_owner_from_str(&row.get::<_, String>(19)?)?,
         log_path: row.get(20)?,
+        runtime_log_path: row.get(36)?,
         latest_output: row.get(21)?,
         workflow_skill_name: row.get(22)?,
         list_inserted_at: row.get(23)?,

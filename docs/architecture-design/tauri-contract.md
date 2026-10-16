@@ -40,7 +40,9 @@
 
 > `start_agent_session`：入参 `StartAgentSessionInput` 可选 `model`（启动期模型选择，ADR-0036 第 8 条）。json 与 tui 启动都按「启动期模型选择 → 该 Agent 启动时刻的当前模型（与模型目录默认项同一套解析）→ 空」认定运行参数模型，写入 Session 记录，并由 `list_agent_sessions` 的 `startupModel` 下发（ADR-0038）。不写回 Agent 全局配置、不记入 Profile；会话内切换模型不改写该快照。
 >
-> `list_agent_sessions`：出参 `AgentSessionListItem` 含 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍；Claude 按 turn 增量累加（同一 turn 的 assistant 分片与 result 总额不双计，cache 写入计入输入、读取计入缓存），能解析同口径字段的其它 Agent 同样累计，否则三项保持 `null`（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
+> `read_agent_session_terminal`：入参可选 `source`。缺省 `log` 读当前 `logPath`（完成后是归档）。`runtimeReplay` 读完成后复制的运行日志 `runtimeLogPath`；副本缺失时快照为空。
+>
+> `list_agent_sessions`：出参 `AgentSessionListItem` 含 `runtimeLogPath`（完成后保留的运行日志副本，未完成为 `null`）以及 `tokenInput` / `tokenOutput` / `tokenCache`（Session Token 消耗三项累计；尚未收到用量为 `null`，已收到 0 为 `0`）。总计与命中率由展示层派生。Codex 结构化用量事件按线程累计 `total` 覆盖写入，不把 `last` 再加一遍；Claude 按 turn 增量累加（同一 turn 的 assistant 分片与 result 总额不双计，cache 写入计入输入、读取计入缓存），能解析同口径字段的其它 Agent 同样累计，否则三项保持 `null`（ADR-0039）。Issue 详情须订阅既有 `agent-session-list-changed` 才能在运行中刷新这五行。
 
 > `detect_tui_hook_registration` / `install_tui_hook` / `uninstall_tui_hook` / `enable_codex_hooks_feature`：设置页 Agents 模块的 TUI hook 注册。检测「已注册」只读本机 `hooks.json` / `redwhisk.json`，不启动 Codex / Grok agent。`codexHooksFeatureEnabled` 另读 `codex features list` 的 `hooks` 行：有效值为 false 时为 false；命令缺失或没有该行时为 true（不据此改 `config.toml`）。返回 `TuiHookRegistrationStatus`（`codexRegistered`、`grokRegistered`、`codexHooksFeatureEnabled`、`channelAvailable`、`registrationAllowed`）。「已注册」只表示文件里有 RedWhisk command，不表示 CLI 已信任或已生效。`registrationAllowed` 只记录「允许为这个机器注册」，不拦截安装或卸载。安装与卸载入参 `{ agent: "codex" | "grok" }`，只改 RedWhisk 自己的条目。`channelAvailable` 为 false 时安装返回 `SettingsPersistenceFailed`（`reason=channelUnavailable`），不写 hook 文件。`enable_codex_hooks_feature` 只在 `config.toml` 的 `[features] hooks` 当前为 false 时写成 true，不与安装合成一次调用；`hooks` 已是 stable 且默认开启时不改文件。前端不直接写 `~/.codex` / `~/.grok`。
 

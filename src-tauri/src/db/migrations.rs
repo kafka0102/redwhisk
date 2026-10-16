@@ -182,6 +182,10 @@ const TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_VERSION: &str =
     "0055_tui_hook_registration_preference";
 const TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_SQL: &str =
     include_str!("../../migrations/0055_tui_hook_registration_preference.sql");
+const AGENT_SESSIONS_RUNTIME_LOG_PATH_MIGRATION_VERSION: &str =
+    "0056_agent_sessions_runtime_log_path";
+const AGENT_SESSIONS_RUNTIME_LOG_PATH_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0056_agent_sessions_runtime_log_path.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -489,6 +493,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_VERSION,
             sql: TUI_HOOK_REGISTRATION_PREFERENCE_MIGRATION_SQL,
+        },
+        Migration {
+            version: AGENT_SESSIONS_RUNTIME_LOG_PATH_MIGRATION_VERSION,
+            sql: AGENT_SESSIONS_RUNTIME_LOG_PATH_MIGRATION_SQL,
         },
     ]
 }

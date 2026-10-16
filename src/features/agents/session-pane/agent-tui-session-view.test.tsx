@@ -235,6 +235,27 @@ describe("AgentTuiSessionView", () => {
     });
   });
 
+  it("只读回放读运行日志副本，且不把输入写回进程", async () => {
+    render(
+      <AgentTuiSessionView
+        projectId={3}
+        sessionId={9}
+        logPath="/tmp/replay/runtime.log"
+        readOnly
+      />,
+    );
+    const transport = terminalSurfaceMock.lastTransport!;
+    await transport!.readSnapshot(1024);
+    expect(commandMocks.readAgentSessionTerminal).toHaveBeenCalledWith({
+      projectId: 3,
+      sessionId: 9,
+      maxBytes: 1024,
+      source: "runtimeReplay",
+    });
+    await transport!.write("hello");
+    expect(commandMocks.writeAgentSessionTerminal).not.toHaveBeenCalled();
+  });
+
   it("subscribeOutput 仅转发本 session 的终端输出事件", async () => {
     render(<AgentTuiSessionView projectId={1} sessionId={5} />);
     const transport = terminalSurfaceMock.lastTransport!;

@@ -60,6 +60,8 @@ interface AgentSessionViewProps {
   /** 本 session 是否为当前选中的 session（实例池模式下未被 hidden 遮蔽）。
    * 透传给消息流，用于在切换到本 session 时定位到底部。 */
   isActive?: boolean;
+  /** 已完成回看切到只读消息流。未传时仍按 Issue 已完成隐藏输入。 */
+  readOnly?: boolean;
 }
 
 // memo 化：props 均为 primitive（projectId/sessionId/agentType/sessionStatus/
@@ -74,6 +76,7 @@ export const AgentSessionView = memo(function AgentSessionView({
   issueStatus = null,
   isTurnRunning = false,
   isActive = true,
+  readOnly = false,
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
@@ -108,7 +111,7 @@ export const AgentSessionView = memo(function AgentSessionView({
     [effectiveTurnStatus, outputSource, state],
   );
 
-  const isReadOnly = issueStatus === "completed";
+  const isReadOnly = readOnly || issueStatus === "completed";
   const readOnlyReason = isReadOnly
     ? messages.agentsFeature.readOnlyCompletedIssue
     : undefined;

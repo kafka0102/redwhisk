@@ -9,6 +9,7 @@ export const TERMINAL_FONT_FAMILY =
 
 export function createTerminalXtermOptions(input: {
   contentFontSize: number;
+  disableStdin?: boolean;
   theme: "light" | "dark";
 }): ITerminalOptions {
   return {
@@ -17,7 +18,7 @@ export function createTerminalXtermOptions(input: {
     cursorBlink: false,
     cursorInactiveStyle: "outline",
     cursorStyle: "block",
-    disableStdin: false,
+    disableStdin: input.disableStdin ?? false,
     fontFamily: TERMINAL_FONT_FAMILY,
     fontSize: input.contentFontSize,
     fontWeight: "normal",

@@ -22,6 +22,8 @@ vi.mock("../agent-session-commands", () => ({
   ),
 }));
 
+const completedOnSession = vi.fn();
+
 function renderSwitchTabs(options: {
   agentType:
     | "codex"
@@ -32,11 +34,13 @@ function renderSwitchTabs(options: {
     | "deepseek";
   issueStatus: "running" | "review" | "completed" | "backlog" | null;
   sessionStatus: "running" | "stopped" | "closed" | "crashed";
+  completedReview?: "archive" | "session" | null;
 }) {
   return render(
     <SessionWorkspaceTabs
       activeTab="session"
       changeTab={null}
+      completedReview={options.completedReview ?? null}
       fileTab={null}
       projectId={1}
       sessionId={7}
@@ -47,6 +51,8 @@ function renderSwitchTabs(options: {
       sessionContent={<div>Session content</div>}
       toolTabs={[]}
       onCloseTab={vi.fn()}
+      onCompletedReviewArchive={vi.fn()}
+      onCompletedReviewSession={completedOnSession}
       onCreateBrowserTab={vi.fn()}
       onCreateTerminalTab={vi.fn()}
       onSelectTab={vi.fn()}
@@ -332,14 +338,28 @@ describe("SessionWorkspaceTabs display mode switch", () => {
     ).not.toBeInTheDocument();
     deepseek.unmount();
 
-    renderSwitchTabs({
+    const completed = renderSwitchTabs({
       agentType: "codex",
       issueStatus: "completed",
       sessionStatus: "stopped",
+      completedReview: "archive",
     });
     expect(
-      screen.queryByRole("button", { name: "Switch to terminal" }),
-    ).not.toBeInTheDocument();
+      within(screen.getByRole("tablist")).getByRole("button", {
+        name: "Switch to messages",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Switch to messages" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "set the status to running on the Issue detail page",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Switch to messages" }));
+    fireEvent.click(screen.getByRole("button", { name: "View session" }));
+    expect(completedOnSession).toHaveBeenCalledTimes(1);
+    expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
+    completed.unmount();
   });
 
   it("asks before stopping a live process and leaves the session unchanged on cancel", () => {

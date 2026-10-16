@@ -116,6 +116,7 @@
         "originBranch": "required",
         "processingMs": "required",
         "projectId": "required",
+        "runtimeLogPath": "required",
         "sessionId": "required",
         "startedAt": "required",
         "startupModel": "required",
@@ -154,6 +155,7 @@
         "projectId": "required",
         "promptSnapshot": "required",
         "providerSessionId": "required",
+        "runtimeLogPath": "required",
         "startedAt": "required",
         "status": "required",
         "targetBranch": "required",
@@ -196,10 +198,10 @@
       "fields": {
         "epoch": "required",
         "event": "required",
+        "logOffset": "optional",
         "projectId": "required",
         "seq": "required",
-        "sessionId": "required",
-        "logOffset": "optional"
+        "sessionId": "required"
       }
     },
     "AgentUiCapabilities": {
@@ -1115,7 +1117,8 @@
       "fields": {
         "maxBytes": "optional",
         "projectId": "required",
-        "sessionId": "required"
+        "sessionId": "required",
+        "source": "optional"
       }
     },
     "ReadAgentSessionTerminalResult": {

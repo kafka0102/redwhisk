@@ -2050,6 +2050,10 @@ impl<'connection> IssueService<'connection> {
             return Ok(Some(IssueSessionArchive {
                 archive_path: session.log_path.clone(),
                 runtime_path: session.log_path.clone(),
+                replay_path: session
+                    .runtime_log_path
+                    .clone()
+                    .unwrap_or_else(|| session.log_path.clone()),
                 latest_output: session.latest_output.clone(),
             }));
         }
@@ -2095,6 +2099,14 @@ impl<'connection> IssueService<'connection> {
             .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue.id))
             .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
         })?;
+        if !archive.replay_path.is_empty() {
+            AgentSessionRepository::update_runtime_log_path_in_transaction(
+                transaction,
+                session.id,
+                &archive.replay_path,
+            )
+            .map_err(issue_database_error)?;
+        }
 
         Ok(Some(archive))
     }
@@ -2851,6 +2863,22 @@ mod tests {
         assert_eq!(result.action, CompleteIssueFlowAction::Completed);
         assert_eq!(result.issue.status, IssueStatus::Completed);
         assert!(!runtime_log_path.exists());
+        let replay_log_path: Option<String> = connection
+            .query_row(
+                "SELECT runtime_log_path FROM agent_sessions WHERE id = 30",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query replay log path");
+        let replay_log_path = replay_log_path.expect("replay log path");
+        assert_ne!(
+            replay_log_path,
+            runtime_log_path.to_string_lossy().to_string()
+        );
+        assert!(std::path::Path::new(&replay_log_path).exists());
+        assert!(fs::read_to_string(&replay_log_path)
+            .expect("read replay")
+            .contains("归档后的回答"));
 
         let archived_log_path: String = connection
             .query_row(
@@ -4127,6 +4155,7 @@ mod tests {
             worktree_root_path: None,
             worktree_setup_command: None,
             log_path: String::new(),
+            runtime_log_path: None,
             latest_output: None,
             last_active_at: 0,
             started_at: 0,

@@ -119,6 +119,7 @@ mod tests {
             worktree_root_path: None,
             worktree_setup_command: None,
             log_path: log_path.to_string(),
+            runtime_log_path: None,
             latest_output: None,
             last_active_at: 1,
             started_at: 1,

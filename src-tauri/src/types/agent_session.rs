@@ -165,6 +165,8 @@ pub struct AgentSessionListItem {
     pub workspace_branch: Option<String>,
     pub worktree_owner: WorktreeOwner,
     pub log_path: String,
+    /// 完成后保留的运行日志。只读回放用它；未完成时为空。
+    pub runtime_log_path: Option<String>,
     pub latest_output: Option<String>,
     pub workflow_skill_name: Option<String>,
     pub last_active_at: i64,
@@ -208,6 +210,8 @@ pub struct AgentSessionRecord {
     pub worktree_root_path: Option<String>,
     pub worktree_setup_command: Option<String>,
     pub log_path: String,
+    /// 完成后保留的运行日志。只读回放用它；未完成时为空。
+    pub runtime_log_path: Option<String>,
     pub latest_output: Option<String>,
     pub last_active_at: i64,
     pub started_at: i64,

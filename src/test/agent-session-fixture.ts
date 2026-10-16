@@ -35,6 +35,7 @@ export function makeAgentSession(
     workspaceBranch: "main",
     worktreeOwner: "redwhisk",
     logPath: "/tmp/session.log",
+    runtimeLogPath: null,
     latestOutput: null,
     lastActiveAt: 0,
     startedAt: 1_700_000_000_000,

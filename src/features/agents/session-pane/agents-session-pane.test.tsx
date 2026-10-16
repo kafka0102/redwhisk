@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentSessionListItem } from "../agent-session-commands";
@@ -22,6 +22,18 @@ vi.mock("./agent-tui-session-view", () => ({
       "data-testid": `agent-tui-session-view:${sessionId}`,
       "aria-label": "tui",
     }),
+}));
+
+vi.mock("./agent-tui-archive-markdown-view", () => ({
+  AgentTuiArchiveMarkdownView: ({ sessionId }: { sessionId: number }) =>
+    createElement("div", {
+      "data-testid": `agent-archive-view:${sessionId}`,
+    }),
+}));
+
+vi.mock("../agent-session-commands", () => ({
+  switchAgentSessionDisplayMode: vi.fn(),
+  resumeAgentSession: vi.fn(),
 }));
 
 function buildSession(
@@ -53,6 +65,7 @@ function buildSession(
     workspaceBranch: null,
     worktreeOwner: "redwhisk",
     logPath: "/tmp/log",
+    runtimeLogPath: null,
     latestOutput: null,
     lastActiveAt: 0,
     startedAt: 0,
@@ -78,6 +91,7 @@ function buildWorkspace(
     isTurnRunning: false,
     displayMode: "json",
     logPath: "/tmp/log",
+    runtimeLogPath: null,
     activeWorkspaceTab: "session",
     changeTab: null,
     fileTab: null,
@@ -260,19 +274,62 @@ describe("AgentsSessionPane display mode switch button", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the switch for DeepSeek Harness and a completed issue", () => {
-    const deepseek = renderSwitch({
+  it("hides the display-mode switch for DeepSeek while an issue is unfinished", () => {
+    renderSwitch({
       agentType: "deepseek",
       issueStatus: "running",
     });
     expect(
       screen.queryByRole("button", { name: "Switch to terminal" }),
     ).not.toBeInTheDocument();
-    deepseek.unmount();
-
-    renderSwitch({ agentType: "codex", issueStatus: "completed" });
     expect(
-      screen.queryByRole("button", { name: "Switch to terminal" }),
+      screen.queryByRole("button", { name: "Switch to messages" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps a stopped unfinished issue on the session view", () => {
+    renderSwitch({ agentType: "codex", issueStatus: "running" });
+    expect(screen.getByTestId("agent-session-view:31")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-archive-view:31"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("defaults a completed issue to the archive, then a read-only session", async () => {
+    const { switchAgentSessionDisplayMode, resumeAgentSession } =
+      await import("../agent-session-commands");
+    renderSwitch({ agentType: "codex", issueStatus: "completed" });
+
+    expect(
+      screen.getByLabelText("Completed issue archive"),
+    ).not.toHaveAttribute("hidden");
+    expect(screen.getByTestId("agent-archive-view:31")).toBeInTheDocument();
+    expect(screen.getByLabelText("Read-only session")).toHaveAttribute(
+      "hidden",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to messages" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "set the status to running on the Issue detail page",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByLabelText("Completed issue archive"),
+    ).not.toHaveAttribute("hidden");
+    expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to messages" }));
+    fireEvent.click(screen.getByRole("button", { name: "View session" }));
+    expect(screen.getByLabelText("Read-only session")).not.toHaveAttribute(
+      "hidden",
+    );
+    expect(screen.getByTestId("agent-session-view:31")).toBeInTheDocument();
+    expect(resumeAgentSession).not.toHaveBeenCalled();
+    expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to archive" }));
+    expect(
+      screen.getByLabelText("Completed issue archive"),
+    ).not.toHaveAttribute("hidden");
   });
 });

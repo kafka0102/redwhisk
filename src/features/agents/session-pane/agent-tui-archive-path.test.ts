@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isTuiArchiveLogPath,
+  prepareArchiveMarkdownForRender,
   prepareTuiArchiveMarkdownForRender,
 } from "./agent-tui-archive-path";
 
@@ -64,5 +65,35 @@ describe("prepareTuiArchiveMarkdownForRender", () => {
     ].join("\n");
 
     expect(prepareTuiArchiveMarkdownForRender(input)).toBe(input);
+  });
+});
+
+describe("prepareArchiveMarkdownForRender", () => {
+  it("从 JSON 归档抽出用户与助手正文，丢掉工具", () => {
+    const tool = JSON.stringify({
+      event: {
+        type: "timeline",
+        item: { type: "tool_call", name: "shell", callId: "SECRET_TOOL" },
+      },
+    });
+    const user = JSON.stringify({
+      event: {
+        type: "timeline",
+        item: { type: "user_message", text: "fix the login" },
+      },
+    });
+    const assistant = JSON.stringify({
+      event: {
+        type: "timeline",
+        item: { type: "assistant_message", text: "login is fixed" },
+      },
+    });
+    const got = prepareArchiveMarkdownForRender(
+      `${user}\n${tool}\n${assistant}\n`,
+    );
+    expect(got).toContain("fix the login");
+    expect(got).toContain("login is fixed");
+    expect(got).not.toContain("SECRET_TOOL");
+    expect(got).not.toContain("tool_call");
   });
 });

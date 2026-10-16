@@ -27,6 +27,8 @@ interface AgentTuiSessionViewProps {
   isActive?: boolean;
   /** 会话日志路径；Issue 完成归档路径走 Markdown 回看，不挂 xterm。 */
   logPath?: string | null;
+  /** 已完成回看里的终端：只回放，不接收输入。 */
+  readOnly?: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ export function AgentTuiSessionView({
   issueStatus = null,
   isActive = true,
   logPath = null,
+  readOnly = false,
 }: AgentTuiSessionViewProps) {
   const { messages } = useI18n();
   const isArchiveReplay = isTuiArchiveLogPath(logPath);
@@ -64,7 +67,12 @@ export function AgentTuiSessionView({
   const transport = useMemo(
     () => ({
       readSnapshot: (maxBytes: number) =>
-        readAgentSessionTerminal({ projectId, sessionId, maxBytes }),
+        readAgentSessionTerminal({
+          projectId,
+          sessionId,
+          maxBytes,
+          ...(readOnly ? { source: "runtimeReplay" as const } : {}),
+        }),
       resize: (rows: number, cols: number) =>
         resizeAgentSessionTerminal({ projectId, sessionId, rows, cols }),
       restore: () => restoreAgentSessionTerminal({ projectId, sessionId }),
@@ -91,10 +99,14 @@ export function AgentTuiSessionView({
             data: event.data,
           });
         }),
-      write: (data: string) =>
-        writeAgentSessionTerminal({ projectId, sessionId, data }),
+      write: (data: string) => {
+        if (readOnly) {
+          return Promise.resolve();
+        }
+        return writeAgentSessionTerminal({ projectId, sessionId, data });
+      },
     }),
-    [projectId, sessionId],
+    [projectId, readOnly, sessionId],
   );
 
   if (isArchiveReplay) {
@@ -127,6 +139,7 @@ export function AgentTuiSessionView({
       ) : null}
       <TerminalSurface
         ariaLabel={messages.agentsFeature.tuiSessionView}
+        disableInput={readOnly}
         transport={transport}
         transportKey={`agent-tui:${projectId}:${sessionId}:${surfaceEpoch}`}
       />

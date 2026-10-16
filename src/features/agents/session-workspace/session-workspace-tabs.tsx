@@ -16,6 +16,7 @@ import type {
   AgentType,
   IssueStatus,
 } from "../agent-session-commands";
+import { CompletedSessionReviewButton } from "../session-pane/completed-session-review";
 import { SessionDisplayModeSwitch } from "./session-display-mode-switch";
 import { getAgentLogoSrc } from "../agent-visuals";
 import { MultiDiffViewer } from "../../../shared/workspace/multi-diff-viewer";
@@ -44,6 +45,9 @@ interface SessionWorkspaceTabsProps {
   sessionDisplayMode?: "json" | "tui";
   sessionIssueStatus?: IssueStatus | null;
   sessionStatus?: AgentSessionStatus;
+  completedReview?: "archive" | "session" | null;
+  onCompletedReviewArchive?: () => void;
+  onCompletedReviewSession?: () => void;
   sessionContent: ReactNode;
   toolTabs: SessionWorkspaceToolTab[];
   onCloseTab: (tab: Exclude<SessionWorkspaceTabKind, "session">) => void;
@@ -62,6 +66,9 @@ export function SessionWorkspaceTabs({
   sessionDisplayMode,
   sessionIssueStatus,
   sessionStatus,
+  completedReview = null,
+  onCompletedReviewArchive,
+  onCompletedReviewSession,
   sessionContent,
   toolTabs,
   onCloseTab,
@@ -157,6 +164,17 @@ export function SessionWorkspaceTabs({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {sessionDisplayMode &&
+        sessionIssueStatus === "completed" &&
+        onCompletedReviewArchive &&
+        onCompletedReviewSession ? (
+          <CompletedSessionReviewButton
+            displayMode={sessionDisplayMode}
+            showingSession={completedReview === "session"}
+            onShowArchive={onCompletedReviewArchive}
+            onShowSession={onCompletedReviewSession}
+          />
+        ) : null}
         {sessionDisplayMode && sessionStatus ? (
           <SessionDisplayModeSwitch
             agentType={sessionAgentType}

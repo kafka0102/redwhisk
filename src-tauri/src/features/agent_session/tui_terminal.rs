@@ -11,6 +11,20 @@ use crate::types::agent_session_terminal::{
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 use super::service::{inactive_terminal_error, AgentSessionService};
+use crate::types::agent_session::AgentSessionRecord;
+
+/// 缺省读当前会话日志。`runtimeReplay` 只读完成后留下的副本，缺失时为空，不退回归档。
+fn terminal_snapshot_path(session: &AgentSessionRecord, source: Option<&str>) -> Option<String> {
+    if source == Some("runtimeReplay") {
+        return session
+            .runtime_log_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(str::to_string);
+    }
+    Some(session.log_path.clone())
+}
 
 impl AgentSessionService<'_> {
     /// 热路径：仅内存 PTY，不打开 SQLite。
@@ -111,18 +125,20 @@ impl AgentSessionService<'_> {
         if is_active {
             let _ = pty_sessions.flush_log(input.session_id);
         }
-        let snapshot = read_terminal_snapshot(
-            Path::new(&session.log_path),
-            input.max_bytes.unwrap_or(32_768),
-        )
-        .map_err(|error| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "读取 Agent Session 终端快照失败。",
-            )
-            .with_reason("terminalSnapshotReadFailed")
-            .with_detail(ErrorDetail::new("Cause").with_value("message", error))
-        })?;
+        let snapshot = match terminal_snapshot_path(&session, input.source.as_deref()) {
+            None => String::new(),
+            Some(path) => {
+                read_terminal_snapshot(Path::new(&path), input.max_bytes.unwrap_or(32_768))
+                    .map_err(|error| {
+                        CommandError::new(
+                            CommandErrorCode::AgentSessionValidationFailed,
+                            "Failed to read the agent session terminal snapshot.",
+                        )
+                        .with_reason("terminalSnapshotReadFailed")
+                        .with_detail(ErrorDetail::new("Cause").with_value("message", error))
+                    })?
+            }
+        };
 
         Ok(ReadAgentSessionTerminalResult {
             session_id: input.session_id,

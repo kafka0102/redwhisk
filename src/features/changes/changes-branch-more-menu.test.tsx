@@ -276,6 +276,7 @@ describe("ChangesBranchMoreMenu", () => {
           workspaceBranch: worktreeRoot.branch,
           worktreeOwner: "redwhisk",
           logPath: "/tmp/s.log",
+          runtimeLogPath: null,
           latestOutput: null,
           lastActiveAt: 1,
           startedAt: 1,

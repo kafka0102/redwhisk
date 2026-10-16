@@ -309,6 +309,7 @@ function session(
     workspaceBranch: null,
     worktreeOwner: "redwhisk",
     logPath: "/tmp/session.log",
+    runtimeLogPath: null,
     lastActiveAt: 1_780_637_000_000,
     latestOutput: null,
     number: 1,

@@ -283,6 +283,7 @@ export function AgentsActivity({
             session.status === "running" && session.isTurnRunning === true,
           displayMode: session.displayMode,
           logPath: session.logPath,
+          runtimeLogPath: session.runtimeLogPath,
           activeWorkspaceTab: tabState.activeWorkspaceTab,
           changeTab: tabState.changeTab,
           fileTab: tabState.fileTab,

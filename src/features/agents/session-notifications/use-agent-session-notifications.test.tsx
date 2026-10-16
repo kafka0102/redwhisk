@@ -485,6 +485,7 @@ function session({
     workspaceBranch: null,
     worktreeOwner: "redwhisk" as const,
     logPath: "/tmp/session.log",
+    runtimeLogPath: null,
     lastActiveAt: 1_780_638_000_000,
     latestOutput: null,
     number: sessionId,

@@ -44,6 +44,74 @@ export function prepareTuiArchiveMarkdownForRender(text: string): string {
   return collapseBlankLines(lines);
 }
 
+/**
+ * JSON 归档是 JSONL 信封。抽出用户与助手正文再交给 AgentMarkdown。
+ * 普通文本原样走既有预处理。
+ */
+export function prepareArchiveMarkdownForRender(text: string): string {
+  const extracted = extractJsonArchiveConversation(text);
+  return prepareTuiArchiveMarkdownForRender(extracted ?? text);
+}
+
+function extractJsonArchiveConversation(text: string): string | null {
+  const lines = text.split("\n").filter((line) => line.trim().startsWith("{"));
+  if (lines.length === 0) {
+    return null;
+  }
+  const parts: string[] = [];
+  let parsed = 0;
+  for (const line of lines) {
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    parsed += 1;
+    const item = timelineItem(value);
+    if (item == null) {
+      continue;
+    }
+    const type = stringField(item, "type");
+    const body =
+      type === "user_message" || type === "assistant_message"
+        ? stringField(item, "text")
+        : type === "error"
+          ? stringField(item, "message")
+          : null;
+    if (body != null && body.trim() !== "") {
+      parts.push(body);
+    }
+  }
+  if (parsed === 0) {
+    return null;
+  }
+  return parts.join("\n\n");
+}
+
+function timelineItem(value: unknown): Record<string, unknown> | null {
+  if (value == null || typeof value !== "object") {
+    return null;
+  }
+  const event = (value as { event?: unknown }).event;
+  if (event == null || typeof event !== "object") {
+    return null;
+  }
+  const item = (event as { item?: unknown }).item;
+  if (item == null || typeof item !== "object") {
+    return null;
+  }
+  return item as Record<string, unknown>;
+}
+
+function stringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
 function collapseBlankLines(lines: string[]): string {
   const out: string[] = [];
   let blankRun = 0;

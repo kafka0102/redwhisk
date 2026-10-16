@@ -1,21 +1,15 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Ellipsis, PanelRightOpen, X } from "lucide-react";
 
 import type { AgentSessionListItem } from "../agent-session-commands";
-import { AgentSessionView } from "./agent-session-view";
-import { AgentTuiSessionView } from "./agent-tui-session-view";
 import { formatSessionTitle } from "../agent-session-formatters";
 import { Input } from "../../../components/ui/input";
-import {
-  SessionWorkspaceTabs,
-  type SessionWorkspaceToolTab,
-} from "../session-workspace/session-workspace-tabs";
 import { useI18n } from "../../../shared/i18n/i18n";
-import type {
-  SessionWorkspaceChangeTab,
-  SessionWorkspaceFileTab,
-  SessionWorkspaceTabKind,
-} from "../session-workspace/session-workspace-types";
+import {
+  SessionWorkspacePane,
+  type SessionWorkspaceEntry,
+} from "./session-workspace-pane";
+import type { SessionWorkspaceTabKind } from "../session-workspace/session-workspace-types";
 
 export interface LinkedSessionIssue {
   issueId: number;
@@ -32,28 +26,7 @@ interface TransitionMenuOption {
   label: string;
 }
 
-/**
- * 单个已缓存 session 的 workspace 渲染数据。
- *
- * 由 `AgentsActivity` 为实例池中每个 cached sessionId 构造：包含该 session 的
- * tab 选中态、file/change tab 内容、terminal/browser tool tabs，以及操作该
- * session tab 所需的回调。`SessionWorkspacePane` 用 memo 消费此结构——只要
- * sessionId 相同且各字段引用稳定，切 session 时不会重渲染、不重挂载。
- */
-export interface SessionWorkspaceEntry {
-  sessionId: number;
-  agentType: AgentSessionListItem["agentType"];
-  sessionStatus: AgentSessionListItem["status"];
-  issueStatus: NonNullable<AgentSessionListItem["issueStatus"]> | null;
-  isTurnRunning: boolean;
-  displayMode: AgentSessionListItem["displayMode"];
-  /** 会话日志路径；TUI 归档回看用于切换 Markdown 面板。 */
-  logPath: string;
-  activeWorkspaceTab: SessionWorkspaceTabKind;
-  changeTab: SessionWorkspaceChangeTab | null;
-  fileTab: SessionWorkspaceFileTab | null;
-  toolTabs: SessionWorkspaceToolTab[];
-}
+export type { SessionWorkspaceEntry };
 
 interface AgentsSessionPaneProps {
   canRenderTransitionButton: boolean;
@@ -400,90 +373,3 @@ export function AgentsSessionPane({
     </div>
   );
 }
-
-interface SessionWorkspacePaneProps {
-  isCurrent: boolean;
-  onCloseWorkspaceTab: (
-    sessionId: number,
-    tab: Exclude<SessionWorkspaceTabKind, "session">,
-  ) => void;
-  onCreateBrowserTab: (sessionId: number) => void;
-  onCreateTerminalTab: (sessionId: number) => void;
-  onSelectWorkspaceTab: (
-    sessionId: number,
-    tab: SessionWorkspaceTabKind,
-  ) => void;
-  onAcknowledgeSessionAttention: (sessionId: number) => void;
-  projectId: number;
-  workspace: SessionWorkspaceEntry;
-}
-
-/**
- * 单个 session 的 workspace 面板：渲染 `SessionWorkspaceTabs`（tab 栏 +
- * AgentSessionView + terminal/browser tool tabs）。
- *
- * 用 `memo` 包裹，props 引用稳定时切 session 不重渲染——配合 `agents-session-main-stack`
- * 中的 `hidden` 切换，实现整个 workspace（含消息流 + 终端）的实例池化，避免切
- * session 时重挂载。
- *
- * 注意：tab 栏虽在 hidden 时不可交互，但仍保留 DOM。`onSelectWorkspaceTab` 等
- * 回调接收 `sessionId` 参数，确保即便用户通过键盘等途径触发也作用于本 session，
- * 而非当前选中 session。
- */
-const SessionWorkspacePane = memo(function SessionWorkspacePane({
-  isCurrent,
-  onCloseWorkspaceTab,
-  onCreateBrowserTab,
-  onCreateTerminalTab,
-  onSelectWorkspaceTab,
-  onAcknowledgeSessionAttention,
-  projectId,
-  workspace,
-}: SessionWorkspacePaneProps) {
-  return (
-    <div
-      className="agents-terminal-host session-workspace-host"
-      hidden={!isCurrent}
-      onMouseDown={() => onAcknowledgeSessionAttention(workspace.sessionId)}
-    >
-      <SessionWorkspaceTabs
-        activeTab={workspace.activeWorkspaceTab}
-        changeTab={workspace.changeTab}
-        fileTab={workspace.fileTab}
-        sessionAgentType={workspace.agentType}
-        sessionDisplayMode={workspace.displayMode}
-        sessionIssueStatus={workspace.issueStatus}
-        sessionStatus={workspace.sessionStatus}
-        sessionContent={
-          workspace.displayMode === "tui" ? (
-            <AgentTuiSessionView
-              projectId={projectId}
-              sessionId={workspace.sessionId}
-              sessionStatus={workspace.sessionStatus}
-              issueStatus={workspace.issueStatus}
-              isActive={isCurrent}
-              logPath={workspace.logPath}
-            />
-          ) : (
-            <AgentSessionView
-              projectId={projectId}
-              sessionId={workspace.sessionId}
-              agentType={workspace.agentType}
-              sessionStatus={workspace.sessionStatus}
-              issueStatus={workspace.issueStatus}
-              isTurnRunning={workspace.isTurnRunning}
-              isActive={isCurrent}
-            />
-          )
-        }
-        onCloseTab={(tab) => onCloseWorkspaceTab(workspace.sessionId, tab)}
-        onCreateBrowserTab={() => onCreateBrowserTab(workspace.sessionId)}
-        onCreateTerminalTab={() => onCreateTerminalTab(workspace.sessionId)}
-        onSelectTab={(tab) => onSelectWorkspaceTab(workspace.sessionId, tab)}
-        projectId={projectId}
-        sessionId={workspace.sessionId}
-        toolTabs={workspace.toolTabs}
-      />
-    </div>
-  );
-});
