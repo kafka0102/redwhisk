@@ -167,6 +167,7 @@ pub fn run() {
             features::agent_session::commands::set_agent_session_attention,
             features::agent_session::commands::inject_agent_session_prompt,
             features::agent_session::commands::resume_agent_session,
+            features::agent_session::commands::open_completed_review,
             features::agent_session::commands::switch_agent_session_display_mode,
             features::agent_session::commands::delete_agent_session,
             features::agent_session::commands::update_agent_session_title,

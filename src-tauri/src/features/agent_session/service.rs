@@ -608,6 +608,7 @@ impl<'connection> AgentSessionService<'connection> {
                         command: prompt_plan.spawn_command.clone(),
                         working_dir: launch.working_dir.clone(),
                         log_path: launch.log_path.clone(),
+                        discard_log: false,
                         initial_prompt: prompt_plan.trailing_prompt.clone(),
                         rows: 32,
                         cols: 120,
@@ -1576,6 +1577,16 @@ impl AgentSessionService<'_> {
         )
     }
 
+    pub fn open_completed_review(
+        &self,
+        data_dir: &Path,
+        input: crate::types::agent_session_completed_review::OpenCompletedReviewInput,
+        pty_sessions: &PtySessionManager,
+    ) -> Result<crate::types::agent_session_completed_review::OpenCompletedReviewResult, CommandError>
+    {
+        super::completed_review::open_completed_review(self, data_dir, input, pty_sessions)
+    }
+
     pub fn resume_agent_session(
         &self,
         data_dir: &Path,
@@ -1901,6 +1912,7 @@ impl AgentSessionService<'_> {
             command: resume_command,
             working_dir: cwd.clone(),
             log_path: log_path.clone(),
+            discard_log: false,
             initial_prompt: None,
             rows: 32,
             cols: 120,

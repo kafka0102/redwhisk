@@ -124,6 +124,8 @@ pub struct PtySpawnRequest {
     pub command: String,
     pub working_dir: String,
     pub log_path: String,
+    /// 为 true 时不创建、不追加 `log_path`。输出只留在内存恢复缓冲。
+    pub discard_log: bool,
     pub initial_prompt: Option<String>,
     pub rows: u16,
     pub cols: u16,
@@ -533,12 +535,17 @@ impl PtySessionManager {
 
         // 存在则保留历史（TUI resume 追加同一 log_path）；不存在则创建。
         // 勿用 File::create：会 truncate，破坏 resume 与 saved log 连贯展示。
-        OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&request.log_path)
-            .map_err(|error| error.to_string())?;
-        let log_writer = PtyLogWriter::open(Path::new(&request.log_path))?;
+        // 完成回看 discard_log：不打开、不创建任何日志文件。
+        let log_writer = if request.discard_log {
+            PtyLogWriter::discard()
+        } else {
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(&request.log_path)
+                .map_err(|error| error.to_string())?;
+            PtyLogWriter::open(Path::new(&request.log_path))?
+        };
 
         let master = pair.master;
         let mut reader = master
@@ -1056,6 +1063,15 @@ fn discard_pending_session(store: &PtySessionStore, session_id: i64) {
 }
 
 impl PtyLogWriter {
+    fn discard() -> Self {
+        Self {
+            path: Path::new("").to_path_buf(),
+            file: None,
+            unflushed_bytes: 0,
+            bytes_since_trim_check: 0,
+        }
+    }
+
     fn open(path: &Path) -> Result<Self, String> {
         let file = OpenOptions::new()
             .create(true)
@@ -1072,6 +1088,9 @@ impl PtyLogWriter {
 
     fn write_all(&mut self, data: &[u8]) -> Result<(), String> {
         let Some(file) = self.file.as_mut() else {
+            if self.path.as_os_str().is_empty() {
+                return Ok(());
+            }
             return Err("log writer closed".to_string());
         };
         file.write_all(data).map_err(|error| error.to_string())?;
@@ -1538,6 +1557,7 @@ mod tests {
                     command: command.to_string(),
                     working_dir: temp.path().to_string_lossy().to_string(),
                     log_path: log_path.to_string_lossy().to_string(),
+                    discard_log: false,
                     initial_prompt: None,
                     rows: 24,
                     cols: 80,
@@ -1719,6 +1739,7 @@ mod tests {
             command: launch.to_string(),
             working_dir: temp.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
+            discard_log: false,
             initial_prompt: None,
             rows: 24,
             cols: 80,
@@ -1844,6 +1865,7 @@ mod tests {
             command: "pnpm".to_string(),
             working_dir: temp.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
+            discard_log: false,
             initial_prompt: None,
             rows: 24,
             cols: 80,

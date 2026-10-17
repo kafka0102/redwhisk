@@ -166,6 +166,11 @@ vi.mock("./agent-session-commands", () => ({
   injectAgentSessionPrompt: vi.fn(),
   listAgentSessions: vi.fn(),
   resumeAgentSession: vi.fn(),
+  openCompletedReview: vi.fn().mockResolvedValue({
+    sessionId: 1,
+    command: "codex resume thread",
+    workingDir: "/tmp/workspace",
+  }),
   setAgentSessionAttention: vi.fn(),
   updateAgentSessionTitle: vi.fn(),
   sendAgentMessage: vi.fn(),
@@ -5632,8 +5637,11 @@ describe("AgentsActivity", () => {
       screen.queryByRole("button", { name: "Mark review" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByLabelText("Agent session message stream"),
+      screen.getByLabelText("Completed issue archive"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Agent session message stream"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps mark done hidden after command success when refreshing sessions fails", async () => {
@@ -5693,8 +5701,11 @@ describe("AgentsActivity", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("refresh failed")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Agent session message stream"),
+      screen.getByLabelText("Completed issue archive"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Agent session message stream"),
+    ).not.toBeInTheDocument();
   });
 
   it("completes a linked running issue directly to done from the status menu", async () => {

@@ -196,6 +196,17 @@ export interface ResumeAgentSessionResult {
   threadId: string;
 }
 
+export interface OpenCompletedReviewInput {
+  projectId: number;
+  sessionId: number;
+}
+
+export interface OpenCompletedReviewResult {
+  sessionId: number;
+  command: string;
+  workingDir: string;
+}
+
 export interface AgentMessageAttachment {
   /** `saveAgentAttachment` 返回的落盘绝对路径。 */
   path: string;
@@ -297,6 +308,14 @@ export function resumeAgentSession(
   input: ResumeAgentSessionInput,
 ): Promise<ResumeAgentSessionResult> {
   return invokeCommand<ResumeAgentSessionResult>("resume_agent_session", {
+    input,
+  });
+}
+
+export function openCompletedReview(
+  input: OpenCompletedReviewInput,
+): Promise<OpenCompletedReviewResult> {
+  return invokeCommand<OpenCompletedReviewResult>("open_completed_review", {
     input,
   });
 }

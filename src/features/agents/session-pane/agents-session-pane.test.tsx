@@ -34,6 +34,15 @@ vi.mock("./agent-tui-archive-markdown-view", () => ({
 vi.mock("../agent-session-commands", () => ({
   switchAgentSessionDisplayMode: vi.fn(),
   resumeAgentSession: vi.fn(),
+  openCompletedReview: vi.fn(),
+}));
+
+vi.mock("./completed-review-terminal", () => ({
+  CompletedReviewTerminal: ({ sessionId }: { sessionId: number }) =>
+    createElement("div", {
+      "data-testid": `completed-review-terminal:${sessionId}`,
+      "aria-label": "completed review",
+    }),
 }));
 
 function buildSession(
@@ -218,6 +227,7 @@ describe("AgentsSessionPane displayMode 视图分流", () => {
 describe("AgentsSessionPane display mode switch button", () => {
   function renderSwitch(options: {
     agentType: AgentSessionListItem["agentType"];
+    displayMode?: "json" | "tui";
     issueStatus: "running" | "completed";
   }) {
     const sessionId = 31;
@@ -225,7 +235,7 @@ describe("AgentsSessionPane display mode switch button", () => {
       sessionId,
       agentType: options.agentType,
       issueStatus: options.issueStatus,
-      displayMode: "json",
+      displayMode: options.displayMode ?? "json",
       status: "stopped",
     });
     const workspace = buildWorkspace({
@@ -233,7 +243,7 @@ describe("AgentsSessionPane display mode switch button", () => {
       agentType: options.agentType,
       issueStatus: options.issueStatus,
       sessionStatus: "stopped",
-      displayMode: "json",
+      displayMode: options.displayMode ?? "json",
     });
     return render(
       <AgentsSessionPane
@@ -295,7 +305,7 @@ describe("AgentsSessionPane display mode switch button", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("defaults a completed issue to the archive, then a read-only session", async () => {
+  it("defaults a completed issue to the archive, then an interactive review", async () => {
     const { switchAgentSessionDisplayMode, resumeAgentSession } =
       await import("../agent-session-commands");
     renderSwitch({ agentType: "codex", issueStatus: "completed" });
@@ -323,7 +333,12 @@ describe("AgentsSessionPane display mode switch button", () => {
     expect(screen.getByLabelText("Read-only session")).not.toHaveAttribute(
       "hidden",
     );
-    expect(screen.getByTestId("agent-session-view:31")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("completed-review-terminal:31"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-session-view:31"),
+    ).not.toBeInTheDocument();
     expect(resumeAgentSession).not.toHaveBeenCalled();
     expect(switchAgentSessionDisplayMode).not.toHaveBeenCalled();
 
@@ -331,5 +346,23 @@ describe("AgentsSessionPane display mode switch button", () => {
     expect(
       screen.getByLabelText("Completed issue archive"),
     ).not.toHaveAttribute("hidden");
+  });
+
+  it("opens the same interactive review for a completed tui session", () => {
+    renderSwitch({
+      agentType: "codex",
+      displayMode: "tui",
+      issueStatus: "completed",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to terminal" }));
+    fireEvent.click(screen.getByRole("button", { name: "View session" }));
+
+    expect(
+      screen.getByTestId("completed-review-terminal:31"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-tui-session-view:31"),
+    ).not.toBeInTheDocument();
   });
 });

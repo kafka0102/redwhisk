@@ -31,6 +31,9 @@ use crate::types::agent_session::{
     SwitchAgentSessionDisplayModeResult, UpdateAgentSessionTitleInput,
     UpdateAgentSessionTitleResult,
 };
+use crate::types::agent_session_completed_review::{
+    OpenCompletedReviewInput, OpenCompletedReviewResult,
+};
 use crate::types::agent_session_stream::AgentStreamEvent;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
@@ -424,6 +427,48 @@ pub async fn resume_agent_session(
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
     .log_if_error("resume_agent_session")
+}
+
+#[tauri::command]
+pub async fn open_completed_review(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: OpenCompletedReviewInput,
+) -> Result<OpenCompletedReviewResult, CommandError> {
+    let data_dir = prepare_agent_session_data_dir(&app, &state)?;
+    let pty_sessions = state.pty_sessions.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+            .open()
+            .map_err(CommandError::from)?;
+        crate::db::migrations::MigrationRunner::default()
+            .run(&database.connection)
+            .map_err(|error| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionPersistenceFailed,
+                    "Agent Session 数据库迁移失败。",
+                )
+                .with_reason("migrationFailed")
+                .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+            })?;
+        let service = AgentSessionService::new(
+            crate::db::issue_repository::IssueRepository::new(&database.connection),
+            crate::db::project_repository::ProjectRepository::new(&database.connection),
+            crate::db::agent_profile_repository::AgentProfileRepository::new(&database.connection),
+            crate::db::agent_session_repository::AgentSessionRepository::new(&database.connection),
+        );
+        service.open_completed_review(&data_dir, input, &pty_sessions)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::AgentSessionPersistenceFailed,
+            "完成回看启动失败。",
+        )
+        .with_reason("completedReviewSpawnFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+    .log_if_error("open_completed_review")
 }
 
 #[tauri::command]

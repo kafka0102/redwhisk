@@ -47,6 +47,7 @@ fn answers_osc_11_before_register_within_codex_probe_budget() {
             command: format!("python3 '{}'", probe_path.display()),
             working_dir: temp_dir.path().to_string_lossy().to_string(),
             log_path: log_path.to_string_lossy().to_string(),
+            discard_log: false,
             initial_prompt: None,
             rows: 24,
             cols: 80,

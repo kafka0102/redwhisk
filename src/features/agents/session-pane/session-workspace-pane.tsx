@@ -2,6 +2,7 @@ import { memo, useState, type ReactNode } from "react";
 
 import { AgentSessionView } from "./agent-session-view";
 import { AgentTuiSessionView } from "./agent-tui-session-view";
+import { CompletedReviewTerminal } from "./completed-review-terminal";
 import { CompletedSessionReview } from "./completed-session-review";
 import { SessionWorkspaceTabs } from "../session-workspace/session-workspace-tabs";
 import type { AgentSessionListItem } from "../agent-session-commands";
@@ -72,12 +73,19 @@ export const SessionWorkspacePane = memo(function SessionWorkspacePane({
   const sessionContent = completed ? (
     <CompletedSessionReview
       projectId={projectId}
-      readOnlySession={sessionView(projectId, isCurrent, workspace, true)}
+      readOnlySession={
+        completedReview === "session" ? (
+          <CompletedReviewTerminal
+            projectId={projectId}
+            sessionId={workspace.sessionId}
+          />
+        ) : null
+      }
       sessionId={workspace.sessionId}
       showingSession={completedReview === "session"}
     />
   ) : (
-    sessionView(projectId, isCurrent, workspace, false)
+    sessionView(projectId, isCurrent, workspace)
   );
 
   return (
@@ -114,16 +122,14 @@ function sessionView(
   projectId: number,
   isCurrent: boolean,
   workspace: SessionWorkspaceEntry,
-  readOnly: boolean,
 ): ReactNode {
   if (workspace.displayMode === "tui") {
     return (
       <AgentTuiSessionView
-        isActive={isCurrent && !readOnly}
+        isActive={isCurrent}
         issueStatus={workspace.issueStatus}
-        logPath={readOnly ? workspace.runtimeLogPath : workspace.logPath}
+        logPath={workspace.logPath}
         projectId={projectId}
-        readOnly={readOnly}
         sessionId={workspace.sessionId}
         sessionStatus={workspace.sessionStatus}
       />
@@ -136,7 +142,6 @@ function sessionView(
       issueStatus={workspace.issueStatus}
       isTurnRunning={workspace.isTurnRunning}
       projectId={projectId}
-      readOnly={readOnly}
       sessionId={workspace.sessionId}
       sessionStatus={workspace.sessionStatus}
     />

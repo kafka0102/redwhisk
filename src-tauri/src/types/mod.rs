@@ -1,5 +1,6 @@
 pub mod agent_profile;
 pub mod agent_session;
+pub mod agent_session_completed_review;
 pub mod agent_session_display_mode;
 pub mod agent_session_stream;
 pub mod agent_session_terminal;

@@ -116,6 +116,7 @@ pub(super) fn relaunch_tui(
         command: resume_command,
         working_dir: cwd,
         log_path: session.log_path.clone(),
+        discard_log: false,
         initial_prompt: None,
         rows: 32,
         cols: 120,

@@ -9,6 +9,7 @@ mod codex_session_id_capture;
 mod codex_session_log;
 mod codex_tui_archive;
 mod command_snapshot;
+mod completed_review;
 mod display_mode_switch;
 mod display_mode_switch_backfill;
 mod display_mode_switch_relaunch;
@@ -82,6 +83,8 @@ pub(crate) use session_log_lookup::{
     read_assistant_texts_for_turn, read_timeline_item_at_log_offset,
 };
 
+#[cfg(test)]
+mod completed_review_tests;
 #[cfg(test)]
 mod timeline_replay_tests;
 #[cfg(test)]
