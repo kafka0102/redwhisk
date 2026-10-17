@@ -1123,6 +1123,10 @@ describe("command client", () => {
       linkedSessionAttention: "none",
       linkedSessionLogPath: "/tmp/session.log",
       linkedSessionLatestOutput: "latest output",
+      linkedSessionAgentProfileId: null,
+      linkedSessionDisplayMode: null,
+      linkedSessionProviderSessionId: null,
+      linkedSessionAgentType: null,
       createdAt: 1_780_700_000_000,
       updatedAt: 1_780_700_100_000,
     });
@@ -1144,6 +1148,10 @@ describe("command client", () => {
       linkedSessionAttention: "none",
       linkedSessionLogPath: "/tmp/session.log",
       linkedSessionLatestOutput: "latest output",
+      linkedSessionAgentProfileId: null,
+      linkedSessionDisplayMode: null,
+      linkedSessionProviderSessionId: null,
+      linkedSessionAgentType: null,
       createdAt: 1_780_700_000_000,
       updatedAt: 1_780_700_100_000,
     });

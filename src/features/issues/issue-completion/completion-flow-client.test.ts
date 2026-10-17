@@ -27,6 +27,10 @@ function baseIssue(overrides: Partial<IssueRecord> = {}): IssueRecord {
     labels: [],
     linkedSessionLogPath: null,
     linkedSessionLatestOutput: null,
+    linkedSessionAgentProfileId: null,
+    linkedSessionDisplayMode: null,
+    linkedSessionProviderSessionId: null,
+    linkedSessionAgentType: null,
     ...overrides,
   };
 }

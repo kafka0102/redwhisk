@@ -68,14 +68,14 @@ export interface IssueRecord {
   linkedSessionAttention: AgentSessionAttention | null;
   linkedSessionLogPath: string | null;
   linkedSessionLatestOutput: string | null;
-  /** 关联 Session 的 Agent。列表未带该字段时为 undefined。 */
-  linkedSessionAgentProfileId?: number | null;
+  /** 关联 Session 的 Agent。无关联 Session 时为 null。 */
+  linkedSessionAgentProfileId: number | null;
   /** 关联 Session 的展示形式。 */
-  linkedSessionDisplayMode?: "json" | "tui" | null;
+  linkedSessionDisplayMode: "json" | "tui" | null;
   /** 关联 Session 的 Provider 会话标识。空值表示不能续接。 */
-  linkedSessionProviderSessionId?: string | null;
+  linkedSessionProviderSessionId: string | null;
   /** 关联 Session 的 Agent 类型。TUI 且为 deepseek 时不能续接。 */
-  linkedSessionAgentType?: AgentType | null;
+  linkedSessionAgentType: AgentType | null;
   createdAt: number;
   updatedAt: number;
   /** 进入当前 status 的时刻（epoch 毫秒）；仅在状态迁移时刷新。 */

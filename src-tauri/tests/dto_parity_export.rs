@@ -18,25 +18,25 @@ use syn::punctuated::Punctuated;
 use syn::{Item, ItemEnum, ItemStruct, Token};
 
 /// 归一化签名（序列化为 rust-dto-signatures.json）。
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct DtoSignatures {
     structs: BTreeMap<String, StructSig>,
     enums: BTreeMap<String, EnumSig>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct StructSig {
     fields: BTreeMap<String, FieldOptionality>,
 }
 
-#[derive(serde::Serialize, PartialEq, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
 enum FieldOptionality {
     Required,
     Optional,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct EnumSig {
     rename: String,
     variants: Vec<String>,
@@ -351,8 +351,72 @@ fn collect_signatures() -> DtoSignatures {
     DtoSignatures { structs, enums }
 }
 
+fn snapshot_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../src/shared/commands/__parity__/rust-dto-signatures.json")
+}
+
+/// 只列出类型名和字段名，避免把整份 JSON 打进失败输出。
+fn signature_mismatches(snapshot: &DtoSignatures, code: &DtoSignatures) -> Vec<String> {
+    let mut mismatches = Vec::new();
+    for (name, sig) in &code.structs {
+        match snapshot.structs.get(name) {
+            None => mismatches.push(format!("struct {name}: 快照缺少")),
+            Some(prev) => {
+                for (field, opt) in &sig.fields {
+                    match prev.fields.get(field) {
+                        None => mismatches.push(format!("{name}.{field}: 快照缺少 ({opt:?})")),
+                        Some(prev_opt) if prev_opt != opt => mismatches
+                            .push(format!("{name}.{field}: 快照={prev_opt:?} 代码={opt:?}")),
+                        _ => {}
+                    }
+                }
+                for field in prev.fields.keys() {
+                    if !sig.fields.contains_key(field) {
+                        mismatches.push(format!("{name}.{field}: 代码缺少"));
+                    }
+                }
+            }
+        }
+    }
+    for name in snapshot.structs.keys() {
+        if !code.structs.contains_key(name) {
+            mismatches.push(format!("struct {name}: 代码缺少"));
+        }
+    }
+    for (name, sig) in &code.enums {
+        match snapshot.enums.get(name) {
+            None => mismatches.push(format!("enum {name}: 快照缺少")),
+            Some(prev) => {
+                if prev.rename != sig.rename {
+                    mismatches.push(format!(
+                        "enum {name}: rename 快照={} 代码={}",
+                        prev.rename, sig.rename
+                    ));
+                }
+                for variant in &sig.variants {
+                    if !prev.variants.contains(variant) {
+                        mismatches.push(format!("enum {name}: 快照缺少变体 {variant}"));
+                    }
+                }
+                for variant in &prev.variants {
+                    if !sig.variants.contains(variant) {
+                        mismatches.push(format!("enum {name}: 代码缺少变体 {variant}"));
+                    }
+                }
+            }
+        }
+    }
+    for name in snapshot.enums.keys() {
+        if !code.enums.contains_key(name) {
+            mismatches.push(format!("enum {name}: 代码缺少"));
+        }
+    }
+    mismatches
+}
+
 #[test]
-fn export_dto_signatures_writes_snapshot() {
+fn export_dto_signatures_matches_snapshot() {
     let sigs = collect_signatures();
     // 关键类型存在性断言（驱动实现正确）
     let project = sigs
@@ -384,9 +448,21 @@ fn export_dto_signatures_writes_snapshot() {
         ]
     );
 
-    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../src/shared/commands/__parity__/rust-dto-signatures.json");
-    fs::create_dir_all(out.parent().unwrap()).unwrap();
-    let json = serde_json::to_string_pretty(&sigs).unwrap();
-    fs::write(&out, json).unwrap();
+    let out = snapshot_path();
+    if std::env::var("UPDATE_DTO_SNAPSHOT").ok().as_deref() == Some("1") {
+        fs::create_dir_all(out.parent().unwrap()).unwrap();
+        let json = serde_json::to_string_pretty(&sigs).unwrap();
+        fs::write(&out, format!("{json}\n")).unwrap();
+        return;
+    }
+
+    let raw = fs::read_to_string(&out).expect("read dto snapshot");
+    let snapshot: DtoSignatures = serde_json::from_str(&raw).expect("parse dto snapshot");
+    let mismatches = signature_mismatches(&snapshot, &sigs);
+    assert!(
+        mismatches.is_empty(),
+        "DTO 快照与代码不一致（{} 处）。需要更新时设置 UPDATE_DTO_SNAPSHOT=1 后重跑本测试。\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
 }

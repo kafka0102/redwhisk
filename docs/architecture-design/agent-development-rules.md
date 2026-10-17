@@ -123,6 +123,7 @@ SQLite 是核心业务状态的事实来源，React 不直接读写 SQLite。
 - 跨 Tauri 边界时字段名使用 `camelCase`，TypeScript 中 ID 和时间字段为 `number`。
 - SQLite 内部 payload 字段使用 JSON 字符串列，例如 `payload_json`、`changed_files_json`。
 - 新增状态变更时，必须同步写入对应审计记录：`IssueAction`、`SessionEvent` 或 `CompletionAttempt`。
+- 给 `agent_sessions` 增加列时，补一条往返测试：写入只可能出现在该列的值，再经 `list_by_project_id` 与 `find_by_id` 读回同一值。`SELECT` 把新列放在语句末尾，与 `row.get` 下标对齐。
 
 禁止：
 

@@ -1645,6 +1645,59 @@ mod tests {
     }
 
     #[test]
+    fn list_by_project_id_and_find_by_id_round_trip_runtime_log_path() {
+        let mut connection = connection_with_all_migrations();
+        insert_project(&connection, 1, "p1");
+        insert_agent_profile(&connection, 100);
+        let replay_path = "/tmp/replay-only/runtime.log";
+        let archive_path = "/tmp/archive.log";
+
+        let session = connection
+            .transaction()
+            .and_then(|transaction| {
+                let session = AgentSessionRepository::insert_standalone_in_transaction(
+                    &transaction,
+                    1,
+                    "replay",
+                    100,
+                    "/tmp/repo",
+                    "codex",
+                    "",
+                    &WorkspaceMode::CurrentBranch,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    archive_path,
+                    "tui",
+                    1_000,
+                )?;
+                AgentSessionRepository::update_runtime_log_path_in_transaction(
+                    &transaction,
+                    session.id,
+                    replay_path,
+                )?;
+                transaction.commit()?;
+                Ok(session)
+            })
+            .expect("insert session");
+
+        let repo = AgentSessionRepository::new(&connection);
+        let rows = repo.list_by_project_id(1).expect("list sessions");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].log_path, archive_path);
+        assert_eq!(rows[0].runtime_log_path.as_deref(), Some(replay_path));
+
+        let found = repo
+            .find_by_id(session.id)
+            .expect("find session")
+            .expect("session row");
+        assert_eq!(found.log_path, archive_path);
+        assert_eq!(found.runtime_log_path.as_deref(), Some(replay_path));
+    }
+
+    #[test]
     fn find_latest_by_workspace_path_returns_latest_active_session_for_worktree() {
         // code 变更页无 sessionId，按 workspace_path 反查 session 的 target_branch 作
         // 分叉基。同一 worktree 可能被多次 session 复用，取 started_at 最新（次按 id）。

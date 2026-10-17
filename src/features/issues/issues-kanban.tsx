@@ -1,6 +1,7 @@
 import { LoaderCircle, Play, Plus } from "lucide-react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
+import type { RunDialogIssue } from "./use-issue-run-dialog";
 import { useI18n } from "../../shared/i18n/i18n";
 
 /** 滚动到距底部多少像素时触发加载下一页。 */
@@ -29,20 +30,7 @@ interface IssuesKanbanProps {
   laneLoadState: Record<IssueStatus, LaneLoadStateView>;
   onCreateIssue: (trigger: HTMLElement | null) => void;
   onOpenIssue: (issue: IssueRecord, trigger: HTMLElement | null) => void;
-  onRunIssue: (
-    issue: Pick<
-      IssueRecord,
-      | "id"
-      | "number"
-      | "title"
-      | "description"
-      | "attachments"
-      | "labels"
-      | "status"
-      | "linkedSessionId"
-    >,
-    trigger: HTMLElement | null,
-  ) => void;
+  onRunIssue: (issue: RunDialogIssue, trigger: HTMLElement | null) => void;
   canRunIssue: (
     issue: Pick<IssueRecord, "status" | "linkedSessionId">,
   ) => boolean;
@@ -180,20 +168,7 @@ function IssueCard({
   formatTimestamp: (epochMilliseconds: number) => string;
   toDescriptionExcerpt: (markdown: string) => string;
   onOpenIssue: (issue: IssueRecord, trigger: HTMLElement | null) => void;
-  onRunIssue: (
-    issue: Pick<
-      IssueRecord,
-      | "id"
-      | "number"
-      | "title"
-      | "description"
-      | "attachments"
-      | "labels"
-      | "status"
-      | "linkedSessionId"
-    >,
-    trigger: HTMLElement | null,
-  ) => void;
+  onRunIssue: (issue: RunDialogIssue, trigger: HTMLElement | null) => void;
 }) {
   const { messages } = useI18n();
   const metaId = `issue-card-meta-${issue.id}`;

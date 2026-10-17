@@ -716,10 +716,14 @@
         "description": "required",
         "id": "required",
         "labels": "required",
+        "linkedSessionAgentProfileId": "required",
+        "linkedSessionAgentType": "required",
         "linkedSessionAttention": "required",
+        "linkedSessionDisplayMode": "required",
         "linkedSessionId": "required",
         "linkedSessionLatestOutput": "required",
         "linkedSessionLogPath": "required",
+        "linkedSessionProviderSessionId": "required",
         "linkedSessionStatus": "required",
         "number": "required",
         "projectId": "required",
@@ -1250,7 +1254,9 @@
     "ResumeAgentSessionInput": {
       "fields": {
         "projectId": "required",
-        "sessionId": "required"
+        "reopenCompleted": "optional",
+        "sessionId": "required",
+        "workspaceBranch": "optional"
       }
     },
     "ResumeAgentSessionResult": {
@@ -1426,6 +1432,9 @@
         "themePreference": "required"
       }
     },
+    "SnapshotText": {
+      "fields": {}
+    },
     "StartAgentSessionInput": {
       "fields": {
         "agentProfileId": "required",
@@ -1457,9 +1466,29 @@
         "sessionId": "required"
       }
     },
+    "SwitchAgentSessionDisplayModeInput": {
+      "fields": {
+        "projectId": "required",
+        "sessionId": "required"
+      }
+    },
+    "SwitchAgentSessionDisplayModeResult": {
+      "fields": {
+        "displayMode": "required",
+        "providerSessionId": "required",
+        "sessionId": "required"
+      }
+    },
     "TestAgentCommandInput": {
       "fields": {
         "command": "required"
+      }
+    },
+    "TimelineHistoryItem": {
+      "fields": {
+        "item": "required",
+        "logOffset": "optional",
+        "turnId": "optional"
       }
     },
     "TodoItem": {
@@ -1632,8 +1661,11 @@
         "kind": "required",
         "language": "required",
         "modifiedContent": "required",
+        "modifiedPreviewBytesBase64": "required",
         "oldPath": "required",
-        "originalContent": "required"
+        "originalContent": "required",
+        "originalPreviewBytesBase64": "required",
+        "previewKind": "required"
       }
     },
     "WorkspaceFileContent": {
@@ -1644,6 +1676,8 @@
         "isTooLarge": "required",
         "language": "required",
         "modifiedAt": "required",
+        "previewBytesBase64": "required",
+        "previewKind": "required",
         "sizeBytes": "required"
       }
     },
@@ -1685,16 +1719,6 @@
         "projectId": "required",
         "sessionId": "required"
       }
-    },
-    "TimelineHistoryItem": {
-      "fields": {
-        "item": "required",
-        "logOffset": "optional",
-        "turnId": "optional"
-      }
-    },
-    "SnapshotText": {
-      "fields": {}
     }
   },
   "enums": {
@@ -2136,6 +2160,13 @@
       "variants": [
         "current_branch",
         "worktree"
+      ]
+    },
+    "WorkspacePreviewKind": {
+      "rename": "camelCase",
+      "variants": [
+        "image",
+        "pdf"
       ]
     },
     "WorktreeOwner": {
