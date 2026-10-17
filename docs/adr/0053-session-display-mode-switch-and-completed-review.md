@@ -2,7 +2,7 @@
 
 ## 状态
 
-采纳（待执行）。
+采纳（待执行）。第 3 条与第 5 条的只读回放形态由 [0054](./0054-completed-review-interactive-resume.md) 取代：完成回看改为拉起只读的交互式 resume。
 
 ## 背景
 
