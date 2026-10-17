@@ -197,6 +197,14 @@ describe("AgentComposer", () => {
     expect(valueRule).toMatch(/text-overflow:\s*ellipsis/);
     const actions = css.match(/\.agents-composer__actions\s*\{[^}]+\}/)?.[0];
     expect(actions).toMatch(/flex-shrink:\s*0/);
+    const menuRule = css.match(
+      /\.agents-composer__output-source-menu\s*\{[^}]+\}/,
+    )?.[0];
+    expect(menuRule).toMatch(/width:\s*max-content/);
+    expect(menuRule).toMatch(/min-width:\s*160px/);
+    expect(menuRule).toMatch(
+      /max-width:\s*min\(480px,\s*var\(--available-width\)\)/,
+    );
   });
 
   it("渲染输入框、附件按钮与发送按钮（默认禁用）", async () => {

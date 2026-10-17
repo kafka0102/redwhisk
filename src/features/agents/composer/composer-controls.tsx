@@ -227,7 +227,10 @@ export function ComposerControls({
                   )}
                 </span>
               </SelectTrigger>
-              <SelectContent align="start" className="agents-composer__menu">
+              <SelectContent
+                align="start"
+                className="agents-composer__menu agents-composer__output-source-menu"
+              >
                 {outputSourceOptions?.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {formatOutputSourceOption(option, outputSourceLabels)}

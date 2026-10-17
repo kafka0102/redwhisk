@@ -264,6 +264,22 @@
   box-shadow: 0 8px 22px var(--color-popover-shadow);
 }
 
+/* 来源菜单宽度跟最长选项走。触发器仍最多 160px；菜单至少这么宽，
+   最多三倍，避免长路径被裁成与按钮同宽。本文件无 layer，盖过
+   primitive 的 w-(--anchor-width)。超出上限时选项文字省略。 */
+.agents-composer__output-source-menu {
+  width: max-content;
+  min-width: 160px;
+  max-width: min(480px, var(--available-width));
+}
+
+.agents-composer__output-source-menu [data-slot="select-item"] > span {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .agents-composer__actions {
   display: flex;
   flex-shrink: 0;
