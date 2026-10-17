@@ -311,8 +311,8 @@ Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区�
 _Avoid_: Project Terminal 配置实体、旁路只读 TUI 面板、双轨同显
 
 **完成回看**：
-Issue 已完成时，Session 主区默认展示 Issue Session 归档，json 与 tui 都一样。用户可以切到只读 Session 内容再切回归档。只读 Session 不接收输入：tui 是终端回放，json 是消息流。这次切换不把 Issue 拉回运行中；继续开发要在 Issue 详情页把状态改为运行中。Agent 一轮结束但 Issue 仍在进行中时不生成临时归档，主区继续展示 Session。
-_Avoid_: 只读回看时恢复进程、在 Session 主区把已完成任务重新推入运行中、一轮结束就写临时归档
+Issue 已完成时，Session 主区默认展示 Issue Session 归档。用户确认后，json 与 tui 都在当前主区拉起该 Agent 的交互式 resume，展示 CLI 画出的完整会话：Codex 用 `codex resume <id>`，Grok 用 `grok --resume <id>`，其余 Agent 用各自已有的交互式 resume。这次拉起不接收键盘输入，不把 Issue 改回运行中，也不把 Session 标成运行中。工作区目录还在就在那里启动；已经不在就在项目主目录启动。缺少 Provider 会话标识，或该 Agent 不支持交互式 resume 时，留在归档并说明原因。切回归档、切到其他 Session 或离开 Session 页面时停掉这个进程。继续开发仍要在 Issue 详情页把状态改为运行中。Agent 一轮结束但 Issue 仍在进行中时不生成临时归档，主区继续展示 Session。
+_Avoid_: 用终端尾部或结构化消息流冒充完整会话、把查看进程记成运行中的 Session、在 Session 主区把已完成任务重新推入运行中、一轮结束就写临时归档
 
 **消息流选择端点**：
 结构化消息流（json Session）拖拽选择时，指针落到命中不到文本的位置——滚动容器自己的 padding、或容器之外的相邻区域——浏览器内核对选区端点的命中测试会退化成「滚动容器内容起点」，长会话表现为整段被选中、复制到远超高亮范围的内容。前端在指针离开内容盒或命中不到文本时接管端点：把指针夹回内容盒边缘、按其可见文本位置重建选区，mouseup 后再连拍修正若干帧防止内核写回被夹端点；指针始终落在文本内容上时不介入，保持原生选择行为。
@@ -323,7 +323,7 @@ _Avoid_: 复制前裁剪文本、全选兜底降级、以 content-visibility 估
 _Avoid_: 仅 Codex 语义的 id、前端伪造 id、与 RedWhisk session 主键混用
 
 **Agent Session 续接**（resume）：
-在既有 Agent Session 记录上重新拉起运行时，以继续同一外部对话上下文：json 走结构化 provider resume；tui 走交互式 PTY + 各 CLI 的续接命令。关联 Issue 为 running 或 review 时可续接。已完成 Issue 只有用户显式把它切回运行中并确认时才可续接，且当前 Agent 必须支持该展示形式的续接并持有 Provider 会话标识；无 Issue、backlog 不续接。Session 是否 closed 不再作为门禁（ADR-0044 supersede ADR-0033 第 2 条；ADR-0050 放宽已完成 Issue 的显式重开）。应用重启后无活跃 PTY 时，Agents 工作台打开 tui 会话可自动尝试续接。
+在既有 Agent Session 记录上重新拉起运行时，以继续同一外部对话上下文：json 走结构化 provider resume；tui 走交互式 PTY + 各 CLI 的续接命令。关联 Issue 为 running 或 review 时可续接。已完成 Issue 只有用户显式把它切回运行中并确认时才可续接，且当前 Agent 必须支持该展示形式的续接并持有 Provider 会话标识；无 Issue、backlog 不续接。完成回看另有一条只用于查看的交互式 resume：不改 Issue、不改 Session 状态，离开视图即停进程。Session 是否 closed 不再作为门禁（ADR-0044 supersede ADR-0033 第 2 条；ADR-0050 放宽已完成 Issue 的显式重开）。应用重启后无活跃 PTY 时，Agents 工作台打开 tui 会话可自动尝试续接。
 _Avoid_: 冷启动全新对话冒充续接、Issue 只读归档面板续接、无 providerSessionId 时静默新开会话
 
 **Agent 启用状态**（enabled）：
