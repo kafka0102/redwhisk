@@ -311,7 +311,7 @@ Agents 工作台右侧在 Session 展示形式快照为 tui 时使用的主区�
 _Avoid_: Project Terminal 配置实体、旁路只读 TUI 面板、双轨同显
 
 **完成回看**：
-Issue 已完成时，Session 主区默认展示 Issue Session 归档。用户确认后，json 与 tui 都在当前主区拉起该 Agent 的交互式 resume，展示 CLI 画出的完整会话：Codex 用 `codex resume <id>`，Grok 用 `grok --resume <id>`，其余 Agent 用各自已有的交互式 resume。这次拉起把滚轮和翻页键交给 CLI，由它翻自己的会话；字母、回车和其它输入丢弃。不把 Issue 改回运行中，也不把 Session 标成运行中，也不改写已落盘的归档。工作区目录还在就在那里启动；已经不在就在项目主目录启动。缺少 Provider 会话标识，或该 Agent 不支持交互式 resume 时，留在归档并说明原因。切回归档、切到其他 Session 或离开 Session 页面时停掉这个进程。同一 Session 内切到终端、文件、变更或浏览器标签时保持进程，回到 Session 标签仍看到同一次 resume。继续开发仍要在 Issue 详情页把状态改为运行中。Agent 一轮结束但 Issue 仍在进行中时不生成临时归档，主区继续展示 Session。
+Issue 已完成时，Session 主区默认展示 Issue Session 归档。用户确认后，json 与 tui 都在当前主区拉起该 Agent 的交互式 resume，展示 CLI 画出的完整会话：Codex 用 `codex resume <id>`，Grok 用 `grok --resume <id>`，其余 Agent 用各自已有的交互式 resume。这次拉起把滚轮和翻页键交给 CLI，由它翻自己的会话；字母、回车和其它输入丢弃。不把 Issue 改回运行中，也不把 Session 标成运行中，也不改写已落盘的归档。工作区目录还在就在那里启动；已经不在就在项目主目录启动。缺少 Provider 会话标识，或该 Agent 不支持交互式 resume 时，留在归档并说明原因。启动失败或进程中途退出时留在这次切换后的画面，说明原因并提供重试，不自动退回归档。切回归档、切到其他 Session 或离开 Session 页面时停掉这个进程。同一 Session 内切到终端、文件、变更或浏览器标签时保持进程，回到 Session 标签仍看到同一次 resume。继续开发仍要在 Issue 详情页把状态改为运行中。Agent 一轮结束但 Issue 仍在进行中时不生成临时归档，主区继续展示 Session。
 _Avoid_: 用终端尾部或结构化消息流冒充完整会话、把查看进程记成运行中的 Session、在 Session 主区把已完成任务重新推入运行中、一轮结束就写临时归档
 
 **消息流选择端点**：
