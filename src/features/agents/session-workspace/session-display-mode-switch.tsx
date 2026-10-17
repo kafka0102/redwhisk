@@ -60,7 +60,7 @@ export function SessionDisplayModeSwitch({
     <>
       <button
         aria-label={label}
-        className="session-workspace-tabs__add"
+        className="session-workspace-tabs__add session-workspace-tabs__switch"
         type="button"
         onClick={onClick}
       >

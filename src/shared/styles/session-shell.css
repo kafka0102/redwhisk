@@ -332,6 +332,10 @@
   color: var(--color-text-muted);
 }
 
+.session-workspace-tabs__switch {
+  margin-left: auto;
+}
+
 .session-workspace-tabs__add:hover,
 .session-workspace-tabs__add:focus-visible,
 .session-workspace-tabs__add[data-popup-open] {

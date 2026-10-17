@@ -323,6 +323,9 @@ describe("SessionWorkspaceTabs display mode switch", () => {
       expect(addButton.compareDocumentPosition(switchButton)).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
       );
+      expect(switchButton.className).toContain(
+        "session-workspace-tabs__switch",
+      );
       view.unmount();
     }
   });
