@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # 两个文件大小门禁按 `--from <PR 基线>` 的 diff 口径复查，基线提交需在本地。
+          fetch-depth: 0
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
@@ -63,6 +66,22 @@ jobs:
       - name: Cargo check
         run: cargo check --all-targets
         working-directory: src-tauri
+
+      # AGENTS.md §5 第 7 条：上面的 --all-targets 以 cfg(test) 编译，不能替代正式构建口径。
+      # 依赖已被上一步拉齐，脚本内的 --offline 可命中缓存。
+      - name: Rust 正式构建检查
+        run: bash scripts/check-rust-compile.sh
+
+      - name: Rust 测试
+        run: cargo test --lib
+        working-directory: src-tauri
+
+      # 两个门禁默认只查未提交改动，提交后再跑等于空转；CI 里改用 PR 全量 diff 口径。
+      - name: Rust 文件大小门禁
+        run: bash scripts/check-rust-file-size.sh --from "${{ github.event.pull_request.base.sha }}"
+
+      - name: 前端文件大小门禁
+        run: bash scripts/check-frontend-file-size.sh --from "${{ github.event.pull_request.base.sha }}"
 
   # tag 触发：构建 Universal Mac 包并创建 draft Release
   release-macos:
