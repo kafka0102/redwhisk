@@ -4,7 +4,6 @@
 
 pub mod argv;
 pub mod event_mapper;
-mod permission;
 mod prompt;
 pub mod session;
 pub mod transport;

@@ -1,3 +1,4 @@
+pub(crate) mod acp_permission;
 pub mod agent_event_broadcaster;
 pub mod claude_config;
 pub mod claude_streaming;

@@ -314,6 +314,8 @@ fn start_grok_session(
         dangerous: request.dangerous,
         mode_id: request.mode_id,
         broadcaster: request.broadcaster,
+        #[cfg(test)]
+        event_log: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         resume_session_id: request.resume_thread_id,
     };
     let _ = request.effort;

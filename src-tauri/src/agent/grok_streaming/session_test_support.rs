@@ -89,17 +89,75 @@ pub(super) fn grok_session_config(
     cwd: &Path,
     resume_session_id: Option<&str>,
 ) -> GrokSessionConfig {
+    grok_session_config_with_mode(binary, cwd, resume_session_id, true, Some("full-access"))
+}
+
+/// 同上，但可指定 `dangerous` / `mode_id`（决定是否注入 `--always-approve`）。
+///
+/// 权限用例需要「安全模式」配置，故这里显式接收这两个字段；事件断言读
+/// `config.event_log`（测试期权限事件采集）。
+pub(super) fn grok_session_config_with_mode(
+    binary: &Path,
+    cwd: &Path,
+    resume_session_id: Option<&str>,
+    dangerous: bool,
+    mode_id: Option<&str>,
+) -> GrokSessionConfig {
     GrokSessionConfig {
         project_id: 1,
         session_id: 2,
         binary: binary.to_string_lossy().into_owned(),
         cwd: cwd.to_string_lossy().into_owned(),
         model: Some("grok-4.7-build".into()),
-        dangerous: true,
-        mode_id: Some("full-access".into()),
+        dangerous,
+        mode_id: mode_id.map(str::to_string),
         broadcaster: AgentEventBroadcaster::new(),
+        event_log: Arc::new(Mutex::new(Vec::new())),
         resume_session_id: resume_session_id.map(str::to_string),
     }
+}
+
+/// 假服务端模板：`session/prompt` 先发一条 server→client 反向请求
+/// （`__REQUEST_JSON__`），把客户端写回的响应记进日志，再收尾整轮。
+///
+/// 反向请求的 `id` 固定为 0（真机 grok 也从 0 起编号），便于断言 `respond_permission`。
+pub(super) const FAKE_SERVER_REVERSE_REQUEST_TEMPLATE: &str = r#"#!/usr/bin/env bash
+log="__LOG__"
+while IFS= read -r line; do
+  printf '%s\n' "$line" >> "$log"
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  method=$(printf '%s' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  case "$method" in
+    initialize)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":1}}\n' "$id"
+      ;;
+    session/new)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"grok-perm-1"}}\n' "$id"
+      ;;
+    session/prompt)
+      printf '%s\n' '__REQUEST_JSON__'
+      if IFS= read -r reply; then
+        printf '%s\n' "$reply" >> "$log"
+      fi
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn"}}\n' "$id"
+      ;;
+  esac
+done
+"#;
+
+/// 落盘回放 [`FAKE_SERVER_REVERSE_REQUEST_TEMPLATE`]，返回 (脚本路径, 日志路径)。
+pub(super) fn write_fake_reverse_request_server(
+    dir: &Path,
+    log_name: &str,
+    request_json: &str,
+) -> (PathBuf, PathBuf) {
+    let log_path = dir.join(log_name);
+    let script_path = dir.join(format!("fake-{log_name}.sh"));
+    let script = FAKE_SERVER_REVERSE_REQUEST_TEMPLATE
+        .replace("__LOG__", &log_path.to_string_lossy())
+        .replace("__REQUEST_JSON__", request_json);
+    write_script(&script_path, &script);
+    (script_path, log_path)
 }
 
 /// 事件采集夹具：与 `GrokSessionHandle` 内部同一装配（transport 通知 → mapper）。

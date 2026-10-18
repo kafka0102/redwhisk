@@ -71,11 +71,19 @@ Agent TUI 会话视图 (xterm)
 | --------- | ------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
 | 进程协议  | `codex app-server`，stdio 上 NDJSON JSON-RPC                  | `claude -p --output-format stream-json`，NDJSON 单向流  | `grok agent stdio`，stdio 上 ACP JSON-RPC 2.0（长驻）            |
 | 会话模型  | 持久 app-server session，维护 `threadId` / 当前 turn          | 单轮子进程；后续消息用 `--resume <session_id>` 续接     | 持久 ACP session，`sessionID` 经 `ThreadStarted` 回流             |
-| 权限      | server→client request；前端经 `respond_agent_permission` 回复 | stream-json 没有等价 request/response 审批通道          | ACP `session/request_permission`（本期不实装审批卡）             |
+| 权限      | server→client request；前端经 `respond_agent_permission` 回复 | stream-json 没有等价 request/response 审批通道          | ACP `session/request_permission`（阻塞式反向请求，须写回）        |
 | 模型/模式 | 通过 provider 请求与通知同步                                  | 由 Claude provider 能力与配置决定；第三方模型列表可只读 | 仅启动期 `agent -m` 透传；会话内切换未启用                        |
 | 输出      | JSON-RPC notification 映射 timeline                           | SDKMessage 流映射 timeline                              | ACP `session/update` 映射 timeline                                |
 
 因此，不能把 Codex 的 JSON-RPC、权限卡片、thread 字段或 effort 假定为所有 provider 都具备。**json 快照**不得为 Claude/Codex 回退重建 xterm 渲染链路；**tui 快照**则必须使用交互式终端主区，不得混用 structured composer / 权限卡。
+
+### ACP 反向请求（Grok / DeepSeek）
+
+ACP 的审批是**阻塞式反向请求**：agent 发 `session/request_permission` 后一直等客户端写回结果，客户端不回，整轮就永久挂住（真机现场：`permission_requested` 之后不再有任何输出，会话停在 `tool_call` + `status: running`）。
+
+- 参数归一与一次性选项在 `src-tauri/src/agent/acp_permission.rs`：按 option `kind`（`allow_once` / `reject_once`）选取，不依赖各 provider 的 optionId 字面量。
+- provider 的 `transport` 负责把 server→client 请求转给 handler，并用同一个 `id` 写回 `result` / `error`。**禁止静默丢弃**：未支持的方法要回 JSON-RPC error，让 agent 立即失败并告知模型。
+- 策略：profile 为 dangerous 或 mode 为 `full-access` 时自动回一次性允许，不弹卡（Grok 对应启动参数 `--always-approve`）；其余模式弹既有权限卡，用户决策后写回，卡片随 `permission_resolved` 消失。
 
 ### DeepSeek Harness
 
@@ -84,7 +92,7 @@ DeepSeek Harness 走 ACP，不走 SDK，也不启动 `dsh web`。
 - 进程是长驻 `dsh --profile acp`。stdout 只承载 ACP JSON-RPC。握手后 `session/new`，每条用户消息是一次 `session/prompt`。
 - `session/update` 的 `agent_message_chunk` 按 `messageId` 合并成一条助手消息；`agent_thought_chunk` 单独成为推理块。这些 chunk 是已提交内容，不是生成过程中的逐字增量。
 - `usage_update` 的 `used` / `size` 表示上下文窗口占用。协议没有输入、输出、缓存三分量时，不发送 Session Token 用量事件。
-- `session/request_permission` 归一成既有权限请求。用户允许或拒绝后，按 ACP 一次性选项写回，卡片随既有 `permission_resolved` 消失。profile 为 dangerous，或 mode 为 `full-access` 时，自动选择一次性允许，不发出需要用户处理的权限卡。
+- 权限走 ACP 反向请求，见上文「ACP 反向请求（Grok / DeepSeek）」。
 - 不展示模型切换、推理强度和 mode，也没有技能根。未知 ACP 字段保持忽略，不因此中断会话。
 
 ## 生命周期规则

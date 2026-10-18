@@ -8,6 +8,7 @@
 //! - `event_mapper`：ACP 通知 → `AgentStreamEvent`（增量累积、幂等）
 //! - `tool_detail` / `usage`：工具调用与用量归一（纯函数）
 //! - `argv`：结构化启动参数 `agent [--always-approve] [-m model] stdio`
+//! - `permission`：ACP 反向请求（权限审批）写回
 //! - `session`：`GrokSessionHandle`（实现 `AgentSessionHandle`）
 //!
 //! 用量口径：每一轮 prompt 的 `usage` 是本轮差额，同一 `promptId` 只计一次，
@@ -18,6 +19,7 @@
 
 pub mod argv;
 pub mod event_mapper;
+mod permission;
 pub mod session;
 pub mod tool_detail;
 pub mod transport;

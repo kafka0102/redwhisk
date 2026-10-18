@@ -12,13 +12,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
+use crate::agent::acp_permission::{
+    auto_allow_outcome, auto_allows, build_permission_request, decision_resolution,
+    is_permission_request, outcome_for_decision, parse_options, permission_request_id,
+    AcpPermissionOption,
+};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::deepseek_streaming::argv::{build_deepseek_acp_args, DEEPSEEK_FALLBACK_BINARY};
 use crate::agent::deepseek_streaming::event_mapper::DeepSeekStreamMapper;
-use crate::agent::deepseek_streaming::permission::{
-    auto_allow_outcome, auto_allows, build_permission_request, decision_resolution,
-    is_permission_request, outcome_for_decision, parse_options, permission_request_id,
-};
 use crate::agent::deepseek_streaming::prompt::{build_prompt_blocks, declares_image_input};
 use crate::agent::deepseek_streaming::transport::{
     DeepSeekStreamingError, DeepSeekStreamingTransport,
@@ -32,7 +33,7 @@ use crate::types::agent_session_stream::{
 
 struct PendingPermission {
     sender: mpsc::Sender<Value>,
-    options: Vec<crate::agent::deepseek_streaming::permission::AcpPermissionOption>,
+    options: Vec<AcpPermissionOption>,
 }
 
 const INITIALIZE_METHOD: &str = "initialize";
@@ -288,7 +289,7 @@ impl AgentSessionHandle for DeepSeekSessionHandle {
                     state
                         .pending_permissions
                         .insert(request_id.to_string(), pending);
-                    return Err(AgentSessionError::from(error));
+                    return Err(AgentSessionError::from(DeepSeekStreamingError::from(error)));
                 }
             }
         };
@@ -424,7 +425,7 @@ fn handle_server_request(
     }
     let options = parse_options(params);
     if auto_allows(config.dangerous, config.mode_id.as_deref()) {
-        return auto_allow_outcome(&options);
+        return auto_allow_outcome(&options).map_err(DeepSeekStreamingError::from);
     }
     let request_id = permission_request_id(rpc_id);
     let turn_id = state

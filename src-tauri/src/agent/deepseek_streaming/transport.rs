@@ -12,10 +12,17 @@ use std::thread;
 
 use serde_json::{json, Value};
 
+use crate::agent::acp_permission::AcpPermissionError;
 use crate::agent::provider_spawn::build_provider_command;
 
 const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
 const STDERR_BUFFER_LIMIT: usize = 8192;
+
+impl From<AcpPermissionError> for DeepSeekStreamingError {
+    fn from(error: AcpPermissionError) -> Self {
+        DeepSeekStreamingError::Protocol(error.to_string())
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum DeepSeekStreamingError {

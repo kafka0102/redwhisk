@@ -2,7 +2,7 @@
 //!
 //! 与 `codex app-server` 同形态：长驻进程 + 按行分隔 JSON，三种消息按字段区分：
 //! - Response：含 `id`（数字）+ `result` 或 `error`
-//! - Request（server→client，如权限反向请求）：含 `id` + `method` —— 本期忽略
+//! - Request（server→client，如权限反向请求）：含 `id` + `method`，转 handler 回复
 //! - Notification：含 `method`，无 `id`
 //!
 //! 本模块只做 wire-level 工作：请求 id 关联、响应分发、通知回调、
@@ -20,6 +20,7 @@ use std::thread;
 
 use serde_json::{json, Value};
 
+use crate::agent::acp_permission::AcpPermissionError;
 use crate::agent::provider_spawn::{build_provider_command, split_command_line};
 
 /// 默认请求超时（14 天）：ACP 的 `session/prompt` 可能长时间不返回，
@@ -28,6 +29,12 @@ const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 14 * 24 * 60 * 60 * 1000;
 const STDERR_BUFFER_LIMIT: usize = 8192;
 pub(crate) const CLIENT_INITIATED_CLOSE_REASON: &str = "客户端主动关闭";
 const STDOUT_EOF_REASON: &str = "stdout EOF";
+
+impl From<AcpPermissionError> for GrokStreamingError {
+    fn from(error: AcpPermissionError) -> Self {
+        GrokStreamingError::Protocol(error.to_string())
+    }
+}
 
 /// 传输层错误。
 #[derive(Debug, thiserror::Error)]
@@ -53,6 +60,11 @@ pub enum GrokStreamingError {
 /// notification 回调：`(method, params)`。
 pub type NotificationHandler = Arc<dyn Fn(&str, &Value) + Send + Sync>;
 
+/// 回复 agent→client 反向请求（`(id, method, params)`）。返回 JSON-RPC `result`，
+/// 由传输层负责把同一个 `id` 写回；返回 `Err` 则写回 JSON-RPC error。
+pub type ServerRequestHandler =
+    Arc<dyn Fn(&Value, &str, &Value) -> Result<Value, GrokStreamingError> + Send + Sync>;
+
 struct PendingRequest {
     sender: Option<mpsc::Sender<Result<Value, GrokStreamingError>>>,
 }
@@ -60,6 +72,7 @@ struct PendingRequest {
 struct TransportState {
     pending: Mutex<HashMap<i64, PendingRequest>>,
     notification_handler: Mutex<Option<NotificationHandler>>,
+    server_request_handler: Mutex<Option<ServerRequestHandler>>,
     stderr_buffer: Mutex<String>,
     closed: Mutex<Option<String>>,
     eof_sender: Mutex<Option<mpsc::Sender<String>>>,
@@ -126,6 +139,7 @@ impl GrokStreamingTransport {
         let state = Arc::new(TransportState {
             pending: Mutex::new(HashMap::new()),
             notification_handler: Mutex::new(None),
+            server_request_handler: Mutex::new(None),
             stderr_buffer: Mutex::new(String::new()),
             closed: Mutex::new(None),
             eof_sender: Mutex::new(None),
@@ -143,6 +157,16 @@ impl GrokStreamingTransport {
     /// 注册 notification 回调（覆盖式；整 session 只有一个消费者）。
     pub fn set_notification_handler(&self, handler: NotificationHandler) {
         if let Ok(mut guard) = self.state.notification_handler.lock() {
+            *guard = Some(handler);
+        }
+    }
+
+    /// 注册 agent→client 反向请求回调（覆盖式；整 session 只有一个消费者）。
+    ///
+    /// 反向请求是阻塞式的：handler 返回前不会写回响应。未注册时传输层仍会写回
+    /// 一条 JSON-RPC error——静默丢弃会让 agent 永久阻塞在这条请求上。
+    pub fn set_server_request_handler(&self, handler: ServerRequestHandler) {
+        if let Ok(mut guard) = self.state.server_request_handler.lock() {
             *guard = Some(handler);
         }
     }
@@ -260,19 +284,7 @@ impl GrokStreamingTransport {
     }
 
     fn write_line(&self, value: &Value) -> Result<(), GrokStreamingError> {
-        let mut line = serde_json::to_string(value)?;
-        line.push('\n');
-        let mut stdin_guard = self
-            .state
-            .stdin
-            .lock()
-            .map_err(|_| GrokStreamingError::Protocol("stdin 锁中毒".into()))?;
-        let stdin = stdin_guard
-            .as_mut()
-            .ok_or_else(|| GrokStreamingError::Closed("grok agent stdio stdin 已关闭".into()))?;
-        stdin.write_all(line.as_bytes())?;
-        stdin.flush()?;
-        Ok(())
+        write_state_line(&self.state, value)
     }
 
     fn remove_pending(&self, id: i64) {
@@ -371,17 +383,69 @@ fn spawn_stderr_reader(stderr: ChildStderr, state: Arc<TransportState>) {
 }
 
 fn dispatch_message(state: &TransportState, value: Value) {
-    let id = value.get("id").and_then(Value::as_i64);
-    let method = value.get("method").and_then(Value::as_str);
-    match (id, method) {
-        (Some(_), Some(_)) => {
-            // server→client request（如 session/request_permission）。
-            // 本期不做可回复审批卡，忽略即可，不误发为 turn 事件。
-        }
-        (Some(id), None) => dispatch_response(state, id, value),
-        (None, Some(method)) => dispatch_notification(state, method, &value),
-        (None, None) => {}
+    // 带 `id` + `method` 的是 server→client 反向请求（如 session/request_permission），
+    // 必须回复，否则 agent 会一直等它。
+    if let (Some(rpc_id), Some(method)) = (
+        jsonrpc_id(&value),
+        value.get("method").and_then(Value::as_str),
+    ) {
+        dispatch_server_request(state, rpc_id, method, &value);
+        return;
     }
+    match value.get("id").and_then(Value::as_i64) {
+        Some(id) => dispatch_response(state, id, value),
+        None => {
+            if let Some(method) = value.get("method").and_then(Value::as_str) {
+                dispatch_notification(state, method, &value);
+            }
+        }
+    }
+}
+
+fn jsonrpc_id(value: &Value) -> Option<Value> {
+    let id = value.get("id")?;
+    (id.is_number() || id.is_string()).then(|| id.clone())
+}
+
+fn dispatch_server_request(state: &TransportState, id: Value, method: &str, value: &Value) {
+    let params = value.get("params").cloned().unwrap_or(Value::Null);
+    let handler = state
+        .server_request_handler
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+    let payload = match handler {
+        Some(handler) => match handler(&id, method, &params) {
+            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            Err(error) => json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": { "code": -32603, "message": error.to_string() }
+            }),
+        },
+        None => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": { "code": -32601, "message": format!("unhandled ACP request: {method}") }
+        }),
+    };
+    // 写失败（stdin 已关闭）不致命：等待方由 EOF 收尾。
+    let _ = write_state_line(state, &payload);
+}
+
+fn write_state_line(state: &TransportState, value: &Value) -> Result<(), GrokStreamingError> {
+    let mut line = serde_json::to_string(value)?;
+    line.push('\n');
+    let mut stdin_guard = state
+        .stdin
+        .lock()
+        .map_err(|_| GrokStreamingError::Protocol("stdin 锁中毒".into()))?;
+    let stdin = stdin_guard
+        .as_mut()
+        .ok_or_else(|| GrokStreamingError::Closed("grok agent stdio stdin 已关闭".into()))?;
+    stdin.write_all(line.as_bytes())?;
+    stdin.flush()?;
+    Ok(())
 }
 
 fn dispatch_response(state: &TransportState, id: i64, value: Value) {
@@ -417,68 +481,5 @@ fn dispatch_notification(state: &TransportState, method: &str, value: &Value) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dispatch_classifies_response_request_and_notification() {
-        let state = TransportState {
-            pending: Mutex::new(HashMap::new()),
-            notification_handler: Mutex::new(None),
-            stderr_buffer: Mutex::new(String::new()),
-            closed: Mutex::new(None),
-            eof_sender: Mutex::new(None),
-            next_id: AtomicI64::new(1),
-            stdin: Mutex::new(None),
-        };
-        let (tx, rx) = mpsc::channel();
-        state
-            .pending
-            .lock()
-            .unwrap()
-            .insert(7, PendingRequest { sender: Some(tx) });
-
-        dispatch_message(
-            &state,
-            json!({"jsonrpc":"2.0","id":7,"result":{"sessionId":"s-1"}}),
-        );
-        assert_eq!(rx.recv().unwrap().unwrap()["sessionId"], "s-1");
-
-        // 未注册的 server→client request 不应 panic、也不应写回响应。
-        dispatch_message(
-            &state,
-            json!({"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{}}),
-        );
-    }
-
-    #[test]
-    fn dispatch_notification_forwards_method_and_params() {
-        let received = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
-        let sink = Arc::clone(&received);
-        let state = TransportState {
-            pending: Mutex::new(HashMap::new()),
-            notification_handler: Mutex::new(Some(Arc::new(
-                move |method: &str, params: &Value| {
-                    sink.lock()
-                        .unwrap()
-                        .push((method.to_string(), params.clone()));
-                },
-            ))),
-            stderr_buffer: Mutex::new(String::new()),
-            closed: Mutex::new(None),
-            eof_sender: Mutex::new(None),
-            next_id: AtomicI64::new(1),
-            stdin: Mutex::new(None),
-        };
-
-        dispatch_message(
-            &state,
-            json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s-1"}}),
-        );
-
-        let guard = received.lock().unwrap();
-        assert_eq!(guard.len(), 1);
-        assert_eq!(guard[0].0, "session/update");
-        assert_eq!(guard[0].1["sessionId"], "s-1");
-    }
-}
+#[path = "transport_tests.rs"]
+mod transport_tests;

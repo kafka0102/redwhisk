@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::grok_streaming::argv::{append_attachment_paths, build_grok_agent_args};
 use crate::agent::grok_streaming::event_mapper::GrokStreamMapper;
+use crate::agent::grok_streaming::permission::{self, PermissionLedger};
 use crate::agent::grok_streaming::transport::{
     GrokStreamingError, GrokStreamingTransport, CLIENT_INITIATED_CLOSE_REASON,
 };
@@ -50,6 +51,9 @@ pub struct GrokSessionConfig {
     pub dangerous: bool,
     pub mode_id: Option<String>,
     pub broadcaster: AgentEventBroadcaster,
+    /// 测试期权限事件采集（无 `AppHandle` 时 broadcaster 按设计丢弃事件）。
+    #[cfg(test)]
+    pub event_log: Arc<Mutex<Vec<AgentStreamEvent>>>,
     pub resume_session_id: Option<String>,
 }
 
@@ -62,6 +66,8 @@ struct SessionState {
 pub struct GrokSessionHandle {
     transport: Mutex<Option<GrokStreamingTransport>>,
     state: Arc<Mutex<SessionState>>,
+    /// 反向请求挂起表。等用户决策时会阻塞传输层读线程，故独立于 `state` 锁。
+    permissions: Arc<PermissionLedger>,
     config: GrokSessionConfig,
 }
 
@@ -93,6 +99,18 @@ impl GrokSessionHandle {
         transport.set_notification_handler(Arc::new(move |method, params| {
             handle_notification(&handler_state, &handler_config, method, params);
         }));
+        let permissions = Arc::new(PermissionLedger::new());
+        let request_config = config.clone();
+        let request_permissions = Arc::clone(&permissions);
+        transport.set_server_request_handler(Arc::new(move |rpc_id, method, params| {
+            permission::handle_server_request(
+                &request_config,
+                &request_permissions,
+                rpc_id,
+                method,
+                params,
+            )
+        }));
 
         watch_process_exit(&transport, Arc::clone(&state), config.clone());
 
@@ -107,6 +125,7 @@ impl GrokSessionHandle {
         Ok(Self {
             transport: Mutex::new(Some(transport)),
             state,
+            permissions,
             config,
         })
     }
@@ -251,12 +270,12 @@ impl AgentSessionHandle for GrokSessionHandle {
 
     fn respond_permission(
         &self,
-        _request_id: &str,
-        _decision: AgentPermissionDecision,
+        request_id: &str,
+        decision: AgentPermissionDecision,
     ) -> Result<(), AgentSessionError> {
-        Err(AgentSessionError::NotRunning(
-            "grok json 会话本期不支持权限审批".into(),
-        ))
+        self.permissions
+            .resolve(&self.config, request_id, decision)
+            .map_err(AgentSessionError::from)
     }
 
     fn set_model(&self, _model_id: String) -> Result<(), AgentSessionError> {
@@ -464,3 +483,7 @@ mod resume_tests;
 #[cfg(test)]
 #[path = "session_failure_tests.rs"]
 mod failure_tests;
+
+#[cfg(test)]
+#[path = "session_permission_tests.rs"]
+mod permission_tests;
