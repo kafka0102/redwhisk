@@ -1799,8 +1799,11 @@ impl AgentSessionService<'_> {
                 session_id: session.id,
                 binary,
                 cwd,
-                mode_id: None,
-                dangerous: false,
+                // 结构化路径的 argv 每次 spawn 现算（不像 TUI 把 `--always-approve`
+                // 冻结在 command_snapshot 里），续接必须沿用 profile 的权限策略，
+                // 否则 Grok 会退回「逐条命令问审批」，表现为莫名其妙的权限卡。
+                mode_id: Some(profile.mode.clone()),
+                dangerous: profile.dangerous,
                 model: runtime.model,
                 effort: runtime.effort,
                 resume_thread_id: Some(thread_id.clone()),
@@ -3148,6 +3151,10 @@ fn missing_session_workspace_error(
     }
     error
 }
+
+#[cfg(test)]
+#[path = "resume_permission_policy_tests.rs"]
+mod resume_permission_policy_tests;
 
 #[cfg(test)]
 mod tests {
@@ -5390,7 +5397,7 @@ mod tests {
             .as_millis() as i64
     }
 
-    fn setup_session_list_database() -> Connection {
+    pub(super) fn setup_session_list_database() -> Connection {
         let connection = Connection::open_in_memory().expect("open database");
         MigrationRunner::default()
             .run(&connection)
@@ -5412,7 +5419,7 @@ mod tests {
         connection
     }
 
-    fn test_agent_session_service(connection: &Connection) -> AgentSessionService<'_> {
+    pub(super) fn test_agent_session_service(connection: &Connection) -> AgentSessionService<'_> {
         AgentSessionService::new(
             IssueRepository::new(connection),
             ProjectRepository::new(connection),
@@ -5421,7 +5428,7 @@ mod tests {
         )
     }
 
-    fn insert_session_list_row(
+    pub(super) fn insert_session_list_row(
         connection: &Connection,
         session_id: i64,
         issue_id: Option<i64>,
@@ -5991,8 +5998,8 @@ mod tests {
     }
 
     /// 记录 provider 收到的启动请求，供 Seam 3（service 启动编排）断言模型透传。
-    struct RecordingProviderFactory {
-        captured:
+    pub(super) struct RecordingProviderFactory {
+        pub(super) captured:
             std::sync::Mutex<Option<crate::agent::provider_factory::AgentSessionStartRequest>>,
     }
 

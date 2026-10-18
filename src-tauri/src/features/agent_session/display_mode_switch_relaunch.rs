@@ -11,6 +11,7 @@ use crate::agent::pty_session_manager::{
     PtyCommandMode, PtyExitStatus, PtySessionManager, PtySpawnRequest,
 };
 use crate::agent::session_registry::AgentSessionRegistry;
+use crate::db::agent_profile_repository::AgentProfileRow;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::event_repository::EventRepository;
 use crate::types::agent_profile::AgentType;
@@ -32,12 +33,13 @@ pub(super) fn relaunch_structured(
     service: &AgentSessionService<'_>,
     data_dir: &Path,
     session: &AgentSessionRecord,
-    agent_type: &AgentType,
+    profile: &AgentProfileRow,
     provider_session_id: &str,
     agent_registry: &AgentSessionRegistry,
     broadcaster: &AgentEventBroadcaster,
     factory: &dyn AgentSessionProviderFactory,
 ) -> Result<(), CommandError> {
+    let agent_type = &profile.agent_type;
     let descriptor = descriptor_for(agent_type);
     let binary = if session.command_snapshot.trim().is_empty() {
         descriptor.fallback_command_when_snapshot_empty()
@@ -55,8 +57,10 @@ pub(super) fn relaunch_structured(
             session_id: session.id,
             binary,
             cwd,
-            mode_id: None,
-            dangerous: false,
+            // 同 `resume_structured_agent_session`：结构化 argv 现算，切形态后
+            // 必须沿用 profile 权限策略，否则 provider 退回逐条问审批。
+            mode_id: Some(profile.mode.clone()),
+            dangerous: profile.dangerous,
             model: runtime.model,
             effort: runtime.effort,
             resume_thread_id: Some(provider_session_id.to_string()),

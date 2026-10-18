@@ -102,7 +102,7 @@ impl<'connection> AgentSessionService<'connection> {
                 self,
                 data_dir,
                 &relaunched,
-                &agent_type,
+                &profile,
                 &provider_session_id,
                 agent_registry,
                 broadcaster,
