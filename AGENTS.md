@@ -71,6 +71,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 改动子进程环境注入（交互式 `PATH` 解析、终端 / Agent spawn、git 子进程）：读取 `docs/architecture-design/agent-development-rules.md`「Agent Profile 与 Settings 规则」中的「交互式 PATH 三条不变量」。
 - 改动 UI、页面或组件：在前端代码规范外，额外读取 `docs/architecture-design/design-guide.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。涉及 Settings 时，额外读取 `docs/architecture-design/settings-page-layout.md`。
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
+- 诊断 Agent 会话行为（权限卡、模型或权限与预期不符、重建后续不上）：读取 `docs/architecture-design/agent-session-diagnostics.md`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
 - 发布或打包：读取 `docs/standards/release-workflow.md`。
 - 涉及后端命令、git 操作或轮询性能：额外读取 `docs/standards/performance.md`。
