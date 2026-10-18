@@ -12,8 +12,8 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 use super::tests::{
-    insert_session_list_row, setup_session_list_database, test_agent_session_service,
-    RecordingProviderFactory,
+    insert_session_list_row, session_started_payload, setup_session_list_database,
+    test_agent_session_service, RecordingProviderFactory,
 };
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::session_registry::AgentSessionRegistry;
@@ -140,6 +140,12 @@ fn structured_resume_keeps_profile_permission_policy() {
         captured.dangerous,
         "续接丢失 profile.dangerous，provider 会退回逐条问审批"
     );
+
+    // 重建下发参数要落进 `session_started` 审计，口径与首启一致。
+    let payload = session_started_payload(&connection, 801);
+    assert_eq!(payload["agentType"], "grok");
+    assert_eq!(payload["modeId"], "full-access");
+    assert_eq!(payload["dangerous"], true);
 }
 
 /// json 会话续接沿用启动期模型，且 Grok 要还原回别名而不是 wire 名。
@@ -175,6 +181,10 @@ fn structured_resume_keeps_startup_model() {
         captured_request(&factory).model.as_deref(),
         Some(GROK_MODEL_ARG),
         "续接未恢复启动期模型，或把 wire 名当成了 CLI 模型入参"
+    );
+    assert_eq!(
+        session_started_payload(&connection, 803)["model"],
+        GROK_MODEL_ARG
     );
 }
 
@@ -214,6 +224,11 @@ fn display_mode_switch_relaunch_keeps_profile_permission_policy() {
         captured.dangerous,
         "切形态后重拉丢失 profile.dangerous，provider 会退回逐条问审批"
     );
+
+    let payload = session_started_payload(&connection, 802);
+    assert_eq!(payload["agentType"], "grok");
+    assert_eq!(payload["modeId"], "full-access");
+    assert_eq!(payload["dangerous"], true);
 }
 
 /// 展示形式切回 json 时重拉结构化进程同样沿用启动期模型。
@@ -249,6 +264,10 @@ fn display_mode_switch_relaunch_keeps_startup_model() {
         captured_request(&factory).model.as_deref(),
         Some(GROK_MODEL_ARG),
         "切形态后重拉未恢复启动期模型，或把 wire 名当成了 CLI 模型入参"
+    );
+    assert_eq!(
+        session_started_payload(&connection, 804)["model"],
+        GROK_MODEL_ARG
     );
 }
 

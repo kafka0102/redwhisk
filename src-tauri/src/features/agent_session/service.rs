@@ -86,6 +86,39 @@ pub(super) struct SessionLaunchContext {
     pub(super) worktree_setup_command: Option<String>,
 }
 
+/// `session_started` 事件里记下的 provider 面向启动参数。
+///
+/// 结构化（json）会话的 argv 每次 spawn 现算，续接与切形态重拉各有一条独立路径：
+/// 只有把这些真正下发的 mode / dangerous / model 记进审计事件，才能在不复现的情况下
+/// 回答「这次跑的是不是全权限、哪个模型」，也才能复查重建路径有没有漏传启动参数。
+#[derive(Clone, Copy)]
+pub(super) struct SessionSpawnParams<'a> {
+    pub(super) agent_type: &'a AgentType,
+    pub(super) mode_id: &'a str,
+    pub(super) dangerous: bool,
+    /// 下发给 provider 的模型入参；未指定模型时为 `None`。
+    pub(super) model: Option<&'a str>,
+}
+
+/// 把 [`SessionSpawnParams`] 以扁平键并进 `session_started` 的 payload。
+///
+/// `spawn` 为 `None` 表示本次没有真正拉起进程（幂等短路），不加这些键。
+pub(super) fn merge_spawn_params(
+    mut payload: serde_json::Value,
+    spawn: Option<SessionSpawnParams<'_>>,
+) -> serde_json::Value {
+    let Some(spawn) = spawn else {
+        return payload;
+    };
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("agentType".to_string(), json!(spawn.agent_type.as_db_str()));
+        object.insert("modeId".to_string(), json!(spawn.mode_id));
+        object.insert("dangerous".to_string(), json!(spawn.dangerous));
+        object.insert("model".to_string(), json!(spawn.model));
+    }
+    payload
+}
+
 pub struct AgentSessionRuntimeListResult {
     pub response: AgentSessionListResponse,
     pub pruned_runtime_session_ids: Vec<i64>,
@@ -829,14 +862,22 @@ impl<'connection> AgentSessionService<'connection> {
             )?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
-            let session_event_payload = json!({
-                "sessionId": session.id,
-                "issueId": issue.id,
-                "agentProfileId": input.agent_profile_id,
-                "status": "running",
-                "structuredStream": true,
-                "logPath": session.log_path,
-            })
+            let session_event_payload = merge_spawn_params(
+                json!({
+                    "sessionId": session.id,
+                    "issueId": issue.id,
+                    "agentProfileId": input.agent_profile_id,
+                    "status": "running",
+                    "structuredStream": true,
+                    "logPath": session.log_path,
+                }),
+                Some(SessionSpawnParams {
+                    agent_type: &launch.profile.agent_type,
+                    mode_id: &launch.profile.mode,
+                    dangerous: launch.profile.dangerous,
+                    model: input.model.as_deref(),
+                }),
+            )
             .to_string();
             EventRepository::insert_session_event_in_transaction(
                 &transaction,
@@ -1650,7 +1691,7 @@ impl AgentSessionService<'_> {
                         .filter(|value| !value.trim().is_empty())
                 })
                 .unwrap_or_default();
-            self.mark_structured_session_resumed(&session, &active_thread_id, None)?;
+            self.mark_structured_session_resumed(&session, &active_thread_id, None, None)?;
             Ok(ResumeAgentSessionResult {
                 session_id: session.id,
                 thread_id: active_thread_id,
@@ -1661,7 +1702,7 @@ impl AgentSessionService<'_> {
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_default();
-            self.mark_structured_session_resumed(&session, &active_thread_id, None)?;
+            self.mark_structured_session_resumed(&session, &active_thread_id, None, None)?;
             Ok(ResumeAgentSessionResult {
                 session_id: session.id,
                 thread_id: active_thread_id,
@@ -1860,6 +1901,12 @@ impl AgentSessionService<'_> {
             &session,
             &resumed_thread_id,
             Some(log_path.as_str()),
+            Some(SessionSpawnParams {
+                agent_type: &profile.agent_type,
+                mode_id: &profile.mode,
+                dangerous: profile.dangerous,
+                model: resume_model.as_deref(),
+            }),
         ) {
             agent_registry.unmark_starting(session.id);
             started.handle.shutdown();
@@ -1958,9 +2005,13 @@ impl AgentSessionService<'_> {
             }
         };
 
-        if let Err(error) =
-            self.mark_structured_session_resumed(&session, &thread_id, Some(log_path.as_str()))
-        {
+        // TUI 路径的启动参数冻结在 `command_snapshot` 里，按快照重放，无需另记。
+        if let Err(error) = self.mark_structured_session_resumed(
+            &session,
+            &thread_id,
+            Some(log_path.as_str()),
+            None,
+        ) {
             agent_registry.unmark_starting(session.id);
             pending_pty.terminate();
             return Err(error);
@@ -2206,6 +2257,7 @@ impl AgentSessionService<'_> {
         session: &crate::types::agent_session::AgentSessionRecord,
         thread_id: &str,
         log_path: Option<&str>,
+        spawn: Option<SessionSpawnParams<'_>>,
     ) -> Result<(), CommandError> {
         let resumed_at = current_epoch_millis()?;
         let transaction = self
@@ -2242,15 +2294,18 @@ impl AgentSessionService<'_> {
             session.log_path.clone()
         };
 
-        let payload = json!({
-            "sessionId": session.id,
-            "issueId": session.issue_id,
-            "status": "running",
-            "resumed": true,
-            "structuredStream": true,
-            "providerSessionId": thread_id,
-            "logPath": persisted_log_path,
-        })
+        let payload = merge_spawn_params(
+            json!({
+                "sessionId": session.id,
+                "issueId": session.issue_id,
+                "status": "running",
+                "resumed": true,
+                "structuredStream": true,
+                "providerSessionId": thread_id,
+                "logPath": persisted_log_path,
+            }),
+            spawn,
+        )
         .to_string();
         EventRepository::insert_session_event_in_transaction(
             &transaction,
@@ -5416,6 +5471,23 @@ mod tests {
         }
     }
 
+    /// 读某 Session 最后一条 `session_started` 事件的 payload。
+    pub(super) fn session_started_payload(
+        connection: &Connection,
+        session_id: i64,
+    ) -> serde_json::Value {
+        let payload: String = connection
+            .query_row(
+                "SELECT payload_json FROM session_events
+                 WHERE session_id = ?1 AND event_type = 'session_started'
+                 ORDER BY id DESC LIMIT 1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .expect("session_started payload");
+        serde_json::from_str(&payload).expect("session_started payload json")
+    }
+
     fn current_millis() -> i64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -6105,6 +6177,14 @@ mod tests {
             .expect("provider 应收到启动请求");
         assert_eq!(captured.model.as_deref(), Some("gpt-5.5"));
         assert!(registry.contains(result.session_id));
+
+        // 下发给 provider 的启动参数要落进 `session_started` 审计，
+        // 供排查续接 / 切形态重建时是否漏传。
+        let payload = session_started_payload(&connection, result.session_id);
+        assert_eq!(payload["agentType"], "codex");
+        assert_eq!(payload["model"].as_str(), captured.model.as_deref());
+        assert_eq!(payload["modeId"].as_str(), captured.mode_id.as_deref());
+        assert_eq!(payload["dangerous"], captured.dangerous);
     }
 
     #[test]

@@ -22,7 +22,8 @@ use crate::types::session_event::SessionEventType;
 use super::display_mode_switch::display_mode_switch_rejected;
 use super::launch::start_provider_session;
 use super::service::{
-    agent_session_database_error, current_epoch_millis, preferred_session_cwd, AgentSessionService,
+    agent_session_database_error, current_epoch_millis, merge_spawn_params, preferred_session_cwd,
+    AgentSessionService, SessionSpawnParams,
 };
 use super::tui_hook_env::tui_hook_spawn_env;
 
@@ -77,9 +78,18 @@ pub(super) fn relaunch_structured(
             return Err(error);
         }
     };
-    if let Err(error) =
-        mark_switched_session_running(service, session, provider_session_id, &session.log_path)
-    {
+    if let Err(error) = mark_switched_session_running(
+        service,
+        session,
+        provider_session_id,
+        &session.log_path,
+        Some(SessionSpawnParams {
+            agent_type: &profile.agent_type,
+            mode_id: &profile.mode,
+            dangerous: profile.dangerous,
+            model: resume_model.as_deref(),
+        }),
+    ) {
         agent_registry.unmark_starting(session.id);
         started.handle.shutdown();
         return Err(error);
@@ -145,9 +155,14 @@ pub(super) fn relaunch_tui(
             .with_detail(ErrorDetail::new("Cause").with_value("message", error)));
         }
     };
-    if let Err(error) =
-        mark_switched_session_running(service, session, provider_session_id, &session.log_path)
-    {
+    // TUI 路径的启动参数冻结在 `command_snapshot` 里，按快照重放，无需另记。
+    if let Err(error) = mark_switched_session_running(
+        service,
+        session,
+        provider_session_id,
+        &session.log_path,
+        None,
+    ) {
         agent_registry.unmark_starting(session.id);
         pending.terminate();
         return Err(error);
@@ -195,6 +210,7 @@ fn mark_switched_session_running(
     session: &AgentSessionRecord,
     provider_session_id: &str,
     log_path: &str,
+    spawn: Option<SessionSpawnParams<'_>>,
 ) -> Result<(), CommandError> {
     let resumed_at = current_epoch_millis()?;
     let transaction = service
@@ -214,14 +230,17 @@ fn mark_switched_session_running(
         .with_reason("displayModeSwitchRestoreFailed")
         .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id)));
     }
-    let payload = json!({
-        "sessionId": session.id,
-        "issueId": session.issue_id,
-        "status": "running",
-        "displayModeSwitched": true,
-        "providerSessionId": provider_session_id,
-        "logPath": log_path,
-    })
+    let payload = merge_spawn_params(
+        json!({
+            "sessionId": session.id,
+            "issueId": session.issue_id,
+            "status": "running",
+            "displayModeSwitched": true,
+            "providerSessionId": provider_session_id,
+            "logPath": log_path,
+        }),
+        spawn,
+    )
     .to_string();
     EventRepository::insert_session_event_in_transaction(
         &transaction,
