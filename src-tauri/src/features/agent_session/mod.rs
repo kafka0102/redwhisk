@@ -16,6 +16,7 @@ mod display_mode_switch_relaunch;
 pub(crate) use display_mode_switch::NativeSessionHomes;
 pub mod commands;
 mod content_search;
+mod grok_session_id_capture;
 mod grok_tui_archive;
 mod launch;
 mod lifecycle;

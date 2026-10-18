@@ -132,7 +132,8 @@ fn grok_chat_history_path(root: &Path, cwd: &Path, provider_session_id: &str) ->
 }
 
 /// Grok 会话目录名：绝对 cwd 的百分号编码。非字母数字按 UTF-8 字节编码。
-fn encode_grok_session_cwd(cwd: &str) -> String {
+/// 会话标识捕获（`grok_session_id_capture`）与归档共用同一编码事实。
+pub(super) fn encode_grok_session_cwd(cwd: &str) -> String {
     let mut encoded = String::new();
     for byte in cwd.as_bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {

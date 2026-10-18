@@ -49,6 +49,7 @@ use crate::types::session_event::SessionEventType;
 
 use super::codex_session_id_capture::should_attempt_codex_session_capture;
 use super::command_snapshot::build_tui_command_snapshot_for_profile;
+use super::grok_session_id_capture;
 use super::launch::{start_provider_session, OwnedWorktreeCleanupGuard};
 use super::log_path::{
     build_issue_runtime_structured_log_path, build_pending_structured_log_path,
@@ -582,19 +583,11 @@ impl<'connection> AgentSessionService<'connection> {
 
         match transaction_result {
             Ok(result) => {
-                if should_attempt_codex_session_capture(&launch.command_snapshot) {
-                    let data_dir = data_dir.as_ref().to_path_buf();
-                    let working_dir = launch.working_dir.clone();
-                    let session_id = result.session_id;
-                    thread::spawn(move || {
-                        refresh_provider_session_id_in_data_dir(
-                            &data_dir,
-                            session_id,
-                            &working_dir,
-                            launch.started_at,
-                        );
-                    });
-                }
+                spawn_launch_provider_session_id_capture(
+                    data_dir.as_ref(),
+                    result.session_id,
+                    &launch,
+                );
 
                 if let Some(pty_sessions) = pty_sessions {
                     let extra_env = tui_hook_spawn_env(
@@ -2982,22 +2975,100 @@ fn normalize_submitted_prompt(prompt: &str) -> String {
     format!("{prompt}\r")
 }
 
+/// Provider 会话标识的捕获来源。
+#[derive(Clone, Copy)]
+enum ProviderSessionIdSource {
+    /// Codex：扫 `CODEX_HOME` 下 session log。
+    Codex,
+    /// Grok TUI：扫本机会话存储（见 `grok_session_id_capture`）。
+    GrokTui,
+}
+
+/// TUI 启动后尽力捕获 Provider 会话标识；失败不阻断启动。
+///
+/// 缺失时后续续接会以 `missingResumeSessionId` 失败，只能看 saved log。
+fn spawn_launch_provider_session_id_capture(
+    data_dir: &Path,
+    session_id: i64,
+    launch: &SessionLaunchContext,
+) {
+    let Some(source) = provider_session_id_source(
+        &launch.profile.agent_type,
+        &launch.profile.display_mode,
+        &launch.command_snapshot,
+    ) else {
+        return;
+    };
+
+    let data_dir = data_dir.to_path_buf();
+    let working_dir = launch.working_dir.clone();
+    let started_at = launch.started_at;
+    thread::spawn(move || {
+        let Some(detected) =
+            detect_provider_session_id(source, &data_dir, &working_dir, started_at)
+        else {
+            return;
+        };
+        persist_provider_session_id(&data_dir, session_id, &detected);
+    });
+}
+
+fn provider_session_id_source(
+    agent_type: &AgentType,
+    display_mode: &str,
+    command_snapshot: &str,
+) -> Option<ProviderSessionIdSource> {
+    if should_attempt_codex_session_capture(command_snapshot) {
+        return Some(ProviderSessionIdSource::Codex);
+    }
+    if grok_session_id_capture::should_attempt(agent_type, display_mode) {
+        return Some(ProviderSessionIdSource::GrokTui);
+    }
+    None
+}
+
+fn detect_provider_session_id(
+    source: ProviderSessionIdSource,
+    data_dir: &Path,
+    working_dir: &str,
+    started_at: i64,
+) -> Option<String> {
+    match source {
+        ProviderSessionIdSource::Codex => {
+            let codex_home = super::codex_session_id_capture::resolve_codex_home()?;
+            super::codex_session_id_capture::resolve(&codex_home, working_dir, started_at)
+        }
+        ProviderSessionIdSource::GrokTui => {
+            let sessions_root = grok_session_id_capture::resolve_sessions_root(data_dir)?;
+            grok_session_id_capture::resolve(&sessions_root, working_dir, started_at)
+        }
+    }
+}
+
+fn persist_provider_session_id(data_dir: &Path, session_id: i64, detected: &str) -> Option<String> {
+    let database = DatabaseConfig::new(data_dir).open().ok()?;
+    MigrationRunner::default().run(&database.connection).ok()?;
+    let repository = AgentSessionRepository::new(&database.connection);
+    let session = repository
+        .update_provider_session_id(session_id, detected)
+        .ok()??;
+    session.provider_session_id
+}
+
+/// 既有 resume 路径：Codex 续接后刷新会话标识（失败不阻断 resume）。
 fn refresh_provider_session_id_in_data_dir(
     data_dir: &Path,
     session_id: i64,
     working_dir: &str,
     started_at: i64,
 ) -> Option<String> {
-    let codex_home = super::codex_session_id_capture::resolve_codex_home()?;
-    let detected = super::codex_session_id_capture::resolve(&codex_home, working_dir, started_at)?;
-
-    let database = DatabaseConfig::new(data_dir).open().ok()?;
-    MigrationRunner::default().run(&database.connection).ok()?;
-    let repository = AgentSessionRepository::new(&database.connection);
-    let session = repository
-        .update_provider_session_id(session_id, &detected)
-        .ok()??;
-    session.provider_session_id
+    let detected = detect_provider_session_id(
+        ProviderSessionIdSource::Codex,
+        data_dir,
+        working_dir,
+        started_at,
+    )?;
+    persist_provider_session_id(data_dir, session_id, &detected)
 }
 
 pub(super) fn preferred_session_cwd(
