@@ -64,11 +64,13 @@ impl<'connection> AgentSessionService<'connection> {
         descriptor
             .accepted_display_mode(target.as_db_str())
             .map_err(|_| display_mode_switch_rejected(session.id, "displayModeNotSwitchable"))?;
-        let provider_session_id = session
-            .provider_session_id
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| display_mode_switch_rejected(session.id, "missingResumeSessionId"))?;
+        let provider_session_id = super::service::backfill_missing_grok_provider_session_id(
+            self,
+            data_dir,
+            &session,
+            &agent_type,
+        )
+        .ok_or_else(|| display_mode_switch_rejected(session.id, "missingResumeSessionId"))?;
 
         let log_path = if target == SessionDisplayMode::Json {
             let path = build_issue_runtime_structured_log_path(

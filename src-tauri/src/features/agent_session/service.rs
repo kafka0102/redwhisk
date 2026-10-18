@@ -3045,6 +3045,42 @@ fn detect_provider_session_id(
     }
 }
 
+/// 库内 `provider_session_id` 为空时，按本次启动的 cwd 单次补查 Grok 本机会话目录并回写。
+///
+/// 修复前的 Grok TUI 不会在启动时捕获标识。会话目录仍在 `~/.grok/sessions` 时，
+/// 续接、展示形式切换和完成回看都要能用到它。已有非空标识原样返回，不覆盖。
+pub(super) fn backfill_missing_grok_provider_session_id(
+    service: &AgentSessionService<'_>,
+    data_dir: &Path,
+    session: &crate::types::agent_session::AgentSessionRecord,
+    agent_type: &AgentType,
+) -> Option<String> {
+    let stored = session
+        .provider_session_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string);
+    if stored.is_some()
+        || !grok_session_id_capture::should_attempt(agent_type, &session.display_mode)
+    {
+        return stored;
+    }
+    let sessions_root = grok_session_id_capture::resolve_sessions_root(data_dir)?;
+    let detected = grok_session_id_capture::resolve_once(
+        &sessions_root,
+        &preferred_session_cwd(session),
+        session.started_at,
+    )?;
+    service
+        .agent_session_repository
+        .update_provider_session_id(session.id, &detected)
+        .ok()
+        .flatten()
+        .and_then(|updated| updated.provider_session_id)
+        .filter(|value| !value.trim().is_empty())
+        .or(Some(detected))
+}
+
 fn persist_provider_session_id(data_dir: &Path, session_id: i64, detected: &str) -> Option<String> {
     let database = DatabaseConfig::new(data_dir).open().ok()?;
     MigrationRunner::default().run(&database.connection).ok()?;

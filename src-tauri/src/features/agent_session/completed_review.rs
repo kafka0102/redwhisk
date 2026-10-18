@@ -10,7 +10,10 @@ use crate::types::agent_session_completed_review::{
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueStatus;
 
-use super::service::{agent_session_database_error, preferred_session_cwd, AgentSessionService};
+use super::service::{
+    agent_session_database_error, backfill_missing_grok_provider_session_id, preferred_session_cwd,
+    AgentSessionService,
+};
 use super::tui_hook_env::tui_hook_spawn_env;
 
 const STARTUP_CHECK_TOTAL_MS: u64 = 500;
@@ -18,7 +21,7 @@ const STARTUP_CHECK_INTERVAL_MS: u64 = 25;
 
 pub(super) fn open_completed_review(
     service: &AgentSessionService<'_>,
-    _data_dir: &Path,
+    data_dir: &Path,
     input: OpenCompletedReviewInput,
     pty_sessions: &PtySessionManager,
 ) -> Result<OpenCompletedReviewResult, CommandError> {
@@ -49,18 +52,6 @@ pub(super) fn open_completed_review(
         .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id)));
     }
 
-    let thread_id = session
-        .provider_session_id
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            CommandError::new(
-                CommandErrorCode::AgentSessionValidationFailed,
-                "当前 Session 缺少可续接的会话标识。",
-            )
-            .with_reason("missingResumeSessionId")
-            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
-        })?;
     let profile = service
         .agent_profile_repository
         .find_profile_by_id(session.agent_profile_id)
@@ -76,6 +67,16 @@ pub(super) fn open_completed_review(
                     .with_value("agentProfileId", session.agent_profile_id),
             )
         })?;
+    let thread_id =
+        backfill_missing_grok_provider_session_id(service, data_dir, &session, &profile.agent_type)
+            .ok_or_else(|| {
+                CommandError::new(
+                    CommandErrorCode::AgentSessionValidationFailed,
+                    "当前 Session 缺少可续接的会话标识。",
+                )
+                .with_reason("missingResumeSessionId")
+                .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+            })?;
     let descriptor = descriptor_for(&profile.agent_type);
     if !descriptor.ui_capabilities().supports_tui_resume {
         return Err(CommandError::new(

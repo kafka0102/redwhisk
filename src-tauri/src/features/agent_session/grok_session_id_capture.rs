@@ -44,6 +44,12 @@ pub(super) fn resolve_sessions_root(data_dir: &Path) -> Option<PathBuf> {
         .map(|home| home.join(GROK_HOME_DIR_NAME).join(GROK_SESSIONS_DIR_NAME))
 }
 
+/// 单次匹配本次会话的 grok session id。续接与展示形式切换在库内标识为空时用它补查，
+/// 不进入启动捕获的 30 秒轮询。
+pub(super) fn resolve_once(root: &Path, cwd: &str, started_at: i64) -> Option<String> {
+    detect_once(root, cwd, started_at)
+}
+
 /// 轮询匹配本次会话的 grok session id。文件命中即返回，未命中按间隔重试至超时。
 pub(super) fn resolve(root: &Path, cwd: &str, started_at: i64) -> Option<String> {
     detect(
