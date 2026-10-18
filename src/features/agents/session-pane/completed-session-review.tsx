@@ -30,6 +30,7 @@ export function CompletedSessionReview({
     <>
       <div
         aria-label={t("agentsFeature.completedArchiveView")}
+        className="completed-session-review__surface"
         hidden={showingSession}
       >
         <AgentTuiArchiveMarkdownView
@@ -39,6 +40,7 @@ export function CompletedSessionReview({
       </div>
       <div
         aria-label={t("agentsFeature.readOnlySessionView")}
+        className="completed-session-review__surface"
         hidden={!showingSession}
       >
         {readOnlySession}

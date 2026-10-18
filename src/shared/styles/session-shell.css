@@ -433,6 +433,17 @@
   display: none;
 }
 
+/* 完成回看：归档与只读 Session 两面在同一个 pane 内互斥切换，必须自己撑满 pane
+   高度。否则内部 `height: 100%` 的滚动容器（归档 Markdown / 终端 shell）会退化成
+   内容高度，其 `overflow: auto` 永不触发，超出一屏的部分被 pane 的 `overflow:
+   hidden` 直接裁掉。 */
+.completed-session-review__surface {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .expandable-text {
   display: grid;
   gap: 6px;
