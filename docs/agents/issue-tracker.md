@@ -27,6 +27,18 @@
 - `.gitignore` 忽略整个 `.scratch/`。spec 与 ticket 只留在本机工作区，Status 以工作区文件为准
 - 提交时不要 `git add -f .scratch`
 
+## Worktree
+
+`.scratch/` 不进 git，linked worktree 里没有主仓那份 spec 与 ticket。
+
+当前目录是 linked worktree，且用户给的 `.scratch/...` 在本目录不存在时：
+
+1. `git worktree list` 取主仓路径（列表第一列、不带本 worktree 路径的那条）。
+2. 读 `<主仓>/.scratch/...` 同一相对路径。
+3. 要在本 worktree 改 Status 时，把文件复制到本工作区 `.scratch/`，仍然不要 `git add -f`。
+
+不要用 `find` 扫上级目录找 ticket。
+
 ## 技能操作映射
 
 - 技能要求「发布到 issue tracker」时：在 `.scratch/<feature-slug>/` 下新建文件（必要时创建目录）。

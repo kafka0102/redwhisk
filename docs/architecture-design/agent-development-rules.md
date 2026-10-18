@@ -102,8 +102,7 @@ service 通过统一入口开 `Transaction`，把 `&Transaction` 传给 reposito
 
 - 常规 `.rs` 文件原则上不得超过 500 行；编排主文件（`features/*/service.rs`、`features/*/commands.rs`）不得超过 800 行；任何文件硬上限 1000 行。
 - 新增或修改 Rust 功能时，如果目标文件接近或超过上述阈值，必须优先按职责聚簇拆分为同 feature 下的子模块，而不是继续追加代码。
-- 每次改动 Rust 后必须运行 `bash scripts/check-rust-file-size.sh`（见 `AGENTS.md` §5 质量门禁），越界且未在 `scripts/rust-file-size-allowlist.txt` 登记的文件会让脚本非零退出，任务不算完成。
-- 每次改动 Rust 后还必须运行 `bash scripts/check-rust-compile.sh`。这只检查正式构建会编译的库和二进制，不打包；口径见下文「测试与验证规则」。
+- 每次改动 Rust 后先运行 `bash scripts/check-rust-file-size.sh`（见 `AGENTS.md` §5 质量门禁），再运行 `bash scripts/check-rust-compile.sh`。文件大小只数行，与编译检查分开跑，不要绑在 `cargo check` 后面。越界且未在 `scripts/rust-file-size-allowlist.txt` 登记的文件会让脚本非零退出，任务不算完成。编译检查只覆盖正式构建会编译的库和二进制，不打包；口径见下文「测试与验证规则」。
 
 例外要求：
 

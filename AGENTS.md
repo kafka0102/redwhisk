@@ -16,7 +16,7 @@
 
 ### Issue tracker
 
-开发技能（`to-tickets` / `triage` / `to-spec` / `qa` / `wayfinder`）使用的 ticket 以本地 markdown 形式记录在仓库 `.scratch/` 下，不使用 GitHub。详见 `docs/agents/issue-tracker.md`。
+开发技能（`to-tickets` / `triage` / `to-spec` / `qa` / `wayfinder`）使用的 ticket 以本地 markdown 形式记录在仓库 `.scratch/` 下，不使用 GitHub。详见 `docs/agents/issue-tracker.md`。linked worktree 按该文档「Worktree」节去主仓读同一相对路径，不要全盘搜索。
 
 > 此处的「ticket」与产品业务 Issue（`src/features/issues`，存 SQLite、由应用 UI 管理）是两个无关概念，禁止混用；详见 `docs/agents/issue-tracker.md` 顶部的「范围声明」。
 
@@ -85,12 +85,12 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 3. `pnpm typecheck`
 4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑；纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
 5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
-6. `bash scripts/check-rust-compile.sh` — 改动 Rust（`src-tauri/**/*.rs`、`src-tauri/Cargo.toml`、`src-tauri/build.rs`）后必跑。脚本只对库和二进制做增量 `cargo check --offline --lib --bins`（dev profile，无 `cfg(test)`），不跑测试、不链接、不打安装包。纯前端 / 纯文档改动可豁免。`cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替：它们以 `cfg(test)` 编译，仅被测试引用的 `use` / `pub use` 在正式构建里仍是未使用项，而 `warnings = "deny"` 会让其变成编译错误。改动这类重导出时先看非测试调用方，只有测试引用则给重导出加 `#[cfg(test)]`；禁止 `#[allow(unused_imports)]` / `#[allow(dead_code)]` 压掉。不要用 `pnpm build:macos`、`tauri build` 或 `cargo build --release` 充当这项门禁。`--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。
-7. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后必跑；越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
+6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后先跑这一项，再跑下一条编译检查。脚本只数行，不编译。越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。与编译检查分开跑，不要绑在 `cargo check` 后面。
+7. `bash scripts/check-rust-compile.sh` — 改动 Rust（`src-tauri/**/*.rs`、`src-tauri/Cargo.toml`、`src-tauri/build.rs`）后必跑，排在文件大小门禁之后。脚本只对库和二进制做增量 `cargo check --offline --lib --bins`（dev profile，无 `cfg(test)`），不跑测试、不链接、不打安装包。纯前端 / 纯文档改动可豁免。`cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替：它们以 `cfg(test)` 编译，仅被测试引用的 `use` / `pub use` 在正式构建里仍是未使用项，而 `warnings = "deny"` 会让其变成编译错误。改动这类重导出时先看非测试调用方，只有测试引用则给重导出加 `#[cfg(test)]`；禁止 `#[allow(unused_imports)]` / `#[allow(dead_code)]` 压掉。不要用 `pnpm build:macos`、`tauri build` 或 `cargo build --release` 充当这项门禁。`--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。
 8. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
 9. `cd src-tauri && cargo test --lib agent::command_detector` — 改动交互式 `PATH` 解析或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后必跑；缓存与回退规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 
-格式化单个 Rust 文件时用 `rustfmt <该文件的绝对路径>`。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
+格式化单个 Rust 文件时用 `rustfmt --edition 2021 <该文件的绝对路径>`。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
 
 依赖与安装前提（跑门禁前必须满足）：
 
