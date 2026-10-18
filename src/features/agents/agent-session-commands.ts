@@ -282,6 +282,8 @@ export interface SaveAgentAttachmentInput {
 export interface ReadAgentTimelineInput {
   projectId: number;
   sessionId: number;
+  /** 已覆盖到的会话日志字节。不传则回放整个打开窗口。 */
+  sinceLogOffset?: number;
 }
 
 export interface SwitchAgentSessionDisplayModeInput {

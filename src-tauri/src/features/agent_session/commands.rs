@@ -982,6 +982,7 @@ pub async fn read_agent_timeline(
             input.project_id,
             input.session_id,
             agent_sessions.get(input.session_id),
+            input.since_log_offset,
         )
     })
     .await

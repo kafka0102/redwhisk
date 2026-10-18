@@ -9,7 +9,7 @@ use crate::features::agent_session::lifecycle::display_mode::{
 use crate::features::agent_session::service::agent_session_error_to_command_error;
 use crate::features::agent_session::timeline::{
     is_empty_standalone_thread_timeline_error, latest_effort_from_session_log,
-    latest_model_from_session_log, read_timeline_from_log_path,
+    latest_model_from_session_log,
 };
 use crate::types::agent_session::{
     AgentSessionRecord, ReadAgentTimelineResult, TimelineHistoryItem,
@@ -19,24 +19,35 @@ use crate::types::errors::CommandError;
 pub(crate) fn read_timeline_for_session(
     session: &AgentSessionRecord,
     handle: Option<Arc<dyn AgentSessionHandle>>,
+    since_log_offset: Option<u64>,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
     match runtime_transport_from_raw(&session.display_mode)? {
         RuntimeTransport::InteractiveTui => Ok(ReadAgentTimelineResult {
             items: Vec::new(),
             effort: None,
             model: None,
+            window_end_offset: None,
+            reset_required: false,
         }),
-        RuntimeTransport::StructuredJson => read_json_timeline(session, handle),
+        RuntimeTransport::StructuredJson => read_json_timeline(session, handle, since_log_offset),
     }
 }
 
 fn read_json_timeline(
     session: &AgentSessionRecord,
     handle: Option<Arc<dyn AgentSessionHandle>>,
+    since_log_offset: Option<u64>,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
-    let history = read_timeline_from_log_path(&session.log_path)?;
+    let (history, reset_required) =
+        crate::features::agent_session::timeline::read_timeline_from_log_path_since(
+            &session.log_path,
+            since_log_offset,
+        )?;
+    if reset_required {
+        return Ok(timeline_result(history, true));
+    }
     if !history.items.is_empty() || history.effort.is_some() || history.model.is_some() {
-        return Ok(timeline_result(history));
+        return Ok(timeline_result(history, false));
     }
 
     if let Some(handle) = handle {
@@ -53,6 +64,8 @@ fn read_json_timeline(
                         .collect(),
                     effort: latest_effort_from_session_log(session),
                     model: latest_model_from_session_log(session),
+                    window_end_offset: None,
+                    reset_required: false,
                 });
             }
             Err(AgentSessionError::NotRunning(_)) => {}
@@ -64,22 +77,32 @@ fn read_json_timeline(
                     items: Vec::new(),
                     effort: latest_effort_from_session_log(session),
                     model: latest_model_from_session_log(session),
+                    window_end_offset: None,
+                    reset_required: false,
                 });
             }
             Err(error) => return Err(agent_session_error_to_command_error(error)),
         }
     }
 
-    Ok(timeline_result(history))
+    Ok(timeline_result(history, false))
 }
 
 fn timeline_result(
     history: crate::features::agent_session::timeline::StructuredTimelineHistory,
+    reset_required: bool,
 ) -> ReadAgentTimelineResult {
+    let window_end_offset = history
+        .items
+        .iter()
+        .filter_map(|entry| entry.log_offset)
+        .max();
     ReadAgentTimelineResult {
         items: history.items,
         effort: history.effort,
         model: history.model,
+        window_end_offset,
+        reset_required,
     }
 }
 
@@ -133,7 +156,7 @@ mod tests {
         let log = dir.path().join("tui.log");
         fs::write(&log, b"\x1b[32mhello\x1b[0m\nnot-json\n").unwrap();
         let session = sample_session("tui", log.to_string_lossy().as_ref());
-        let result = read_timeline_for_session(&session, None).unwrap();
+        let result = read_timeline_for_session(&session, None, None).unwrap();
         assert!(result.items.is_empty());
         assert!(result.effort.is_none());
         assert!(result.model.is_none());
@@ -170,7 +193,7 @@ mod tests {
         .expect("write structured log");
 
         let session = sample_session("json", log.to_string_lossy().as_ref());
-        let result = read_timeline_for_session(&session, None).unwrap();
+        let result = read_timeline_for_session(&session, None, None).unwrap();
         assert_eq!(
             result
                 .items
@@ -221,7 +244,7 @@ mod tests {
         fs::write(&log, format!("{lines}\n")).expect("write structured log");
 
         let session = sample_session("json", log.to_string_lossy().as_ref());
-        let result = read_timeline_for_session(&session, None).unwrap();
+        let result = read_timeline_for_session(&session, None, None).unwrap();
         assert!(result.items.is_empty());
         assert_eq!(result.model.as_deref(), Some("gpt-5.5"));
     }
@@ -229,7 +252,7 @@ mod tests {
     #[test]
     fn invalid_display_mode_is_validation_error() {
         let session = sample_session("pty", "");
-        let err = read_timeline_for_session(&session, None).unwrap_err();
+        let err = read_timeline_for_session(&session, None, None).unwrap_err();
         assert_eq!(err.reason.as_deref(), Some("invalidDisplayMode"));
     }
 }

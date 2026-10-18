@@ -1491,9 +1491,10 @@ impl<'connection> AgentSessionService<'connection> {
         project_id: i64,
         session_id: i64,
         handle: Option<Arc<dyn AgentSessionHandle>>,
+        since_log_offset: Option<u64>,
     ) -> Result<ReadAgentTimelineResult, CommandError> {
         let session = self.find_project_session(project_id, session_id)?;
-        super::lifecycle::read_timeline_for_session(&session, handle)
+        super::lifecycle::read_timeline_for_session(&session, handle, since_log_offset)
     }
 
     pub fn read_timeline_item_at_offset(
@@ -3850,7 +3851,7 @@ mod tests {
             message: "handle should not be read".to_string(),
         });
         let result = service
-            .read_agent_timeline(1, 401, Some(handle))
+            .read_agent_timeline(1, 401, Some(handle), None)
             .expect("read persisted timeline");
 
         assert_eq!(
@@ -3978,7 +3979,7 @@ mod tests {
         });
 
         let result = service
-            .read_agent_timeline(1, 401, Some(handle))
+            .read_agent_timeline(1, 401, Some(handle), None)
             .expect("read empty standalone timeline");
 
         assert!(result.items.is_empty());

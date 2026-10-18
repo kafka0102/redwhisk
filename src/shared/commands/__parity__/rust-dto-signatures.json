@@ -886,6 +886,19 @@
         "projectId": "required"
       }
     },
+    "OpenCompletedReviewInput": {
+      "fields": {
+        "projectId": "required",
+        "sessionId": "required"
+      }
+    },
+    "OpenCompletedReviewResult": {
+      "fields": {
+        "command": "required",
+        "sessionId": "required",
+        "workingDir": "required"
+      }
+    },
     "OpenProjectInput": {
       "fields": {
         "projectId": "required"
@@ -1135,14 +1148,17 @@
     "ReadAgentTimelineInput": {
       "fields": {
         "projectId": "required",
-        "sessionId": "required"
+        "sessionId": "required",
+        "sinceLogOffset": "optional"
       }
     },
     "ReadAgentTimelineResult": {
       "fields": {
         "effort": "required",
         "items": "required",
-        "model": "required"
+        "model": "required",
+        "resetRequired": "optional",
+        "windowEndOffset": "optional"
       }
     },
     "ReadProjectTerminalCwdInput": {

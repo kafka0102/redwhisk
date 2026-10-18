@@ -163,6 +163,7 @@ export function messageStreamReducer(
         subagents: folded.subagents,
         effort: action.effort ?? null,
         model: action.model ?? null,
+        expandedEntryIds: state.expandedEntryIds,
         isInitialized: true,
       });
     }

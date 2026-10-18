@@ -20,6 +20,7 @@ use super::{
 
 pub(super) fn read_structured_timeline_log(
     path: &Path,
+    since_log_offset: Option<u64>,
 ) -> Result<Option<StructuredTimelineHistory>, CommandError> {
     let mut replay = OpenReplay::default();
     match for_each_session_log_line_in_tool_call_window(
@@ -38,6 +39,12 @@ pub(super) fn read_structured_timeline_log(
     }
     hydrate_assistant_snapshots(path, &mut replay.history.items)
         .map_err(agent_session_start_error)?;
+    if let Some(cursor) = since_log_offset {
+        replay
+            .history
+            .items
+            .retain(|entry| entry.log_offset.is_none_or(|offset| offset > cursor));
+    }
     Ok(Some(replay.history))
 }
 

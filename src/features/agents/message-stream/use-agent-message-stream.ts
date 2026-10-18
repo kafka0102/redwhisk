@@ -34,6 +34,10 @@ interface UseAgentMessageStreamArgs {
 interface CachedSessionState {
   state: MessageStreamState;
   lastAccessTime: number;
+  /** 这份消息流已经覆盖到的会话日志字节。没有则切回时不补读。 */
+  logOffset?: number;
+  /** 上次订阅失败，下次进入必须再补齐。 */
+  subscriptionStale?: boolean;
 }
 
 // 最大缓存的 session 数量（LRU 策略）
@@ -41,6 +45,36 @@ const MAX_CACHED_SESSIONS = 5;
 
 // 全局的 session 状态缓存。键含 projectId，避免不同项目的同号会话串缓存。
 const sessionStateCache = new Map<string, CachedSessionState>();
+const staleSubscriptions = new Set<string>();
+
+function markSubscriptionStale(projectId: number, sessionId: number): void {
+  const key = cacheKey(projectId, sessionId);
+  staleSubscriptions.add(key);
+  const cached = sessionStateCache.get(key);
+  if (cached) {
+    cached.subscriptionStale = true;
+  }
+}
+
+function clearSubscriptionStale(projectId: number, sessionId: number): void {
+  const key = cacheKey(projectId, sessionId);
+  staleSubscriptions.delete(key);
+  const cached = sessionStateCache.get(key);
+  if (cached) {
+    cached.subscriptionStale = false;
+  }
+}
+
+function coveredLogOffset(state: MessageStreamState): number | undefined {
+  let max: number | undefined;
+  for (const entry of state.entries) {
+    if (entry.logOffset == null) {
+      continue;
+    }
+    max = max == null ? entry.logOffset : Math.max(max, entry.logOffset);
+  }
+  return max;
+}
 
 function cacheKey(projectId: number, sessionId: number): string {
   return `${projectId}:${sessionId}`;
@@ -48,9 +82,37 @@ function cacheKey(projectId: number, sessionId: number): string {
 
 export function clearAgentMessageStreamCacheForTest(): void {
   sessionStateCache.clear();
+  staleSubscriptions.clear();
+}
+
+export function isAgentMessageStreamSubscriptionStaleForTest(
+  projectId: number,
+  sessionId: number,
+): boolean {
+  const key = cacheKey(projectId, sessionId);
+  return (
+    staleSubscriptions.has(key) ||
+    sessionStateCache.get(key)?.subscriptionStale === true
+  );
 }
 
 // 更新 session 缓存
+function rememberLogOffset(
+  projectId: number,
+  sessionId: number,
+  logOffset: number | undefined,
+) {
+  const key = cacheKey(projectId, sessionId);
+  const cached = sessionStateCache.get(key);
+  if (!cached || logOffset == null) {
+    return;
+  }
+  cached.logOffset =
+    cached.logOffset == null
+      ? logOffset
+      : Math.max(cached.logOffset, logOffset);
+}
+
 function updateCachedSessionState(
   projectId: number,
   sessionId: number,
@@ -74,9 +136,20 @@ function updateCachedSessionState(
       sessionStateCache.delete(oldestKey);
     }
   }
+  const previous = sessionStateCache.get(key);
+  const fromState = coveredLogOffset(state);
+  const logOffset =
+    fromState == null
+      ? previous?.logOffset
+      : previous?.logOffset == null
+        ? fromState
+        : Math.max(previous.logOffset, fromState);
   sessionStateCache.set(key, {
     state,
     lastAccessTime: Date.now(),
+    logOffset,
+    subscriptionStale:
+      previous?.subscriptionStale === true || staleSubscriptions.has(key),
   });
 }
 
@@ -213,6 +286,64 @@ export function useAgentMessageStream({
       // 同一次运行里再次进入：沿用内存中的消息流，不重读打开回放。
       if (hasCachedInitialized && cachedState) {
         cachedState.lastAccessTime = Date.now();
+        const sinceLogOffset = cachedState.logOffset;
+        if (sinceLogOffset != null) {
+          try {
+            const replay = await readAgentTimeline({
+              projectId,
+              sessionId,
+              sinceLogOffset,
+            });
+            if (isDisposed) {
+              return;
+            }
+            if (replay.resetRequired) {
+              const full = await readAgentTimeline({ projectId, sessionId });
+              if (isDisposed) {
+                return;
+              }
+              dispatch({
+                type: "HYDRATE",
+                items: full.items,
+                effort: full.effort,
+                model: full.model,
+              });
+              rememberLogOffset(
+                projectId,
+                sessionId,
+                full.windowEndOffset ??
+                  coveredLogOffset(stateRef.current) ??
+                  undefined,
+              );
+            } else if (replay.items.length > 0) {
+              dispatch({
+                type: "EVENT_BATCH",
+                events: replay.items.map((entry) => ({
+                  event: {
+                    type: "timeline" as const,
+                    item: entry.item,
+                    turnId: entry.turnId ?? undefined,
+                    seq: 0,
+                    timestamp: 0,
+                  },
+                  logOffset: entry.logOffset ?? undefined,
+                })),
+              });
+              rememberLogOffset(
+                projectId,
+                sessionId,
+                replay.windowEndOffset ??
+                  coveredLogOffset(stateRef.current) ??
+                  undefined,
+              );
+            }
+          } catch {
+            markSubscriptionStale(projectId, sessionId);
+          }
+        }
+        if (isDisposed) {
+          return;
+        }
 
         try {
           unlisten = await subscribeAgentSessionStream((envelope) => {
@@ -227,23 +358,27 @@ export function useAgentMessageStream({
           if (isDisposed) {
             unlisten?.();
             unlisten = null;
+          } else {
+            clearSubscriptionStale(projectId, sessionId);
           }
         } catch {
-          // 订阅失败不阻塞：已有消息流仍留在页面上。
+          markSubscriptionStale(projectId, sessionId);
         }
         return;
       }
 
       // 没有缓存的情况下，正常初始化
       try {
-        const { items, effort, model } = await readAgentTimeline({
-          projectId,
-          sessionId,
-        });
+        const { items, effort, model, windowEndOffset } =
+          await readAgentTimeline({
+            projectId,
+            sessionId,
+          });
         if (isDisposed) {
           return;
         }
         dispatch({ type: "HYDRATE", items, effort, model });
+        rememberLogOffset(projectId, sessionId, windowEndOffset ?? undefined);
       } catch (error) {
         if (isDisposed) {
           return;
@@ -269,7 +404,7 @@ export function useAgentMessageStream({
           unlisten = null;
         }
       } catch {
-        // 订阅失败不阻塞：用户可刷新历史回放补齐。
+        markSubscriptionStale(projectId, sessionId);
       }
     }
 

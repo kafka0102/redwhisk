@@ -482,17 +482,11 @@ pub struct SaveAgentAttachmentResult {
     pub kind: AgentAttachmentKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadAgentTimelineInput {
-    pub project_id: i64,
-    pub session_id: i64,
-}
-
 pub use crate::types::agent_session_display_mode::{
     SwitchAgentSessionDisplayModeInput, SwitchAgentSessionDisplayModeResult,
 };
 
 pub use crate::types::agent_session_timeline::{
-    ReadAgentTimelineResult, ReadTimelineItemAtOffsetInput, TimelineHistoryItem,
+    ReadAgentTimelineInput, ReadAgentTimelineResult, ReadTimelineItemAtOffsetInput,
+    TimelineHistoryItem,
 };

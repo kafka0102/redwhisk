@@ -86,6 +86,8 @@ pub(crate) use session_log_lookup::{
 #[cfg(test)]
 mod completed_review_tests;
 #[cfg(test)]
+mod timeline_cursor_tests;
+#[cfg(test)]
 mod timeline_replay_tests;
 #[cfg(test)]
 mod timeline_tests;

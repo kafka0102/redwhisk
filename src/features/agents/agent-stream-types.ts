@@ -251,6 +251,10 @@ export interface ReadAgentTimelineResult {
   items: TimelineHistoryItem[];
   effort: string | null;
   model: string | null;
+  /** 打开窗口内最后一条快照的起始字节。没有条目时缺省。 */
+  windowEndOffset?: number | null;
+  /** 游标对不上当前日志时，调用方应整份替换。 */
+  resetRequired?: boolean;
 }
 
 export type AgentAttachmentKindLiteral =

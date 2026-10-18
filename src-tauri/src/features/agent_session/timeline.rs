@@ -28,16 +28,53 @@ pub(crate) struct StructuredTimelineHistory {
     pub(crate) model: Option<String>,
 }
 
+fn cursor_needs_full_replace(path: &Path, since_log_offset: Option<u64>) -> bool {
+    let Some(cursor) = since_log_offset else {
+        return false;
+    };
+    let Ok(len) = std::fs::metadata(path).map(|meta| meta.len()) else {
+        return true;
+    };
+    if cursor > len {
+        return true;
+    }
+    if cursor == 0 || cursor == len {
+        return false;
+    }
+    let Ok(line) = super::session_log_line::read_session_log_line_at(path, cursor) else {
+        return true;
+    };
+    let start = line
+        .bytes()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .unwrap_or(line.len());
+    line.as_bytes()
+        .get(start)
+        .is_none_or(|byte| *byte != b'{' && *byte != b'[')
+}
+
+#[cfg(test)]
 pub(crate) fn read_timeline_from_log_path(
     log_path: &str,
 ) -> Result<StructuredTimelineHistory, CommandError> {
+    read_timeline_from_log_path_since(log_path, None).map(|(history, _)| history)
+}
+
+pub(crate) fn read_timeline_from_log_path_since(
+    log_path: &str,
+    since_log_offset: Option<u64>,
+) -> Result<(StructuredTimelineHistory, bool), CommandError> {
     if log_path.trim().is_empty() {
-        return Ok(StructuredTimelineHistory::default());
+        return Ok((StructuredTimelineHistory::default(), false));
     }
 
     let path = Path::new(log_path);
-    if let Some(history) = read_structured_timeline_log(path)? {
-        return Ok(history);
+    if let Some(mut history) = read_structured_timeline_log(path, since_log_offset)? {
+        let reset_required = cursor_needs_full_replace(path, since_log_offset);
+        if reset_required {
+            history.items.clear();
+        }
+        return Ok((history, reset_required));
     }
 
     let items = read_terminal_timeline_log(path)?
@@ -48,11 +85,14 @@ pub(crate) fn read_timeline_from_log_path(
             turn_id: None,
         })
         .collect();
-    Ok(StructuredTimelineHistory {
-        items,
-        effort: None,
-        model: None,
-    })
+    Ok((
+        StructuredTimelineHistory {
+            items,
+            effort: None,
+            model: None,
+        },
+        false,
+    ))
 }
 
 pub(super) fn structured_events_from_log_line(line: &str) -> Option<Vec<AgentStreamEvent>> {
@@ -280,7 +320,7 @@ fn latest_history_from_session_log(
     session: &crate::types::agent_session::AgentSessionRecord,
 ) -> Option<StructuredTimelineHistory> {
     let path = Path::new(&session.log_path);
-    read_structured_timeline_log(path).ok().flatten()
+    read_structured_timeline_log(path, None).ok().flatten()
 }
 
 pub(crate) fn is_empty_standalone_thread_timeline_error(message: &str) -> bool {
@@ -322,7 +362,7 @@ pub(super) fn latest_output_from_session_log(log_path: &str) -> Option<String> {
     }
 
     let path = Path::new(log_path);
-    if let Ok(Some(history)) = read_structured_timeline_log(path) {
+    if let Ok(Some(history)) = read_structured_timeline_log(path, None) {
         for item in history.items.iter().rev() {
             if let Some(output) = latest_output_from_timeline_item(&item.item) {
                 return Some(output);

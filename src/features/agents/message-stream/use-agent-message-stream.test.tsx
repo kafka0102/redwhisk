@@ -9,6 +9,7 @@ import type {
 } from "../agent-stream-types";
 import {
   clearAgentMessageStreamCacheForTest,
+  isAgentMessageStreamSubscriptionStaleForTest,
   useAgentMessageStream,
 } from "./use-agent-message-stream";
 import type { MessageStreamState } from "./message-stream-types";
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     callback: (event: { payload: AgentStreamEventEnvelope }) => void;
   }>,
   unlisten: vi.fn(),
+  listenError: null as Error | null,
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -28,6 +30,9 @@ vi.mock("@tauri-apps/api/event", () => ({
       eventName: string,
       callback: (event: { payload: AgentStreamEventEnvelope }) => void,
     ) => {
+      if (mocks.listenError) {
+        return Promise.reject(mocks.listenError);
+      }
       mocks.listeners.push({ eventName, callback });
       return Promise.resolve(mocks.unlisten);
     },
@@ -60,6 +65,7 @@ afterEach(() => {
   window.requestAnimationFrame = originalRequestAnimationFrame;
   window.cancelAnimationFrame = originalCancelAnimationFrame;
   clearAgentMessageStreamCacheForTest();
+  mocks.listenError = null;
   vi.useRealTimers();
 });
 
@@ -77,8 +83,12 @@ function Probe({ projectId, sessionId, onState }: ProbeProps) {
 
 async function renderProbe(props: ProbeProps) {
   let latest: MessageStreamState | null = null;
+  let latestDispatch:
+    | ReturnType<typeof useAgentMessageStream>["dispatch"]
+    | null = null;
   const captureState = (result: ReturnType<typeof useAgentMessageStream>) => {
     latest = result.state;
+    latestDispatch = result.dispatch;
   };
   const result = render(
     <Probe
@@ -95,6 +105,11 @@ async function renderProbe(props: ProbeProps) {
   return {
     result,
     getState: () => latest,
+    dispatch: (action: Parameters<NonNullable<typeof latestDispatch>>[0]) => {
+      act(() => {
+        latestDispatch?.(action);
+      });
+    },
     /** rerender 时复用同一份 state 捕获器，保证 getState 始终读到最新值。 */
     rerenderWith: (next: { projectId: number; sessionId: number }) => {
       result.rerender(
@@ -538,7 +553,7 @@ describe("useAgentMessageStream", () => {
     expect(state.entries[0].id).toBe("u2");
   });
 
-  it("切回已缓存 session 时恢复整段消息流，不再重读打开回放", async () => {
+  it("切回没有日志字节的缓存时恢复整段消息流，不再重读打开回放", async () => {
     vi.useFakeTimers();
     readAgentTimelineMock.mockReset();
     readAgentTimelineMock.mockResolvedValueOnce({
@@ -584,5 +599,306 @@ describe("useAgentMessageStream", () => {
 
     expect(readAgentTimelineMock.mock.calls.length).toBe(readsBeforeReturn);
     expect(getState()!.entries[0]?.id).toBe("u1");
+  });
+
+  it("切回已缓存会话时按日志字节补上离开期间的最终正文", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开时的正文",
+            messageId: "msg-final",
+          },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "其它会话", messageId: "other" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开后的完整正文",
+            messageId: "msg-final",
+          },
+          logOffset: 480,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 480,
+      resetRequired: false,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 19,
+      onState: () => {},
+    });
+    expect(getState()!.entries[0]?.item).toMatchObject({
+      text: "离开时的正文",
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 20 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 19 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    expect(readAgentTimelineMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 19,
+      sinceLogOffset: 100,
+    });
+    expect(getState()!.entries).toHaveLength(1);
+    expect(getState()!.entries[0]?.item).toMatchObject({
+      text: "离开后的完整正文",
+    });
+  });
+
+  it("同一批增量再应用一次时正文不重复", async () => {
+    vi.useFakeTimers();
+    const finalItem = {
+      item: {
+        type: "assistant_message" as const,
+        text: "离开后的完整正文",
+        messageId: "msg-final",
+      },
+      logOffset: 480,
+    };
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开时的正文",
+            messageId: "msg-final",
+          },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValue({
+      items: [finalItem],
+      effort: null,
+      model: null,
+      windowEndOffset: 480,
+      resetRequired: false,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 21,
+      onState: () => {},
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 22 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerenderWith({ projectId: 1, sessionId: 21 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+    rerenderWith({ projectId: 1, sessionId: 22 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerenderWith({ projectId: 1, sessionId: 21 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    const messages = getState()!.entries.filter(
+      (entry) => entry.id === "msg-final",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.item).toMatchObject({ text: "离开后的完整正文" });
+  });
+
+  it("日志游标失效时整份替换，并保留已展开的条目", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "tool_call",
+            callId: "call-1",
+            name: "read",
+            status: "running",
+            detail: { type: "read", path: "a.ts" },
+          },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "其它", messageId: "other" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [],
+      effort: null,
+      model: null,
+      resetRequired: true,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "归档后的正文",
+            messageId: "msg-reset",
+          },
+          logOffset: 20,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 20,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith, dispatch } = await renderProbe({
+      projectId: 1,
+      sessionId: 23,
+      onState: () => {},
+    });
+    const toolId = getState()!.entries[0]?.id;
+    expect(toolId).toBeTruthy();
+    dispatch({
+      type: "SET_ENTRY_EXPANDED",
+      entryId: toolId!,
+      expanded: true,
+    });
+    expect(getState()!.expandedEntryIds).toContain(toolId);
+
+    rerenderWith({ projectId: 1, sessionId: 24 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerenderWith({ projectId: 1, sessionId: 23 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    expect(getState()!.entries.map((entry) => entry.id)).toEqual(["msg-reset"]);
+    expect(getState()!.entries[0]?.item).toMatchObject({
+      text: "归档后的正文",
+    });
+    expect(getState()!.expandedEntryIds).toContain(toolId);
+  });
+
+  it("订阅失败会记下过期标记，再次进入后清除并补上正文", async () => {
+    vi.useFakeTimers();
+    mocks.listenError = new Error("listen failed");
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开时的正文",
+            messageId: "msg-final",
+          },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "垫一场", messageId: "pad" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "订阅恢复后的正文",
+            messageId: "msg-final",
+          },
+          logOffset: 220,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 220,
+      resetRequired: false,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 25,
+      onState: () => {},
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(isAgentMessageStreamSubscriptionStaleForTest(1, 25)).toBe(true);
+
+    mocks.listenError = null;
+    rerenderWith({ projectId: 1, sessionId: 26 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerenderWith({ projectId: 1, sessionId: 25 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    expect(isAgentMessageStreamSubscriptionStaleForTest(1, 25)).toBe(false);
+    expect(getState()!.entries[0]?.item).toMatchObject({
+      text: "订阅恢复后的正文",
+    });
   });
 });
