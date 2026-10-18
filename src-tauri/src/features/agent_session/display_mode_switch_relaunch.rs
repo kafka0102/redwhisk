@@ -48,7 +48,10 @@ pub(super) fn relaunch_structured(
     };
     let cwd = preferred_session_cwd(session);
     agent_registry.mark_starting(session.id);
-    let runtime = descriptor.resolve_runtime_config(data_dir, &binary, None, None);
+    // 同 `resume_structured_agent_session`：切形态后沿用启动期模型。
+    let resume_model = service.resume_model_arg(profile, data_dir, &binary, session.id)?;
+    let runtime =
+        descriptor.resolve_runtime_config(data_dir, &binary, resume_model.as_deref(), None);
     let started = match start_provider_session(
         factory,
         AgentSessionStartRequest {

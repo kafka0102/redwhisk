@@ -1698,6 +1698,29 @@ impl AgentSessionService<'_> {
         Ok(result)
     }
 
+    /// 续接 / 切形态重建 provider 进程时，按 Session 的启动期模型还原 CLI 模型入参。
+    ///
+    /// 落库存的是发给 LLM 的模型参数（Grok 别名场景下是 wire 名），交由
+    /// `startup_model::resume_model_arg` 反查回当时的模型 id / 别名。
+    pub(super) fn resume_model_arg(
+        &self,
+        profile: &AgentProfileRow,
+        data_dir: &Path,
+        command: &str,
+        session_id: i64,
+    ) -> Result<Option<String>, CommandError> {
+        let startup_model = self
+            .agent_session_repository
+            .startup_model_for_session(session_id)
+            .map_err(agent_session_database_error)?;
+        Ok(super::startup_model::resume_model_arg(
+            &profile.agent_type,
+            data_dir,
+            command,
+            startup_model.as_deref(),
+        ))
+    }
+
     fn mark_reopened_issue_running(
         &self,
         project_id: i64,
@@ -1790,7 +1813,10 @@ impl AgentSessionService<'_> {
         let log_path = self.prepare_reopened_runtime_log(data_dir, &session, reopen_completed)?;
         let cwd = self.resolve_session_cwd_for_resume(&session)?;
         agent_registry.mark_starting(session.id);
-        let runtime = descriptor.resolve_runtime_config(data_dir, &binary, None, None);
+        // 续接沿用启动期模型（落库的是发给 LLM 的参数，按目录反查回当时的模型入参）。
+        let resume_model = self.resume_model_arg(&profile, data_dir, &binary, session.id)?;
+        let runtime =
+            descriptor.resolve_runtime_config(data_dir, &binary, resume_model.as_deref(), None);
         let started = match start_provider_session(
             factory,
             AgentSessionStartRequest {
@@ -3153,8 +3179,8 @@ fn missing_session_workspace_error(
 }
 
 #[cfg(test)]
-#[path = "resume_permission_policy_tests.rs"]
-mod resume_permission_policy_tests;
+#[path = "resume_restore_tests.rs"]
+mod resume_restore_tests;
 
 #[cfg(test)]
 mod tests {

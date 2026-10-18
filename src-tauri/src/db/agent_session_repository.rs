@@ -80,6 +80,18 @@ impl<'connection> AgentSessionRepository<'connection> {
             .optional()
     }
 
+    /// 读取启动期模型快照；续接 / 切形态重建 provider 进程时恢复运行参数用。
+    ///
+    /// `AgentSessionRecord` 是宽 DTO（8 处查询共用同一个行映射），这里只取需要的
+    /// 一列，避免为单个调用方加宽它。session 不存在时返回 `QueryReturnedNoRows`。
+    pub fn startup_model_for_session(&self, id: i64) -> rusqlite::Result<Option<String>> {
+        self.connection.query_row(
+            "SELECT startup_model FROM agent_sessions WHERE id = ?1 AND del = 0",
+            params![id],
+            |row| row.get(0),
+        )
+    }
+
     /// 读取 session 当前 turn 上下文；session 不存在时返回 `QueryReturnedNoRows`。
     pub fn find_current_turn(
         &self,
