@@ -327,6 +327,7 @@ export function useAgentMessageStream({
                     timestamp: 0,
                   },
                   logOffset: entry.logOffset ?? undefined,
+                  replayed: true,
                 })),
               });
               rememberLogOffset(

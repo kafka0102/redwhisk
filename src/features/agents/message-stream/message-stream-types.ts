@@ -81,7 +81,12 @@ export type MessageStreamAction =
   | { type: "EVENT"; event: AgentStreamEvent; logOffset?: number }
   | {
       type: "EVENT_BATCH";
-      events: Array<{ event: AgentStreamEvent; logOffset?: number }>;
+      events: Array<{
+        event: AgentStreamEvent;
+        logOffset?: number;
+        /** 补读的历史条目（非实时事件），不作为「本轮仍在产出」的证据。 */
+        replayed?: boolean;
+      }>;
     }
   | { type: "OPTIMISTIC_USER_MESSAGE"; text: string }
   | { type: "SET_ENTRY_EXPANDED"; entryId: string; expanded: boolean }

@@ -901,4 +901,89 @@ describe("useAgentMessageStream", () => {
       text: "订阅恢复后的正文",
     });
   });
+
+  it("离开期间 turn 已结束，切回缓存会话不应继续显示运行中", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    // 首次进入：冷读带一条已落盘正文，游标 100。
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: { type: "assistant_message", text: "开始", messageId: "m0" },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    // 离开后切到别的会话。
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "其它会话", messageId: "other" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    // 切回：按日志字节补齐离开期间落盘的正文，此时该轮已经结束。
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开后完成的正文",
+            messageId: "m1",
+          },
+          logOffset: 480,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 480,
+      resetRequired: false,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 31,
+      onState: () => {},
+    });
+
+    act(() => {
+      mocks.listeners[0].callback({
+        payload: {
+          projectId: 1,
+          sessionId: 31,
+          seq: 1,
+          epoch: "epoch-1",
+          event: { type: "turn_started", turnId: "t1" },
+        },
+      });
+    });
+    dispatchFrame();
+    expect(getState()!.turnStatus).toBe("running");
+
+    rerenderWith({ projectId: 1, sessionId: 32 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 31 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    const visible = getState()!.entries.filter(
+      (entry) => entry.kind !== "turn_boundary",
+    );
+    expect(visible[visible.length - 1]?.item).toMatchObject({
+      text: "离开后完成的正文",
+    });
+    expect(getState()!.turnStatus).toBe("idle");
+    vi.useRealTimers();
+  });
 });

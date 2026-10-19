@@ -1561,6 +1561,79 @@ describe("messageStreamReducer", () => {
     });
   });
 
+  describe("补读的历史条目", () => {
+    function interruptedState(): MessageStreamState {
+      return {
+        ...createInitialState(),
+        turnStatus: "idle",
+        turnInterrupted: true,
+        interruptedStopReason: null,
+        isInitialized: true,
+      };
+    }
+
+    it("缓存带着中断标记时，补读正文不把 turnStatus 拉回 running", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT_BATCH",
+        events: [
+          {
+            event: timelineEvent({
+              type: "assistant_message",
+              text: "离开后完成的正文",
+              messageId: "m1",
+            }),
+            logOffset: 480,
+            replayed: true,
+          },
+        ],
+      });
+      expect(next.turnStatus).toBe("idle");
+      const visible = next.entries.filter(
+        (entry) => entry.kind !== "turn_boundary",
+      );
+      expect(visible[visible.length - 1]?.item).toMatchObject({
+        text: "离开后完成的正文",
+      });
+    });
+
+    it("实时产出事件仍按原规则恢复 running", () => {
+      const next = messageStreamReducer(interruptedState(), {
+        type: "EVENT_BATCH",
+        events: [
+          { event: timelineEvent({ type: "reasoning", text: "继续思考" }) },
+        ],
+      });
+      expect(next.turnStatus).toBe("running");
+      expect(next.turnInterrupted).toBe(false);
+    });
+  });
+
+  describe("RESTORE 缓存恢复", () => {
+    it("丢弃缓存里的 turn 运行态，只保留消息流内容", () => {
+      const cached: MessageStreamState = {
+        ...createInitialState(),
+        entries: [
+          {
+            id: "m1",
+            kind: "assistant_message",
+            item: { type: "assistant_message", text: "半截", messageId: "m1" },
+          },
+        ],
+        turnStatus: "running",
+        isInitialized: true,
+      };
+
+      const next = messageStreamReducer(cached, {
+        type: "RESTORE",
+        state: cached,
+      });
+
+      expect(next.turnStatus).toBe("idle");
+      expect(next.entries).toEqual(cached.entries);
+      expect(next.isInitialized).toBe(true);
+    });
+  });
+
   describe("turn_completed 后残留 running 工具", () => {
     it("父 Turn 结束后残留 running 工具卡片不保持 turnStatus running", () => {
       let state = messageStreamReducer(createInitialState(), {

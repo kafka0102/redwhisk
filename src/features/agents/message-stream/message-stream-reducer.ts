@@ -127,7 +127,12 @@ export function messageStreamReducer(
       return createInitialState();
 
     case "RESTORE":
-      return action.state;
+      // 缓存恢复：重入会话只按日志字节补读时间轴条目，不会重放
+      // turn_started / turn_completed，所以缓存里的 turn 运行态是「离开那一刻的
+      // 推断」——离开期间这一轮可能已经结束。沿用它会造成会话卡片已因 grace
+      // 结束变蓝点、消息流却永远停在「正在思考」。从 idle 起步，running 由后续
+      // 实时事件与 grace 感知的 isTurnRunning 重新推出。
+      return { ...action.state, turnStatus: "idle" };
 
     case "HYDRATE": {
       const folded = action.items.reduce<{
@@ -181,7 +186,12 @@ export function messageStreamReducer(
     case "EVENT_BATCH":
       return action.events.reduce(
         (currentState, queued) =>
-          applyEvent(currentState, queued.event, queued.logOffset),
+          applyEvent(
+            currentState,
+            queued.event,
+            queued.logOffset,
+            queued.replayed === true,
+          ),
         state,
       );
 
@@ -289,6 +299,7 @@ function applyEvent(
   state: MessageStreamState,
   event: AgentStreamEvent,
   envelopeLogOffset?: number,
+  replayed = false,
 ): MessageStreamState {
   switch (event.type) {
     case "thread_started":
@@ -348,7 +359,10 @@ function applyEvent(
       // end_turn 先于收尾正文到达时，末条还是已完成工具，会被标成异常中断。
       // 随后的正文只补进时间线并清掉横幅，不再把提交按钮拉回执行中。
       // stop_reason 异常（如 max_tokens）的 idle 仍按产出恢复 running。
+      // 补读的历史条目不算产出证据：缓存恢复时若带着上一轮的中断标记，让它们
+      // 触发恢复会把 turnStatus 拉回 running，与「这一轮已结束」的事实相反。
       const activeWorkClearsInterrupt =
+        !replayed &&
         (state.turnInterrupted || state.subagentInterrupted) &&
         timelineItemIndicatesActiveWork(event.item);
       const settlesCleanLateReply =
