@@ -76,6 +76,8 @@ export type MessageStreamAction =
       items: Array<AgentTimelineItem | TimelineHistoryItem>;
       effort?: string | null;
       model?: string | null;
+      /** 日志快照里仍待审批的请求，用于重建审批卡片。 */
+      pendingPermissions?: AgentPermissionRequest[];
     }
   | { type: "HYDRATE_FAILED"; error: string }
   | { type: "EVENT"; event: AgentStreamEvent; logOffset?: number }
@@ -89,6 +91,7 @@ export type MessageStreamAction =
       }>;
     }
   | { type: "OPTIMISTIC_USER_MESSAGE"; text: string }
+  | { type: "SYNC_PENDING_PERMISSIONS"; requests: AgentPermissionRequest[] }
   | { type: "SET_ENTRY_EXPANDED"; entryId: string; expanded: boolean }
   | {
       type: "RESTORE_ENTRY_BODY";

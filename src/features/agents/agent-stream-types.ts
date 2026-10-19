@@ -255,6 +255,8 @@ export interface ReadAgentTimelineResult {
   windowEndOffset?: number | null;
   /** 游标对不上当前日志时，调用方应整份替换。 */
   resetRequired?: boolean;
+  /** 打开窗口内仍待用户审批的请求（已被解决的不会出现）。 */
+  pendingPermissions?: AgentPermissionRequest[];
 }
 
 export type AgentAttachmentKindLiteral =

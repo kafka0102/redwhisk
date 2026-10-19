@@ -3,8 +3,47 @@ use std::fs;
 use crate::features::agent_session::session_log_tail::{reset_tail_peak, tail_peak_bytes};
 use crate::features::agent_session::timeline::read_timeline_from_log_path;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, ToolCallDetail, ToolCallStatus,
+    AgentPermissionAction, AgentPermissionRequest, AgentStreamEvent, AgentStreamEventEnvelope,
+    AgentTimelineItem, PermissionBehavior, PermissionKind, ToolCallDetail, ToolCallStatus,
 };
+
+fn permission_requested(seq: u64, request_id: &str) -> AgentStreamEventEnvelope {
+    AgentStreamEventEnvelope {
+        project_id: 1,
+        session_id: 337,
+        seq,
+        epoch: "epoch-test".to_string(),
+        event: AgentStreamEvent::PermissionRequested {
+            request: AgentPermissionRequest {
+                id: request_id.to_string(),
+                turn_id: Some("turn-perm".to_string()),
+                kind: PermissionKind::Tool,
+                title: Some("运行命令".to_string()),
+                description: None,
+                actions: vec![AgentPermissionAction {
+                    id: "accept".to_string(),
+                    label: "允许".to_string(),
+                    behavior: PermissionBehavior::Allow,
+                }],
+            },
+        },
+        log_offset: None,
+    }
+}
+
+fn permission_resolved(seq: u64, request_id: &str) -> AgentStreamEventEnvelope {
+    AgentStreamEventEnvelope {
+        project_id: 1,
+        session_id: 337,
+        seq,
+        epoch: "epoch-test".to_string(),
+        event: AgentStreamEvent::PermissionResolved {
+            request_id: request_id.to_string(),
+            resolution: "allow".to_string(),
+        },
+        log_offset: None,
+    }
+}
 
 fn envelope(seq: u64, turn_id: &str, item: AgentTimelineItem) -> AgentStreamEventEnvelope {
     AgentStreamEventEnvelope {
@@ -208,4 +247,34 @@ fn open_replay_keeps_the_last_50_command_calls_of_one_session_turn() {
         peak < usize::try_from(file_len / 2).unwrap_or(usize::MAX),
         "open replay retained {peak} bytes while locating 50 command calls in a {file_len} byte log"
     );
+}
+
+#[test]
+fn open_replay_collects_permission_requests_that_are_still_waiting() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("permissions.jsonl");
+    let events = [
+        envelope(
+            1,
+            "turn-perm",
+            AgentTimelineItem::AssistantMessage {
+                text: "先看看".to_string().into(),
+                message_id: Some("msg-perm".to_string()),
+                subagent_id: None,
+            },
+        ),
+        permission_requested(2, "perm-approved"),
+        permission_resolved(3, "perm-approved"),
+        permission_requested(4, "perm-waiting"),
+        // 同一条请求被重复写入（重连 / 重放）时不应重复挂起两张卡片。
+        permission_requested(5, "perm-waiting"),
+    ];
+    write_log(&log_path, &events);
+
+    let history = read_timeline_from_log_path(log_path.to_str().expect("utf8")).expect("replay");
+
+    let pending = history.pending_permissions;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, "perm-waiting");
+    assert_eq!(pending[0].kind, PermissionKind::Tool);
 }

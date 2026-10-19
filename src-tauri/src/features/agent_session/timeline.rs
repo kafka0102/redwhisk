@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::agent::pty_session_manager::read_terminal_snapshot;
 use crate::types::agent_session::TimelineHistoryItem;
 use crate::types::agent_session_stream::{
-    AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+    AgentPermissionRequest, AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
 };
 use crate::types::errors::CommandError;
 
@@ -26,6 +26,8 @@ pub(crate) struct StructuredTimelineHistory {
     pub(crate) items: Vec<TimelineHistoryItem>,
     pub(crate) effort: Option<String>,
     pub(crate) model: Option<String>,
+    /// 窗口内仍待用户审批的请求，按到达顺序。已被解决的不在这里。
+    pub(crate) pending_permissions: Vec<AgentPermissionRequest>,
 }
 
 fn cursor_needs_full_replace(path: &Path, since_log_offset: Option<u64>) -> bool {
@@ -90,6 +92,7 @@ pub(crate) fn read_timeline_from_log_path_since(
             items,
             effort: None,
             model: None,
+            pending_permissions: Vec::new(),
         },
         false,
     ))

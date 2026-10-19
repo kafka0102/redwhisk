@@ -1157,6 +1157,7 @@
         "effort": "required",
         "items": "required",
         "model": "required",
+        "pendingPermissions": "optional",
         "resetRequired": "optional",
         "windowEndOffset": "optional"
       }

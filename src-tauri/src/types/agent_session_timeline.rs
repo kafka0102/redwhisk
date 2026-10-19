@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::agent_session_stream::AgentTimelineItem;
+use crate::types::agent_session_stream::{AgentPermissionRequest, AgentTimelineItem};
 
 /// 打开回放里的一条时间轴项，带上所属 Turn 和最新一次快照的回读位置。
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -35,6 +35,12 @@ pub struct ReadAgentTimelineResult {
     /// 游标落在行中间或超出文件，调用方应整份替换而不是按游标拼接。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reset_required: bool,
+    /// 打开窗口内仍待用户审批的请求（已被解决的不会出现）。没有时缺省。
+    ///
+    /// 会话重建、切回已缓存会话时用它恢复审批卡片：这类事件只走实时流，重放
+    /// 时间轴不会带回，离开期间挂起的审批会因此从界面上消失。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_permissions: Vec<AgentPermissionRequest>,
 }
 
 /// 按会话日志行的起始字节回读这一行。

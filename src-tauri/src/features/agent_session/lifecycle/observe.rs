@@ -28,6 +28,7 @@ pub(crate) fn read_timeline_for_session(
             model: None,
             window_end_offset: None,
             reset_required: false,
+            pending_permissions: Vec::new(),
         }),
         RuntimeTransport::StructuredJson => read_json_timeline(session, handle, since_log_offset),
     }
@@ -66,6 +67,7 @@ fn read_json_timeline(
                     model: latest_model_from_session_log(session),
                     window_end_offset: None,
                     reset_required: false,
+                    pending_permissions: Vec::new(),
                 });
             }
             Err(AgentSessionError::NotRunning(_)) => {}
@@ -79,6 +81,7 @@ fn read_json_timeline(
                     model: latest_model_from_session_log(session),
                     window_end_offset: None,
                     reset_required: false,
+                    pending_permissions: Vec::new(),
                 });
             }
             Err(error) => return Err(agent_session_error_to_command_error(error)),
@@ -103,6 +106,7 @@ fn timeline_result(
         model: history.model,
         window_end_offset,
         reset_required,
+        pending_permissions: history.pending_permissions,
     }
 }
 

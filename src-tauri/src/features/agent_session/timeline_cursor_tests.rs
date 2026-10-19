@@ -180,3 +180,50 @@ fn open_replay_cursor_past_a_truncated_log_requests_a_full_replace() {
         "失效游标不应把当前文件残片当成增量"
     );
 }
+
+#[test]
+fn open_replay_since_cursor_still_reports_pending_permission() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let log_path = temp_dir.path().join("cursor-permission.jsonl");
+    let events = [
+        envelope(1, assistant("离开前的正文")),
+        AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 230,
+            seq: 2,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::PermissionRequested {
+                request: crate::types::agent_session_stream::AgentPermissionRequest {
+                    id: "perm-waiting".to_string(),
+                    turn_id: Some("turn-1".to_string()),
+                    kind: crate::types::agent_session_stream::PermissionKind::Tool,
+                    title: Some("运行命令".to_string()),
+                    description: None,
+                    actions: Vec::new(),
+                },
+            },
+            log_offset: None,
+        },
+    ];
+    write_log(&log_path, &events);
+    let body = fs::read_to_string(&log_path).expect("read");
+    let left_before_request = line_offset(&body, &events[0]);
+
+    let (replay, reset_required) = read_timeline_from_log_path_since(
+        log_path.to_str().expect("utf8"),
+        Some(left_before_request),
+    )
+    .expect("incremental replay");
+
+    assert!(!reset_required);
+    // 待审批是「当前状态快照」而不是增量：离开期间挂起的审批必须补回来，
+    // 否则用户切回会话只看到空的待审批区，agent 一直卡在等写回。
+    assert_eq!(replay.pending_permissions.len(), 1);
+    assert_eq!(replay.pending_permissions[0].id, "perm-waiting");
+    assert!(
+        replay.items.iter().all(|entry| entry
+            .log_offset
+            .is_none_or(|offset| offset > left_before_request)),
+        "游标只过滤时间轴条目"
+    );
+}

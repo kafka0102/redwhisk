@@ -149,6 +149,23 @@ impl OpenReplay {
             }
             AgentStreamEvent::EffortChanged { effort } => self.history.effort = effort,
             AgentStreamEvent::ModelChanged { model_id } => self.history.model = Some(model_id),
+            // 审批事件只走实时流，重放时间轴拿不到；这里顺带算出窗口内仍待审批的
+            // 请求，供会话重建 / 切回时恢复审批卡片。
+            AgentStreamEvent::PermissionRequested { request } => {
+                if !self
+                    .history
+                    .pending_permissions
+                    .iter()
+                    .any(|pending| pending.id == request.id)
+                {
+                    self.history.pending_permissions.push(request);
+                }
+            }
+            AgentStreamEvent::PermissionResolved { request_id, .. } => {
+                self.history
+                    .pending_permissions
+                    .retain(|pending| pending.id != request_id);
+            }
             _ => {}
         }
     }

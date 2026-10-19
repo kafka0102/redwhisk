@@ -134,6 +134,12 @@ export function messageStreamReducer(
       // 实时事件与 grace 感知的 isTurnRunning 重新推出。
       return { ...action.state, turnStatus: "idle" };
 
+    case "SYNC_PENDING_PERMISSIONS":
+      // 用日志快照覆盖待审批列表。重入会话时审批事件不会重放（只有时间轴条目
+      // 会补读），离开期间挂起的审批只能靠日志快照恢复；覆盖而非合并，才能把
+      // 离开期间已经审批过的请求一并清掉。
+      return { ...state, pendingPermissions: action.requests };
+
     case "HYDRATE": {
       const folded = action.items.reduce<{
         entries: MessageStreamEntry[];
@@ -168,6 +174,7 @@ export function messageStreamReducer(
         subagents: folded.subagents,
         effort: action.effort ?? null,
         model: action.model ?? null,
+        pendingPermissions: action.pendingPermissions ?? [],
         expandedEntryIds: state.expandedEntryIds,
         isInitialized: true,
       });
@@ -358,18 +365,22 @@ function applyEvent(
       // running 并清红条，避免活动进行中却挂着「异常中断 / 工作流可能已暂停」。
       // end_turn 先于收尾正文到达时，末条还是已完成工具，会被标成异常中断。
       // 随后的正文只补进时间线并清掉横幅，不再把提交按钮拉回执行中。
-      // stop_reason 异常（如 max_tokens）的 idle 仍按产出恢复 running。
+      // stop_reason 异常（如 max_tokens）的 idle 仍按产出恢复 running——模型被
+      // 掐断后继续产出说明这一轮没结束；中断来自「末条已完成工具」启发式
+      // （stop_reason 正常或未上报）时，迟到产出只是收尾晚，保持 idle。
       // 补读的历史条目不算产出证据：缓存恢复时若带着上一轮的中断标记，让它们
       // 触发恢复会把 turnStatus 拉回 running，与「这一轮已结束」的事实相反。
       const activeWorkClearsInterrupt =
         !replayed &&
         (state.turnInterrupted || state.subagentInterrupted) &&
         timelineItemIndicatesActiveWork(event.item);
+      const interruptedByAbnormalStopReason =
+        state.interruptedStopReason !== null &&
+        !isCleanStopReason(state.interruptedStopReason);
       const settlesCleanLateReply =
         activeWorkClearsInterrupt &&
         state.turnStatus === "idle" &&
-        state.interruptedStopReason !== null &&
-        isCleanStopReason(state.interruptedStopReason);
+        !interruptedByAbnormalStopReason;
       const turnPatch = settlesCleanLateReply
         ? {
             turnInterrupted: false,

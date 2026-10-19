@@ -3,6 +3,7 @@ import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  AgentPermissionRequest,
   AgentStreamEventEnvelope,
   AgentTimelineItem,
   TimelineHistoryItem,
@@ -48,6 +49,10 @@ const readAgentTimelineMock = vi.mocked(readAgentTimeline);
 
 function historyItems(items: AgentTimelineItem[]): TimelineHistoryItem[] {
   return items.map((item) => ({ item }));
+}
+
+function permissionRequest(id: string): AgentPermissionRequest {
+  return { id, kind: "tool", actions: [] };
 }
 
 let originalRequestAnimationFrame: typeof window.requestAnimationFrame;
@@ -984,6 +989,87 @@ describe("useAgentMessageStream", () => {
       text: "离开后完成的正文",
     });
     expect(getState()!.turnStatus).toBe("idle");
+    vi.useRealTimers();
+  });
+
+  it("首次进入会话时按日志快照恢复待审批卡片", async () => {
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "开始", messageId: "u1" },
+      ]),
+      effort: null,
+      model: null,
+      pendingPermissions: [permissionRequest("perm-restart")],
+    });
+    mocks.listeners.length = 0;
+
+    const { getState } = await renderProbe({
+      projectId: 1,
+      sessionId: 41,
+      onState: () => {},
+    });
+
+    expect(getState()!.pendingPermissions.map(({ id }) => id)).toEqual([
+      "perm-restart",
+    ]);
+  });
+
+  it("离开期间挂起的审批在切回会话时补回卡片", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: { type: "assistant_message", text: "开始", messageId: "m0" },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "其它会话", messageId: "other" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    // 补读：离开期间没有新正文，只有一条挂起等待审批的请求。
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+      resetRequired: false,
+      pendingPermissions: [permissionRequest("perm-waiting")],
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 42,
+      onState: () => {},
+    });
+    expect(getState()!.pendingPermissions).toEqual([]);
+
+    rerenderWith({ projectId: 1, sessionId: 43 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 42 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    expect(getState()!.pendingPermissions.map(({ id }) => id)).toEqual([
+      "perm-waiting",
+    ]);
     vi.useRealTimers();
   });
 });

@@ -1390,6 +1390,44 @@ describe("messageStreamReducer", () => {
       });
       expect(state.pendingPermissions).toHaveLength(0);
     });
+
+    it("SYNC_PENDING_PERMISSIONS 用日志快照覆盖待审批列表", () => {
+      let state = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: {
+          type: "permission_requested",
+          request: { id: "permission-stale", kind: "tool", actions: [] },
+        },
+      });
+      expect(state.pendingPermissions.map(({ id }) => id)).toEqual([
+        "permission-stale",
+      ]);
+
+      state = messageStreamReducer(state, {
+        type: "SYNC_PENDING_PERMISSIONS",
+        requests: [{ id: "permission-waiting", kind: "tool", actions: [] }],
+      });
+
+      // 覆盖而非合并：离开期间已经审批过的请求要一并清掉。
+      expect(state.pendingPermissions.map(({ id }) => id)).toEqual([
+        "permission-waiting",
+      ]);
+    });
+
+    it("HYDRATE 按日志快照恢复待审批卡片", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [],
+        pendingPermissions: [
+          { id: "permission-restart", kind: "tool", actions: [] },
+        ],
+      });
+
+      expect(state.isInitialized).toBe(true);
+      expect(state.pendingPermissions.map(({ id }) => id)).toEqual([
+        "permission-restart",
+      ]);
+    });
   });
 
   describe("usage_updated", () => {
@@ -1459,12 +1497,15 @@ describe("messageStreamReducer", () => {
   });
 
   describe("timeline 有产出事件清除异常中断态", () => {
+    // 异常中断 = stop_reason 异常（如 max_tokens）：模型被掐断，产出说明还在跑。
+    // provider 未上报 stop_reason 时中断来自「末条已完成工具」启发式，迟到产出
+    // 按收尾处理，见「未上报 stop_reason」用例。
     function interruptedState(): MessageStreamState {
       return {
         ...createInitialState(),
         turnStatus: "idle",
         turnInterrupted: true,
-        interruptedStopReason: null,
+        interruptedStopReason: "max_tokens",
         isInitialized: true,
       };
     }
@@ -1559,15 +1600,54 @@ describe("messageStreamReducer", () => {
       expect(next.turnStatus).toBe("running");
       expect(next.turnInterrupted).toBe(false);
     });
+
+    it("provider 未上报 stop_reason 时，迟到正文收尾为 idle 而不是卡在 running", () => {
+      let state = createInitialState();
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "t1" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "tool_call",
+          callId: "call_late",
+          name: "edit",
+          detail: { type: "edit", path: "CONTEXT.md" },
+          status: "completed",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: { type: "turn_completed", turnId: "t1", usage: null },
+      });
+      // 末条是已完成工具 → 启发式判为异常中断，但 provider 没上报 stop_reason，
+      // 说明这不是「模型被掐断」，随后的正文只是收尾晚。
+      expect(state.turnInterrupted).toBe(true);
+      expect(state.interruptedStopReason).toBeNull();
+
+      const settled = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "assistant_message",
+          text: "收尾正文",
+          messageId: "a-late",
+        }),
+      });
+
+      expect(settled.turnStatus).toBe("idle");
+      expect(settled.turnInterrupted).toBe(false);
+    });
   });
 
   describe("补读的历史条目", () => {
+    // 缓存里带着上一轮的异常中断标记（stop_reason 异常）。
     function interruptedState(): MessageStreamState {
       return {
         ...createInitialState(),
         turnStatus: "idle",
         turnInterrupted: true,
-        interruptedStopReason: null,
+        interruptedStopReason: "max_tokens",
         isInitialized: true,
       };
     }

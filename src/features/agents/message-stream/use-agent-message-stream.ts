@@ -307,6 +307,7 @@ export function useAgentMessageStream({
                 items: full.items,
                 effort: full.effort,
                 model: full.model,
+                pendingPermissions: full.pendingPermissions ?? [],
               });
               rememberLogOffset(
                 projectId,
@@ -315,28 +316,38 @@ export function useAgentMessageStream({
                   coveredLogOffset(stateRef.current) ??
                   undefined,
               );
-            } else if (replay.items.length > 0) {
-              dispatch({
-                type: "EVENT_BATCH",
-                events: replay.items.map((entry) => ({
-                  event: {
-                    type: "timeline" as const,
-                    item: entry.item,
-                    turnId: entry.turnId ?? undefined,
-                    seq: 0,
-                    timestamp: 0,
-                  },
-                  logOffset: entry.logOffset ?? undefined,
-                  replayed: true,
-                })),
-              });
-              rememberLogOffset(
-                projectId,
-                sessionId,
-                replay.windowEndOffset ??
-                  coveredLogOffset(stateRef.current) ??
-                  undefined,
-              );
+            } else {
+              if (replay.items.length > 0) {
+                dispatch({
+                  type: "EVENT_BATCH",
+                  events: replay.items.map((entry) => ({
+                    event: {
+                      type: "timeline" as const,
+                      item: entry.item,
+                      turnId: entry.turnId ?? undefined,
+                      seq: 0,
+                      timestamp: 0,
+                    },
+                    logOffset: entry.logOffset ?? undefined,
+                    replayed: true,
+                  })),
+                });
+                rememberLogOffset(
+                  projectId,
+                  sessionId,
+                  replay.windowEndOffset ??
+                    coveredLogOffset(stateRef.current) ??
+                    undefined,
+                );
+              }
+              // 审批事件不是时间轴条目：离开期间挂起的审批即使没有新正文也要补回来，
+              // 否则用户回来只看到空白的待审批状态，agent 会一直卡在等写回。
+              if (replay.pendingPermissions) {
+                dispatch({
+                  type: "SYNC_PENDING_PERMISSIONS",
+                  requests: replay.pendingPermissions,
+                });
+              }
             }
           } catch {
             markSubscriptionStale(projectId, sessionId);
@@ -370,7 +381,7 @@ export function useAgentMessageStream({
 
       // 没有缓存的情况下，正常初始化
       try {
-        const { items, effort, model, windowEndOffset } =
+        const { items, effort, model, windowEndOffset, pendingPermissions } =
           await readAgentTimeline({
             projectId,
             sessionId,
@@ -378,7 +389,13 @@ export function useAgentMessageStream({
         if (isDisposed) {
           return;
         }
-        dispatch({ type: "HYDRATE", items, effort, model });
+        dispatch({
+          type: "HYDRATE",
+          items,
+          effort,
+          model,
+          pendingPermissions: pendingPermissions ?? [],
+        });
         rememberLogOffset(projectId, sessionId, windowEndOffset ?? undefined);
       } catch (error) {
         if (isDisposed) {
