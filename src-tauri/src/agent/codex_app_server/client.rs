@@ -29,11 +29,12 @@ pub struct InitializeParams {
 
 impl Default for InitializeParams {
     fn default() -> Self {
-        // 使用非 originating 的 client identity，避免在 provider usage log
-        // 里把请求标成 redwhisk 发起。
+        // Codex 把这个名字写入 Responses 请求的 User-Agent。
+        // 自定义 Responses 中转只对 `codex_cli_rs` / `codex_exec` / `codex-tui`
+        // 接受 `agent_message`；其它前缀会 422，子代理回传因此中断。
         Self {
-            client_name: "redwhisk_codex_app_server".into(),
-            client_title: "RedWhisk Codex App Server".into(),
+            client_name: "codex_cli_rs".into(),
+            client_title: "Codex CLI".into(),
             client_version: "0.0.0".into(),
         }
     }
@@ -380,6 +381,16 @@ fn build_turn_interrupt_payload(thread_id: &str, turn_id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_client_name_is_on_responses_agent_message_allowlist() {
+        // 自定义 Responses 中转按 User-Agent 前缀决定是否接受 `agent_message`。
+        // `codex_cli_rs` / `codex_exec` / `codex-tui` 放行；未知前缀返回 422，
+        // 子代理回传的 `agent_message` 无法进入下一轮。
+        let params = InitializeParams::default();
+
+        assert_eq!(params.client_name, "codex_cli_rs");
+    }
 
     #[test]
     fn sandbox_policy_serializes_workspace_write() {
