@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canEditCodeFileTab,
   getCodeFileEditBlockReason,
+  isHtmlFile,
   isMarkdownPreviewable,
 } from "./code-workspace-helpers";
 import type { CodeFileTab } from "./code-workspace-cache";
@@ -31,6 +32,20 @@ function tab(partial: Partial<CodeFileTab> = {}): CodeFileTab {
     ...partial,
   };
 }
+
+describe("isHtmlFile", () => {
+  it("matches html and htm extensions case-insensitively", () => {
+    expect(isHtmlFile("index.html")).toBe(true);
+    expect(isHtmlFile("page.HTM")).toBe(true);
+    expect(isHtmlFile("src/view.HTML")).toBe(true);
+  });
+
+  it("rejects other extensions and names without an extension", () => {
+    expect(isHtmlFile("index.xhtml")).toBe(false);
+    expect(isHtmlFile("readme.md")).toBe(false);
+    expect(isHtmlFile("html")).toBe(false);
+  });
+});
 
 describe("isMarkdownPreviewable", () => {
   it("returns true for successfully loaded markdown text", () => {

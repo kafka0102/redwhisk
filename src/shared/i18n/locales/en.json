@@ -726,6 +726,8 @@
     "diffPreviewBefore": "Before",
     "diffPreviewAfter": "After",
     "toggleFileEdit": "Edit file",
+    "openHtmlInBrowser": "Open in browser",
+    "openHtmlInBrowserFailed": "Could not open this file in the browser.",
     "fileTabUnsaved": "Unsaved changes",
     "unsavedChangesTitle": "Unsaved Changes",
     "unsavedChangesMessage": "Do you want to save the changes you made to {{fileName}}?",

@@ -31,6 +31,17 @@ export function isMissingWorkspaceFileError(error: unknown): boolean {
   return reason != null && MISSING_FILE_ERROR_REASONS.has(reason);
 }
 
+const HTML_FILE_EXTENSIONS = new Set(["htm", "html"]);
+
+/** 按文件名后缀判断是否为 HTML（大小写不敏感，含 `.htm`）。 */
+export function isHtmlFile(fileName: string): boolean {
+  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (extension === fileName.toLowerCase()) {
+    return false;
+  }
+  return HTML_FILE_EXTENSIONS.has(extension);
+}
+
 /** 当前 tab 是否可显示 markdown 源码/预览切换（语言为 markdown 且文本已成功加载）。 */
 export function isMarkdownPreviewable(tab: CodeFileTab): boolean {
   if (tab.isLoading || tab.errorMessage || !tab.content) {

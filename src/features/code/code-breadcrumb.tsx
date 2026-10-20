@@ -32,6 +32,11 @@ export interface CodeEditToggle {
   title?: string;
 }
 
+export interface CodeOpenInBrowserAction {
+  label: string;
+  onOpen: () => void;
+}
+
 export function CodeBreadcrumb({
   filePath,
   tree,
@@ -39,6 +44,7 @@ export function CodeBreadcrumb({
   onDirectoryOpen,
   editToggle = null,
   markdownPreviewToggle = null,
+  openInBrowser = null,
   svgPreviewToggle = null,
 }: {
   filePath: string;
@@ -47,6 +53,7 @@ export function CodeBreadcrumb({
   onDirectoryOpen?: (directoryPath: string) => void;
   editToggle?: CodeEditToggle | null;
   markdownPreviewToggle?: CodeMarkdownPreviewToggle | null;
+  openInBrowser?: CodeOpenInBrowserAction | null;
   svgPreviewToggle?: CodeMarkdownPreviewToggle | null;
 }) {
   // 受控弹层：同一时间只展开一个目录段。打开文件后立即关闭，回到面包屑。
@@ -93,6 +100,17 @@ export function CodeBreadcrumb({
           );
         })}
       </nav>
+      {openInBrowser ? (
+        <button
+          type="button"
+          className="code-workspace__browser-toggle"
+          aria-label={openInBrowser.label}
+          title={openInBrowser.label}
+          onClick={openInBrowser.onOpen}
+        >
+          <ChromeBrowserIcon />
+        </button>
+      ) : null}
       {editToggle ? (
         <button
           type="button"
@@ -235,6 +253,24 @@ function CodeBreadcrumbMenuRow({
       <FileTypeIcon fileName={node.name} />
       <span>{node.name}</span>
     </button>
+  );
+}
+
+function ChromeBrowserIcon() {
+  return (
+    <svg aria-hidden="true" width={14} height={14} viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" fill="#34A853" />
+      <path
+        d="M12 2a10 10 0 0 1 8.66 15H13.2A4.6 4.6 0 0 0 12 7.4V2Z"
+        fill="#EA4335"
+      />
+      <path
+        d="M3.34 7A10 10 0 0 0 12 22l3.2-7.6A4.6 4.6 0 0 0 8.2 13.1L3.34 7Z"
+        fill="#FBBC04"
+      />
+      <circle cx="12" cy="12" r="4.5" fill="#fff" />
+      <circle cx="12" cy="12" r="3.1" fill="#4285F4" />
+    </svg>
   );
 }
 

@@ -38,6 +38,7 @@ import {
 import {
   canEditCodeFileTab,
   getCodeFileEditBlockReason,
+  isHtmlFile,
   isMarkdownPreviewable,
   normalizeCodeFileTab,
   resolveEditDisabledTitle,
@@ -52,6 +53,7 @@ import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { useCodeFileTreePathActions } from "./use-code-file-tree-path-actions";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
+import { openHtmlInBrowser } from "./open-html-in-browser";
 import { useCodeReadingPositionCleanup } from "./use-code-reading-position-cleanup";
 
 interface CodeActivityProps {
@@ -619,6 +621,28 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                   tree={tree}
                   onDirectoryOpen={loadDirectory}
                   onOpenFile={openFile}
+                  openInBrowser={
+                    isHtmlFile(activeTab.fileName) && selectedRoot
+                      ? {
+                          label: t("agentsFeature.openHtmlInBrowser"),
+                          onOpen: () => {
+                            void openHtmlInBrowser(
+                              selectedRoot.path,
+                              activeTab.filePath,
+                            ).then((opened) => {
+                              if (!opened) {
+                                showAlert({
+                                  message: t(
+                                    "agentsFeature.openHtmlInBrowserFailed",
+                                  ),
+                                  type: "error",
+                                });
+                              }
+                            });
+                          },
+                        }
+                      : null
+                  }
                   editToggle={
                     shouldShowCodeFileEditToggle(activeTab)
                       ? {

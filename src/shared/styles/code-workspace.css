@@ -263,6 +263,7 @@
 }
 
 .code-workspace__edit-toggle,
+.code-workspace__browser-toggle,
 .code-workspace__markdown-toggle {
   display: inline-grid;
   flex-shrink: 0;
@@ -277,6 +278,8 @@
 
 .code-workspace__edit-toggle:hover:not(:disabled),
 .code-workspace__edit-toggle:focus-visible:not(:disabled),
+.code-workspace__browser-toggle:hover,
+.code-workspace__browser-toggle:focus-visible,
 .code-workspace__markdown-toggle:hover,
 .code-workspace__markdown-toggle:focus-visible {
   background: var(--color-surface-muted);

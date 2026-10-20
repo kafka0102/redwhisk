@@ -726,6 +726,8 @@
     "diffPreviewBefore": "变更前",
     "diffPreviewAfter": "变更后",
     "toggleFileEdit": "编辑文件",
+    "openHtmlInBrowser": "在浏览器中打开",
+    "openHtmlInBrowserFailed": "无法在浏览器中打开该文件。",
     "fileTabUnsaved": "未保存更改",
     "unsavedChangesTitle": "未保存的更改",
     "unsavedChangesMessage": "是否保存对 {{fileName}} 的更改？",
