@@ -337,6 +337,85 @@ pub fn restore_worktree_for_branch(
     Ok(())
 }
 
+/// 已删除的 Issue worktree 按基线最新提交重建。
+///
+/// `workspace_branch` 是新建工作分支（`git worktree add -B`），`base_branch` 只作为起点。
+/// 基线若有上游且本地是其祖先，先 fetch 该上游，新 worktree 用上游提交；不检出、不移动
+/// 主工作区里已经占用的基线分支。没有上游或 fetch 失败时，用本地基线分支当前提交。
+pub fn recreate_issue_worktree_from_base(
+    repo_path: impl AsRef<Path>,
+    workspace_path: impl AsRef<Path>,
+    workspace_branch: &str,
+    base_branch: &str,
+) -> Result<(), GitWorktreeError> {
+    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
+    let workspace_path = workspace_path.as_ref();
+    if workspace_path.is_dir() {
+        return Ok(());
+    }
+    if workspace_path.exists() {
+        return Err(GitWorktreeError::WorktreeRootInvalid(
+            workspace_path.to_string_lossy().to_string(),
+        ));
+    }
+    if let Some(parent) = workspace_path.parent() {
+        prepare_worktree_root(parent)?;
+    }
+
+    let start_point = latest_base_start_point(&repo_path, base_branch);
+    run_git(&repo_path, &["worktree", "prune"])?;
+    run_git(
+        &repo_path,
+        &[
+            "worktree",
+            "add",
+            "-B",
+            workspace_branch,
+            workspace_path.to_string_lossy().as_ref(),
+            start_point.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn latest_base_start_point(repo_path: &Path, base_branch: &str) -> String {
+    let upstream_spec = format!("{base_branch}@{{upstream}}");
+    let Ok(upstream) = run_git(
+        repo_path,
+        &["rev-parse", "--abbrev-ref", upstream_spec.as_str()],
+    ) else {
+        return base_branch.to_string();
+    };
+    if upstream.is_empty() || upstream == base_branch {
+        return base_branch.to_string();
+    }
+    let Some((remote, remote_branch)) = upstream.split_once('/') else {
+        return base_branch.to_string();
+    };
+    let refspec = format!("+refs/heads/{remote_branch}:refs/remotes/{remote}/{remote_branch}");
+    if run_git(repo_path, &["fetch", remote, refspec.as_str()]).is_err() {
+        return base_branch.to_string();
+    }
+    let Ok(upstream) = run_git(
+        repo_path,
+        &["rev-parse", "--abbrev-ref", upstream_spec.as_str()],
+    ) else {
+        return base_branch.to_string();
+    };
+    match command::run_git_raw(
+        repo_path,
+        &[
+            "merge-base",
+            "--is-ancestor",
+            base_branch,
+            upstream.as_str(),
+        ],
+    ) {
+        Ok(output) if output.status.success() => upstream,
+        _ => base_branch.to_string(),
+    }
+}
+
 /// Narrow inputs for Worktree 对账（不含 owner 策略）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorktreeReconcileRequest<'a> {

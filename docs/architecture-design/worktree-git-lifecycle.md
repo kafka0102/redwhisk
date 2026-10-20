@@ -16,9 +16,10 @@
 
 1. 创建隔离会话前确定 target branch、worktree root 和 setup command。
 2. `git worktree add -B issue-{issueNumber}-{repoSlug}` 创建工作区（`repoSlug` 由仓库路径 basename 规范化，最长 20；空则省略）；目录冲突会产生明确阻断，不得静默复用未知目录。
-3. 仅 `worktree_owner=redwhisk` 的工作区可由应用执行 `worktree remove --force`、删除分支和 `worktree prune`。
-4. 创建 worktree 后、Agent 会话完整启动前的任意失败（初始化命令、provider 进程启动、DB 写入、参数校验等）都会自动删除该 worktree（目录 + 工作分支）：启动入口持有 `OwnedWorktreeCleanupGuard`，成功启动才 disarm，清理为 best-effort 且不阻塞错误返回。
-5. 外部工作区必须通过完成 flow 明示确认；不得删除用户拥有的目录或分支。
+3. 已删除的 RedWhisk worktree 在重启时按同一规则重建：Session 上的工作分支名做 `-B`，弹窗所选目标分支只做起点。目标分支已在主工作区检出时不得再次检出。目标分支有上游且本地是其祖先时，先 fetch 该上游，新 worktree 使用上游提交，不移动主工作区。
+4. 仅 `worktree_owner=redwhisk` 的工作区可由应用执行 `worktree remove --force`、删除分支和 `worktree prune`。
+5. 创建 worktree 后、Agent 会话完整启动前的任意失败（初始化命令、provider 进程启动、DB 写入、参数校验等）都会自动删除该 worktree（目录 + 工作分支）：启动入口持有 `OwnedWorktreeCleanupGuard`，成功启动才 disarm，清理为 best-effort 且不阻塞错误返回。
+6. 外部工作区必须通过完成 flow 明示确认；不得删除用户拥有的目录或分支。
 
 ## 完成 flow
 

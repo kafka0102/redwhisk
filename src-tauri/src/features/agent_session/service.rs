@@ -26,7 +26,8 @@ use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
 use crate::features::issue::IssueService;
 use crate::git::worktree::{
-    cleanup_worktree, list_local_branches, restore_worktree_for_branch, GitBranchInfo,
+    cleanup_worktree, list_local_branches, recreate_issue_worktree_from_base,
+    restore_worktree_for_branch, GitBranchInfo,
 };
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::{
@@ -2169,10 +2170,22 @@ impl AgentSessionService<'_> {
             ));
         }
 
-        session.workspace_branch = Some(requested_branch.to_string());
+        let workspace_branch = session.workspace_branch.clone().ok_or_else(|| {
+            CommandError::new(
+                CommandErrorCode::AgentSessionValidationFailed,
+                "Agent Session 缺少可重建的工作分支。",
+            )
+            .with_reason("workspaceBranchMissing")
+            .with_detail(ErrorDetail::new("AgentSession").with_value("sessionId", session.id))
+        })?;
         let workspace_path = session.workspace_path.clone().unwrap_or(cwd);
-        restore_worktree_for_branch(&project.repo_path, &workspace_path, requested_branch)
-            .map_err(agent_session_start_error)?;
+        recreate_issue_worktree_from_base(
+            &project.repo_path,
+            &workspace_path,
+            &workspace_branch,
+            requested_branch,
+        )
+        .map_err(agent_session_start_error)?;
         run_worktree_setup_command(&workspace_path, session.worktree_setup_command.as_deref())?;
 
         let transaction = self
@@ -2183,9 +2196,9 @@ impl AgentSessionService<'_> {
         let changed = transaction
             .execute(
                 "UPDATE agent_sessions
-                 SET workspace_branch = ?1, workspace_path = ?2, working_dir = ?2
+                 SET workspace_path = ?1, working_dir = ?1, target_branch = ?2
                  WHERE id = ?3 AND del = 0",
-                rusqlite::params![requested_branch, workspace_path, session.id],
+                rusqlite::params![workspace_path, requested_branch, session.id],
             )
             .map_err(agent_session_database_error)?;
         if changed == 0 {
@@ -2199,6 +2212,7 @@ impl AgentSessionService<'_> {
         transaction.commit().map_err(agent_session_database_error)?;
         session.workspace_path = Some(workspace_path.clone());
         session.working_dir = workspace_path;
+        session.target_branch = Some(requested_branch.to_string());
         Ok(session)
     }
 

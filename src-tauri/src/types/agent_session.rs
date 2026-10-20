@@ -299,7 +299,8 @@ pub struct ResumeAgentSessionInput {
     /// 用户确认把已完成 Issue 切回运行中。缺省或 false 时，已完成 Issue 仍拒绝续接。
     #[serde(default)]
     pub reopen_completed: bool,
-    /// worktree 目录已不在时，用来重建的已有本地分支。缺省则沿用 Session 记录上的分支。
+    /// worktree 目录已不在时，作为新工作区分支起点的已有本地基线分支。
+    /// 不直接检出该分支。缺省则沿用 Session 记录上的工作分支，不新建目录。
     #[serde(default)]
     pub workspace_branch: Option<String>,
 }
