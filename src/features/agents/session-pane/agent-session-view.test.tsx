@@ -783,7 +783,7 @@ describe("AgentSessionView 输出来源", () => {
     expect(source).toHaveTextContent("All");
     await user.click(source);
     expect(
-      screen.getByRole("option", { name: "Main agent" }),
+      await screen.findByRole("option", { name: "Main agent" }),
     ).toBeInTheDocument();
     await user.click(
       await screen.findByRole("option", { name: "Subagent 1 · Ended" }),

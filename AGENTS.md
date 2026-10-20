@@ -35,7 +35,7 @@
 | 格式化 | `pnpm format` |
 | Lint | `pnpm lint` |
 | 类型检查 | `pnpm typecheck` |
-| 前端测试 | `pnpm test`（聚焦单测用 vitest 过滤，避免全量） |
+| 前端测试 | `pnpm test`（行为改动跑全量；vitest 过滤只用于定位失败，不能当作通过） |
 | 构建 | `pnpm build` |
 | Rust 编译检查 | `bash scripts/check-rust-compile.sh` |
 | Rust 测试 | `cd src-tauri && cargo test` |
@@ -84,7 +84,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 1. `pnpm format` → 复查 `git status --short`，带出的额外文件按 §8 处理。
 2. `pnpm lint`
 3. `pnpm typecheck`
-4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑；纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
+4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑全量；vitest 过滤只用于定位失败，不能当作通过。同文件用例有时序依赖，过滤运行会漏报。纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
 5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
 6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后先跑这一项，再跑下一条编译检查。脚本只数行，不编译。越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。与编译检查分开跑，不要绑在 `cargo check` 后面。
 7. `bash scripts/check-rust-compile.sh` — 改动 Rust（`src-tauri/**/*.rs`、`src-tauri/Cargo.toml`、`src-tauri/build.rs`）后必跑，排在文件大小门禁之后。脚本只对库和二进制做增量 `cargo check --offline --lib --bins`（dev profile，无 `cfg(test)`），不跑测试、不链接、不打安装包。纯前端 / 纯文档改动可豁免。`cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替：它们以 `cfg(test)` 编译，仅被测试引用的 `use` / `pub use` 在正式构建里仍是未使用项，而 `warnings = "deny"` 会让其变成编译错误。改动这类重导出时先看非测试调用方，只有测试引用则给重导出加 `#[cfg(test)]`；禁止 `#[allow(unused_imports)]` / `#[allow(dead_code)]` 压掉。不要用 `pnpm build:macos`、`tauri build` 或 `cargo build --release` 充当这项门禁。`--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。
