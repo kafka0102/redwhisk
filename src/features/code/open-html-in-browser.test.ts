@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const openPath = vi.hoisted(() => vi.fn());
@@ -52,3 +55,97 @@ describe("openHtmlInBrowser", () => {
     expect(openPath).not.toHaveBeenCalled();
   });
 });
+
+const BRIEFING_HTML_PATH =
+  "/Users/yujianjia/workspace/lixiang/show-case/pages/cloud-service-ontology-briefing/index.html";
+
+describe("opener capability", () => {
+  it("allows open_path to launch an absolute workspace html file", () => {
+    const capability = readOpenerCapability(
+      readFileSync(
+        resolve(process.cwd(), "src-tauri/capabilities/default.json"),
+        "utf8",
+      ),
+    );
+
+    expect(
+      openerScopeAllowsPath(openerAllowPaths(capability), BRIEFING_HTML_PATH),
+    ).toBe(true);
+    expect(
+      openerScopeAllowsPath(
+        openerAllowPaths(capability),
+        "/tmp/outside-home/index.html",
+      ),
+    ).toBe(true);
+  });
+});
+
+interface OpenerCapability {
+  permissions?: unknown[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readOpenerCapability(source: string): OpenerCapability {
+  const parsed: unknown = JSON.parse(source);
+  if (!isRecord(parsed) || !Array.isArray(parsed.permissions)) {
+    return { permissions: [] };
+  }
+  return { permissions: parsed.permissions };
+}
+
+function openerAllowPaths(capability: OpenerCapability): string[] {
+  const paths: string[] = [];
+  for (const permission of capability.permissions ?? []) {
+    if (!isRecord(permission)) {
+      continue;
+    }
+    if (permission.identifier !== "opener:allow-open-path") {
+      continue;
+    }
+    if (!Array.isArray(permission.allow)) {
+      continue;
+    }
+    for (const entry of permission.allow) {
+      if (!isRecord(entry) || typeof entry.path !== "string") {
+        continue;
+      }
+      paths.push(entry.path);
+    }
+  }
+  return paths;
+}
+
+function openerScopeAllowsPath(
+  patterns: string[],
+  targetPath: string,
+): boolean {
+  const home = homedir();
+  return patterns.some((pattern) =>
+    openerPatternMatches(resolveOpenerPattern(pattern, home), targetPath),
+  );
+}
+
+function resolveOpenerPattern(pattern: string, home: string): string {
+  if (pattern === "$HOME") {
+    return home;
+  }
+  if (pattern.startsWith("$HOME/") || pattern.startsWith("$HOME\\")) {
+    return `${home}${pattern.slice("$HOME".length)}`;
+  }
+  return pattern;
+}
+
+/** 只覆盖已用 tauri glob 规则核对过的 scope 写法。空 scope 必须拒绝。 */
+function openerPatternMatches(pattern: string, targetPath: string): boolean {
+  if (pattern === "**" || pattern === "/**" || pattern === "**/*") {
+    return targetPath.length > 0;
+  }
+  if (pattern.endsWith("/**")) {
+    const prefix = pattern.slice(0, -3);
+    return targetPath === prefix || targetPath.startsWith(`${prefix}/`);
+  }
+  return pattern === targetPath;
+}

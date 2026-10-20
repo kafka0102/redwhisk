@@ -11,7 +11,10 @@
     "core:window:allow-unmaximize",
     "dialog:allow-open",
     "notification:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
+    },
     "opener:default"
   ]
 }
