@@ -14,6 +14,7 @@ use crate::features::agent_session::timeline::{
 use crate::types::agent_session::{
     AgentSessionRecord, ReadAgentTimelineResult, TimelineHistoryItem,
 };
+use crate::types::agent_session_stream::AgentTimelineItem;
 use crate::types::errors::CommandError;
 
 pub(crate) fn read_timeline_for_session(
@@ -39,11 +40,13 @@ fn read_json_timeline(
     handle: Option<Arc<dyn AgentSessionHandle>>,
     since_log_offset: Option<u64>,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
-    let (history, reset_required) =
+    let (mut history, reset_required) =
         crate::features::agent_session::timeline::read_timeline_from_log_path_since(
             &session.log_path,
             since_log_offset,
         )?;
+    history.items =
+        without_session_thread_roster(history.items, session.provider_session_id.as_deref());
     if reset_required {
         return Ok(timeline_result(history, true));
     }
@@ -54,8 +57,8 @@ fn read_json_timeline(
     if let Some(handle) = handle {
         match handle.read_timeline() {
             Ok(items) => {
-                return Ok(ReadAgentTimelineResult {
-                    items: items
+                let items = without_session_thread_roster(
+                    items
                         .into_iter()
                         .map(|item| TimelineHistoryItem {
                             item,
@@ -63,6 +66,10 @@ fn read_json_timeline(
                             turn_id: None,
                         })
                         .collect(),
+                    session.provider_session_id.as_deref(),
+                );
+                return Ok(ReadAgentTimelineResult {
+                    items,
                     effort: latest_effort_from_session_log(session),
                     model: latest_model_from_session_log(session),
                     window_end_offset: None,
@@ -89,6 +96,27 @@ fn read_json_timeline(
     }
 
     Ok(timeline_result(history, false))
+}
+
+/// 已经写进日志的父 thread 花名册不再回放。
+///
+/// 子线程 `interacted` 曾把本会话 thread 记成 running，且不会 ended。
+/// 重开后提交按钮会一直显示运行中。真子智能体的 id 与 `provider_session_id` 不同，仍保留。
+fn without_session_thread_roster(
+    mut items: Vec<TimelineHistoryItem>,
+    provider_session_id: Option<&str>,
+) -> Vec<TimelineHistoryItem> {
+    let Some(session_thread_id) = provider_session_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return items;
+    };
+    items.retain(|entry| match &entry.item {
+        AgentTimelineItem::SubagentRoster { subagent_id, .. } => subagent_id != session_thread_id,
+        _ => true,
+    });
+    items
 }
 
 fn timeline_result(
@@ -258,5 +286,66 @@ mod tests {
         let session = sample_session("pty", "");
         let err = read_timeline_for_session(&session, None, None).unwrap_err();
         assert_eq!(err.reason.as_deref(), Some("invalidDisplayMode"));
+    }
+
+    #[test]
+    fn json_snapshot_drops_roster_entry_for_the_session_thread() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("structured.jsonl");
+        let events = [
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 1,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::SubagentRoster {
+                        subagent_id: "thr_parent".to_string(),
+                        status: crate::types::agent_session_stream::SubagentRosterStatus::Running,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 1,
+                },
+                log_offset: None,
+            },
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 2,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::Timeline {
+                    item: AgentTimelineItem::SubagentRoster {
+                        subagent_id: "thr_child".to_string(),
+                        status: crate::types::agent_session_stream::SubagentRosterStatus::Ended,
+                    },
+                    turn_id: None,
+                    seq: 0,
+                    timestamp: 2,
+                },
+                log_offset: None,
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log, format!("{lines}\n")).expect("write structured log");
+
+        let mut session = sample_session("json", log.to_string_lossy().as_ref());
+        session.provider_session_id = Some("thr_parent".to_string());
+        let result = read_timeline_for_session(&session, None, None).unwrap();
+        assert_eq!(
+            result
+                .items
+                .into_iter()
+                .map(|entry| entry.item)
+                .collect::<Vec<_>>(),
+            vec![AgentTimelineItem::SubagentRoster {
+                subagent_id: "thr_child".to_string(),
+                status: crate::types::agent_session_stream::SubagentRosterStatus::Ended,
+            }]
+        );
     }
 }

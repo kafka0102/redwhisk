@@ -288,3 +288,69 @@ fn child_turn_stays_interruptible_after_parent_turn_completes() {
         Some("turn_child")
     );
 }
+
+#[test]
+fn subagent_interacted_with_parent_thread_does_not_open_a_live_roster_entry() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    {
+        let mut guard = state.lock().unwrap();
+        guard.thread_id = Some("thr_parent".into());
+        guard.current_turn_id = Some("turn_parent".into());
+    }
+
+    let events = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "SubAgentActivity",
+                "model": null,
+                "reasoning_effort": null,
+                "id": "call-interact-parent",
+                "kind": "interacted",
+                "agent_thread_id": "thr_parent",
+                "agent_path": "/root"
+            }),
+            thread_id: Some("thr_child".into()),
+        },
+    );
+
+    assert!(
+        events.is_empty(),
+        "子线程向父线程汇报不是新的子智能体，不能把父 thread 记成一直在跑"
+    );
+    assert_eq!(
+        state.lock().unwrap().current_turn_id.as_deref(),
+        Some("turn_parent")
+    );
+}
+
+#[test]
+fn subagent_interacted_with_child_thread_still_marks_that_child_running() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    {
+        let mut guard = state.lock().unwrap();
+        guard.thread_id = Some("thr_parent".into());
+        guard.current_turn_id = Some("turn_parent".into());
+    }
+
+    let events = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "SubAgentActivity",
+                "model": null,
+                "reasoning_effort": null,
+                "id": "call-interact-child",
+                "kind": "interacted",
+                "agent_thread_id": "thr_child",
+                "agent_path": "/root/ticket"
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    let json = serde_json::to_value(&events).expect("events");
+    assert_eq!(json.as_array().map(Vec::len), Some(1));
+    assert_eq!(json[0]["item"]["type"], "subagent_roster");
+    assert_eq!(json[0]["item"]["subagentId"], "thr_child");
+    assert_eq!(json[0]["item"]["status"], "running");
+}

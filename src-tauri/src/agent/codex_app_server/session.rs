@@ -1120,6 +1120,15 @@ fn events_for_subagent_activity(
     activity: super::subagent_activity::SubagentActivity,
 ) -> Vec<AgentStreamEvent> {
     let thread_id = activity.agent_thread_id;
+    // 子线程向父线程汇报时，SubAgentActivity.interacted 的 agent_thread_id 是父 thread。
+    // 那不是新的子智能体；记成 running 后没有 ended，提交按钮会一直停在运行中。
+    let targets_session_thread = state
+        .lock()
+        .ok()
+        .is_some_and(|session| session.thread_id.as_deref() == Some(thread_id.as_str()));
+    if targets_session_thread {
+        return Vec::new();
+    }
     let (call_id, prompt, status, roster) = {
         let Ok(mut session) = state.lock() else {
             return Vec::new();
