@@ -2080,6 +2080,53 @@ describe("输出来源", () => {
     expect(texts(state, "thr_a")).toEqual([]);
   });
 
+  it("花名册结束后，仍在运行的拉起记录收成已取消", () => {
+    let state = messageStreamReducer(createInitialState(), {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "tool_call",
+        callId: "spawn_a",
+        name: "collabAgentToolCall",
+        status: "running",
+        detail: {
+          type: "collab_agent",
+          prompt: "/root/impl",
+          receiverThreadIds: ["thr_a"],
+        },
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "tool_call",
+        callId: "spawn_b",
+        name: "collabAgentToolCall",
+        status: "running",
+        detail: {
+          type: "collab_agent",
+          prompt: "/root/other",
+          receiverThreadIds: ["thr_b"],
+        },
+      }),
+    });
+    state = messageStreamReducer(state, {
+      type: "EVENT",
+      event: timelineEvent({
+        type: "subagent_roster",
+        subagentId: "thr_a",
+        status: "ended",
+      }),
+    });
+
+    const launch = state.entries.find((entry) => entry.id === "spawn_a");
+    const other = state.entries.find((entry) => entry.id === "spawn_b");
+    expect(launch?.item).toMatchObject({ status: "canceled" });
+    expect(other?.item).toMatchObject({ status: "running" });
+    expect(state.subagents.find((entry) => entry.id === "thr_a")?.ended).toBe(
+      true,
+    );
+  });
+
   it("父 Turn 结束后，花名册仍标明在跑的子智能体显示运行中", () => {
     let state = messageStreamReducer(createInitialState(), {
       type: "EVENT",

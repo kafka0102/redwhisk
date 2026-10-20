@@ -354,3 +354,56 @@ fn subagent_interacted_with_child_thread_still_marks_that_child_running() {
     assert_eq!(json[0]["item"]["subagentId"], "thr_child");
     assert_eq!(json[0]["item"]["status"], "running");
 }
+
+#[test]
+fn subagent_interrupted_closes_the_launch_and_roster() {
+    let state = Arc::new(Mutex::new(super::tests::empty_state()));
+    {
+        let mut guard = state.lock().unwrap();
+        guard.thread_id = Some("thr_parent".into());
+        guard.current_turn_id = Some("turn_parent".into());
+    }
+
+    super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "SubAgentActivity",
+                "id": "call_spawn",
+                "kind": "started",
+                "agent_thread_id": "thr_child",
+                "agent_path": "/root/impl"
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    state
+        .lock()
+        .unwrap()
+        .active_child_turns
+        .insert("thr_child".into(), "turn_child".into());
+
+    let events = super::build_events(
+        &state,
+        super::CodexNotification::ItemCompleted {
+            item: json!({
+                "type": "SubAgentActivity",
+                "model": null,
+                "reasoning_effort": null,
+                "id": "call-interrupted",
+                "kind": "interrupted",
+                "agent_thread_id": "thr_child",
+                "agent_path": "/root/impl"
+            }),
+            thread_id: Some("thr_parent".into()),
+        },
+    );
+    let json = serde_json::to_value(&events).expect("events");
+    assert_eq!(json[0]["item"]["type"], "tool_call");
+    assert_eq!(json[0]["item"]["callId"], "call_spawn");
+    assert_eq!(json[0]["item"]["status"], "canceled");
+    assert_eq!(json[1]["item"]["type"], "subagent_roster");
+    assert_eq!(json[1]["item"]["subagentId"], "thr_child");
+    assert_eq!(json[1]["item"]["status"], "ended");
+    assert!(state.lock().unwrap().active_child_turns.is_empty());
+}

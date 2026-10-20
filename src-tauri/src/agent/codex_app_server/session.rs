@@ -1160,6 +1160,20 @@ fn events_for_subagent_activity(
                     Some(SubagentRosterStatus::Ended),
                 )
             }
+            SubagentActivityKind::Interrupted => {
+                let call_id = session
+                    .subagent_launch_call_ids
+                    .get(&thread_id)
+                    .cloned()
+                    .unwrap_or(activity.call_id);
+                session.active_child_turns.remove(&thread_id);
+                (
+                    call_id,
+                    prompt,
+                    ToolCallStatus::Canceled,
+                    Some(SubagentRosterStatus::Ended),
+                )
+            }
             SubagentActivityKind::Interacted => (
                 String::new(),
                 None,

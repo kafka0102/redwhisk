@@ -2,6 +2,7 @@
 //!
 //! 新版 app-server 不再把任务描述和子 thread id 放进 `collabAgentToolCall`，
 //! 而是另发 `SubAgentActivity`（kind = started / completed / interacted）。
+//! `interrupted` 与 completed 一样收口这一路，只是拉起记录记为取消。
 //! 拉起记录属于主智能体；花名册按 `agent_thread_id` 记这一路是否还在跑。
 
 use serde_json::Value;
@@ -21,6 +22,7 @@ pub(super) enum SubagentActivityKind {
     Started,
     Completed,
     Interacted,
+    Interrupted,
 }
 
 pub(super) fn parse_subagent_activity(item: &Value) -> Option<SubagentActivity> {
@@ -69,6 +71,7 @@ fn parse_kind(raw: &str) -> Option<SubagentActivityKind> {
         "started" => Some(SubagentActivityKind::Started),
         "completed" => Some(SubagentActivityKind::Completed),
         "interacted" => Some(SubagentActivityKind::Interacted),
+        "interrupted" => Some(SubagentActivityKind::Interrupted),
         _ => None,
     }
 }

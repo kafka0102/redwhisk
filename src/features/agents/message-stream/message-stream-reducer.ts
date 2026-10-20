@@ -28,7 +28,7 @@ import {
   stripToolCallBody,
 } from "./message-stream-fold";
 import { mergeToolCallDetail } from "./message-stream-tool-detail";
-import { foldSubagentRoster } from "./output-source";
+import { closeEndedCollabLaunches, foldSubagentRoster } from "./output-source";
 import type {
   MessageStreamAction,
   MessageStreamEntry,
@@ -157,11 +157,12 @@ export function messageStreamReducer(
           const withBoundary = startsTurn
             ? appendTurnBoundary(current.entries, turnId)
             : current.entries;
+          const entries =
+            item.type === "subagent_roster"
+              ? withBoundary
+              : applyTimelineItem(withBoundary, item, historyItem.logOffset);
           return {
-            entries:
-              item.type === "subagent_roster"
-                ? withBoundary
-                : applyTimelineItem(withBoundary, item, historyItem.logOffset),
+            entries: closeEndedCollabLaunches(entries, item),
             subagents: foldSubagentRoster(current.subagents, item),
             turnId,
           };
@@ -398,7 +399,12 @@ function applyEvent(
       if (event.item.type === "subagent_roster") {
         const lastSeq =
           event.seq > (state.lastSeq ?? -1) ? event.seq : state.lastSeq;
-        return { ...state, subagents, lastSeq };
+        return {
+          ...state,
+          entries: closeEndedCollabLaunches(state.entries, event.item),
+          subagents,
+          lastSeq,
+        };
       }
       if (shouldSkipTimelineItem(event.item, state.entries)) {
         const lastSeq =

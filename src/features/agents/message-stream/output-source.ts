@@ -72,6 +72,39 @@ export function foldSubagentRoster(
   return next;
 }
 
+/**
+ * 花名册已结束时，把仍停在 running 的拉起记录收成 canceled。
+ *
+ * `SubAgentActivity` 的 interrupted 以前被丢掉，日志里只剩 running 的拉起记录
+ * 和后来的 roster ended。重开时按花名册收口，避免这一路看起来还在跑。
+ */
+export function closeEndedCollabLaunches(
+  entries: readonly MessageStreamEntry[],
+  item: AgentTimelineItem,
+): MessageStreamEntry[] {
+  if (item.type !== "subagent_roster" || item.status !== "ended") {
+    return [...entries];
+  }
+  const subagentId = item.subagentId;
+  let changed = false;
+  const next = entries.map((entry) => {
+    if (
+      entry.item.type !== "tool_call" ||
+      entry.item.status !== "running" ||
+      entry.item.detail.type !== "collab_agent" ||
+      !entry.item.detail.receiverThreadIds.includes(subagentId)
+    ) {
+      return entry;
+    }
+    changed = true;
+    return {
+      ...entry,
+      item: { ...entry.item, status: "canceled" as const },
+    };
+  });
+  return changed ? next : [...entries];
+}
+
 export function formatOutputSourceOption(
   option: OutputSourceOption,
   labels: OutputSourceLabels,
