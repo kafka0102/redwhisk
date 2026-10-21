@@ -749,6 +749,24 @@ impl PtySessionManager {
         result
     }
 
+    /// 强杀并等到子进程退出。展示形式切换后立刻 `thread/resume` 时，
+    /// Codex 仍把刚被杀掉的 TUI 当作这个 thread 的 active writer。
+    pub fn kill_and_wait(&self, session_id: i64) -> Result<(), String> {
+        let session = self.lookup(session_id)?;
+        let mut killer = session
+            .killer
+            .lock()
+            .map_err(|_| "failed to lock PTY killer".to_string())?;
+        killer.kill().map_err(|error| error.to_string())?;
+        drop(killer);
+        drop(session);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while self.contains(session_id) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(25));
+        }
+        Ok(())
+    }
+
     pub fn kill(&self, session_id: i64) -> Result<(), String> {
         #[cfg(test)]
         {
@@ -817,16 +835,6 @@ impl PtySessionManager {
         project_ids.sort_unstable();
         project_ids.dedup();
         project_ids
-    }
-
-    /// 从注册表摘掉会话，不等待进程退出。
-    ///
-    /// 展示形式切换先杀进程再按新形式拉起。退出回调是异步的，若仍留在注册表里，
-    /// 随后的 `contains` 会把已终止的旧进程当成还在跑。
-    pub fn forget(&self, session_id: i64) {
-        if let Ok(mut sessions) = self.store.sessions.lock() {
-            sessions.remove(&session_id);
-        }
     }
 
     pub fn contains(&self, session_id: i64) -> bool {

@@ -18,10 +18,7 @@ fn switch_rejects_deepseek_and_completed_issue_without_changing_snapshot() {
         "json",
     );
     let agent = service(&database.connection);
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
     let error = agent
         .switch_agent_session_display_mode(
             temp_dir.path(),

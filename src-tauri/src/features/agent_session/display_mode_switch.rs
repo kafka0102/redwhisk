@@ -90,14 +90,17 @@ impl<'connection> AgentSessionService<'connection> {
             session.log_path.clone()
         };
 
-        // 先摘注册再杀进程。退出回调会把 Session 标成已结束，不能盖过随后的拉起。
-        release_live_session(agent_registry, pty_sessions, session.id);
+        // 先停进程再改快照。TUI 退出回调会按当时的 display_mode 收尾；
+        // 若先改成 json，杀进程失败时界面仍停在终端，却去读这份 JSONL。
+        if let Err(error) = release_live_session(agent_registry, pty_sessions, session.id) {
+            return Err(display_mode_switch_rejected(session.id, error));
+        }
         self.persist_display_mode_snapshot(&session, target, &log_path)?;
         let mut relaunched = session.clone();
         relaunched.display_mode = target.as_db_str().to_string();
         relaunched.log_path = log_path;
 
-        match target {
+        let relaunch = match target {
             SessionDisplayMode::Json => relaunch_structured(
                 self,
                 data_dir,
@@ -107,7 +110,7 @@ impl<'connection> AgentSessionService<'connection> {
                 agent_registry,
                 broadcaster,
                 factory,
-            )?,
+            ),
             SessionDisplayMode::Tui => relaunch_tui(
                 self,
                 data_dir,
@@ -116,7 +119,12 @@ impl<'connection> AgentSessionService<'connection> {
                 &provider_session_id,
                 agent_registry,
                 pty_sessions,
-            )?,
+            ),
+        };
+        if let Err(error) = relaunch {
+            // 拉起失败时界面仍按旧展示形式渲染。快照留在目标侧会让终端去读 JSONL。
+            let _ = self.persist_display_mode_snapshot(&session, current, &session.log_path);
+            return Err(error);
         }
 
         Ok(SwitchAgentSessionDisplayModeResult {
@@ -212,12 +220,18 @@ fn release_live_session(
     agent_registry: &AgentSessionRegistry,
     pty_sessions: &PtySessionManager,
     session_id: i64,
-) {
+) -> Result<(), &'static str> {
     if let Some(handle) = agent_registry.unregister(session_id) {
         handle.shutdown();
     }
     if pty_sessions.contains(session_id) {
-        let _ = pty_sessions.kill(session_id);
-        pty_sessions.forget(session_id);
+        // 等到退出回调把会话摘掉。先 forget 再 resume，Codex 仍认旧 TUI 为 writer。
+        pty_sessions
+            .kill_and_wait(session_id)
+            .map_err(|_| "displayModeSwitchStopFailed")?;
+        if pty_sessions.contains(session_id) {
+            return Err("displayModeSwitchStopFailed");
+        }
     }
+    Ok(())
 }

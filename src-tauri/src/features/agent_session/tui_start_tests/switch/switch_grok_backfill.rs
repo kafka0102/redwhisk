@@ -30,10 +30,7 @@ fn switch_backfills_grok_provider_session_id_from_native_store() {
     write_grok_summary(&home_dir, &repo_dir, provider_session_id, 1_500);
 
     let agent = service(&database.connection);
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
     let result = agent
         .switch_agent_session_display_mode(
             &data_dir,
@@ -91,10 +88,7 @@ fn switch_still_rejects_grok_tui_when_native_store_has_no_match() {
         "tui",
     );
     let agent = service(&database.connection);
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
     let error = agent
         .switch_agent_session_display_mode(
             &data_dir,

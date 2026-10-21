@@ -32,10 +32,7 @@ fn switch_from_stopped_json_relaunches_tui_with_same_provider_session_without_ch
     let pty = PtySessionManager::new();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
 
     let result = agent
         .switch_agent_session_display_mode(

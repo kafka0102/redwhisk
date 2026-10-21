@@ -43,10 +43,7 @@ fn switch_from_live_tui_replaces_snapshot_relaunches_same_provider_session_and_b
         .expect("live tui");
     assert!(pty.contains(session_id));
 
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
     let result = agent
         .switch_agent_session_display_mode(
             temp_dir.path(),
@@ -97,4 +94,58 @@ fn switch_from_live_tui_replaces_snapshot_relaunches_same_provider_session_and_b
         ]
     );
     assert!(texts.iter().all(|text| !text.contains("SECRET_TOOL")));
+}
+
+#[test]
+fn switch_to_json_keeps_tui_snapshot_when_structured_relaunch_fails() {
+    let temp_dir = tempdir().expect("temp");
+    let repo_dir = temp_dir.path().join("repo");
+    create_git_repo(&repo_dir);
+    let database = open_db(temp_dir.path());
+    let session_id = seed_switch_session(
+        &database.connection,
+        &repo_dir.to_string_lossy(),
+        "codex",
+        Some("thread-still-held"),
+        "stopped",
+        "running",
+        "codex",
+        "tui",
+        "tui",
+    );
+    let original_log = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find")
+        .expect("session")
+        .log_path;
+    let agent = service(&database.connection);
+    let mut factory = RecordingFactory::default();
+    factory.fail_start = true;
+
+    let error = agent
+        .switch_agent_session_display_mode(
+            temp_dir.path(),
+            SwitchAgentSessionDisplayModeInput {
+                project_id: 1,
+                session_id,
+            },
+            &AgentSessionRegistry::new(),
+            &AgentEventBroadcaster::new(),
+            &PtySessionManager::new(),
+            &factory,
+            NativeSessionHomes {
+                codex_home: Some(temp_dir.path()),
+                user_home: None,
+            },
+        )
+        .expect_err("resume rejected");
+
+    assert_eq!(error.code, CommandErrorCode::AgentSessionStreamFailed);
+    let record = AgentSessionRepository::new(&database.connection)
+        .find_by_id(session_id)
+        .expect("find")
+        .expect("session");
+    assert_eq!(record.display_mode, "tui");
+    assert_eq!(record.log_path, original_log);
+    assert_eq!(record.status, AgentSessionStatus::Stopped);
 }

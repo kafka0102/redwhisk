@@ -20,10 +20,7 @@ fn switch_to_json_succeeds_when_native_session_log_is_missing() {
         "json",
     );
     let agent = service(&database.connection);
-    let factory = RecordingFactory {
-        resume_thread_ids: std::sync::Mutex::new(Vec::new()),
-        sends: Arc::new(AtomicUsize::new(0)),
-    };
+    let factory = RecordingFactory::default();
     let result = agent
         .switch_agent_session_display_mode(
             temp_dir.path(),

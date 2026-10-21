@@ -28,6 +28,17 @@ pub(super) use crate::types::errors::CommandErrorCode;
 pub(super) struct RecordingFactory {
     pub(super) resume_thread_ids: std::sync::Mutex<Vec<Option<String>>>,
     pub(super) sends: Arc<AtomicUsize>,
+    pub(super) fail_start: bool,
+}
+
+impl Default for RecordingFactory {
+    fn default() -> Self {
+        Self {
+            resume_thread_ids: std::sync::Mutex::new(Vec::new()),
+            sends: Arc::new(AtomicUsize::new(0)),
+            fail_start: false,
+        }
+    }
 }
 
 impl AgentSessionProviderFactory for RecordingFactory {
@@ -39,6 +50,11 @@ impl AgentSessionProviderFactory for RecordingFactory {
             .lock()
             .expect("lock")
             .push(request.resume_thread_id.clone());
+        if self.fail_start {
+            return Err(AgentSessionError::Protocol(
+                "thread already has an active writer".to_string(),
+            ));
+        }
         Ok(StartedSession {
             handle: Arc::new(IdleHandle {
                 thread_id: request.resume_thread_id.clone().unwrap_or_default(),
