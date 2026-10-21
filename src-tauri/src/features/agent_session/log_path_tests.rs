@@ -284,9 +284,9 @@ fn build_tui_archive_renders_session_log_turns_with_fixed_spacing() {
         &codex_home,
         &[
             session_meta_line(PROVIDER_SESSION_ID),
-            // 用户块含 Markdown 两空格硬换行，必须原样保留。
+            // 用户块逐行加 ›；行尾空白在 trim 后不保留。
             item_completed_line("UserMessage", "turn-1", "text", "第一行  \n第二行"),
-            // 结论块含多余空行与交付标签：压空行、去标签。
+            // 结论块保留连续空行，只去掉交付标签。
             item_completed_line(
                 "AgentMessage",
                 "turn-1",
@@ -314,19 +314,15 @@ fn build_tui_archive_renders_session_log_turns_with_fixed_spacing() {
 
     let content = fs::read_to_string(&archive.archive_path).expect("read archive");
     assert!(
-        content.contains("第一行  \n第二行"),
-        "hard line break must be preserved, got={content:?}"
+        content.contains("› 第一行\n› 第二行"),
+        "each user line is marked, got={content:?}"
     );
     assert!(
-        !content.contains("\n\n\n"),
-        "consecutive blank lines must collapse to one, got={content:?}"
+        content.contains("结论一\n\n\n结论二 摘要"),
+        "blank runs inside a conclusion stay, got={content:?}"
     );
     assert!(
-        content.contains("结论一\n\n结论二 摘要"),
-        "blank runs inside a block collapse to one, got={content:?}"
-    );
-    assert!(
-        content.contains("追问\n\n结论三"),
+        content.contains("› 追问\n\n结论三"),
         "turn user block and conclusion block separated by one blank line, got={content:?}"
     );
     assert_eq!(archive.latest_output.as_deref(), Some("结论三"));

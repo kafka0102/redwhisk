@@ -99,7 +99,7 @@ pub(super) fn codex_session_archive_text(source: TuiSessionLogSource<'_>) -> Opt
 fn render_session_summary_text(summary: &CodexSessionSummary) -> String {
     let mut blocks: Vec<String> = Vec::new();
     for turn in &summary.turns {
-        push_normalized_block(&mut blocks, &turn.user_text);
+        push_user_archive_block(&mut blocks, &turn.user_text);
         if let Some(conclusion) = turn.final_assistant_text.as_deref() {
             push_normalized_block(&mut blocks, conclusion);
         }
@@ -114,27 +114,45 @@ fn push_normalized_block(blocks: &mut Vec<String>, text: &str) {
     }
 }
 
-/// 去交付用 `<issue-comment>` 标签，块内连续空行压到一行。
+pub(super) fn push_user_archive_block(blocks: &mut Vec<String>, text: &str) {
+    let normalized = normalize_archive_block(text);
+    let marked = mark_user_archive_block(&normalized);
+    if !marked.is_empty() {
+        blocks.push(marked);
+    }
+}
+
+/// 用户块每一行以 `› ` 开头；原文空行写成单独一行 `›`。已有引导符不重复加。
+pub(super) fn mark_user_archive_block(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                return "›".to_string();
+            }
+            if trimmed.starts_with('›') || trimmed.starts_with('❯') {
+                return trimmed.to_string();
+            }
+            format!("› {trimmed}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 去交付用 `<issue-comment>` 标签，保留段落空行。
 ///
-/// 有意保留行尾空白（含 Markdown 两空格硬换行），故不复用
-/// `terminal_archive_clean::finalize_archive_text`——后者会 trim 行尾。
+/// 用户块随后经 `mark_user_archive_block` trim，行尾空白（含 Markdown 两空格硬换行）不保留。
 pub(super) fn normalize_archive_block(text: &str) -> String {
     let without_tags = text
         .replace("<issue-comment>", "")
         .replace("</issue-comment>", "");
 
     let mut lines: Vec<&str> = Vec::new();
-    let mut blank_run = 0usize;
     for line in without_tags.lines() {
         if line.trim().is_empty() {
-            blank_run += 1;
-            if blank_run > 1 {
-                continue;
-            }
             lines.push("");
             continue;
         }
-        blank_run = 0;
         lines.push(line);
     }
 
@@ -145,4 +163,20 @@ pub(super) fn normalize_archive_block(text: &str) -> String {
         lines.pop();
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_archive_block;
+
+    #[test]
+    fn user_block_marks_every_line_including_blank_and_keeps_markdown_blanks() {
+        let user = normalize_archive_block("第一行\n\n第二行");
+        let marked = super::mark_user_archive_block(&user);
+        assert_eq!(marked, "› 第一行\n›\n› 第二行");
+
+        let conclusion = normalize_archive_block("# 结论\n\n第一段。\n\n\n第二段。");
+        assert_eq!(conclusion, "# 结论\n\n第一段。\n\n\n第二段。");
+        assert!(!conclusion.lines().any(|line| line.starts_with('›')));
+    }
 }

@@ -97,33 +97,6 @@ fn turn_without_conclusion_keeps_only_user_block() {
 }
 
 #[test]
-fn multiline_user_block_preserved_with_spacing_contract() {
-    let input = "\
-› 第一行用户输入：
-
-  第二行继续说明。
-
-  第三行附件说明。
-
-• Ran ls
-  └ x
-
-• 最终答复一行
-";
-    let got = extract_tui_archive_conclusion_text(input);
-    let expected = "\
-› 第一行用户输入：
-
-  第二行继续说明。
-
-  第三行附件说明。
-
-• 最终答复一行";
-    assert_eq!(got, expected);
-    assert!(!got.contains("\n\n\n"), "块内连续空行最多 1: {got:?}");
-}
-
-#[test]
 fn drops_inline_working_sticky_chrome_and_fold_lines() {
     let input = "\
 pre•Working(17s • esc to interrupt) › Find and fix · ~/path
@@ -176,6 +149,7 @@ fn decorative_lines_inside_conclusion_do_not_truncate() {
 • ## 结论
 
   首屏同步加载过重。
+
 
   主包从 5.8MB 降到 1.1MB。";
     assert_eq!(got, expected);

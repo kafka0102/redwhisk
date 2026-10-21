@@ -13,7 +13,9 @@ use serde_json::Value;
 use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::AgentSessionRecord;
 
-use super::codex_tui_archive::{normalize_archive_block, TuiSessionLogSource};
+use super::codex_tui_archive::{
+    normalize_archive_block, push_user_archive_block, TuiSessionLogSource,
+};
 use super::service::preferred_session_cwd;
 
 const CHAT_HISTORY_FILE_NAME: &str = "chat_history.jsonl";
@@ -95,7 +97,7 @@ pub(super) fn grok_session_archive_text(source: TuiSessionLogSource<'_>) -> Opti
     }
     let mut blocks = Vec::new();
     for turn in turns {
-        push_block(&mut blocks, &turn.user_text);
+        push_user_archive_block(&mut blocks, &turn.user_text);
         if let Some(conclusion) = turn.conclusion.as_deref() {
             push_block(&mut blocks, conclusion);
         }

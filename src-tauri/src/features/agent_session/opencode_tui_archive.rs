@@ -11,7 +11,9 @@ use serde_json::Value;
 
 use crate::types::agent_profile::AgentType;
 
-use super::codex_tui_archive::{normalize_archive_block, TuiSessionLogSource};
+use super::codex_tui_archive::{
+    normalize_archive_block, push_user_archive_block, TuiSessionLogSource,
+};
 
 pub(super) fn opencode_session_archive_text(source: TuiSessionLogSource<'_>) -> Option<String> {
     let turns = opencode_session_turns(source)?;
@@ -20,7 +22,7 @@ pub(super) fn opencode_session_archive_text(source: TuiSessionLogSource<'_>) -> 
     }
     let mut blocks = Vec::new();
     for turn in turns {
-        push_block(&mut blocks, &turn.user_text);
+        push_user_archive_block(&mut blocks, &turn.user_text);
         if let Some(conclusion) = turn.conclusion.as_deref() {
             push_block(&mut blocks, conclusion);
         }

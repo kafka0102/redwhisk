@@ -190,8 +190,8 @@ fn build_tui_archive_prefers_grok_session_store_turns() {
         "composer fragment must not win: {content:?}"
     );
     assert!(
-        content.contains("第一个问题\n\n第一轮结论"),
-        "blocks separated by one blank line: {content:?}"
+        content.contains("› 第一个问题\n\n第一轮结论"),
+        "user line is marked and blocks are separated by one blank line: {content:?}"
     );
     assert_eq!(archive.latest_output.as_deref(), Some("第三轮结论"));
 }
@@ -234,7 +234,7 @@ fn build_tui_archive_keeps_only_user_query_when_grok_turn_never_finishes() {
     assert!(content.contains("只有工具的一轮"), "{content:?}");
     assert!(!content.contains("还在调工具"), "{content:?}");
     assert!(!content.contains("旧 PTY"), "{content:?}");
-    assert_eq!(archive.latest_output.as_deref(), Some("只有工具的一轮"));
+    assert_eq!(archive.latest_output.as_deref(), Some("› 只有工具的一轮"));
 }
 
 #[test]

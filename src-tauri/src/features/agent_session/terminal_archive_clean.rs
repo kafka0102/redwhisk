@@ -124,24 +124,18 @@ fn line_keys(lines: &[&str]) -> std::collections::HashSet<String> {
         .collect()
 }
 
-/// 写档收尾：去掉交付标签，保留 Markdown；折叠多余空行。
+/// 写档收尾：去掉交付标签，保留 Markdown 与结论里的连续空行。
 fn finalize_archive_text(text: &str) -> String {
     let without_tags = text
         .replace("<issue-comment>", "")
         .replace("</issue-comment>", "");
     let mut cleaned: Vec<String> = Vec::new();
-    let mut blank_run = 0usize;
     for line in without_tags.lines() {
         let trimmed_end = line.trim_end();
         if trimmed_end.trim().is_empty() {
-            blank_run += 1;
-            if blank_run > 1 {
-                continue;
-            }
             cleaned.push(String::new());
             continue;
         }
-        blank_run = 0;
         cleaned.push(trimmed_end.to_string());
     }
     while cleaned.first().is_some_and(|line| line.is_empty()) {
@@ -180,7 +174,7 @@ fn extract_user_block(lines: &[&str], start: usize, turn_end: usize) -> (String,
         break;
     }
 
-    let block = format_block_lines(&lines[start..=last_content]);
+    let block = format_user_block_lines(&lines[start..=last_content]);
     (block, last_content + 1)
 }
 
@@ -259,32 +253,37 @@ fn join_blocks_with_spacing(blocks: &[String]) -> String {
     blocks.join("\n\n")
 }
 
+/// 用户块每一行以 `› ` 开头；原文空行写成单独一行 `›`。已有引导符不重复加。
+fn format_user_block_lines(lines: &[&str]) -> String {
+    let cleaned = trim_blank_edges(lines.iter().map(|line| line.trim_end().to_string()));
+    super::codex_tui_archive::mark_user_archive_block(&cleaned.join("\n"))
+}
+
+/// 结论块保留来源里的段落空行，不再把连续空行压成一行。
 fn format_block_lines(lines: &[&str]) -> String {
     let mut cleaned: Vec<String> = Vec::new();
-    let mut blank_run = 0usize;
 
     for line in lines {
         let trimmed_end = line.trim_end();
         if trimmed_end.trim().is_empty() {
-            blank_run += 1;
-            if blank_run > 1 {
-                continue;
-            }
             cleaned.push(String::new());
             continue;
         }
-        blank_run = 0;
         cleaned.push(trimmed_end.to_string());
     }
 
+    trim_blank_edges(cleaned.into_iter()).join("\n")
+}
+
+fn trim_blank_edges(lines: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut cleaned: Vec<String> = lines.into_iter().collect();
     while cleaned.first().is_some_and(|line| line.is_empty()) {
         cleaned.remove(0);
     }
     while cleaned.last().is_some_and(|line| line.is_empty()) {
         cleaned.pop();
     }
-
-    cleaned.join("\n")
+    cleaned
 }
 
 /// 无可用结论时的回退清理：去掉 spinner / Working / 多标记族过程行，合并过多空行。
@@ -332,3 +331,7 @@ fn light_clean_terminal_archive_text(text: &str) -> String {
 #[cfg(test)]
 #[path = "terminal_archive_clean_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "terminal_archive_clean_user_mark_test.rs"]
+mod user_mark_tests;

@@ -351,3 +351,7 @@ mod native_session_archive_tests;
 #[cfg(test)]
 #[path = "log_path_opencode_archive_tests.rs"]
 mod opencode_archive_tests;
+
+#[cfg(test)]
+#[path = "log_path_user_mark_archive_tests.rs"]
+mod user_mark_archive_tests;
