@@ -12,7 +12,7 @@ use crate::features::agent_session::timeline::{
     latest_model_from_session_log,
 };
 use crate::types::agent_session::{
-    AgentSessionRecord, ReadAgentTimelineResult, TimelineHistoryItem,
+    AgentSessionRecord, AgentSessionStatus, ReadAgentTimelineResult, TimelineHistoryItem,
 };
 use crate::types::agent_session_stream::AgentTimelineItem;
 use crate::types::errors::CommandError;
@@ -40,6 +40,14 @@ fn read_json_timeline(
     handle: Option<Arc<dyn AgentSessionHandle>>,
     since_log_offset: Option<u64>,
 ) -> Result<ReadAgentTimelineResult, CommandError> {
+    if session.status != AgentSessionStatus::Running {
+        crate::features::agent_session::timeline::close_running_subagents_in_log(
+            &session.log_path,
+            session.provider_session_id.as_deref(),
+            session.project_id,
+            session.id,
+        )?;
+    }
     let (mut history, reset_required) =
         crate::features::agent_session::timeline::read_timeline_from_log_path_since(
             &session.log_path,
@@ -145,7 +153,7 @@ mod tests {
         AgentSessionAttention, AgentSessionStatus, WorkspaceMode, WorktreeOwner,
     };
     use crate::types::agent_session_stream::{
-        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem,
+        AgentStreamEvent, AgentStreamEventEnvelope, AgentTimelineItem, SubagentRosterStatus,
     };
     use std::fs;
 
@@ -347,5 +355,113 @@ mod tests {
                 status: crate::types::agent_session_stream::SubagentRosterStatus::Ended,
             }]
         );
+    }
+
+    #[test]
+    fn stopped_json_session_reopen_ends_subagent_left_running_when_the_app_died() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("structured.jsonl");
+        let events = [
+            roster_envelope("thr_done", SubagentRosterStatus::Running, 1),
+            roster_envelope("thr_done", SubagentRosterStatus::Ended, 2),
+            roster_envelope("thr_live", SubagentRosterStatus::Running, 3),
+            AgentStreamEventEnvelope {
+                project_id: 1,
+                session_id: 7,
+                seq: 4,
+                epoch: "epoch-test".to_string(),
+                event: AgentStreamEvent::TurnCanceled {
+                    turn_id: None,
+                    reason: "no_interruptible_turn".to_string(),
+                },
+                log_offset: None,
+            },
+        ];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log, format!("{lines}\n")).expect("write structured log");
+
+        let mut session = sample_session("json", log.to_string_lossy().as_ref());
+        session.status = AgentSessionStatus::Stopped;
+        session.provider_session_id = Some("thr_parent".to_string());
+        let result = read_timeline_for_session(&session, None, None).unwrap();
+        let live = result
+            .items
+            .iter()
+            .rev()
+            .find_map(|entry| match &entry.item {
+                AgentTimelineItem::SubagentRoster {
+                    subagent_id,
+                    status,
+                } if subagent_id == "thr_live" => Some(*status),
+                _ => None,
+            });
+        assert_eq!(live, Some(SubagentRosterStatus::Ended));
+        let persisted = fs::read_to_string(&log).expect("read log");
+        let ended_live = persisted
+            .lines()
+            .filter(|line| {
+                line.contains("\"subagentId\":\"thr_live\"")
+                    && line.contains("\"status\":\"ended\"")
+            })
+            .count();
+        assert_eq!(ended_live, 1, "重启收口应把仍在跑的子智能体写回日志");
+    }
+
+    #[test]
+    fn running_json_session_keeps_live_subagent_roster() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("structured.jsonl");
+        let events = [roster_envelope(
+            "thr_live",
+            SubagentRosterStatus::Running,
+            1,
+        )];
+        let lines = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(&log, format!("{lines}\n")).expect("write structured log");
+
+        let mut session = sample_session("json", log.to_string_lossy().as_ref());
+        session.status = AgentSessionStatus::Running;
+        let before = fs::read_to_string(&log).expect("read log");
+        let result = read_timeline_for_session(&session, None, None).unwrap();
+        let live = result.items.iter().find_map(|entry| match &entry.item {
+            AgentTimelineItem::SubagentRoster {
+                subagent_id,
+                status,
+            } if subagent_id == "thr_live" => Some(*status),
+            _ => None,
+        });
+        assert_eq!(live, Some(SubagentRosterStatus::Running));
+        assert_eq!(fs::read_to_string(&log).expect("read log"), before);
+    }
+
+    fn roster_envelope(
+        subagent_id: &str,
+        status: SubagentRosterStatus,
+        seq: u64,
+    ) -> AgentStreamEventEnvelope {
+        AgentStreamEventEnvelope {
+            project_id: 1,
+            session_id: 7,
+            seq,
+            epoch: "epoch-test".to_string(),
+            event: AgentStreamEvent::Timeline {
+                item: AgentTimelineItem::SubagentRoster {
+                    subagent_id: subagent_id.to_string(),
+                    status,
+                },
+                turn_id: None,
+                seq: 0,
+                timestamp: seq as i64,
+            },
+            log_offset: None,
+        }
     }
 }

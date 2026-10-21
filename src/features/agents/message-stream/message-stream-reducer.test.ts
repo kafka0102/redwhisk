@@ -12,6 +12,7 @@ import {
 import {
   formatOutputSourceOption,
   projectMessageStream,
+  turnStatusForComposer,
 } from "./output-source";
 import type { MessageStreamState } from "./message-stream-types";
 
@@ -1207,6 +1208,49 @@ describe("messageStreamReducer", () => {
         event: { type: "turn_canceled", turnId: "t1", reason: "用户取消" },
       });
       expect(state.turnStatus).toBe("canceled");
+    });
+
+    it("没有可中断的 turn 时收口仍在跑的子智能体，停止按钮不再保持运行", () => {
+      let state = messageStreamReducer(createInitialState(), {
+        type: "EVENT",
+        event: { type: "turn_started", turnId: "turn_parent" },
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "subagent_roster",
+          subagentId: "thr_live",
+          status: "running",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: timelineEvent({
+          type: "subagent_roster",
+          subagentId: "thr_done",
+          status: "ended",
+        }),
+      });
+      state = messageStreamReducer(state, {
+        type: "EVENT",
+        event: {
+          type: "turn_canceled",
+          turnId: null,
+          reason: "no_interruptible_turn",
+        },
+      });
+
+      expect(state.turnStatus).toBe("canceled");
+      expect(state.subagentInterrupted).toBe(true);
+      expect(
+        state.subagents.find((entry) => entry.id === "thr_live"),
+      ).toMatchObject({ ended: true, live: false });
+      expect(
+        state.subagents.find((entry) => entry.id === "thr_done")?.ended,
+      ).toBe(true);
+      expect(turnStatusForComposer(state.turnStatus, state.subagents)).not.toBe(
+        "running",
+      );
     });
 
     it("turn_completed 正常收尾（end_turn + assistant 消息）不标记异常中断", () => {

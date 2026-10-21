@@ -8,6 +8,11 @@ use crate::types::agent_session_stream::{
 };
 use crate::types::errors::CommandError;
 
+#[path = "timeline_orphan_subagents.rs"]
+mod timeline_orphan_subagents;
+
+pub(crate) use timeline_orphan_subagents::close_running_subagents_in_log;
+
 use super::service::{agent_session_start_error, strip_terminal_control_sequences};
 #[path = "timeline_replay.rs"]
 mod timeline_replay;

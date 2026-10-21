@@ -2707,6 +2707,13 @@ impl AgentSessionService<'_> {
         .map_err(agent_session_database_error)?;
 
         transaction.commit().map_err(agent_session_database_error)?;
+        // 进程已不在。花名册若停在 running，重开后停止按钮会一直在。
+        super::timeline::close_running_subagents_in_log(
+            &session.log_path,
+            session.provider_session_id.as_deref(),
+            session.project_id,
+            session.id,
+        )?;
         Ok(())
     }
 }

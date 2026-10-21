@@ -356,8 +356,34 @@ function applyEvent(
       };
     }
 
-    case "turn_canceled":
-      return { ...state, turnStatus: "canceled" };
+    case "turn_canceled": {
+      if (event.reason !== "no_interruptible_turn") {
+        return { ...state, turnStatus: "canceled" };
+      }
+      // 进程已经没了，点停止不会有可中断的 turn。花名册仍标着 live 时
+      // composer 会继续显示停止，输入也发不出去。这里把还在跑的子智能体收口。
+      const liveIds = state.subagents.filter(
+        (entry) => entry.live === true && !entry.ended,
+      );
+      let entries = state.entries;
+      let subagents = state.subagents;
+      for (const entry of liveIds) {
+        const item: AgentTimelineItem = {
+          type: "subagent_roster",
+          subagentId: entry.id,
+          status: "ended",
+        };
+        entries = closeEndedCollabLaunches(entries, item);
+        subagents = foldSubagentRoster(subagents, item);
+      }
+      return {
+        ...state,
+        entries,
+        subagents,
+        turnStatus: "canceled",
+        subagentInterrupted: liveIds.length > 0 || state.subagentInterrupted,
+      };
+    }
 
     case "timeline": {
       const subagents = foldSubagentRoster(state.subagents, event.item);

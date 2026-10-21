@@ -628,8 +628,16 @@ pub async fn cancel_agent_turn(
     tauri::async_runtime::spawn_blocking(move || {
         let database = open_agent_session_database(&app)?;
         let service = build_agent_session_service(&database.connection);
-        service.find_project_session_record(input.project_id, input.session_id)?;
+        let session = service.find_project_session_record(input.project_id, input.session_id)?;
         let Some(handle) = agent_sessions.get(input.session_id) else {
+            // 进程已退出：没有可中断的 turn。收口日志里的 running 子智能体，
+            // 并广播取消，让停止按钮回到可输入，而不是停在错误提示上。
+            super::timeline::close_running_subagents_in_log(
+                &session.log_path,
+                session.provider_session_id.as_deref(),
+                input.project_id,
+                input.session_id,
+            )?;
             broadcaster.emit_stream_event(
                 input.project_id,
                 input.session_id,
@@ -638,9 +646,7 @@ pub async fn cancel_agent_turn(
                     reason: "no_interruptible_turn".into(),
                 },
             );
-            return Err(super::service::agent_session_error_to_command_error(
-                AgentSessionError::NoInterruptibleTurn,
-            ));
+            return Ok(());
         };
 
         match handle.cancel_turn() {
