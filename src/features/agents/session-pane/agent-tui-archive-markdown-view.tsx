@@ -19,6 +19,80 @@ type LoadState =
   | { kind: "empty" }
   | { kind: "error"; message: string };
 
+type ReviewCard =
+  | { kind: "user"; text: string }
+  | { kind: "conclusion"; text: string };
+
+/** 连续 `›` 行是一张用户卡；其余行直到下一个 `›` 是一张结论卡。无标记则整篇 Markdown。 */
+function splitReviewCards(markdown: string): ReviewCard[] | null {
+  const lines = markdown.split("\n");
+  if (!lines.some((line) => line.startsWith("›"))) {
+    return null;
+  }
+  const cards: ReviewCard[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (lines[index] === "") {
+      index += 1;
+      continue;
+    }
+    if (lines[index]?.startsWith("›")) {
+      const userLines: string[] = [];
+      while (index < lines.length && lines[index]?.startsWith("›")) {
+        const line = lines[index] ?? "";
+        const body = line.startsWith("› ") ? line.slice(2) : line.slice(1);
+        userLines.push(body);
+        index += 1;
+      }
+      cards.push({ kind: "user", text: userLines.join("\n") });
+      continue;
+    }
+    const conclusionLines: string[] = [];
+    while (index < lines.length && !lines[index]?.startsWith("›")) {
+      conclusionLines.push(lines[index] ?? "");
+      index += 1;
+    }
+    while (conclusionLines[0] === "") {
+      conclusionLines.shift();
+    }
+    while (conclusionLines[conclusionLines.length - 1] === "") {
+      conclusionLines.pop();
+    }
+    if (conclusionLines.length > 0) {
+      cards.push({ kind: "conclusion", text: conclusionLines.join("\n") });
+    }
+  }
+  return cards;
+}
+
+function ReviewCards({ cards }: { cards: ReviewCard[] }) {
+  return (
+    <div className="agent-tui-archive-markdown__body">
+      {cards.map((card, index) =>
+        card.kind === "user" ? (
+          <article
+            key={`user-${index}`}
+            className="agents-message__entry agents-message__entry--user"
+          >
+            <div className="agents-message__bubble agents-message__bubble--user">
+              <p className="agents-message__text">{card.text}</p>
+            </div>
+          </article>
+        ) : (
+          <article
+            key={`conclusion-${index}`}
+            className="agents-message__entry agents-message__entry--assistant"
+          >
+            <div className="agents-message__bubble agents-message__bubble--assistant">
+              <AgentMarkdown>{card.text}</AgentMarkdown>
+            </div>
+          </article>
+        ),
+      )}
+    </div>
+  );
+}
+
 /**
  * TUI Issue 完成归档回看：读磁盘快照并用 AgentMarkdown 渲染（对齐 JSON 富文本）。
  * 不挂 xterm，不自动 resume。
@@ -96,10 +170,20 @@ export function AgentTuiArchiveMarkdownView({
         </p>
       ) : null}
       {state.kind === "ready" ? (
-        <div className="agent-tui-archive-markdown__body">
-          <AgentMarkdown>{state.markdown}</AgentMarkdown>
-        </div>
+        <ReadyArchive markdown={state.markdown} />
       ) : null}
     </div>
   );
+}
+
+function ReadyArchive({ markdown }: { markdown: string }) {
+  const cards = splitReviewCards(markdown);
+  if (cards == null) {
+    return (
+      <div className="agent-tui-archive-markdown__body">
+        <AgentMarkdown>{markdown}</AgentMarkdown>
+      </div>
+    );
+  }
+  return <ReviewCards cards={cards} />;
 }
