@@ -1,10 +1,12 @@
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -12,12 +14,32 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::agent::terminal_log_tail::{safe_terminal_log_tail_start, take_terminal_log_tail};
+use crate::agent::terminal_log_tail::{read_log_suffix, take_terminal_log_tail};
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 
 const RESTORE_BUFFER_MAX_BYTES: usize = 1_048_576;
 const LOG_MAX_BYTES: usize = 32 * 1024 * 1024;
+
+#[cfg(test)]
+thread_local! {
+    static TERMINAL_SNAPSHOT_BYTES: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn note_terminal_snapshot_bytes(len: usize) {
+    TERMINAL_SNAPSHOT_BYTES.with(|bytes| bytes.set(len));
+}
+
+#[cfg(test)]
+fn reset_terminal_snapshot_bytes() {
+    TERMINAL_SNAPSHOT_BYTES.with(|bytes| bytes.set(0));
+}
+
+#[cfg(test)]
+fn terminal_snapshot_bytes() -> usize {
+    TERMINAL_SNAPSHOT_BYTES.with(|bytes| bytes.get())
+}
 const LOG_FLUSH_EVERY_BYTES: usize = 4 * 1024;
 const LOG_TRIM_CHECK_EVERY_BYTES: usize = 8 * 1024 * 1024;
 const EMIT_COALESCE_MAX_BYTES: usize = 64 * 1024;
@@ -1144,14 +1166,36 @@ pub(crate) fn trim_log_file(path: &Path, max_bytes: usize) -> Result<(), String>
         return Ok(());
     }
 
-    let content = std::fs::read(path).map_err(|error| error.to_string())?;
-    if content.len() <= max_bytes {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    let len = file.metadata().map_err(|error| error.to_string())?.len();
+    if len <= max_bytes as u64 {
         return Ok(());
     }
 
+    let suffix = read_log_suffix(path, max_bytes).map_err(|error| error.to_string())?;
+    let kept = trim_suffix(&suffix, max_bytes);
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| error.to_string())?;
+    file.write_all(kept).map_err(|error| error.to_string())?;
+    file.set_len(kept.len() as u64)
+        .map_err(|error| error.to_string())?;
+    file.flush().map_err(|error| error.to_string())
+}
+
+/// 在已经读入的后缀上决定保留哪一段。语义与整文件裁剪一致。
+fn trim_suffix(content: &[u8], max_bytes: usize) -> &[u8] {
+    use crate::agent::terminal_log_tail::safe_terminal_log_tail_start;
+
+    if content.len() <= max_bytes {
+        return content;
+    }
     // TUI 日志几乎全是 CSI/OSC：优先按转义/UTF-8 边界裁，再尽量贴到最近换行，
     // 避免半截 ESC 序列残留在文件头。
-    let mut cut = safe_terminal_log_tail_start(&content, max_bytes);
+    let mut cut = safe_terminal_log_tail_start(content, max_bytes);
     if let Some(relative) = content[cut..].iter().position(|byte| *byte == b'\n') {
         let newline_cut = cut.saturating_add(relative).saturating_add(1);
         if newline_cut < content.len() && content.len() - newline_cut >= max_bytes.saturating_div(2)
@@ -1159,8 +1203,7 @@ pub(crate) fn trim_log_file(path: &Path, max_bytes: usize) -> Result<(), String>
             cut = newline_cut;
         }
     }
-
-    std::fs::write(path, &content[cut..]).map_err(|error| error.to_string())
+    &content[cut..]
 }
 
 impl PtyRestoreBuffer {
@@ -1262,7 +1305,9 @@ pub fn read_terminal_snapshot(path: &Path, max_bytes: usize) -> Result<String, S
         return Ok(String::new());
     }
 
-    let content = std::fs::read(path).map_err(|error| error.to_string())?;
+    let content = read_log_suffix(path, max_bytes).map_err(|error| error.to_string())?;
+    #[cfg(test)]
+    note_terminal_snapshot_bytes(content.len());
     let tail = take_terminal_log_tail(&content, max_bytes);
     Ok(String::from_utf8_lossy(tail).to_string())
 }
@@ -1505,6 +1550,7 @@ impl Write for CapturingWriter {
 mod tests {
     use super::{
         accepts_proactive_theme_osc, build_shell_command_line, build_shell_keepalive_command_line,
+        read_terminal_snapshot, reset_terminal_snapshot_bytes, terminal_snapshot_bytes,
         trim_log_file, PtyCommandMode, PtySessionManager, TerminalBackgroundTheme,
     };
     use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
@@ -1974,6 +2020,34 @@ mod tests {
         let content = std::fs::read_to_string(&path).expect("read trimmed");
         assert!(content.len() <= 10);
         assert!(content.contains("dddd") || content.ends_with("dddd\n") || content.contains("ccc"));
+    }
+
+    #[test]
+    fn read_terminal_snapshot_of_a_large_log_does_not_load_the_prefix() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("huge.log");
+        let mut file = std::fs::File::create(&path).expect("create log");
+        let prefix = vec![b'x'; 2 * 1024 * 1024];
+        file.write_all(&prefix).expect("write prefix");
+        let tail = vec![b'Z'; 128];
+        file.write_all(&tail).expect("write tail");
+        drop(file);
+
+        reset_terminal_snapshot_bytes();
+        let snapshot = read_terminal_snapshot(&path, 64).expect("snapshot");
+        assert!(
+            snapshot.chars().all(|ch| ch == 'Z'),
+            "expected only the log tail, got {snapshot:?}"
+        );
+        assert!(
+            snapshot.len() <= 64,
+            "snapshot longer than requested: {snapshot:?}"
+        );
+        let loaded = terminal_snapshot_bytes();
+        assert!(
+            loaded <= 64 + 8_192 + 4_096,
+            "opening the snapshot loaded {loaded} bytes of a multi-megabyte log"
+        );
     }
 
     #[test]

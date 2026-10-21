@@ -7,12 +7,12 @@
 
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{Seek, Write};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter};
 
+use crate::agent::session_log_coalesce::SnapshotLogState;
 use crate::agent::session_token_usage::{
     persist_session_token_usage_with, session_token_usage_from_event, SessionTokenAccumulator,
 };
@@ -69,6 +69,7 @@ pub struct AgentEventBroadcaster {
     app_handle: std::sync::Arc<OnceLock<AppHandle>>,
     cursors: std::sync::Arc<Mutex<HashMap<i64, SessionCursor>>>,
     persistence: std::sync::Arc<Mutex<HashMap<i64, SessionPersistenceState>>>,
+    snapshot_logs: std::sync::Arc<Mutex<HashMap<i64, SnapshotLogState>>>,
     log_write_lock: std::sync::Arc<Mutex<()>>,
     turn_completed_handler: std::sync::Arc<OnceLock<TurnCompletedHandler>>,
 }
@@ -130,6 +131,9 @@ impl AgentEventBroadcaster {
         }
         if let Ok(mut persistence) = self.persistence.lock() {
             persistence.remove(&session_id);
+        }
+        if let Ok(mut snapshot_logs) = self.snapshot_logs.lock() {
+            snapshot_logs.remove(&session_id);
         }
     }
 
@@ -240,13 +244,20 @@ impl AgentEventBroadcaster {
             return false;
         };
 
-        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_path) {
-            // 偏移记这一行的起点。log_offset 写盘时是空的，所以不会进 JSONL。
-            if let Ok(offset) = file.stream_position() {
-                if let Ok(line) = serde_json::to_string(&*envelope) {
-                    if writeln!(file, "{line}").is_ok()
-                        && matches!(envelope.event, AgentStreamEvent::Timeline { .. })
-                    {
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(&log_path)
+        {
+            if let Ok(mut snapshot_logs) = self.snapshot_logs.lock() {
+                let state = snapshot_logs.entry(envelope.session_id).or_default();
+                if state.log_path() != Some(log_path.as_str()) {
+                    state.reset_for_path(log_path.clone());
+                }
+                // 同一条助手/推理快照的中间帧不追加。偏移只在真正落盘时填上。
+                if let Ok(Some(offset)) = state.write_envelope(&mut file, envelope) {
+                    if matches!(envelope.event, AgentStreamEvent::Timeline { .. }) {
                         envelope.log_offset = Some(offset);
                     }
                 }

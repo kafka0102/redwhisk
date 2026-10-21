@@ -9,6 +9,34 @@ const ESC_LOOKBACK_MAX: usize = 8_192;
 /// 为完整包含跨边界 ESC 序列，允许 tail 略超 max_bytes 的上限。
 const ESC_OVERFLOW_SLACK: usize = 4_096;
 
+/// 从文件末尾读取截尾所需的后缀。
+///
+/// 只覆盖 `max_bytes` 加上转义回看窗口，避免为了取最后几 KB 把几十 GB 的会话日志读进内存。
+pub(crate) fn read_log_suffix(
+    path: &std::path::Path,
+    max_bytes: usize,
+) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    if max_bytes == 0 {
+        return Ok(Vec::new());
+    }
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+    let budget = (max_bytes as u64)
+        .saturating_add(ESC_LOOKBACK_MAX as u64)
+        .saturating_add(ESC_OVERFLOW_SLACK as u64);
+    let read_len = budget.min(len) as usize;
+    let start = len - read_len as u64;
+    file.seek(SeekFrom::Start(start))?;
+    let mut buf = vec![0u8; read_len];
+    file.read_exact(&mut buf)?;
+    Ok(buf)
+}
+
 /// 计算「保留末尾不超过 max_bytes」时的安全起点（含）。
 ///
 /// 规则：

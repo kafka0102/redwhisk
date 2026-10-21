@@ -18,6 +18,7 @@ pub(crate) mod provider_spawn;
 pub mod pty_osc_color_reply;
 pub mod pty_session_manager;
 pub mod session_handle;
+pub(crate) mod session_log_coalesce;
 pub mod session_registry;
 pub(crate) mod session_token_usage;
 pub mod terminal_log_tail;
