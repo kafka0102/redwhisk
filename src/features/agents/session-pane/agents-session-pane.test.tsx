@@ -222,6 +222,53 @@ describe("AgentsSessionPane displayMode 视图分流", () => {
       screen.queryByTestId("agent-session-view:22"),
     ).not.toBeInTheDocument();
   });
+
+  it("同一缓存会话切换 displayMode 时卸掉原来的主区", () => {
+    const { rerender } = renderPane({ displayMode: "tui", sessionId: 11 });
+    expect(screen.getByTestId("agent-tui-session-view:11")).toBeInTheDocument();
+
+    const selectedSession = buildSession({
+      sessionId: 11,
+      displayMode: "json",
+    });
+    rerender(
+      <AgentsSessionPane
+        canRenderTransitionButton={false}
+        canRenderTransitionMenu={false}
+        isTransitionMenuOpen={false}
+        isTransitionPending={false}
+        linkedIssue={null}
+        isDeletingSession={false}
+        isRenamingSessionTitle={false}
+        isSidePanelOpen={false}
+        onAcknowledgeSessionAttention={vi.fn()}
+        onCloseWorkspaceTab={vi.fn()}
+        onCreateBrowserTab={vi.fn()}
+        onCreateTerminalTab={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onRenameSessionTitle={vi.fn()}
+        onSelectWorkspaceTab={vi.fn()}
+        onToggleSidePanel={vi.fn()}
+        onToggleTransitionMenu={vi.fn()}
+        onTransitionAction={vi.fn()}
+        onTransitionMainAction={vi.fn()}
+        projectId={1}
+        selectedSession={selectedSession}
+        cachedSessionIds={[11]}
+        sessionWorkspaces={[
+          buildWorkspace({ sessionId: 11, displayMode: "json" }),
+        ]}
+        transitionButtonLabel={null}
+        transitionMenuOptions={[]}
+        transitionPhase={null}
+      />,
+    );
+
+    expect(screen.getByTestId("agent-session-view:11")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-tui-session-view:11"),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("AgentsSessionPane display mode switch button", () => {

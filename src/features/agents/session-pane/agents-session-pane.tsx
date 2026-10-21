@@ -356,7 +356,7 @@ export function AgentsSessionPane({
             const isCurrent = workspace.sessionId === currentSessionId;
             return (
               <SessionWorkspacePane
-                key={workspace.sessionId}
+                key={`${workspace.sessionId}:${workspace.displayMode}`}
                 isCurrent={isCurrent}
                 onCloseWorkspaceTab={onCloseWorkspaceTab}
                 onCreateBrowserTab={onCreateBrowserTab}
