@@ -91,6 +91,8 @@ mod timeline_cursor_tests;
 #[cfg(test)]
 mod timeline_replay_tests;
 #[cfg(test)]
+mod timeline_roster_window_tests;
+#[cfg(test)]
 mod timeline_tests;
 #[cfg(test)]
 mod tui_hook_env_tests;
