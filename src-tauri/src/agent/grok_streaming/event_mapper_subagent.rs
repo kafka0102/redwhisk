@@ -194,4 +194,3 @@ mod snapshot_tests {
         assert!(mapper.child_text_is(child, "先写", "看规格"));
     }
 }
-
