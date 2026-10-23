@@ -2811,6 +2811,17 @@ pub(crate) fn agent_session_error_to_command_error(error: AgentSessionError) -> 
             "没有可中断的 Turn。",
         )
         .with_reason("noInterruptibleTurn"),
+        AgentSessionError::NoSteerableTurn => CommandError::new(
+            CommandErrorCode::AgentSessionValidationFailed,
+            "没有可插入的 Turn。",
+        )
+        .with_reason("noSteerableTurn"),
+        AgentSessionError::SteerRejected(message) => CommandError::new(
+            CommandErrorCode::AgentSessionStreamFailed,
+            "Turn 插入失败。",
+        )
+        .with_reason("turnSteerRejected")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", message)),
         AgentSessionError::NotRunning(_) => CommandError::new(
             CommandErrorCode::AgentSessionNotRunning,
             "Agent 会话调用失败。",

@@ -25,6 +25,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 vi.mock("../agent-session-commands", () => ({
   sendAgentMessage: vi.fn(),
+  steerAgentTurn: vi.fn(),
   cancelAgentTurn: vi.fn(),
   saveAgentAttachment: vi.fn(),
   setAgentThinking: vi.fn(),
@@ -32,11 +33,13 @@ vi.mock("../agent-session-commands", () => ({
 
 const {
   sendAgentMessage,
+  steerAgentTurn,
   cancelAgentTurn,
   saveAgentAttachment,
   setAgentThinking,
 } = await import("../agent-session-commands");
 const sendAgentMessageMock = vi.mocked(sendAgentMessage);
+const steerAgentTurnMock = vi.mocked(steerAgentTurn);
 const cancelAgentTurnMock = vi.mocked(cancelAgentTurn);
 const saveAgentAttachmentMock = vi.mocked(saveAgentAttachment);
 const setAgentThinkingMock = vi.mocked(setAgentThinking);
@@ -45,6 +48,7 @@ interface ProbeProps {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  canSteerRunningTurn?: boolean;
   currentEffort?: string | null;
   isReadOnly?: boolean;
   onBeforeSend?: () => Promise<void>;
@@ -57,6 +61,7 @@ function Probe({
   projectId,
   sessionId,
   turnStatus,
+  canSteerRunningTurn,
   currentEffort,
   isReadOnly,
   onBeforeSend,
@@ -68,6 +73,7 @@ function Probe({
     projectId,
     sessionId,
     turnStatus,
+    canSteerRunningTurn,
     currentEffort,
     isReadOnly,
     onBeforeSend,
@@ -96,6 +102,7 @@ async function renderProbe(props: ProbeInput): Promise<{
       projectId={props.projectId}
       sessionId={props.sessionId}
       turnStatus={props.turnStatus}
+      canSteerRunningTurn={props.canSteerRunningTurn}
       currentEffort={props.currentEffort}
       isReadOnly={props.isReadOnly}
       onBeforeSend={props.onBeforeSend}
@@ -134,6 +141,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dialogMocks.open.mockResolvedValue(null);
   sendAgentMessageMock.mockResolvedValue(undefined);
+  steerAgentTurnMock.mockResolvedValue(undefined);
   cancelAgentTurnMock.mockResolvedValue(undefined);
   setAgentThinkingMock.mockResolvedValue(undefined);
   saveAgentAttachmentMock.mockImplementation(
@@ -626,6 +634,148 @@ describe("useAgentComposer", () => {
         turnStatus: "idle",
       });
       expect(second.getState()!.text).toBe("");
+    });
+  });
+
+  describe("Turn 插入", () => {
+    it("Codex 运行中发送插入当前 Turn，不新开一轮也不排队", async () => {
+      const onMessageSent = vi.fn();
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        canSteerRunningTurn: true,
+        onMessageSent,
+      });
+      await act(async () => {
+        getState()!.setText("插进这一轮");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(steerAgentTurnMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+        message: "插进这一轮",
+        attachments: [],
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.queuedFollowUp).toBeNull();
+      expect(getState()!.text).toBe("");
+      expect(onMessageSent).toHaveBeenCalledWith("插进这一轮");
+    });
+
+    it("上一条插入未返回时仍可再发，按发送顺序各自插入", async () => {
+      let releaseFirst: (() => void) | null = null;
+      steerAgentTurnMock.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+      );
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        canSteerRunningTurn: true,
+      });
+      await act(async () => {
+        getState()!.setText("先发");
+      });
+      let first: Promise<void> | undefined;
+      act(() => {
+        first = getState()!.handleSubmit();
+      });
+      await act(async () => {
+        getState()!.setText("后发");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(steerAgentTurnMock).toHaveBeenNthCalledWith(1, {
+        projectId: 1,
+        sessionId: 10,
+        message: "先发",
+        attachments: [],
+      });
+      expect(steerAgentTurnMock).toHaveBeenNthCalledWith(2, {
+        projectId: 1,
+        sessionId: 10,
+        message: "后发",
+        attachments: [],
+      });
+      await act(async () => {
+        releaseFirst?.();
+        await first;
+      });
+    });
+
+    it("没有可插入的 Turn 时同一条发送立刻新开一轮", async () => {
+      steerAgentTurnMock.mockRejectedValueOnce(
+        Object.assign(new Error("no turn"), { reason: "noSteerableTurn" }),
+      );
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        canSteerRunningTurn: true,
+      });
+      await act(async () => {
+        getState()!.setText("改开新一轮");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).toHaveBeenCalledWith({
+        projectId: 1,
+        sessionId: 10,
+        message: "改开新一轮",
+        attachments: [],
+      });
+      expect(getState()!.queuedFollowUp).toBeNull();
+      expect(getState()!.submitError).toBeNull();
+    });
+
+    it("没有可插入的 Turn 且新开一轮失败时，把原文放回输入框", async () => {
+      steerAgentTurnMock.mockRejectedValueOnce(
+        Object.assign(new Error("no turn"), { reason: "noSteerableTurn" }),
+      );
+      sendAgentMessageMock.mockRejectedValueOnce(new Error("网络错误"));
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        canSteerRunningTurn: true,
+      });
+      await act(async () => {
+        getState()!.setText("放回来");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(getState()!.text).toBe("放回来");
+      expect(getState()!.submitError).toBe("网络错误");
+    });
+
+    it("插入遇到协议错误时退回排队追问", async () => {
+      steerAgentTurnMock.mockRejectedValueOnce(new Error("方法不存在"));
+      const { getState } = await renderProbe({
+        projectId: 1,
+        sessionId: 10,
+        turnStatus: "running",
+        canSteerRunningTurn: true,
+      });
+      await act(async () => {
+        getState()!.setText("先排队");
+      });
+      await act(async () => {
+        await getState()!.handleSubmit();
+      });
+      expect(sendAgentMessageMock).not.toHaveBeenCalled();
+      expect(getState()!.queuedFollowUp).toEqual({
+        message: "先排队",
+        attachments: [],
+      });
+      expect(getState()!.text).toBe("");
     });
   });
 

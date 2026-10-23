@@ -251,6 +251,18 @@ impl CodexAppServerClient {
         Ok(())
     }
 
+    /// `turn/steer`：把用户输入插入指定的正在运行的 Turn。
+    pub fn turn_steer(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        input: &TurnInput,
+    ) -> Result<(), CodexAppServerError> {
+        let payload = build_turn_steer_payload(thread_id, turn_id, &input.to_json());
+        self.transport.request("turn/steer", payload)?;
+        Ok(())
+    }
+
     /// `thread/read`：读取 thread 历史。
     pub fn thread_read(&self, thread_id: &str) -> Result<ThreadReadResponse, CodexAppServerError> {
         let payload = json!({
@@ -378,6 +390,16 @@ fn build_turn_interrupt_payload(thread_id: &str, turn_id: &str) -> Value {
     })
 }
 
+/// `turn/steer`：`expectedTurnId` 与 `turnId` 相同，避免插到已经换掉的轮次上。
+pub(crate) fn build_turn_steer_payload(thread_id: &str, turn_id: &str, input: &Value) -> Value {
+    json!({
+        "threadId": thread_id,
+        "turnId": turn_id,
+        "expectedTurnId": turn_id,
+        "input": input,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,6 +458,23 @@ mod tests {
 
         assert_eq!(payload["threadId"], "thr_1");
         assert_eq!(payload["turnId"], "turn_1");
+    }
+
+    #[test]
+    fn turn_steer_payload_includes_thread_turn_and_input() {
+        let payload = build_turn_steer_payload(
+            "thr_1",
+            "turn_1",
+            &TurnInput::Text("补充一句".into()).to_json(),
+        );
+
+        assert_eq!(payload["threadId"], "thr_1");
+        assert_eq!(payload["turnId"], "turn_1");
+        assert_eq!(payload["expectedTurnId"], "turn_1");
+        assert_eq!(
+            payload["input"],
+            json!([{ "type": "text", "text": "补充一句", "text_elements": [] }])
+        );
     }
 
     #[test]

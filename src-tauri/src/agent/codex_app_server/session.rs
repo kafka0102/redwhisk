@@ -40,6 +40,7 @@ use crate::types::agent_session_stream::{
 
 const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(80);
 const NO_INTERRUPTIBLE_TURN: &str = "没有可中断的 Turn";
+const NO_STEERABLE_TURN: &str = "没有可插入的 Turn";
 
 /// codex mode 预设（approvalPolicy + sandbox）。
 ///
@@ -307,6 +308,30 @@ impl CodexSessionHandle {
         };
         self.client.turn_start(&params)?;
         Ok(())
+    }
+
+    /// 把用户消息插入当前用户 Turn。
+    ///
+    /// 没有 thread 或当前用户 Turn 时返回「没有可插入的 Turn」，调用方改为新开一轮。
+    /// 不改 turn 来源，也不清空当前 Turn。
+    pub fn steer_turn(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), CodexAppServerError> {
+        let (thread_id, turn_id) = {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| CodexAppServerError::Protocol("session 锁中毒".into()))?;
+            (state.thread_id.clone(), state.current_turn_id.clone())
+        };
+        let (thread_id, turn_id) = thread_id
+            .filter(|thread_id| !thread_id.is_empty())
+            .zip(turn_id.filter(|turn_id| !turn_id.is_empty()))
+            .ok_or_else(|| CodexAppServerError::Protocol(NO_STEERABLE_TURN.into()))?;
+        self.client
+            .turn_steer(&thread_id, &turn_id, &build_turn_input(text, &attachments))
     }
 
     /// 中断当前用户 Turn。父 Turn 已经结束、但子线程还在跑时，改中断这些子线程。
@@ -639,6 +664,24 @@ impl AgentSessionHandle for CodexSessionHandle {
         CodexSessionHandle::send_message(self, text, attachments).map_err(AgentSessionError::from)
     }
 
+    fn steer_turn(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError> {
+        CodexSessionHandle::steer_turn(self, text, attachments).map_err(|error| match error {
+            CodexAppServerError::Protocol(message) if message == NO_STEERABLE_TURN => {
+                AgentSessionError::NoSteerableTurn
+            }
+            CodexAppServerError::ServerError { message }
+                if steer_rejection_is_missing_turn(&message) =>
+            {
+                AgentSessionError::NoSteerableTurn
+            }
+            other => AgentSessionError::SteerRejected(other.to_string()),
+        })
+    }
+
     fn cancel_turn(&self) -> Result<(), AgentSessionError> {
         CodexSessionHandle::cancel_turn(self).map_err(|error| match error {
             CodexAppServerError::Protocol(message) if message == NO_INTERRUPTIBLE_TURN => {
@@ -708,6 +751,25 @@ impl CodexMode {
             CodexMode::FullAccess => "danger-full-access",
         }
     }
+}
+
+/// Codex 明确说当前没有可插入的 Turn。方法不存在等其它拒绝不在此列。
+fn steer_rejection_is_missing_turn(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("no active turn")
+        || lower.contains("turn not found")
+        || message.contains("没有可插入的 Turn")
+    {
+        return true;
+    }
+    // 「no turn/steer」里的 no turn 是方法名，不是没有 Turn。
+    if lower.contains("turn/steer") || lower.contains("turn.steer") {
+        return false;
+    }
+    if lower.contains("method") && lower.contains("not found") {
+        return false;
+    }
+    lower.contains("no turn")
 }
 
 fn resolve_turn_interrupt(
@@ -2401,6 +2463,17 @@ mod tests {
             json!({ "type": "text", "text": "[附件] b.pdf: /data/b.pdf", "text_elements": [] })
         );
         assert_eq!(input.to_json(), Value::Array(blocks.to_vec()));
+    }
+
+    #[test]
+    fn steer_rejection_missing_turn_is_distinct_from_unknown_method() {
+        assert!(steer_rejection_is_missing_turn("no active turn"));
+        assert!(steer_rejection_is_missing_turn("Turn not found"));
+        assert!(!steer_rejection_is_missing_turn(
+            "method turn/steer not found"
+        ));
+        assert!(!steer_rejection_is_missing_turn("no turn/steer method"));
+        assert_eq!(NO_STEERABLE_TURN, "没有可插入的 Turn");
     }
 
     #[test]

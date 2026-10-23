@@ -5,10 +5,10 @@
 // 避免与 message-stream 形成双数据源；同时补一个本地 `isSubmitting` 锁住
 // “点击发送 → running 事件回流”之间的空窗，防止重复点击重复发送。
 //
-// 排队追问：running 且非只读时提交写入按 sessionId 隔离的一条内存槽位，不调用
-// sendAgentMessage；只要「存在排队」且「当前不在 running」就自动以 follow_up
-// 发出（水平触发，见下方 effect 注释）。点停止不再丢队——排队在 Turn 取消后发出；
-// 显式取消排队仍经 chip 的关闭按钮丢弃。
+// 排队追问：不能插入的 Agent 在 running 且非只读时，提交写入按 sessionId 隔离的
+// 一条内存槽位，不调用 sendAgentMessage；只要「存在排队」且「当前不在 running」
+// 就自动以 follow_up 发出（水平触发，见下方 effect 注释）。点停止不再丢队——
+// 排队在 Turn 取消后发出；显式取消排队仍经 chip 的关闭按钮丢弃。
 //
 // 附件流程：
 //   open({ directory:false, multiple:false }) → sourcePath
@@ -29,6 +29,7 @@ import {
 import type { AgentMessageAttachment } from "../agent-session-commands";
 import type { AgentAttachmentKindLiteral } from "../agent-stream-types";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
+import { steerOrStartRunningTurn } from "./steer-running-turn";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type { ComposerAttachment, ComposerEffort } from "./composer-types";
 import type { TurnStatus } from "../message-stream/message-stream-types";
@@ -37,6 +38,7 @@ interface UseAgentComposerArgs {
   projectId: number;
   sessionId: number;
   turnStatus: TurnStatus;
+  canSteerRunningTurn?: boolean;
   currentEffort?: ComposerEffort;
   isReadOnly?: boolean;
   onBeforeSend?: () => Promise<void>;
@@ -161,6 +163,7 @@ export function useAgentComposer({
   projectId,
   sessionId,
   turnStatus,
+  canSteerRunningTurn = false,
   currentEffort,
   isReadOnly = false,
   onBeforeSend,
@@ -172,9 +175,11 @@ export function useAgentComposer({
   const [text, setTextState] = useState(
     () => composerDraftCache.get(sessionId) ?? "",
   );
+  const textRef = useRef(text);
   // setText 同步写缓存 + 触发渲染，保证卸载后草稿仍存活于模块单例。
   const setText = useCallback(
     (value: string) => {
+      textRef.current = value;
       composerDraftCache.set(sessionId, value);
       setTextState(value);
     },
@@ -221,9 +226,6 @@ export function useAgentComposer({
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (isReadOnly || submitLockRef.current) {
-      return;
-    }
     const message = text.trim();
     if (message === "") {
       return;
@@ -237,6 +239,39 @@ export function useAgentComposer({
       (attachment) => attachment.status === "saved",
     );
     const payloadAttachments = toPayloadAttachments(savedAttachments);
+    if (isSending && canSteerRunningTurn && !isReadOnly) {
+      setSubmitError(null);
+      setText("");
+      clearComposerDraft(sessionId);
+      setAttachments([]);
+      const outcome = await steerOrStartRunningTurn({
+        projectId,
+        sessionId,
+        message,
+        attachments: payloadAttachments,
+        onBeforeSend,
+        onMessageSent,
+        t,
+      });
+      if (outcome.kind === "queue") {
+        const queued: QueuedFollowUp = {
+          message,
+          attachments: savedAttachments,
+        };
+        queuedFollowUpCache.set(sessionId, queued);
+        setQueuedFollowUp(queued);
+      } else if (outcome.kind === "failed") {
+        if (textRef.current.trim() === "") {
+          setText(message);
+          setAttachments(savedAttachments);
+        }
+        setSubmitError(outcome.message);
+      }
+      return;
+    }
+    if (isReadOnly || submitLockRef.current) {
+      return;
+    }
     if (isSending) {
       const queued: QueuedFollowUp = {
         message,
@@ -273,6 +308,7 @@ export function useAgentComposer({
       setIsSubmitting(false);
     }
   }, [
+    canSteerRunningTurn,
     isSending,
     isReadOnly,
     text,

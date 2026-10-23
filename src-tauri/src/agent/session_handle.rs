@@ -35,6 +35,12 @@ pub enum AgentSessionError {
     /// 当前没有可中断的用户 Turn。
     #[error("没有可中断的 Turn")]
     NoInterruptibleTurn,
+    /// 当前没有可插入的用户 Turn。调用方应改为新开一轮。
+    #[error("没有可插入的 Turn")]
+    NoSteerableTurn,
+    /// 插入被协议拒绝。调用方应退回排队追问。
+    #[error("Turn 插入失败：{0}")]
+    SteerRejected(String),
 }
 
 impl From<crate::agent::codex_app_server::transport::CodexAppServerError> for AgentSessionError {
@@ -69,6 +75,20 @@ pub trait AgentSessionHandle: Send + Sync {
         text: String,
         attachments: Vec<AgentMessageAttachment>,
     ) -> Result<(), AgentSessionError>;
+
+    /// 把用户消息插入正在运行的 Turn。
+    ///
+    /// 默认不支持：返回 `NoSteerableTurn`，调用方改为新开一轮。
+    /// Codex 在有活跃用户 Turn 时真正插入；没有可插入的 Turn 时同样返回
+    /// `NoSteerableTurn`。方法不存在或其它协议错误返回 `SteerRejected`。
+    fn steer_turn(
+        &self,
+        text: String,
+        attachments: Vec<AgentMessageAttachment>,
+    ) -> Result<(), AgentSessionError> {
+        let _ = (text, attachments);
+        Err(AgentSessionError::NoSteerableTurn)
+    }
 
     /// 中断当前用户 Turn。
     ///

@@ -30,6 +30,7 @@ mod session_log_lookup;
 mod session_log_tail;
 pub mod session_monitor_commands;
 mod startup_model;
+pub(crate) mod steer_command;
 mod terminal_archive_clean;
 mod terminal_archive_render;
 mod timeline;

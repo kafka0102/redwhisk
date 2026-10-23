@@ -39,6 +39,8 @@ export interface AgentComposerProps {
   sessionId: number;
   /** 来自 message-stream state，决定发送/取消按钮切换。 */
   turnStatus: TurnStatus;
+  /** Codex json 在当前 Turn 运行时把消息插入这一轮。 */
+  canSteerRunningTurn?: boolean;
   /** 来自 message-stream state.usage，驱动上下文窗口用量条。 */
   usage: AgentUsage | null;
   /**

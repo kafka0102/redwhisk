@@ -159,6 +159,7 @@ export const AgentSessionView = memo(function AgentSessionView({
           key={sessionId}
           projectId={projectId}
           sessionId={sessionId}
+          canSteerRunningTurn={agentType === "codex"}
           turnStatus={turnStatusForComposer(
             effectiveTurnStatus,
             state.subagents ?? [],

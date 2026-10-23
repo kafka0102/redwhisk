@@ -326,6 +326,11 @@ export function sendAgentMessage(input: SendAgentMessageInput): Promise<void> {
   return invokeCommand("send_agent_message", { input });
 }
 
+/** 把消息插入正在运行的 Turn。没有可插入的 Turn 时 reason 为 `noSteerableTurn`。 */
+export function steerAgentTurn(input: SendAgentMessageInput): Promise<void> {
+  return invokeCommand("steer_agent_turn", { input });
+}
+
 export function cancelAgentTurn(input: CancelAgentTurnInput): Promise<void> {
   return invokeCommand("cancel_agent_turn", { input });
 }

@@ -847,7 +847,8 @@
       "worktreeCreateFailed": "Agent Session 工作区创建失败。"
     },
     "AGENT_SESSION_STREAM_FAILED": {
-      "default": "Agent 会话出错。"
+      "default": "Agent 会话出错。",
+      "turnSteerRejected": "没能把消息插入当前 Turn。"
     },
     "AGENT_SESSION_VALIDATION_FAILED": {
       "cannotDeleteProjectRoot": "不能删除项目主工作区。",
@@ -882,6 +883,7 @@
       "mustBeRunningToUpdateFollow": "只有运行中的 Agent Session 可以更新关注状态。",
       "tuiResumeNotSupported": "当前 Agent 不支持 TUI 会话续接。",
       "noInterruptibleTurn": "没有可中断的 Turn。",
+      "noSteerableTurn": "没有可插入的 Turn。",
       "noActiveTerminal": "当前 Session 没有活跃终端。",
       "onlyBacklogCanStart": "只有 backlog Issue 可以启动 Agent Session。",
       "pathAlreadyExists": "目标已存在。",

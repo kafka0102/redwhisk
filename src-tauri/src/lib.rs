@@ -172,6 +172,7 @@ pub fn run() {
             features::agent_session::commands::delete_agent_session,
             features::agent_session::commands::update_agent_session_title,
             features::agent_session::commands::send_agent_message,
+            features::agent_session::steer_command::steer_agent_turn,
             features::agent_session::commands::cancel_agent_turn,
             features::agent_session::commands::respond_agent_permission,
             features::agent_session::commands::set_agent_model,

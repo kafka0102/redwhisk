@@ -847,7 +847,8 @@
       "worktreeCreateFailed": "Failed to create Agent Session workspace."
     },
     "AGENT_SESSION_STREAM_FAILED": {
-      "default": "Agent session error."
+      "default": "Agent session error.",
+      "turnSteerRejected": "Could not append the message to the current Turn."
     },
     "AGENT_SESSION_VALIDATION_FAILED": {
       "cannotDeleteProjectRoot": "Cannot delete the project main checkout.",
@@ -882,6 +883,7 @@
       "mustBeRunningToUpdateFollow": "Only running Agent Sessions can update follow status.",
       "tuiResumeNotSupported": "This Agent does not support TUI session resume.",
       "noInterruptibleTurn": "There is no interruptible Turn.",
+      "noSteerableTurn": "There is no Turn to append to.",
       "noActiveTerminal": "The current Session has no active terminal.",
       "onlyBacklogCanStart": "Only backlog Issues can start an Agent Session.",
       "pathAlreadyExists": "Target already exists.",

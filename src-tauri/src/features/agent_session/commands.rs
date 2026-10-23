@@ -257,7 +257,7 @@ pub async fn inject_agent_session_prompt(
 // ---------------------------------------------------------------------------
 
 /// 从 registry 取回句柄；未注册时返回 `AgentSessionNotRunning`。
-fn require_structured_handle(
+pub(crate) fn require_structured_handle(
     agent_sessions: &AgentSessionRegistry,
     session_id: i64,
 ) -> Result<Arc<dyn AgentSessionHandle>, CommandError> {
