@@ -47,6 +47,7 @@ export interface CompletionFlowDecisionPorts {
   messages: {
     gitOperationBlocked: string;
     noCommitDetected: string;
+    commitTurnFinishedDirty: string;
   };
 }
 
@@ -186,6 +187,10 @@ export async function runCompletionFlow(
           ports.onLoadingChange?.(false);
           throw new Error(ports.messages.noCommitDetected);
         }
+        if (detection.outcome === "commit_turn_finished_dirty") {
+          ports.onLoadingChange?.(false);
+          throw new Error(ports.messages.commitTurnFinishedDirty);
+        }
       } finally {
         ports.onWaitingAutoCommitChange?.(false);
       }
@@ -218,6 +223,7 @@ export async function runCompletionFlow(
 export type AgentCommitWaitOutcome =
   | { outcome: "commit_detected" }
   | { outcome: "no_commit_detected" }
+  | { outcome: "commit_turn_finished_dirty" }
   | { outcome: "blocked"; message: string };
 
 /** 轮询 detect_agent_commit_completion，直到检测到 commit / 阻塞 / 超时。 */
@@ -242,6 +248,9 @@ export async function waitForAgentCommit(
     }
     if (detection.outcome === "git_operation_blocked") {
       return { outcome: "blocked", message: detection.message };
+    }
+    if (detection.outcome === "commit_turn_finished_dirty") {
+      return { outcome: "commit_turn_finished_dirty" };
     }
     // no_commit_detected → 继续轮询。
   }

@@ -249,6 +249,8 @@ export function useAgentSessionCompletionResolution({
           messages: {
             gitOperationBlocked: messages.issues.completionGitOperationBlocked,
             noCommitDetected: messages.issues.completionNoCommitDetected,
+            commitTurnFinishedDirty:
+              messages.issues.completionCommitTurnFinishedDirty,
           },
         },
       );

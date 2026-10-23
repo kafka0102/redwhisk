@@ -70,6 +70,7 @@ function ports(
     messages: {
       gitOperationBlocked: "git blocked",
       noCommitDetected: "no commit",
+      commitTurnFinishedDirty: "still dirty",
     },
     ...overrides,
   };
@@ -164,6 +165,30 @@ describe("runCompletionFlow", () => {
         branchName: "issue-10-fixed",
       }),
     );
+  });
+
+  it("stops waiting when the commit turn ends with a dirty workspace", async () => {
+    const complete = vi
+      .fn()
+      .mockResolvedValueOnce(flowResult("waiting_auto_commit"));
+    const detect = vi.fn().mockResolvedValue({
+      outcome: "commit_turn_finished_dirty",
+      issue: baseIssue(),
+      message: "still dirty",
+    });
+
+    await expect(
+      runCompletionFlow({ projectId: 1, issueId: 10 }, ports(), {
+        completeIssueFlow: complete,
+        detectAgentCommitCompletion: detect,
+        delay: async () => undefined,
+        maxDetectAttempts: 3,
+        detectIntervalMs: 0,
+      }),
+    ).rejects.toThrow("still dirty");
+
+    expect(detect).toHaveBeenCalledTimes(1);
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 
   it("waits for agent commit then confirms continue", async () => {
@@ -331,5 +356,21 @@ describe("waitForAgentCommit", () => {
     });
     expect(outcome).toEqual({ outcome: "no_commit_detected" });
     expect(detect).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns commit_turn_finished_dirty without using the remaining attempts", async () => {
+    const detect = vi.fn().mockResolvedValue({
+      outcome: "commit_turn_finished_dirty",
+      issue: baseIssue(),
+      message: "still dirty",
+    });
+    const outcome = await waitForAgentCommit(1, 10, {
+      detectAgentCommitCompletion: detect,
+      delay: async () => undefined,
+      maxDetectAttempts: 3,
+      detectIntervalMs: 0,
+    });
+    expect(outcome).toEqual({ outcome: "commit_turn_finished_dirty" });
+    expect(detect).toHaveBeenCalledTimes(1);
   });
 });

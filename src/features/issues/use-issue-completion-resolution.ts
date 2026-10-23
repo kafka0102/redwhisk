@@ -147,6 +147,8 @@ export function useIssueCompletionResolution({
         messages: {
           gitOperationBlocked: messages.issues.completionGitOperationBlocked,
           noCommitDetected: messages.issues.completionNoCommitDetected,
+          commitTurnFinishedDirty:
+            messages.issues.completionCommitTurnFinishedDirty,
         },
       },
     );

@@ -313,7 +313,25 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
                 message: "未找到挂起的自动提交记录。".to_string(),
             });
         };
-        if !snapshot.head.is_empty() && snapshot.head != pending.head_before {
+        if snapshot.head.is_empty() || snapshot.head == pending.head_before {
+            let turn_in_progress =
+                AgentSessionRepository::new(self.service.issue_repository.connection())
+                    .is_turn_in_progress(session.id)
+                    .map_err(issue_database_error)?;
+            if !turn_in_progress && !snapshot.is_clean {
+                return Ok(DetectAgentCommitCompletionResult {
+                    outcome: DetectAgentCommitCompletionOutcome::CommitTurnFinishedDirty,
+                    issue: self.service.hydrate_issue(issue)?,
+                    message: "自动提交已结束，工作区仍有未提交文件。".to_string(),
+                });
+            }
+            return Ok(DetectAgentCommitCompletionResult {
+                outcome: DetectAgentCommitCompletionOutcome::NoCommitDetected,
+                issue: self.service.hydrate_issue(issue)?,
+                message: "尚未检测到 Agent 提交的新 commit。".to_string(),
+            });
+        }
+        {
             // 检测到新 commit：更新 attempt + phase → ConfirmingContinueAfterCommit。
             let state = completion_state_from_record(&flow);
             // 与 drive 共用 gather_completion_world，去掉 detect 手搓 dummy world 双源。
@@ -367,10 +385,5 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
                 message: "代码已提交成功。确定继续标记完成吗？".to_string(),
             });
         }
-        Ok(DetectAgentCommitCompletionResult {
-            outcome: DetectAgentCommitCompletionOutcome::NoCommitDetected,
-            issue: self.service.hydrate_issue(issue)?,
-            message: "尚未检测到 Agent 提交的新 commit。".to_string(),
-        })
     }
 }

@@ -385,6 +385,7 @@
     "completionWorktreeCleanupConfirm": "删除",
     "completionWorktreeCleanupKeep": "保留",
     "completionNoCommitDetected": "未检测到新的提交。",
+    "completionCommitTurnFinishedDirty": "自动提交已结束，工作区仍有未提交文件。",
     "completionGitOperationBlocked": "当前 Git 正在进行中的操作阻止完成。请在工作区终端查看 git status，手动解决冲突或执行 rebase/merge 的 continue/abort 后重试。",
     "mergeConflictNeedsHandoff": "代码合并存在冲突，需要你接管处理。",
     "mergeConflictResolvePrompt": "请解决临时分支 {{workspaceBranch}} 合并到最初记录的目标分支 {{targetBranch}} 时产生的冲突。",

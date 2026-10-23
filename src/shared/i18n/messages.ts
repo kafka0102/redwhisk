@@ -319,6 +319,7 @@ export interface I18nMessages {
     completionWorktreeCleanupConfirm: string;
     completionWorktreeCleanupKeep: string;
     completionNoCommitDetected: string;
+    completionCommitTurnFinishedDirty: string;
     completionGitOperationBlocked: string;
     mergeConflictNeedsHandoff: string;
     mergeConflictResolvePrompt: string;

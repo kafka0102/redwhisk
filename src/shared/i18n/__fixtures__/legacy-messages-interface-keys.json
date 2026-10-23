@@ -402,6 +402,7 @@
     "issues.completionContinueLabel",
     "issues.completionDirtyMessage",
     "issues.completionDirtyTitle",
+    "issues.completionCommitTurnFinishedDirty",
     "issues.completionGitOperationBlocked",
     "issues.completionNoCommitDetected",
     "issues.completionSkipDirty",

@@ -2247,6 +2247,13 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
         "detect no commit",
         "running",
     );
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET is_turn_running = 1, turn_ended_at = NULL WHERE id = ?1",
+            [session_id],
+        )
+        .expect("mark turn running");
     let registry = AgentSessionRegistry::new();
     let (handle, _sent) = RecordingHandle::new();
     registry.register(project_id, session_id, Arc::new(handle));
@@ -2293,6 +2300,80 @@ fn detect_agent_commit_completion_keeps_review_when_no_commit_detected() {
     assert_eq!(attempts.len(), 1);
     assert_eq!(attempts[0].result.as_str(), "prompt_sent");
     assert_eq!(attempts[0].commit_hash, None);
+}
+
+#[test]
+fn detect_agent_commit_completion_reports_dirty_when_turn_ends_without_new_commit() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repo_dir = temp_dir.path().join("detect-turn-finished-dirty-repo");
+    init_repo(&repo_dir);
+    write_file(&repo_dir, "tracked.txt", "initial\n");
+    git(&repo_dir, &["add", "tracked.txt"]);
+    git(&repo_dir, &["commit", "-m", "initial"]);
+    fs::create_dir_all(repo_dir.join("shots")).expect("shots dir");
+    write_file(&repo_dir, "shots/keep.png", "unrelated\n");
+
+    let database = migrated_database(temp_dir.path());
+    let project_id = insert_project_with_repo_path_and_policy(
+        &database.connection,
+        "detect-turn-finished-dirty-repo",
+        &repo_dir,
+    );
+    let service = issue_service(&database.connection);
+    let (issue, session_id) = create_review_issue_with_session(
+        &database.connection,
+        project_id,
+        &service,
+        "detect turn finished dirty",
+        "running",
+    );
+    let registry = AgentSessionRegistry::new();
+    let (handle, _sent) = RecordingHandle::new();
+    registry.register(project_id, session_id, Arc::new(handle));
+
+    service
+        .complete_issue_flow(
+            CompleteIssueFlowInput {
+                project_id,
+                issue_id: issue.id,
+                ignore_dirty: None,
+                dirty_decision: Some(DirtyWorkspaceOption::AutoCommit),
+                branch_name: None,
+                actual_path: None,
+                continue_after_commit: None,
+                worktree_cleanup_decision: None,
+            },
+            temp_dir.path(),
+            &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),
+            &registry,
+        )
+        .expect("auto commit waits");
+
+    // 模拟自动提交回合已结束：HEAD 仍是注入时的值，未跟踪文件还在。
+    database
+        .connection
+        .execute(
+            "UPDATE agent_sessions SET is_turn_running = 0, turn_ended_at = NULL WHERE id = ?1",
+            [session_id],
+        )
+        .expect("mark turn idle");
+
+    let result = service
+        .detect_agent_commit_completion(DetectAgentCommitCompletionInput {
+            project_id,
+            issue_id: issue.id,
+        })
+        .expect("detect");
+    assert_eq!(
+        result.outcome,
+        redwhisk_lib::types::issue::DetectAgentCommitCompletionOutcome::CommitTurnFinishedDirty
+    );
+    assert_eq!(result.issue.status, IssueStatus::Review);
+    let flow = IssueCompletionFlowRepository::new(&database.connection)
+        .find_by_issue_id(issue.id)
+        .expect("flow")
+        .expect("flow exists");
+    assert_eq!(flow.phase, IssueCompletionPhase::AutoCommitting);
 }
 
 #[test]

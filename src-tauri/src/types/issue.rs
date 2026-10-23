@@ -232,6 +232,8 @@ pub enum DetectAgentCommitCompletionOutcome {
     NoCommitDetected,
     /// 检测到新 commit，但需用户确认是否继续标记完成（phase → ConfirmingContinueAfterCommit）。
     CommitDetected,
+    /// 自动提交回合已结束，HEAD 未前进，工作区仍有未提交文件。
+    CommitTurnFinishedDirty,
     GitOperationBlocked,
 }
 

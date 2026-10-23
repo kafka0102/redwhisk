@@ -295,6 +295,7 @@ export type DetectAgentCommitCompletionOutcome =
   | "completed"
   | "no_commit_detected"
   | "commit_detected"
+  | "commit_turn_finished_dirty"
   | "git_operation_blocked";
 
 export interface DetectAgentCommitCompletionResult {

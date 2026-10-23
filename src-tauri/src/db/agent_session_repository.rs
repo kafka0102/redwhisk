@@ -92,6 +92,23 @@ impl<'connection> AgentSessionRepository<'connection> {
         )
     }
 
+    /// 完成流程轮询用：session 仍在跑，且当前 turn 尚未被 broadcaster 标成结束。
+    /// `is_turn_running = 0` 且 `turn_ended_at IS NULL` 才算空闲（含 grace 已收尾）。
+    pub fn is_turn_in_progress(&self, session_id: i64) -> rusqlite::Result<bool> {
+        self.connection
+            .query_row(
+                "SELECT 1 FROM agent_sessions
+             WHERE id = ?1 AND del = 0 AND status = 'running'
+               AND (is_turn_running = 1 OR turn_ended_at IS NOT NULL)",
+                params![session_id],
+                |_| Ok(true),
+            )
+            .or_else(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => Ok(false),
+                other => Err(other),
+            })
+    }
+
     /// 读取 session 当前 turn 上下文；session 不存在时返回 `QueryReturnedNoRows`。
     pub fn find_current_turn(
         &self,
