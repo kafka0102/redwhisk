@@ -259,8 +259,8 @@ _Avoid_: 开始到现在的墙钟跨度、把睡眠与关机算进 json 会话�
 _Avoid_: 墙钟时长、事件间隔、用户在线时长
 
 **Turn 插入**：
-Codex 的 json 会话里，用户在当前 Turn 仍运行时从 Session 输入框提交的消息。不中断当前 Turn，也不新开一轮，作为同一 Turn 上的又一条用户消息进入当前轮次。完成提示与注入 prompt 不走这条路径。当前没有可插入的 Turn 时，改为新开一轮。
-_Avoid_: 排队追问、follow_up、另开一轮、中断当前 Turn、把完成提示或注入 prompt 插进当前 Turn
+Codex 的 json 会话里，用户在当前 Turn 仍运行时从 Session 输入框提交的消息。不中断当前 Turn，也不新开一轮，作为同一 Turn 上的又一条用户消息进入当前轮次。上一条尚未返回时仍可继续发送，每条各自插入，按发送顺序进入当前 Turn。完成提示与注入 prompt 不走这条路径。当前没有可插入的 Turn 时，改为新开一轮。
+_Avoid_: 排队追问、follow_up、另开一轮、中断当前 Turn、把完成提示或注入 prompt 插进当前 Turn、上一条未返回时禁用发送
 
 **排队追问**：
 json composer 在当前 Turn 仍运行、且该 Agent 不能把消息插入当前 Turn 时，用户提交的下一条消息；不中断当前 Turn，同一 Session 只保留一条（含已保存附件）。只要当前 Turn 不在运行就作为 follow_up 发出——Turn 正常结束、失败或用户停止（取消）后都发出，停止当前 Turn 不丢排队；只有显式取消排队（chip 关闭按钮）才丢弃。Codex 不认这个方法或插入失败时，也退回这里。
