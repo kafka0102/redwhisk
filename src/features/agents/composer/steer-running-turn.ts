@@ -3,10 +3,7 @@
 
 import type { TFunction } from "i18next";
 
-import {
-  getCommandErrorMessage,
-  toCommandError,
-} from "../../../shared/commands/command-error";
+import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { sendAgentMessage, steerAgentTurn } from "../agent-session-commands";
 import type { AgentMessageAttachment } from "../agent-session-commands";
 
@@ -27,15 +24,14 @@ export type SteerRunningTurnResult =
   | { kind: "failed"; message: string };
 
 function isNoSteerableTurn(error: unknown): boolean {
-  if (
+  return (
     typeof error === "object" &&
     error !== null &&
+    "code" in error &&
+    "message" in error &&
     "reason" in error &&
     (error as { reason?: unknown }).reason === "noSteerableTurn"
-  ) {
-    return true;
-  }
-  return toCommandError(error).reason === "noSteerableTurn";
+  );
 }
 
 export async function steerOrStartRunningTurn(

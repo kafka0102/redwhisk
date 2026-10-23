@@ -710,9 +710,11 @@ describe("useAgentComposer", () => {
     });
 
     it("没有可插入的 Turn 时同一条发送立刻新开一轮", async () => {
-      steerAgentTurnMock.mockRejectedValueOnce(
-        Object.assign(new Error("no turn"), { reason: "noSteerableTurn" }),
-      );
+      steerAgentTurnMock.mockRejectedValueOnce({
+        code: "AGENT_SESSION_VALIDATION_FAILED",
+        message: "没有可插入的 Turn。",
+        reason: "noSteerableTurn",
+      });
       const { getState } = await renderProbe({
         projectId: 1,
         sessionId: 10,
@@ -736,9 +738,11 @@ describe("useAgentComposer", () => {
     });
 
     it("没有可插入的 Turn 且新开一轮失败时，把原文放回输入框", async () => {
-      steerAgentTurnMock.mockRejectedValueOnce(
-        Object.assign(new Error("no turn"), { reason: "noSteerableTurn" }),
-      );
+      steerAgentTurnMock.mockRejectedValueOnce({
+        code: "AGENT_SESSION_VALIDATION_FAILED",
+        message: "没有可插入的 Turn。",
+        reason: "noSteerableTurn",
+      });
       sendAgentMessageMock.mockRejectedValueOnce(new Error("网络错误"));
       const { getState } = await renderProbe({
         projectId: 1,

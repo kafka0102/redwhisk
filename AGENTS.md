@@ -72,6 +72,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 改动 UI、页面或组件：在前端代码规范外，额外读取 `docs/architecture-design/design-guide.md`、`docs/architecture-design/frontend-large-component-splitting-rules.md`。涉及 Settings 时，额外读取 `docs/architecture-design/settings-page-layout.md`。
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
 - 诊断 Agent 会话行为（权限卡、模型或权限与预期不符、重建后续不上）：读取 `docs/architecture-design/agent-session-diagnostics.md`。
+- 诊断 Session 输入框在 Agent 运行中发送后长时间不进入执行：先读 `CONTEXT.md` 的「Turn 插入」与「排队追问」，再看 composer 的排队与 Codex `turn/steer`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
 - 发布或打包：读取 `docs/standards/release-workflow.md`。
 - 涉及后端命令、git 操作或轮询性能：额外读取 `docs/standards/performance.md`。
