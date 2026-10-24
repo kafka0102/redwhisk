@@ -78,6 +78,7 @@ frontier 上**每一张** ticket：
 2. 子代理启动提示必须显式包含：
    - 默认简体中文；不要输出思考过程
    - 你不是一个人在改代码，不要回退他人改动
+   - 提交只向前追加：改动按文件定点编辑、用 `git diff <本票起点>` 复核；本票之外的改动一律不动
    - **必须按 `/implement` 执行**，不是「随便改到绿」
    - spec 路径、本 ticket 路径、分支名、seam（从 spec Testing Decisions 抄）
    - 完成清单（见 3.2）
@@ -89,7 +90,7 @@ frontier 上**每一张** ticket：
    - review 有必须修的问题 → 在本票内修到过，再 commit
    - 在阶段 0 所定分支上 **commit**（标题遵守仓库 git 规范）
 4. 子代理回报固定字段：交付、测试命令与结果、**review 两轴结论**、commit hash、改动文件、`git status --short`、未运行的命令与原因。缺任一项 = 未完成。
-5. 主会话核验回报与 `git log` / 测试输出后，才把 ticket 标 `done`，再启动下一张。
+5. 主会话核验回报与 `git log` / 测试输出后，先断言 `git merge-base --is-ancestor <上一张票的 HEAD> HEAD`：不成立说明历史被改写，按 3.4 处理。通过后才把 ticket 标 `done`，再启动下一张。
 
 一张未 green，**禁止**启动下一张。
 
@@ -99,7 +100,7 @@ frontier 上**每一张** ticket：
 - [ ] `/tdd` 在约定 seam 上执行（非「先写光实现再补测」）
 - [ ] 本票要求的全量测试通过
 - [ ] `/code-review` Standards + Spec **均通过**（或仅剩已记录的非阻断 nit，且不违反 AGENTS 门禁）
-- [ ] 已 commit，工作区无本票残留改动
+- [ ] 已 commit，工作区无本票残留改动，且 HEAD 是上一张票 HEAD 的后代（只追加）
 - [ ] 子代理回报完整
 
 任一项缺失 → 该票 **not green**，不得进入下一张，也不得进入最终验收「全部完成」口径。

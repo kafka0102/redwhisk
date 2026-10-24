@@ -80,7 +80,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
 
-改动 TypeScript / TSX / JavaScript 后，按序执行并确认通过：
+前端门禁的单一入口：`bash scripts/check-frontend-gates.sh`（依赖 / 构建配置 / 静态资源 / 打包代码变更时加 `--with-build`；已提交后复查文件大小用 `--from <ref>`）。脚本按下列顺序执行、逐步打印，任一步失败立即停止。下列各项是同一门禁的口径来源；手跑时照此顺序，豁免理由必须写进最终说明。
 
 1. `pnpm format` → 复查 `git status --short`，带出的额外文件按 §8 处理。
 2. `pnpm lint`
@@ -89,7 +89,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
 6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后先跑这一项，再跑下一条编译检查。脚本只数行，不编译。越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。与编译检查分开跑，不要绑在 `cargo check` 后面。
 7. `bash scripts/check-rust-compile.sh` — 改动 Rust（`src-tauri/**/*.rs`、`src-tauri/Cargo.toml`、`src-tauri/build.rs`）后必跑，排在文件大小门禁之后。脚本只对库和二进制做增量 `cargo check --offline --lib --bins`（dev profile，无 `cfg(test)`），不跑测试、不链接、不打安装包。纯前端 / 纯文档改动可豁免。`cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替：它们以 `cfg(test)` 编译，仅被测试引用的 `use` / `pub use` 在正式构建里仍是未使用项，而 `warnings = "deny"` 会让其变成编译错误。改动这类重导出时先看非测试调用方，只有测试引用则给重导出加 `#[cfg(test)]`；禁止 `#[allow(unused_imports)]` / `#[allow(dead_code)]` 压掉。不要用 `pnpm build:macos`、`tauri build` 或 `cargo build --release` 充当这项门禁。`--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。
-8. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。
+8. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。白名单是棘轮：条目登记行数是上限，文件长过登记值即失败（先拆分，或显式下调登记值）；已回到阈值以内的文件必须删除条目。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动用 `--from <ref>` 复查。
 9. `cd src-tauri && cargo test --lib agent::command_detector` — 改动交互式 `PATH` 解析或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后必跑；缓存与回退规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 
 格式化单个 Rust 文件时用 `rustfmt --edition 2021 <该文件的绝对路径>`。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
@@ -136,6 +136,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 ## 8. Git 提交
 
 - 任务完成并按 §5 验证后，由 Agent 手动创建 commit；提交范围只含本次任务直接相关文件，禁止混入无关改动。
+- 提交历史只向前追加：前序提交有问题时用后续提交修正，不重写已有提交。
 - `.claude` 的 `Stop` hook 会检查是否存在未提交的任务改动：若有，会要求 Agent 自行完成提交（不依赖外部脚本生成 message），未完成提交不得结束本轮回复。
 - `pnpm format` / 验证命令若改写了任务相关文件，一并纳入本次提交；若改写了无关文件，先回退再提交。
 - 提交前必须 `git status --short` 复查，确认无残留任务相关未提交文件。
