@@ -329,6 +329,25 @@
   font-size: var(--content-font-size);
 }
 
+/* 已确认存在的行内代码路径：外观与普通行内代码一致，hover / focus 给出可点反馈。 */
+.agents-message__code-inline--link {
+  border-color: var(--color-border-strong);
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agents-message__code-inline--link:hover {
+  background: var(--color-accent-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agents-message__code-inline--link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .agents-message__code-block {
   margin: 6px 0;
   padding: 8px 10px;

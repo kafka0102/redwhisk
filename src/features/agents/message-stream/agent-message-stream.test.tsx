@@ -29,6 +29,7 @@ import {
 } from "./message-stream-reducer";
 import type { SessionFileLinks } from "./session-file-links";
 import { clearAgentMessageStreamCacheForTest } from "./use-agent-message-stream";
+import { clearWorkspaceFileExistenceCacheForTest } from "./use-workspace-file-existence";
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
@@ -38,8 +39,16 @@ vi.mock("../agent-session-commands", () => ({
   readAgentTimeline: vi.fn(),
 }));
 
+vi.mock("../../../shared/workspace/workspace-commands", () => ({
+  statProjectWorktreeFile: vi.fn(() => Promise.reject(new Error("not found"))),
+}));
+
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+
+const { statProjectWorktreeFile } =
+  await import("../../../shared/workspace/workspace-commands");
+const statProjectWorktreeFileMock = vi.mocked(statProjectWorktreeFile);
 
 /**
  * 多数用例只验证滚动位置 / 状态渲染：给消息流一个不产生副作用的文件链接能力，
@@ -99,6 +108,14 @@ function createMessageStreamState(
 afterEach(() => {
   clearAgentMessageStreamCacheForTest();
   resetMessageStreamScrollOffsetCacheForTests();
+});
+
+beforeEach(() => {
+  statProjectWorktreeFileMock.mockReset();
+  statProjectWorktreeFileMock.mockImplementation(() =>
+    Promise.reject(new Error("not found")),
+  );
+  clearWorkspaceFileExistenceCacheForTest();
 });
 
 describe("AgentMessageStream", () => {
@@ -1335,6 +1352,55 @@ describe("AgentMessageStreamView 文件链接能力透传", () => {
       screen.getByRole("button", { name: "Open file src/app/a.ts" }),
     );
 
+    expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
+  });
+
+  it("助手消息里已确认存在的行内代码路径点击后回传相对路径", async () => {
+    statProjectWorktreeFileMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+    const openFilePath = vi.fn();
+    const user = userEvent.setup();
+    const state = createMessageStreamState({
+      entries: [
+        {
+          id: "a1",
+          kind: "assistant_message",
+          item: {
+            type: "assistant_message",
+            text: "改动见 `src/app/a.ts`。",
+            messageId: "a1",
+          },
+        },
+      ],
+    });
+
+    render(
+      <AgentMessageStreamView
+        state={state}
+        sessionFileLinks={{
+          projectId: 1,
+          sessionId: 10,
+          workspacePath: "/Users/tester/repo",
+          homePath: "/Users/tester",
+          openFilePath,
+        }}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open file src/app/a.ts",
+      }),
+    );
+
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 10,
+      filePath: "src/app/a.ts",
+    });
     expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
   });
 });

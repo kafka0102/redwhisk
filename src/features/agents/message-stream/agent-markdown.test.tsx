@@ -1,9 +1,24 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentMarkdown } from "./agent-markdown";
 import type { SessionFileLinks } from "./session-file-links";
+import { clearWorkspaceFileExistenceCacheForTest } from "./use-workspace-file-existence";
+
+vi.mock("../../../shared/workspace/workspace-commands", () => ({
+  statProjectWorktreeFile: vi.fn(() => Promise.reject(new Error("not found"))),
+}));
+
+const { statProjectWorktreeFile } =
+  await import("../../../shared/workspace/workspace-commands");
+const statMock = vi.mocked(statProjectWorktreeFile);
+
+beforeEach(() => {
+  statMock.mockClear();
+  statMock.mockImplementation(() => Promise.reject(new Error("not found")));
+  clearWorkspaceFileExistenceCacheForTest();
+});
 
 describe("AgentMarkdown", () => {
   it("为有序确认菜单保留可恢复数字编号的列表结构", () => {
@@ -141,5 +156,140 @@ describe("AgentMarkdown 链接分类", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("a.ts")).toBeInTheDocument();
+  });
+});
+
+describe("AgentMarkdown 行内代码文件路径", () => {
+  it("存在的工作区相对路径行内代码可点，点击回传相对路径", async () => {
+    statMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+    const openFilePath = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AgentMarkdown sessionFileLinks={{ ...SESSION_FILE_LINKS, openFilePath }}>
+        {"改动见 `src/app/a.ts` 与 `./src/app/a.ts`。"}
+      </AgentMarkdown>,
+    );
+
+    const buttons = await screen.findAllByRole("button", {
+      name: "Open file src/app/a.ts",
+    });
+    expect(buttons).toHaveLength(2);
+    expect(statMock).toHaveBeenCalledTimes(1);
+
+    await user.click(buttons[0]);
+
+    expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
+  });
+
+  it("后端拒绝的路径保持普通 code 且没有按钮 role", async () => {
+    render(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {"改动见 `./src/app/missing.ts`。"}
+      </AgentMarkdown>,
+    );
+
+    await waitFor(() => {
+      expect(statMock).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("./src/app/missing.ts").tagName).toBe("CODE");
+  });
+
+  it("不像工作区路径的行内代码不参与探测也不可点", async () => {
+    statMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+
+    render(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {
+          "见 `pnpm test`、`useI18n`、`const a = 1`、`https://example.com`、`//server/share/a.ts`。"
+        }
+      </AgentMarkdown>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("pnpm test")).toBeInTheDocument();
+    });
+    expect(statMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("围栏代码块里的路径不参与探测也不可点", async () => {
+    statMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+
+    render(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {"```\nsrc/app/a.ts\n```"}
+      </AgentMarkdown>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("src/app/a.ts")).toBeInTheDocument();
+    });
+    expect(statMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("未注入文件链接能力时不发存在性检查请求，行内代码保持原样", async () => {
+    statMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+
+    render(<AgentMarkdown>{"改动见 `src/app/a.ts`。"}</AgentMarkdown>);
+
+    await waitFor(() => {
+      expect(screen.getByText("src/app/a.ts")).toBeInTheDocument();
+    });
+    expect(statMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("流式追加内容后已探测过的路径不重复请求", async () => {
+    statMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      sizeBytes: 10,
+      modifiedAt: null,
+    });
+
+    const { rerender } = render(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {"改动见 `src/app/a.ts`"}
+      </AgentMarkdown>,
+    );
+    await screen.findByRole("button", { name: "Open file src/app/a.ts" });
+
+    rerender(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {"改动见 `src/app/a.ts`，另见 `src/app/b.ts`。"}
+      </AgentMarkdown>,
+    );
+
+    await waitFor(() => {
+      expect(statMock).toHaveBeenCalledTimes(2);
+    });
+    expect(statMock).toHaveBeenNthCalledWith(1, {
+      projectId: 1,
+      sessionId: 10,
+      filePath: "src/app/a.ts",
+    });
+    expect(statMock).toHaveBeenNthCalledWith(2, {
+      projectId: 1,
+      sessionId: 10,
+      filePath: "src/app/b.ts",
+    });
   });
 });
