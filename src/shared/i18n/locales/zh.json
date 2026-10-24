@@ -696,6 +696,7 @@
     "toolOutputTruncated": "输出已截断，仅显示 {{visibleCharacters}} / {{totalCharacters}} 个字符。",
     "exitCode": "退出码 {{exitCode}}",
     "copyCommand": "复制命令",
+    "copyCode": "复制代码",
     "copyFailed": "复制失败",
     "toolOutputExpand": "展开输出（{{lines}} 行）",
     "toolOutputCollapse": "收起输出",

@@ -10,14 +10,39 @@ vi.mock("../../../shared/workspace/workspace-commands", () => ({
   statProjectWorktreeFile: vi.fn(() => Promise.reject(new Error("not found"))),
 }));
 
+vi.mock("../../../shared/commands/copy-text-to-clipboard", () => ({
+  copyTextToClipboard: vi.fn(async () => true),
+}));
+
+vi.mock("../../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
 const { statProjectWorktreeFile } =
   await import("../../../shared/workspace/workspace-commands");
 const statMock = vi.mocked(statProjectWorktreeFile);
+
+const { copyTextToClipboard } =
+  await import("../../../shared/commands/copy-text-to-clipboard");
+const copyTextToClipboardMock = vi.mocked(copyTextToClipboard);
+
+const { toast } = await import("../../../shared/toast");
+
+const hljsCore = (await import("highlight.js/lib/core")).default;
 
 beforeEach(() => {
   statMock.mockClear();
   statMock.mockImplementation(() => Promise.reject(new Error("not found")));
   clearWorkspaceFileExistenceCacheForTest();
+  copyTextToClipboardMock.mockReset();
+  copyTextToClipboardMock.mockResolvedValue(true);
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.error).mockClear();
 });
 
 describe("AgentMarkdown", () => {
@@ -239,7 +264,10 @@ describe("AgentMarkdown 行内代码文件路径", () => {
       expect(screen.getByText("src/app/a.ts")).toBeInTheDocument();
     });
     expect(statMock).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    // 围栏代码块自带复制按钮，但里面的路径不该变成可点文件按钮。
+    expect(
+      screen.queryByRole("button", { name: "Open file src/app/a.ts" }),
+    ).not.toBeInTheDocument();
   });
 
   it("未注入文件链接能力时不发存在性检查请求，行内代码保持原样", async () => {
@@ -291,5 +319,96 @@ describe("AgentMarkdown 行内代码文件路径", () => {
       sessionId: 10,
       filePath: "src/app/b.ts",
     });
+  });
+});
+
+describe("AgentMarkdown 围栏代码", () => {
+  it("已知语言渲染高亮结构并标出语言", () => {
+    const { container } = render(
+      <AgentMarkdown>{"```ts\nconst answer: number = 1;\n```"}</AgentMarkdown>,
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+    expect(container.querySelector(".hljs-keyword")).not.toBeNull();
+    expect(screen.getByText("ts")).toBeInTheDocument();
+  });
+
+  it("复制按钮把原文写入剪贴板并提示成功", async () => {
+    const user = userEvent.setup();
+
+    render(<AgentMarkdown>{"```ts\nconst answer = 1;\n```"}</AgentMarkdown>);
+
+    await user.click(screen.getByRole("button", { name: "Copy code" }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith("Copied to clipboard");
+    });
+    expect(copyTextToClipboardMock).toHaveBeenCalledWith("const answer = 1;\n");
+  });
+
+  it("复制失败时提示失败文案", async () => {
+    copyTextToClipboardMock.mockResolvedValueOnce(false);
+    const user = userEvent.setup();
+
+    render(<AgentMarkdown>{"```ts\nconst answer = 1;\n```"}</AgentMarkdown>);
+
+    await user.click(screen.getByRole("button", { name: "Copy code" }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Failed to copy");
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("未知语言回落纯文本且逐字保留原文", () => {
+    const { container } = render(
+      <AgentMarkdown>{"```unknownlang\nconst answer = 1;\n```"}</AgentMarkdown>,
+    );
+
+    const code = container.querySelector("pre code");
+
+    expect(code?.className).toBe("language-unknownlang");
+    expect(code?.textContent).toBe("const answer = 1;\n");
+    expect(container.querySelector(".hljs-keyword")).toBeNull();
+  });
+
+  it("无 info string 的围栏代码回落纯文本", () => {
+    const { container } = render(
+      <AgentMarkdown>{"```\nplain text\n```"}</AgentMarkdown>,
+    );
+
+    const code = container.querySelector("pre code");
+
+    expect(code?.textContent).toBe("plain text\n");
+    expect(container.querySelector(".hljs-keyword")).toBeNull();
+  });
+
+  it("高亮抛错时仍显示原文且不崩", () => {
+    const highlightSpy = vi
+      .spyOn(hljsCore, "highlight")
+      .mockImplementationOnce(() => {
+        throw new Error("highlight failed");
+      });
+
+    const { container } = render(
+      <AgentMarkdown>{"```ts\nconst answer = 1;\n```"}</AgentMarkdown>,
+    );
+
+    expect(highlightSpy).toHaveBeenCalled();
+    expect(container.querySelector("pre code")?.textContent).toBe(
+      "const answer = 1;\n",
+    );
+    expect(container.querySelector(".hljs-keyword")).toBeNull();
+  });
+
+  it("行内代码 DOM 与样式保持不变", () => {
+    const { container } = render(
+      <AgentMarkdown>{"见 `pnpm test`。"}</AgentMarkdown>,
+    );
+
+    expect(container.querySelector("code")).toHaveClass(
+      "agents-message__code-inline",
+    );
+    expect(container.querySelector("pre")).toBeNull();
   });
 });

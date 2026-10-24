@@ -1,12 +1,14 @@
 // Agent 消息文本的 Markdown 渲染封装。
 //
 // 使用 react-markdown + remark-gfm 渲染 assistant 消息（含代码块、列表、表格、
-// 删除线、任务列表）。自定义 code/a 渲染以贴合 RedWhisk 设计系统（等宽代码块）。
+// 删除线、任务列表）。自定义 a / pre / code 渲染以贴合 RedWhisk 设计系统（等宽代码块）。
 // 链接按三态分类：http(s) 新标签页打开；工作区内文件路径交给侧栏
 // `SessionFileViewer`（`sessionFileLinks.openFilePath`，不做 `_blank`）；
-// 解析不了的保持纯文本，不外泄原始指令。不引入语法高亮，首版只要可读。
+// 解析不了的保持纯文本，不外泄原始指令。
 // 行内代码里的工作区相对路径先做语法判定，再经后端存在性检查确认后才变成可点元素，
 // 不存在的路径保持普通 `<code>`。
+// 围栏代码交给 `MessageCodeBlock`（语法高亮 + 复制按钮）；围栏与行内的分流放在
+// `pre` 渲染器里，避免外层 `<pre>` 与代码块自带的 `<pre>` 叠成两层。
 
 import remarkGfm from "remark-gfm";
 import type { TFunction } from "i18next";
@@ -19,6 +21,7 @@ import {
   extractInlineCodeTexts,
   resolveInlineCodeFilePath,
 } from "./inline-code-kind";
+import { MessageCodeBlock } from "./message-code-block";
 import {
   parseFileReference,
   resolveWorkspaceRelativePath,
@@ -93,17 +96,33 @@ function createMarkdownComponents(
     ul({ children }) {
       return <ul className="agents-message__unordered-list">{children}</ul>;
     },
-    code(props) {
-      // react-markdown v10 把 inline/block 都走 code；通过 className 区分行内。
-      const { className, children } = props;
+    // 围栏代码块由 `pre` 接管：react-markdown 只在围栏代码外生成 `<pre>`（行内代码
+    // 没有这一层），所以「是不是围栏」只在这里判断 —— 只看 `code` 的 className 区分
+    // 不出两者（没有 info string 的围栏不带 `language-*`）。围栏原文与 info string
+    // 取自 `node`，避免外层 `<pre>` 与 `MessageCodeBlock` 自带的 `<pre>` 叠成两层。
+    pre({ children, node }) {
+      const codeElement = node?.children[0];
+      if (codeElement?.type !== "element" || codeElement.tagName !== "code") {
+        return <pre className="agents-message__code-block">{children}</pre>;
+      }
+      const rawText = codeElement.children[0];
+      const rawClassName = codeElement.properties.className;
+      return (
+        <MessageCodeBlock
+          className={
+            Array.isArray(rawClassName) ? rawClassName.join(" ") : undefined
+          }
+          code={rawText?.type === "text" ? rawText.value : ""}
+        />
+      );
+    },
+    code({ className, children }) {
+      // react-markdown v10 把 inline/block 都走 code；围栏代码已由上面的 `pre`
+      // 渲染器接管，这里只渲染行内代码，非行内分支保留原有 `<code>` 结构。
       const isInline =
         typeof className !== "string" || !className.includes("language-");
       if (!isInline) {
-        return (
-          <pre className="agents-message__code-block">
-            <code className={className}>{children}</code>
-          </pre>
-        );
+        return <code className={className}>{children}</code>;
       }
 
       const inlineText = typeof children === "string" ? children : null;

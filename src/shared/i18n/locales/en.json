@@ -696,6 +696,7 @@
     "toolOutputTruncated": "Output truncated to {{visibleCharacters}} of {{totalCharacters}} characters.",
     "exitCode": "exit {{exitCode}}",
     "copyCommand": "Copy command",
+    "copyCode": "Copy code",
     "copyFailed": "Failed to copy",
     "toolOutputExpand": "Show output ({{lines}} lines)",
     "toolOutputCollapse": "Hide output",

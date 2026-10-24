@@ -364,6 +364,111 @@
   font-family: inherit;
 }
 
+/* 围栏代码块外壳：语言标签与复制按钮住在头部，`pre` 只负责代码本体。 */
+.agents-message__code-block-shell {
+  margin: 6px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+  overflow: hidden;
+}
+
+/* 外壳内的 `pre` 去掉自带边框与间距，避免双重描边。 */
+.agents-message__code-block-shell > .agents-message__code-block {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.agents-message__code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.agents-message__code-block-language {
+  margin-right: auto;
+}
+
+.agents-message__code-block-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.agents-message__code-block-copy:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.agents-message__code-block-copy:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* highlight.js token 配色：沿用既有 diff 高亮的一组颜色，黑白灰之外只做必要点缀。 */
+.agents-message__code-block .hljs-comment,
+.agents-message__code-block .hljs-quote {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__code-block .hljs-keyword,
+.agents-message__code-block .hljs-meta,
+.agents-message__code-block .hljs-selector-tag {
+  color: #7c4dff;
+}
+
+.agents-message__code-block .hljs-built_in,
+.agents-message__code-block .hljs-title {
+  color: #0b6fcb;
+}
+
+.agents-message__code-block .hljs-attr,
+.agents-message__code-block .hljs-attribute,
+.agents-message__code-block .hljs-literal,
+.agents-message__code-block .hljs-number {
+  color: #9a5b00;
+}
+
+.agents-message__code-block .hljs-property,
+.agents-message__code-block .hljs-tag,
+.agents-message__code-block .hljs-type,
+.agents-message__code-block .hljs-variable {
+  color: #9950b8;
+}
+
+.agents-message__code-block .hljs-addition,
+.agents-message__code-block .hljs-regexp,
+.agents-message__code-block .hljs-string {
+  color: #237a3b;
+}
+
+.agents-message__code-block .hljs-operator,
+.agents-message__code-block .hljs-punctuation,
+.agents-message__code-block .hljs-subst {
+  color: var(--color-text-subtle);
+}
+
+.agents-message__code-block .hljs-deletion {
+  color: var(--color-danger);
+}
+
 /* 推理折叠 */
 .agents-message__reasoning {
   width: 100%;

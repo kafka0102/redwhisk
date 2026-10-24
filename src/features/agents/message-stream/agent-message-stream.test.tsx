@@ -642,10 +642,10 @@ describe("AgentMessageStream", () => {
     await waitFor(() => {
       expect(screen.getByText("示例：")).toBeInTheDocument();
     });
-    expect(
-      container.querySelector(".agents-message__code-block"),
-    ).not.toBeNull();
-    expect(screen.getByText("const x = 1;")).toBeInTheDocument();
+    const codeBlock = container.querySelector(".agents-message__code-block");
+    expect(codeBlock).not.toBeNull();
+    // 高亮会把代码切成 `<span class="hljs-*">`，原文仍逐字保留。
+    expect(codeBlock?.textContent).toBe("const x = 1;\n");
   });
 
   it("Claude session 仅含用户消息且 turn 运行时展示正在思考占位", () => {
