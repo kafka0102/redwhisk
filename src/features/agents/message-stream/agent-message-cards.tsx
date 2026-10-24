@@ -9,7 +9,6 @@ import {
   Terminal,
   ChevronDown,
   ChevronRight,
-  ExternalLink,
   FileEdit,
   FilePlus,
   FileSearch,
@@ -22,7 +21,6 @@ import { memo, useState } from "react";
 
 import { Badge } from "@/components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
-import type { I18nMessages } from "../../../shared/i18n/messages";
 import type {
   AgentTimelineItem,
   ToolCallDetail,
@@ -30,9 +28,15 @@ import type {
 } from "../agent-stream-types";
 import { ExpandableText } from "../expandable-text";
 import { AgentMarkdown } from "./agent-markdown";
-import { HighlightedDiffBlock } from "./highlighted-diff-block";
 import type { MessageStreamEntry } from "./message-stream-types";
 import type { SessionFileLinks } from "./session-file-links";
+import { ToolCallDetailView } from "./tool-call-detail";
+import {
+  buildToolCallPresentation,
+  hasToolCallDetail,
+  type ToolCallPresentation,
+} from "./tool-call-presentation";
+import { extractTaskUpdateInfo } from "./unknown-tool-payload";
 
 interface AgentMessageCardsProps {
   entries: MessageStreamEntry[];
@@ -44,8 +48,6 @@ interface AgentMessageCardsProps {
   /** 本地文件链接能力；`undefined` 表示本条流未接侧栏（路径只显示文本）。 */
   sessionFileLinks: SessionFileLinks | undefined;
 }
-
-const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
 
 // 用户消息可能是一次粘贴的长代码，折叠行数限制避免单条消息占据多个屏幕。
 const USER_MESSAGE_MAX_LINES = 5;
@@ -120,6 +122,7 @@ const MessageCard = memo(function MessageCard({
           isDetailOpen={isDetailOpen}
           loadError={loadError}
           onEntryExpandedChange={onEntryExpandedChange}
+          sessionFileLinks={sessionFileLinks}
         />
       );
     case "todo":
@@ -220,6 +223,7 @@ function ToolCallCard({
   isDetailOpen = false,
   loadError,
   onEntryExpandedChange,
+  sessionFileLinks,
 }: {
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
   entryId?: string;
@@ -227,6 +231,7 @@ function ToolCallCard({
   isDetailOpen?: boolean;
   loadError?: string;
   onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
+  sessionFileLinks: SessionFileLinks | undefined;
 }) {
   const { messages } = useI18n();
   const [localOpen, setLocalOpen] = useState(false);
@@ -270,7 +275,11 @@ function ToolCallCard({
               />
             </summary>
             {open ? (
-              <ToolCallDetail name={item.name} detail={item.detail} />
+              <ToolCallDetailView
+                name={item.name}
+                detail={item.detail}
+                sessionFileLinks={sessionFileLinks}
+              />
             ) : null}
             {loadError ? (
               <p className="agents-message__tool-error" role="status">
@@ -289,7 +298,11 @@ function ToolCallCard({
                 isExpandable={false}
               />
             </div>
-            <ToolCallDetail name={item.name} detail={item.detail} />
+            <ToolCallDetailView
+              name={item.name}
+              detail={item.detail}
+              sessionFileLinks={sessionFileLinks}
+            />
           </>
         )}
         {item.error ? (
@@ -405,524 +418,6 @@ function ToolCallStatusBadge({ status }: { status: ToolCallStatus }) {
       </Badge>
     );
   }
-}
-
-function ToolCallDetail({
-  name,
-  detail,
-}: {
-  name: string;
-  detail: ToolCallDetail;
-}) {
-  const { messages } = useI18n();
-  switch (detail.type) {
-    case "shell": {
-      const shellOutput = truncateToolDetailText(detail.output);
-      return (
-        <div className="agents-message__tool-body">
-          {detail.output || detail.exitCode != null ? (
-            <div className="agents-message__tool-output">
-              {detail.exitCode != null ? (
-                <span className="agents-message__exit-code">
-                  {messages.agentsFeature.exitCode(detail.exitCode)}
-                </span>
-              ) : null}
-              <code className="agents-message__command agents-message__command--details">
-                {detail.command}
-              </code>
-              {shellOutput ? (
-                <>
-                  <pre className="agents-message__output">
-                    {shellOutput.text}
-                  </pre>
-                  {shellOutput.isTruncated ? (
-                    <p className="agents-message__truncated" role="status">
-                      {messages.agentsFeature.toolOutputTruncated(
-                        shellOutput.visibleCharacters,
-                        shellOutput.totalCharacters,
-                      )}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-    case "read": {
-      const readContent = truncateToolDetailText(detail.content);
-      return (
-        <div className="agents-message__tool-body">
-          {readContent ? (
-            <div className="agents-message__tool-output">
-              <code className="agents-message__path agents-message__path--details">
-                {detail.path}
-              </code>
-              <pre className="agents-message__output">{readContent.text}</pre>
-              {readContent.isTruncated ? (
-                <p className="agents-message__truncated" role="status">
-                  {messages.agentsFeature.toolOutputTruncated(
-                    readContent.visibleCharacters,
-                    readContent.totalCharacters,
-                  )}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-    case "edit": {
-      const editDiff = truncateToolDetailText(detail.diff);
-      return (
-        <div className="agents-message__tool-body">
-          {editDiff ? (
-            <div className="agents-message__tool-output">
-              <code className="agents-message__path agents-message__path--details">
-                {detail.path}
-              </code>
-              <HighlightedDiffBlock diff={editDiff.text} path={detail.path} />
-              {editDiff.isTruncated ? (
-                <p className="agents-message__truncated" role="status">
-                  {messages.agentsFeature.toolOutputTruncated(
-                    editDiff.visibleCharacters,
-                    editDiff.totalCharacters,
-                  )}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-    case "write": {
-      const writeContent = truncateToolDetailText(detail.content);
-      return (
-        <div className="agents-message__tool-body">
-          {writeContent ? (
-            <div className="agents-message__tool-output">
-              <code className="agents-message__path agents-message__path--details">
-                {detail.path}
-              </code>
-              <pre className="agents-message__output">{writeContent.text}</pre>
-              {writeContent.isTruncated ? (
-                <p className="agents-message__truncated" role="status">
-                  {messages.agentsFeature.toolOutputTruncated(
-                    writeContent.visibleCharacters,
-                    writeContent.totalCharacters,
-                  )}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-    case "search":
-      return (
-        <div className="agents-message__tool-body">
-          <div className="agents-message__tool-output">
-            <div className="agents-message__search-details">
-              <div className="agents-message__detail-row">
-                <span className="agents-message__detail-label">
-                  {messages.agentsFeature.query}
-                </span>
-                <code className="agents-message__search-query">
-                  {detail.query}
-                </code>
-              </div>
-              <div className="agents-message__detail-row">
-                <span className="agents-message__detail-label">
-                  {messages.agentsFeature.mode}
-                </span>
-                <code className="agents-message__search-query">
-                  {formatSearchMode(detail.mode)}
-                </code>
-              </div>
-              {detail.matches.length > 0 ? (
-                <ul className="agents-message__search-matches">
-                  {detail.matches.map((match, index) => (
-                    <li key={`${index}-${match}`}>
-                      <SearchMatch match={match} />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="agents-message__search-empty">
-                  {messages.agentsFeature.noSearchMatches}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    case "sub_agent":
-      return (
-        <div className="agents-message__tool-body">
-          {detail.childSessionId ? (
-            <p className="agents-message__sub-agent">
-              {messages.agentsFeature.subSession(detail.childSessionId)}
-            </p>
-          ) : (
-            <p className="agents-message__sub-agent">
-              {messages.agentsFeature.subSessionStarted}
-            </p>
-          )}
-        </div>
-      );
-
-    case "collab_agent":
-      return detail.prompt ? (
-        <div className="agents-message__tool-body">
-          <p className="agents-message__plan">{detail.prompt}</p>
-        </div>
-      ) : null;
-    case "plan":
-      return (
-        <div className="agents-message__tool-body">
-          <p className="agents-message__plan">{detail.text}</p>
-        </div>
-      );
-    default: {
-      const taskUpdate = extractTaskUpdateInfo(name, detail);
-      if (taskUpdate) {
-        const statusLabel = messages.agentsFeature.taskStatusLabel(
-          taskUpdate.status ?? "updated",
-        );
-        return (
-          <div className="agents-message__tool-body">
-            <p className="agents-message__plan">
-              {messages.agentsFeature.taskUpdateDetail(
-                taskUpdate.taskId,
-                statusLabel,
-              )}
-            </p>
-          </div>
-        );
-      }
-      return (
-        <div className="agents-message__tool-body">
-          {detail.rawInput || detail.rawOutput ? (
-            <div className="agents-message__tool-output">
-              {detail.rawInput ? (
-                <pre className="agents-message__output">{detail.rawInput}</pre>
-              ) : null}
-              {detail.rawOutput ? (
-                <pre className="agents-message__output">{detail.rawOutput}</pre>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-  }
-}
-
-function hasToolCallDetail(detail: ToolCallDetail): boolean {
-  switch (detail.type) {
-    case "shell":
-      return Boolean(detail.output) || detail.exitCode != null;
-    case "read":
-      return Boolean(detail.content);
-    case "edit":
-      return Boolean(detail.diff);
-    case "write":
-      return Boolean(detail.content);
-    case "search":
-      return true;
-    case "unknown":
-      return Boolean(detail.rawInput || detail.rawOutput);
-    default:
-      return false;
-  }
-}
-
-function truncateToolDetailText(text: string | null | undefined): {
-  text: string;
-  isTruncated: boolean;
-  visibleCharacters: number;
-  totalCharacters: number;
-} | null {
-  if (!text) {
-    return null;
-  }
-  if (text.length <= MAX_TOOL_DETAIL_TEXT_LENGTH) {
-    return {
-      text,
-      isTruncated: false,
-      visibleCharacters: text.length,
-      totalCharacters: text.length,
-    };
-  }
-  return {
-    text: text.slice(0, MAX_TOOL_DETAIL_TEXT_LENGTH),
-    isTruncated: true,
-    visibleCharacters: MAX_TOOL_DETAIL_TEXT_LENGTH,
-    totalCharacters: text.length,
-  };
-}
-
-function SearchMatch({ match }: { match: string }) {
-  const url = extractFirstUrl(match);
-  if (!url) {
-    return <code>{match}</code>;
-  }
-  return (
-    <a
-      className="agents-message__search-link"
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-    >
-      <ExternalLink aria-hidden="true" size={12} strokeWidth={1.8} />
-      <span>{match}</span>
-    </a>
-  );
-}
-
-function extractFirstUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s)]+/);
-  return match?.[0] ?? null;
-}
-
-interface ToolCallPresentation {
-  displayName: string;
-  summary?: string;
-}
-
-function buildToolCallPresentation(
-  copy: I18nMessages["agentsFeature"],
-  name: string,
-  detail: ToolCallDetail,
-): ToolCallPresentation {
-  switch (detail.type) {
-    case "shell":
-      return { displayName: copy.toolShell, summary: detail.command };
-    case "edit":
-      return { displayName: copy.toolEdit, summary: detail.path };
-    case "write":
-      return { displayName: copy.toolWrite, summary: detail.path };
-    case "read":
-      return { displayName: copy.toolRead, summary: detail.path };
-    case "search":
-      return { displayName: copy.toolSearch, summary: detail.query };
-    case "sub_agent":
-      return {
-        displayName: copy.toolTask,
-        summary: detail.childSessionId
-          ? copy.subSession(detail.childSessionId)
-          : undefined,
-      };
-    case "collab_agent":
-      return {
-        displayName: copy.toolCollab,
-        summary: detail.prompt,
-      };
-    case "plan":
-      return { displayName: copy.toolPlan };
-    case "unknown":
-      return buildUnknownToolCallPresentation(copy, name, detail);
-    default:
-      return { displayName: formatToolName(name) };
-  }
-}
-
-function buildUnknownToolCallPresentation(
-  copy: I18nMessages["agentsFeature"],
-  name: string,
-  detail: Extract<ToolCallDetail, { type: "unknown" }>,
-): ToolCallPresentation {
-  const taskUpdate = extractTaskUpdateInfo(name, detail);
-  if (taskUpdate) {
-    const statusLabel = copy.taskStatusLabel(taskUpdate.status ?? "updated");
-    return {
-      displayName: copy.toolTask,
-      summary: copy.taskUpdateSummary(taskUpdate.taskId, statusLabel),
-    };
-  }
-
-  const displayName = formatToolName(name);
-  if (!isWebSearchName(name)) {
-    return { displayName };
-  }
-  const rawQuery = extractUnknownSearchQuery(detail.rawInput);
-  const rawOutputQuery = extractUnknownSearchQuery(detail.rawOutput);
-  return {
-    displayName: "Search",
-    summary: rawQuery ?? rawOutputQuery,
-  };
-}
-
-function isWebSearchName(name: string): boolean {
-  const normalized = name.replace(/[\s_-]+/g, "").toLowerCase();
-  return normalized === "websearch" || normalized === "websearchtoolcall";
-}
-
-function extractUnknownSearchQuery(
-  raw: string | undefined,
-): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return findQueryInUnknown(JSON.parse(raw));
-  } catch {
-    return undefined;
-  }
-}
-
-function findQueryInUnknown(value: unknown): string | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const directQuery = readString(value.query);
-  if (directQuery) {
-    return directQuery;
-  }
-  return (
-    findQueryInUnknown(value.input) ??
-    findQueryInUnknown(value.action) ??
-    findQueryInUnknown(value.output)
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
-}
-
-interface TaskUpdateInfo {
-  taskId: string;
-  status?: string;
-}
-
-function extractTaskUpdateInfo(
-  name: string,
-  detail: Extract<ToolCallDetail, { type: "unknown" }>,
-): TaskUpdateInfo | null {
-  if (!isTaskUpdateName(name) && !looksLikeTaskUpdatePayload(detail)) {
-    return null;
-  }
-
-  const inputPayload = parseUnknownToolPayload(detail.rawInput);
-  const outputPayload = parseUnknownToolPayload(detail.rawOutput);
-  const taskId =
-    readTaskId(inputPayload) ??
-    readTaskId(outputPayload) ??
-    extractTaskIdFromText(detail.rawOutput) ??
-    extractTaskIdFromText(detail.rawInput);
-  if (!taskId) {
-    return null;
-  }
-
-  return {
-    taskId,
-    status:
-      readTaskStatus(inputPayload) ??
-      readTaskStatus(outputPayload) ??
-      extractTaskStatusFromText(detail.rawOutput),
-  };
-}
-
-function isTaskUpdateName(name: string): boolean {
-  const normalized = name.replace(/[\s_-]+/g, "").toLowerCase();
-  return normalized === "taskupdate";
-}
-
-function looksLikeTaskUpdatePayload(
-  detail: Extract<ToolCallDetail, { type: "unknown" }>,
-): boolean {
-  return (
-    extractTaskIdFromText(detail.rawInput) != null ||
-    extractTaskIdFromText(detail.rawOutput) != null
-  );
-}
-
-function parseUnknownToolPayload(
-  raw: string | undefined,
-): Record<string, unknown> | null {
-  if (!raw) {
-    return null;
-  }
-  try {
-    const value = JSON.parse(raw);
-    return isRecord(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function readTaskId(value: Record<string, unknown> | null): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const taskId = value.taskId;
-  if (typeof taskId === "number") {
-    return String(taskId);
-  }
-  return readString(taskId);
-}
-
-function readTaskStatus(
-  value: Record<string, unknown> | null,
-): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return readString(value.status);
-}
-
-function extractTaskIdFromText(raw: string | undefined): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-  const match = raw.match(/task\s*#?(\d+)/i);
-  return match?.[1];
-}
-
-function extractTaskStatusFromText(
-  raw: string | undefined,
-): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-  const normalized = raw.toLowerCase();
-  if (normalized.includes("completed")) {
-    return "completed";
-  }
-  if (
-    normalized.includes("in_progress") ||
-    normalized.includes("in progress")
-  ) {
-    return "in_progress";
-  }
-  if (normalized.includes("updated")) {
-    return "updated";
-  }
-  return undefined;
-}
-
-function formatToolName(name: string): string {
-  return name
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatSearchMode(
-  mode: Extract<ToolCallDetail, { type: "search" }>["mode"],
-) {
-  if (mode === "files_with_matches") {
-    return "files with matches";
-  }
-  return mode;
 }
 
 function TodoCard({

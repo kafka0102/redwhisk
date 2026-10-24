@@ -564,6 +564,106 @@ details[open] > summary .agents-message__summary-chevron {
   margin-top: 6px;
 }
 
+/* shell 命令行 + 复制按钮：命令文本可变宽，按钮固定尺寸。 */
+.agents-message__command-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.agents-message__command-row > .agents-message__command {
+  margin-top: 0;
+}
+
+.agents-message__command-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-panel);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.agents-message__command-copy:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.agents-message__command-copy:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* 工具卡里已确认在工作区内的路径：外观同纯文本路径，hover / focus 给出可点反馈。 */
+.agents-message__path--button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agents-message__path--button:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agents-message__path--button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* 卡内嵌套折叠（大输出 / 大 diff / 未知工具 raw）：默认收起，摘要给出行数。 */
+.agents-message__tool-fold {
+  margin-top: 6px;
+}
+
+.agents-message__tool-fold-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  list-style: none;
+  cursor: pointer;
+}
+
+.agents-message__tool-fold-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agents-message__tool-fold-summary:hover {
+  color: var(--color-text);
+}
+
+.agents-message__tool-fold-summary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.agents-message__tool-fold-chevron {
+  flex: 0 0 auto;
+  transition: transform 150ms ease;
+}
+
+.agents-message__tool-fold[open] .agents-message__tool-fold-chevron {
+  transform: rotate(90deg);
+}
+
+.agents-message__tool-fold-body {
+  min-width: 0;
+}
+
 .agents-message__output--diff {
   color: var(--color-text-muted);
   padding: 0;

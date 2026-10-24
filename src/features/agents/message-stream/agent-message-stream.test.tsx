@@ -43,12 +43,31 @@ vi.mock("../../../shared/workspace/workspace-commands", () => ({
   statProjectWorktreeFile: vi.fn(() => Promise.reject(new Error("not found"))),
 }));
 
+vi.mock("../../../shared/commands/copy-text-to-clipboard", () => ({
+  copyTextToClipboard: vi.fn(async () => true),
+}));
+
+vi.mock("../../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
 
 const { statProjectWorktreeFile } =
   await import("../../../shared/workspace/workspace-commands");
 const statProjectWorktreeFileMock = vi.mocked(statProjectWorktreeFile);
+
+const { copyTextToClipboard } =
+  await import("../../../shared/commands/copy-text-to-clipboard");
+const copyTextToClipboardMock = vi.mocked(copyTextToClipboard);
+
+const { toast } = await import("../../../shared/toast");
 
 /**
  * 多数用例只验证滚动位置 / 状态渲染：给消息流一个不产生副作用的文件链接能力，
@@ -116,6 +135,10 @@ beforeEach(() => {
     Promise.reject(new Error("not found")),
   );
   clearWorkspaceFileExistenceCacheForTest();
+  copyTextToClipboardMock.mockReset();
+  copyTextToClipboardMock.mockResolvedValue(true);
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.error).mockClear();
 });
 
 describe("AgentMessageStream", () => {
@@ -1402,5 +1425,302 @@ describe("AgentMessageStreamView 文件链接能力透传", () => {
       filePath: "src/app/a.ts",
     });
     expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
+  });
+});
+
+describe("AgentMessageStreamView 工具卡交互", () => {
+  const WORKSPACE_PATH = "/workspace/repo";
+
+  function fileLinks(openFilePath: (filePath: string) => void) {
+    return {
+      projectId: 1,
+      sessionId: 40,
+      workspacePath: WORKSPACE_PATH,
+      homePath: "/home/dev",
+      openFilePath,
+    };
+  }
+
+  function renderToolCard(
+    item: Extract<AgentTimelineItem, { type: "tool_call" }>,
+    sessionFileLinks?: SessionFileLinks,
+  ) {
+    return render(
+      <AgentMessageStreamView
+        sessionFileLinks={sessionFileLinks}
+        state={createMessageStreamState({
+          entries: [{ id: "t1", kind: "tool_call", item }],
+        })}
+      />,
+    );
+  }
+
+  /** 生成指定行数的统一 diff，用于验证 diff 折叠阈值。 */
+  function largeDiff(contentLines: number): string {
+    return [
+      `@@ -1,${contentLines} +1,${contentLines} @@`,
+      ...Array.from({ length: contentLines }, (_, index) => `+line ${index}`),
+    ].join("\n");
+  }
+
+  it("read 工具卡的路径是按钮并回传工作区相对路径", () => {
+    const openFilePath = vi.fn();
+    renderToolCard(
+      {
+        type: "tool_call",
+        callId: "read-1",
+        name: "read",
+        detail: {
+          type: "read",
+          path: `${WORKSPACE_PATH}/src/app/a.ts`,
+          content: "export const a = 1;",
+        },
+        status: "completed",
+      },
+      fileLinks(openFilePath),
+    );
+
+    fireEvent.click(screen.getByText("Read"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open file src/app/a.ts" }),
+    );
+
+    expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
+  });
+
+  it("工作区外绝对路径的 read 路径保持纯文本", () => {
+    const openFilePath = vi.fn();
+    renderToolCard(
+      {
+        type: "tool_call",
+        callId: "read-outside",
+        name: "read",
+        detail: {
+          type: "read",
+          path: "/tmp/outside/a.ts",
+          content: "export const a = 1;",
+        },
+        status: "completed",
+      },
+      fileLinks(openFilePath),
+    );
+
+    fireEvent.click(screen.getByText("Read"));
+
+    expect(
+      screen.queryByRole("button", { name: /^Open file / }),
+    ).not.toBeInTheDocument();
+    // 头部摘要与详情各显示一次原文路径。
+    expect(screen.getAllByText("/tmp/outside/a.ts")).toHaveLength(2);
+  });
+
+  it("write 工具卡的路径是按钮并回传工作区相对路径", () => {
+    const openFilePath = vi.fn();
+    renderToolCard(
+      {
+        type: "tool_call",
+        callId: "write-1",
+        name: "write",
+        detail: {
+          type: "write",
+          path: `${WORKSPACE_PATH}/src/app/b.ts`,
+          content: "export const b = 2;",
+        },
+        status: "completed",
+      },
+      fileLinks(openFilePath),
+    );
+
+    fireEvent.click(screen.getByText("Write"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open file src/app/b.ts" }),
+    );
+
+    expect(openFilePath).toHaveBeenCalledWith("src/app/b.ts");
+  });
+
+  it("edit 工具卡的路径是按钮，小 diff 维持高亮直出", () => {
+    const openFilePath = vi.fn();
+    const { container } = renderToolCard(
+      {
+        type: "tool_call",
+        callId: "edit-small",
+        name: "edit",
+        detail: {
+          type: "edit",
+          path: `${WORKSPACE_PATH}/src/app/c.tsx`,
+          diff: [
+            "@@ -1,1 +1,1 @@",
+            '- const a = "old";',
+            '+ const a = "new";',
+          ].join("\n"),
+        },
+        status: "completed",
+      },
+      fileLinks(openFilePath),
+    );
+
+    fireEvent.click(screen.getByText("Edit"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open file src/app/c.tsx" }),
+    );
+
+    expect(openFilePath).toHaveBeenCalledWith("src/app/c.tsx");
+    expect(
+      container.querySelector(".agents-message__diff-code"),
+    ).not.toBeNull();
+    expect(screen.queryByText(/^Show diff \(/)).not.toBeInTheDocument();
+  });
+
+  it("edit 工具卡的大 diff 默认收起在嵌套折叠里", () => {
+    renderToolCard({
+      type: "tool_call",
+      callId: "edit-large",
+      name: "edit",
+      detail: {
+        type: "edit",
+        path: "/tmp/large.ts",
+        diff: largeDiff(130),
+      },
+      status: "completed",
+    });
+
+    fireEvent.click(screen.getByText("Edit"));
+
+    const fold = screen
+      .getByText("Show diff (131 lines)")
+      .closest("details") as HTMLDetailsElement | null;
+    expect(fold?.open).toBe(false);
+
+    fireEvent.click(screen.getByText("Show diff (131 lines)"));
+
+    expect(
+      screen
+        .getByText("Hide diff")
+        .closest("details") as HTMLDetailsElement | null,
+    ).toHaveProperty("open", true);
+  });
+
+  it("shell 卡保留命令与退出码，复制命令成功后提示已复制", async () => {
+    renderToolCard({
+      type: "tool_call",
+      callId: "shell-copy",
+      name: "shell",
+      detail: {
+        type: "shell",
+        command: "pnpm test",
+        output: "all good",
+        exitCode: 0,
+      },
+      status: "completed",
+    });
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    expect(screen.getByText("exit 0")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy command" }));
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledWith("pnpm test");
+    });
+    expect(toast.success).toHaveBeenCalledWith("Copied to clipboard");
+  });
+
+  it("shell 卡复制命令失败时提示复制失败", async () => {
+    copyTextToClipboardMock.mockResolvedValue(false);
+    renderToolCard({
+      type: "tool_call",
+      callId: "shell-copy-failed",
+      name: "shell",
+      detail: {
+        type: "shell",
+        command: "pnpm lint",
+        output: "no problems",
+        exitCode: 0,
+      },
+      status: "completed",
+    });
+
+    fireEvent.click(screen.getByText("Shell"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy command" }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Failed to copy");
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shell 大输出默认收起在嵌套折叠里", () => {
+    const output = Array.from(
+      { length: 41 },
+      (_, index) => `line ${index}`,
+    ).join("\n");
+    renderToolCard({
+      type: "tool_call",
+      callId: "shell-large",
+      name: "shell",
+      detail: { type: "shell", command: "cat big.log", output, exitCode: 0 },
+      status: "completed",
+    });
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    const fold = screen
+      .getByText("Show output (41 lines)")
+      .closest("details") as HTMLDetailsElement | null;
+    expect(fold?.open).toBe(false);
+
+    fireEvent.click(screen.getByText("Show output (41 lines)"));
+
+    expect(screen.getByText("Hide output")).toBeInTheDocument();
+  });
+
+  it("shell 小输出直接展开，不出现嵌套折叠", () => {
+    renderToolCard({
+      type: "tool_call",
+      callId: "shell-small",
+      name: "shell",
+      detail: {
+        type: "shell",
+        command: "ls",
+        output: "a.txt\nb.txt",
+        exitCode: 0,
+      },
+      status: "completed",
+    });
+
+    fireEvent.click(screen.getByText("Shell"));
+
+    expect(screen.getByText("a.txt b.txt")).toBeInTheDocument();
+    expect(screen.queryByText(/^Show output \(/)).not.toBeInTheDocument();
+  });
+
+  it("未知工具的 raw 输入输出默认收起在折叠详情里", () => {
+    renderToolCard({
+      type: "tool_call",
+      callId: "unknown-1",
+      name: "some_unknown_tool",
+      detail: {
+        type: "unknown",
+        rawInput: '{"foo":"bar"}',
+        rawOutput: "raw output text",
+      },
+      status: "completed",
+    });
+
+    expect(screen.queryByText("raw output text")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Some Unknown Tool"));
+
+    const fold = screen
+      .getByText("Raw tool input and output")
+      .closest("details") as HTMLDetailsElement | null;
+    expect(fold?.open).toBe(false);
+
+    fireEvent.click(screen.getByText("Raw tool input and output"));
+
+    expect(screen.getByText('{"foo":"bar"}')).toBeInTheDocument();
+    expect(screen.getByText("raw output text")).toBeInTheDocument();
   });
 });
