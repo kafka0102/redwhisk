@@ -13,6 +13,7 @@ import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
   readProjectWorktreeDiff,
+  readProjectWorktreeFile,
   type WorkspaceChangedFile,
   type WorkspaceCommitChangedFile,
   type WorkspaceCommitRecord,
@@ -55,6 +56,7 @@ const getProjectWorktreeCommitHistoryMock = vi.mocked(
   getProjectWorktreeCommitHistory,
 );
 const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
+const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
@@ -1963,5 +1965,99 @@ describe("useSessionWorkspaceCache session list event invalidation", () => {
 
     expect(getProjectWorktreeChangesMock).not.toHaveBeenCalled();
     expect(getProjectWorktreeCommitHistoryMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useSessionWorkspaceCache openFilePathForSession", () => {
+  beforeEach(() => {
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+    readProjectWorktreeFileMock.mockReset();
+  });
+
+  it("按目标 sessionId 打开工作区相对路径并写入 fileTab 内容", async () => {
+    readProjectWorktreeFileMock.mockResolvedValue({
+      filePath: "src/app/a.ts",
+      language: "typescript",
+      content: "export const a = 1;",
+      modifiedAt: null,
+      sizeBytes: 19,
+      isBinary: false,
+      isTooLarge: false,
+      previewKind: null,
+      previewBytesBase64: "",
+    });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    // 目标 session 与 hook 当前 session 不同：证明用的是入参而不是闭包里的 sessionId。
+    act(() => {
+      result.current.openFilePathForSession(2, "src/app/a.ts");
+    });
+    await settle();
+
+    expect(readProjectWorktreeFileMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 2,
+      filePath: "src/app/a.ts",
+    });
+    expect(result.current.getWorkspaceTabState(2)).toMatchObject({
+      activeWorkspaceTab: "file",
+      fileTab: {
+        fileName: "a.ts",
+        filePath: "src/app/a.ts",
+        content: { content: "export const a = 1;" },
+        isLoading: false,
+        errorMessage: null,
+      },
+    });
+  });
+
+  it("读取失败时在 fileTab 写入侧栏既有错误态", async () => {
+    readProjectWorktreeFileMock.mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "file outside workspace",
+    });
+
+    const { result } = renderHook(
+      () =>
+        useSessionWorkspaceCache({
+          projectId: 1,
+          sessionId: 1,
+          isSidePanelOpen: true,
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.openFilePathForSession(1, "src/app/missing.ts");
+    });
+    await settle();
+
+    const fileTab = result.current.getWorkspaceTabState(1).fileTab;
+    expect(fileTab).toMatchObject({
+      filePath: "src/app/missing.ts",
+      content: null,
+      isLoading: false,
+    });
+    expect(fileTab?.errorMessage).toBe("file outside workspace");
   });
 });

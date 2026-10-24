@@ -105,6 +105,7 @@ function buildWorkspace(
     changeTab: null,
     fileTab: null,
     toolTabs: [],
+    workspacePath: null,
     ...overrides,
   };
 }
@@ -139,6 +140,7 @@ function renderPane(options: {
       onCreateTerminalTab={vi.fn()}
       onDeleteSession={vi.fn()}
       onRenameSessionTitle={vi.fn()}
+      onOpenFilePath={vi.fn()}
       onSelectWorkspaceTab={vi.fn()}
       onToggleSidePanel={vi.fn()}
       onToggleTransitionMenu={vi.fn()}
@@ -197,6 +199,7 @@ describe("AgentsSessionPane displayMode 视图分流", () => {
         onCreateTerminalTab={vi.fn()}
         onDeleteSession={vi.fn()}
         onRenameSessionTitle={vi.fn()}
+        onOpenFilePath={vi.fn()}
         onSelectWorkspaceTab={vi.fn()}
         onToggleSidePanel={vi.fn()}
         onToggleTransitionMenu={vi.fn()}
@@ -247,6 +250,7 @@ describe("AgentsSessionPane displayMode 视图分流", () => {
         onCreateTerminalTab={vi.fn()}
         onDeleteSession={vi.fn()}
         onRenameSessionTitle={vi.fn()}
+        onOpenFilePath={vi.fn()}
         onSelectWorkspaceTab={vi.fn()}
         onToggleSidePanel={vi.fn()}
         onToggleTransitionMenu={vi.fn()}
@@ -308,6 +312,7 @@ describe("AgentsSessionPane display mode switch button", () => {
         onCreateTerminalTab={vi.fn()}
         onDeleteSession={vi.fn()}
         onRenameSessionTitle={vi.fn()}
+        onOpenFilePath={vi.fn()}
         onSelectWorkspaceTab={vi.fn()}
         onToggleSidePanel={vi.fn()}
         onToggleTransitionMenu={vi.fn()}

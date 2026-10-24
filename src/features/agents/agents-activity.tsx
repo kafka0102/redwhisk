@@ -288,6 +288,7 @@ export function AgentsActivity({
           changeTab: tabState.changeTab,
           fileTab: tabState.fileTab,
           toolTabs,
+          workspacePath: session.workspacePath,
         },
       ];
     });
@@ -493,6 +494,7 @@ export function AgentsActivity({
           }}
           onRenameSessionTitle={handleRenameSessionTitle}
           onSelectWorkspaceTab={workspaceCache.selectWorkspaceTabForSession}
+          onOpenFilePath={workspaceCache.openFilePathForSession}
           onToggleSidePanel={handleToggleSessionSidePanel}
           onToggleTransitionMenu={() =>
             setIsTransitionMenuOpen(

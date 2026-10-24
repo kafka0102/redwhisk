@@ -28,6 +28,8 @@ export interface SessionWorkspaceEntry {
   changeTab: SessionWorkspaceChangeTab | null;
   fileTab: SessionWorkspaceFileTab | null;
   toolTabs: SessionWorkspaceToolTab[];
+  /** 本 session 工作区根绝对路径；消息流把绝对路径 / `~/` 收成相对路径时用。 */
+  workspacePath: string | null;
 }
 
 interface SessionWorkspacePaneProps {
@@ -38,6 +40,8 @@ interface SessionWorkspacePaneProps {
   ) => void;
   onCreateBrowserTab: (sessionId: number) => void;
   onCreateTerminalTab: (sessionId: number) => void;
+  /** 打开指定 session 工作区内的文件（`workspaceCache.openFilePathForSession`）。 */
+  onOpenFilePath: (sessionId: number, filePath: string) => void;
   onSelectWorkspaceTab: (
     sessionId: number,
     tab: SessionWorkspaceTabKind,
@@ -55,6 +59,7 @@ export const SessionWorkspacePane = memo(function SessionWorkspacePane({
   onCloseWorkspaceTab,
   onCreateBrowserTab,
   onCreateTerminalTab,
+  onOpenFilePath,
   onSelectWorkspaceTab,
   onAcknowledgeSessionAttention,
   projectId,
@@ -85,7 +90,7 @@ export const SessionWorkspacePane = memo(function SessionWorkspacePane({
       showingSession={completedReview === "session"}
     />
   ) : (
-    sessionView(projectId, isCurrent, workspace)
+    sessionView(projectId, isCurrent, workspace, onOpenFilePath)
   );
 
   return (
@@ -122,6 +127,7 @@ function sessionView(
   projectId: number,
   isCurrent: boolean,
   workspace: SessionWorkspaceEntry,
+  onOpenFilePath: (sessionId: number, filePath: string) => void,
 ): ReactNode {
   if (workspace.displayMode === "tui") {
     return (
@@ -141,9 +147,11 @@ function sessionView(
       isActive={isCurrent}
       issueStatus={workspace.issueStatus}
       isTurnRunning={workspace.isTurnRunning}
+      onOpenFilePath={onOpenFilePath}
       projectId={projectId}
       sessionId={workspace.sessionId}
       sessionStatus={workspace.sessionStatus}
+      workspacePath={workspace.workspacePath}
     />
   );
 }

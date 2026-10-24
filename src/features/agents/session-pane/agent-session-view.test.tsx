@@ -51,6 +51,10 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/path", () => ({
+  homeDir: vi.fn().mockResolvedValue("/Users/tester"),
+}));
+
 const {
   readAgentTimeline,
   resumeAgentSession,
@@ -835,5 +839,67 @@ describe("turnStatusForComposer", () => {
       ]),
     ).toBe("idle");
     expect(turnStatusForComposer("canceled", [])).toBe("canceled");
+  });
+});
+
+describe("AgentSessionView 本地文件链接", () => {
+  it("助手消息里的工作区相对路径点击后带本 session id 调用 openFilePath", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "改动见 [a.ts](./src/app/a.ts)。",
+        messageId: "a1",
+      } as never,
+    ]);
+    const onOpenFilePath = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        onOpenFilePath={onOpenFilePath}
+        workspacePath="/Users/tester/repo"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open file src/app/a.ts",
+      }),
+    );
+
+    expect(onOpenFilePath).toHaveBeenCalledWith(10, "src/app/a.ts");
+  });
+
+  it("~/ 路径用解析出的 home 目录收成工作区相对路径后再打开", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "改动见 [a.ts](~/repo/src/app/a.ts)。",
+        messageId: "a1",
+      } as never,
+    ]);
+    const onOpenFilePath = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        onOpenFilePath={onOpenFilePath}
+        workspacePath="/Users/tester/repo"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open file src/app/a.ts",
+      }),
+    );
+
+    expect(onOpenFilePath).toHaveBeenCalledWith(10, "src/app/a.ts");
   });
 });

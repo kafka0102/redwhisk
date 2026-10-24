@@ -477,6 +477,7 @@
     "openSessionSidePanel": "Open session side panel",
     "openStatusOptions": "Open status options",
     "openTerminal": "Open terminal",
+    "openWorkspaceFileLink": "Open file {{path}}",
     "closeSessionTerminal": "Close terminal {{terminalName}}",
     "resizeSessionList": "Resize session list",
     "resizeSessionSidePanel": "Resize session side panel",

@@ -46,6 +46,8 @@ interface AgentsSessionPaneProps {
   onCreateTerminalTab: (sessionId: number) => void;
   onDeleteSession: () => void;
   onRenameSessionTitle: (sessionId: number, title: string) => Promise<void>;
+  /** 打开指定 session 工作区内的文件（`workspaceCache.openFilePathForSession`）。 */
+  onOpenFilePath: (sessionId: number, filePath: string) => void;
   onSelectWorkspaceTab: (
     sessionId: number,
     tab: SessionWorkspaceTabKind,
@@ -84,6 +86,7 @@ export function AgentsSessionPane({
   onCreateTerminalTab,
   onDeleteSession,
   onRenameSessionTitle,
+  onOpenFilePath,
   onSelectWorkspaceTab,
   onToggleSidePanel,
   onToggleTransitionMenu,
@@ -361,6 +364,7 @@ export function AgentsSessionPane({
                 onCloseWorkspaceTab={onCloseWorkspaceTab}
                 onCreateBrowserTab={onCreateBrowserTab}
                 onCreateTerminalTab={onCreateTerminalTab}
+                onOpenFilePath={onOpenFilePath}
                 onSelectWorkspaceTab={onSelectWorkspaceTab}
                 onAcknowledgeSessionAttention={onAcknowledgeSessionAttention}
                 projectId={projectId}

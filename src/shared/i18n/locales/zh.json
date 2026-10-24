@@ -477,6 +477,7 @@
     "openSessionSidePanel": "打开会话侧边栏",
     "openStatusOptions": "打开状态选项",
     "openTerminal": "打开终端",
+    "openWorkspaceFileLink": "打开文件 {{path}}",
     "closeSessionTerminal": "关闭终端 {{terminalName}}",
     "resizeSessionList": "调整会话列表宽度",
     "resizeSessionSidePanel": "调整会话侧边栏宽度",

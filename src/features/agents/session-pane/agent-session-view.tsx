@@ -34,6 +34,8 @@ import {
   type IssueStatus,
 } from "../agent-session-commands";
 import type { TurnStatus } from "../message-stream/message-stream-types";
+import type { SessionFileLinks } from "../message-stream/session-file-links";
+import { useHomePath } from "../../../shared/paths/use-home-path";
 
 // 计算 effective turnStatus：reducer 已 running 直接 running；否则在
 // canUseExternalTurnRunning 生效时用外部 isTurnRunning 维持 running（grace 期），
@@ -62,10 +64,17 @@ interface AgentSessionViewProps {
   isActive?: boolean;
   /** 已完成回看切到只读消息流。未传时仍按 Issue 已完成隐藏输入。 */
   readOnly?: boolean;
+  /** 本 session 工作区根绝对路径；用于把消息里的绝对路径 / `~/` 收成工作区相对路径。 */
+  workspacePath?: string | null;
+  /** 打开本 session 工作区内的文件（由 `AgentsActivity` 透传
+   * `workspaceCache.openFilePathForSession`）。缺省时消息里的本地路径只显示文本。
+   * 必须传稳定引用：内联包装会在流式重渲染时换掉能力对象身份，破坏 memo 浅比较。 */
+  onOpenFilePath?: (sessionId: number, filePath: string) => void;
 }
 
 // memo 化：props 均为 primitive（projectId/sessionId/agentType/sessionStatus/
-// issueStatus/isTurnRunning）。实例池模式下 sessions 列表刷新会传入新 session
+// issueStatus/isTurnRunning/workspacePath）或稳定回调（onOpenFilePath 来自
+// workspaceCache，身份稳定）。实例池模式下 sessions 列表刷新会传入新 session
 // 对象引用，但字段值不变时 memo 浅比较可跳过重渲染，避免常驻实例全量重跑
 // 消息流 reconciliation（这是切回大 session 极慢的根因）。
 export const AgentSessionView = memo(function AgentSessionView({
@@ -77,8 +86,11 @@ export const AgentSessionView = memo(function AgentSessionView({
   isTurnRunning = false,
   isActive = true,
   readOnly = false,
+  workspacePath = null,
+  onOpenFilePath,
 }: AgentSessionViewProps) {
   const { messages } = useI18n();
+  const homePath = useHomePath();
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const onEntryExpandedChange = useExpandTimelineEntry(
     projectId,
@@ -124,6 +136,29 @@ export const AgentSessionView = memo(function AgentSessionView({
     await resumeAgentSession({ projectId, sessionId });
   }, [projectId, sessionId, shouldResumeBeforeSend]);
 
+  // 单一稳定能力对象：`openFilePath` 绑定本 session，`sessionFileLinks` 只在
+  // projectId / sessionId / 工作区路径 / home 或回调变化时重建，保持下游 memo 有效。
+  const openFilePath = useCallback(
+    (filePath: string) => {
+      onOpenFilePath?.(sessionId, filePath);
+    },
+    [onOpenFilePath, sessionId],
+  );
+  const sessionFileLinks = useMemo<SessionFileLinks | undefined>(
+    () =>
+      onOpenFilePath === undefined
+        ? undefined
+        : { projectId, sessionId, workspacePath, homePath, openFilePath },
+    [
+      homePath,
+      onOpenFilePath,
+      openFilePath,
+      projectId,
+      sessionId,
+      workspacePath,
+    ],
+  );
+
   return (
     <div
       className="agents-session-view"
@@ -142,6 +177,7 @@ export const AgentSessionView = memo(function AgentSessionView({
         autoScrollOnActivate={!isReadOnly}
         sessionId={sessionId}
         onEntryExpandedChange={onEntryExpandedChange}
+        sessionFileLinks={sessionFileLinks}
       />
 
       <div className="agents-session-view__permissions">

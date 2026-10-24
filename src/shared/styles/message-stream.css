@@ -303,6 +303,23 @@
   text-decoration: underline;
 }
 
+/* 消息里的本地文件链接：外观同外链，点击交给右侧栏 SessionFileViewer 打开。 */
+.agents-message__file-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.agents-message__file-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .agents-message__code-inline {
   padding: 0 3px;
   border: 1px solid var(--color-border);

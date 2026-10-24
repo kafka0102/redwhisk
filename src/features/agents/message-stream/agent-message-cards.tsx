@@ -32,6 +32,7 @@ import { ExpandableText } from "../expandable-text";
 import { AgentMarkdown } from "./agent-markdown";
 import { HighlightedDiffBlock } from "./highlighted-diff-block";
 import type { MessageStreamEntry } from "./message-stream-types";
+import type { SessionFileLinks } from "./session-file-links";
 
 interface AgentMessageCardsProps {
   entries: MessageStreamEntry[];
@@ -40,6 +41,8 @@ interface AgentMessageCardsProps {
   expandedEntryIds?: readonly string[];
   entryLoadErrors?: Readonly<Record<string, string>>;
   onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
+  /** 本地文件链接能力；`undefined` 表示本条流未接侧栏（路径只显示文本）。 */
+  sessionFileLinks: SessionFileLinks | undefined;
 }
 
 const MAX_TOOL_DETAIL_TEXT_LENGTH = 20_000;
@@ -55,6 +58,7 @@ export const AgentMessageCards = memo(function AgentMessageCards({
   expandedEntryIds = [],
   entryLoadErrors = {},
   onEntryExpandedChange,
+  sessionFileLinks,
 }: AgentMessageCardsProps) {
   return (
     <>
@@ -66,6 +70,7 @@ export const AgentMessageCards = memo(function AgentMessageCards({
           isDetailOpen={expandedEntryIds.includes(entry.id)}
           loadError={entryLoadErrors[entry.id]}
           onEntryExpandedChange={onEntryExpandedChange}
+          sessionFileLinks={sessionFileLinks}
         />
       ))}
     </>
@@ -78,12 +83,14 @@ const MessageCard = memo(function MessageCard({
   isDetailOpen,
   loadError,
   onEntryExpandedChange,
+  sessionFileLinks,
 }: {
   entry: MessageStreamEntry;
   reasoningInProgress: boolean;
   isDetailOpen: boolean;
   loadError?: string;
   onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
+  sessionFileLinks: SessionFileLinks | undefined;
 }) {
   const { messages } = useI18n();
   const item = entry.item;
@@ -91,7 +98,9 @@ const MessageCard = memo(function MessageCard({
     case "user_message":
       return <UserMessageCard item={item} />;
     case "assistant_message":
-      return <AssistantMessageCard item={item} />;
+      return (
+        <AssistantMessageCard item={item} sessionFileLinks={sessionFileLinks} />
+      );
     case "reasoning":
       return (
         <ReasoningCard
@@ -147,13 +156,17 @@ function UserMessageCard({
 
 function AssistantMessageCard({
   item,
+  sessionFileLinks,
 }: {
   item: Extract<AgentTimelineItem, { type: "assistant_message" }>;
+  sessionFileLinks: SessionFileLinks | undefined;
 }) {
   return (
     <article className="agents-message__entry agents-message__entry--assistant">
       <div className="agents-message__bubble agents-message__bubble--assistant">
-        <AgentMarkdown>{item.text}</AgentMarkdown>
+        <AgentMarkdown sessionFileLinks={sessionFileLinks}>
+          {item.text}
+        </AgentMarkdown>
       </div>
     </article>
   );

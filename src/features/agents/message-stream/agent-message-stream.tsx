@@ -37,10 +37,13 @@ import type {
   MessageStreamEntry,
   MessageStreamState,
 } from "./message-stream-types";
+import type { SessionFileLinks } from "./session-file-links";
 
 interface AgentMessageStreamProps {
   projectId: number;
   sessionId: number;
+  /** 本地文件链接能力；独立场景（无侧栏）不传，本地路径只显示文本。 */
+  sessionFileLinks?: SessionFileLinks;
 }
 
 /** 距底部阈值（px），小于此值视为"贴底"，新内容自动跟随滚动。 */
@@ -59,6 +62,7 @@ type ScrollDirection = "down" | "up" | null;
 export function AgentMessageStream({
   projectId,
   sessionId,
+  sessionFileLinks,
 }: AgentMessageStreamProps) {
   const { state, dispatch } = useAgentMessageStream({ projectId, sessionId });
   const onEntryExpandedChange = useExpandTimelineEntry(
@@ -72,6 +76,7 @@ export function AgentMessageStream({
       state={state}
       sessionId={sessionId}
       onEntryExpandedChange={onEntryExpandedChange}
+      sessionFileLinks={sessionFileLinks}
     />
   );
 }
@@ -90,6 +95,12 @@ interface AgentMessageStreamViewProps {
   /** 当前 session id：用于按 session 记录并恢复滚动位置。缺省（未提供）时不恢复。 */
   sessionId?: number;
   onEntryExpandedChange?: (entryId: string, expanded: boolean) => void;
+  /**
+   * 本地文件链接能力（由 `AgentSessionView` 组装后透传）。
+   * 必填但可为 `undefined`：调用方必须显式声明本流是否接侧栏，
+   * 未接的流（自包含变体）本地路径只显示文本。
+   */
+  sessionFileLinks: SessionFileLinks | undefined;
 }
 
 /**
@@ -109,6 +120,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   autoScrollOnActivate = false,
   sessionId,
   onEntryExpandedChange,
+  sessionFileLinks,
 }: AgentMessageStreamViewProps) {
   const { messages, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -361,6 +373,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
           expandedEntryIds={state.expandedEntryIds}
           entryLoadErrors={state.entryLoadErrors}
           onEntryExpandedChange={onEntryExpandedChange}
+          sessionFileLinks={sessionFileLinks}
         />
         {turnInterrupted ? (
           <div className="agents-message__entry agents-message__entry--interrupted">

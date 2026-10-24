@@ -237,6 +237,110 @@ export function clearSessionWorkspaceCacheForTest(): void {
   fileTreeListingSequenceByKey.clear();
 }
 
+/** 按指定 sessionId 更新 workspace cache 的写入函数（hook 内的 `updateSessionCache`）。 */
+type SessionCacheUpdater = (
+  targetSessionId: number,
+  updater: (cache: SessionWorkspaceCache) => SessionWorkspaceCache,
+) => void;
+
+/** 从工作区相对路径取 basename，作为 file tab 的标签（如 `src/app/a.ts` → `a.ts`）。 */
+function fileNameFromWorkspacePath(filePath: string): string {
+  const segments = filePath.split("/").filter((segment) => segment.length > 0);
+  return segments[segments.length - 1] ?? filePath;
+}
+
+/**
+ * 打开指定 session 工作区内的一个文件：先在 file tab 落加载态，再读取内容 / 写失败态。
+ *
+ * 文件树点击（`openFile`）与消息流路径点击（`openFilePathForSession`）共用这一段
+ * 写入 + 读取逻辑，避免两套读取路径在「已打开是否重复读盘」与失败态归属上分叉。
+ */
+async function openWorkspaceFileTab({
+  projectId,
+  sessionId,
+  filePath,
+  updateSessionCache,
+  translateError,
+}: {
+  projectId: number;
+  sessionId: number;
+  filePath: string;
+  updateSessionCache: SessionCacheUpdater;
+  translateError: (error: unknown) => string;
+}): Promise<void> {
+  // 与 CodeWorkspace 对齐：已打开且仍在加载 / 已有内容时不重复读盘，
+  // 避免连点同一文件触发二次 IO 与全量 cache 刷新。
+  let shouldFetch = true;
+  updateSessionCache(sessionId, (cache) => {
+    const existing =
+      cache.fileTab?.filePath === filePath ? cache.fileTab : null;
+    if (existing != null) {
+      shouldFetch = false;
+      if (
+        cache.activeWorkspaceTab === "file" &&
+        (existing.content != null ||
+          existing.isLoading ||
+          existing.errorMessage != null)
+      ) {
+        return cache;
+      }
+      return {
+        ...cache,
+        activeWorkspaceTab: "file",
+        fileTab: existing,
+      };
+    }
+    return {
+      ...cache,
+      activeWorkspaceTab: "file",
+      fileTab: {
+        fileName: fileNameFromWorkspacePath(filePath),
+        filePath,
+        content: null,
+        errorMessage: null,
+        isLoading: true,
+      },
+    };
+  });
+
+  if (!shouldFetch) {
+    return;
+  }
+
+  try {
+    const content = await readProjectWorktreeFile({
+      projectId,
+      sessionId,
+      filePath,
+    });
+
+    updateSessionCache(sessionId, (cache) => ({
+      ...cache,
+      fileTab:
+        cache.fileTab?.filePath === filePath
+          ? {
+              ...cache.fileTab,
+              content,
+              errorMessage: null,
+              isLoading: false,
+            }
+          : cache.fileTab,
+    }));
+  } catch (error) {
+    updateSessionCache(sessionId, (cache) => ({
+      ...cache,
+      fileTab:
+        cache.fileTab?.filePath === filePath
+          ? {
+              ...cache.fileTab,
+              errorMessage: translateError(error),
+              isLoading: false,
+            }
+          : cache.fileTab,
+    }));
+  }
+}
+
 const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
   activeWorkspaceTab: "session",
   changeTab: null,
@@ -1062,85 +1166,45 @@ export function useSessionWorkspaceCache({
     [projectId, sessionId, updateSessionCache, t],
   );
 
+  // 命令错误 → 侧栏文案。抽出稳定引用，使 `openFile` / `openFilePathForSession`
+  // 不因尺寸变化以外的原因换身份。
+  const translateError = useCallback(
+    (error: unknown): string => getCommandErrorMessage(error, t),
+    [t],
+  );
+
   const openFile = useCallback(
     async (file: WorkspaceFileTreeNode) => {
       if (sessionId == null || file.kind !== "file") {
         return;
       }
 
-      // 与 CodeWorkspace 对齐：已打开且仍在加载 / 已有内容时不重复读盘，
-      // 避免连点同一文件触发二次 IO 与全量 cache 刷新。
-      let shouldFetch = true;
-      updateCurrentCache((cache) => {
-        const existing =
-          cache.fileTab?.filePath === file.path ? cache.fileTab : null;
-        if (existing != null) {
-          shouldFetch = false;
-          if (
-            cache.activeWorkspaceTab === "file" &&
-            (existing.content != null ||
-              existing.isLoading ||
-              existing.errorMessage != null)
-          ) {
-            return cache;
-          }
-          return {
-            ...cache,
-            activeWorkspaceTab: "file",
-            fileTab: existing,
-          };
-        }
-        return {
-          ...cache,
-          activeWorkspaceTab: "file",
-          fileTab: {
-            fileName: file.name,
-            filePath: file.path,
-            content: null,
-            errorMessage: null,
-            isLoading: true,
-          },
-        };
+      await openWorkspaceFileTab({
+        projectId,
+        sessionId,
+        filePath: file.path,
+        updateSessionCache,
+        translateError,
       });
-
-      if (!shouldFetch) {
-        return;
-      }
-
-      try {
-        const content = await readProjectWorktreeFile({
-          projectId,
-          sessionId,
-          filePath: file.path,
-        });
-
-        updateCurrentCache((cache) => ({
-          ...cache,
-          fileTab:
-            cache.fileTab?.filePath === file.path
-              ? {
-                  ...cache.fileTab,
-                  content,
-                  errorMessage: null,
-                  isLoading: false,
-                }
-              : cache.fileTab,
-        }));
-      } catch (error) {
-        updateCurrentCache((cache) => ({
-          ...cache,
-          fileTab:
-            cache.fileTab?.filePath === file.path
-              ? {
-                  ...cache.fileTab,
-                  errorMessage: getCommandErrorMessage(error, t),
-                  isLoading: false,
-                }
-              : cache.fileTab,
-        }));
-      }
     },
-    [projectId, sessionId, updateCurrentCache, t],
+    [projectId, sessionId, translateError, updateSessionCache],
+  );
+
+  // 打开任意 sessionId 工作区内的一个文件。供消息流 / 工具卡里的路径点击调用：
+  // 与文件树（`openFile`）走同一条写入 + 读取路径，失败同样落在侧栏既有
+  // `fileTab.errorMessage`。身份稳定：不依赖当前 `sessionId` 闭包，
+  // 避免透传到 memo 化组件后因回调换引用而重渲染（同 `selectWorkspaceTabForSession`）。
+  const openFilePathForSession = useCallback(
+    (targetSessionId: number, filePath: string): void => {
+      void openWorkspaceFileTab({
+        projectId,
+        sessionId: targetSessionId,
+        filePath,
+        updateSessionCache,
+        translateError,
+      });
+    },
+    [projectId, translateError, updateSessionCache],
   );
 
   // 仓库路径不可访问属于不可恢复错误：worktree 目录已被删除或移动，继续轮询只会
@@ -1265,6 +1329,7 @@ export function useSessionWorkspaceCache({
     openCommittedChange,
     openCommitChanges,
     openFile,
+    openFilePathForSession,
     refreshCommitHistory,
     loadMoreCommitHistory,
     refreshChanges,

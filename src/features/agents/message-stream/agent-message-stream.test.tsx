@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -26,6 +27,7 @@ import {
   createInitialState,
   messageStreamReducer,
 } from "./message-stream-reducer";
+import type { SessionFileLinks } from "./session-file-links";
 import { clearAgentMessageStreamCacheForTest } from "./use-agent-message-stream";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -38,6 +40,18 @@ vi.mock("../agent-session-commands", () => ({
 
 const { readAgentTimeline } = await import("../agent-session-commands");
 const readAgentTimelineMock = vi.mocked(readAgentTimeline);
+
+/**
+ * 多数用例只验证滚动位置 / 状态渲染：给消息流一个不产生副作用的文件链接能力，
+ * 使新增的必填 prop 不必在每个用例里重复展开。
+ */
+const STREAM_FILE_LINKS: SessionFileLinks = {
+  projectId: 1,
+  sessionId: 1,
+  workspacePath: null,
+  homePath: null,
+  openFilePath: () => {},
+};
 
 function historyItems(items: AgentTimelineItem[]): TimelineHistoryItem[] {
   return items.map((item) => ({ item }));
@@ -118,6 +132,7 @@ describe("AgentMessageStream", () => {
   it("运行指示器位于消息滚动栈内并跟随消息卡片之后", () => {
     const { container } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={createMessageStreamState({
           entries: [
             {
@@ -156,6 +171,7 @@ describe("AgentMessageStream", () => {
   it("异常中断且携带 stop_reason 时渲染提示条", () => {
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={createMessageStreamState({
           turnInterrupted: true,
           interruptedStopReason: "max_tokens",
@@ -172,6 +188,7 @@ describe("AgentMessageStream", () => {
   it("异常中断且无 stop_reason 时渲染无原因提示条", () => {
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={createMessageStreamState({
           turnInterrupted: true,
           interruptedStopReason: null,
@@ -597,6 +614,7 @@ describe("AgentMessageStream", () => {
     // assistant_message/reasoning/tool_call，占位行立即隐藏。
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         agentType="claude"
         isTurnRunning
         state={createMessageStreamState({
@@ -623,6 +641,7 @@ describe("AgentMessageStream", () => {
     // 「正在思考…」占位行应立即隐藏，避免与 Claude 自身的输出重复。
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         agentType="claude"
         isTurnRunning
         state={createMessageStreamState({
@@ -683,6 +702,7 @@ describe("AgentMessageStream", () => {
 
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         agentType="grok"
         isTurnRunning={false}
         state={{ ...state, isInitialized: true }}
@@ -698,6 +718,7 @@ describe("AgentMessageStream", () => {
   it("turn 仍在运行时，未结算的思考继续显示正在思考", () => {
     render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         agentType="grok"
         isTurnRunning
         state={createMessageStreamState({
@@ -761,6 +782,7 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     const state = createStateWithMessages();
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={state}
         isActive={false}
         autoScrollOnActivate
@@ -773,7 +795,12 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     scroll.scrollTop = 0;
 
     rerender(
-      <AgentMessageStreamView state={state} isActive autoScrollOnActivate />,
+      <AgentMessageStreamView
+        state={state}
+        isActive
+        autoScrollOnActivate
+        sessionFileLinks={STREAM_FILE_LINKS}
+      />,
     );
 
     expect(scroll.scrollTop).toBe(500);
@@ -783,6 +810,7 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     const state = createStateWithMessages();
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={state}
         isActive={false}
         autoScrollOnActivate={false}
@@ -796,6 +824,7 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
 
     rerender(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={state}
         isActive
         autoScrollOnActivate={false}
@@ -809,6 +838,7 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     const state = createStateWithMessages();
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         state={state}
         isActive={false}
         autoScrollOnActivate
@@ -822,7 +852,12 @@ describe("AgentMessageStreamView 切换 session 时的滚动定位", () => {
     scroll.scrollTop = 42;
 
     rerender(
-      <AgentMessageStreamView state={state} isActive autoScrollOnActivate />,
+      <AgentMessageStreamView
+        state={state}
+        isActive
+        autoScrollOnActivate
+        sessionFileLinks={STREAM_FILE_LINKS}
+      />,
     );
 
     expect(scroll.scrollTop).toBe(42);
@@ -878,7 +913,12 @@ describe("AgentMessageStreamView 长内容跳转按钮", () => {
 
   function renderLongStream() {
     const state = createStateWithMessages();
-    const view = render(<AgentMessageStreamView state={state} />);
+    const view = render(
+      <AgentMessageStreamView
+        state={state}
+        sessionFileLinks={STREAM_FILE_LINKS}
+      />,
+    );
     const scroll = view.container.querySelector(
       ".agents-message-stream__scroll",
     ) as HTMLElement;
@@ -964,7 +1004,12 @@ describe("AgentMessageStreamView 长内容跳转按钮", () => {
 
   it("内容不足两屏时不显示跳转按钮", () => {
     const state = createStateWithMessages();
-    const { container } = render(<AgentMessageStreamView state={state} />);
+    const { container } = render(
+      <AgentMessageStreamView
+        state={state}
+        sessionFileLinks={STREAM_FILE_LINKS}
+      />,
+    );
     const scroll = container.querySelector(
       ".agents-message-stream__scroll",
     ) as HTMLElement;
@@ -1029,6 +1074,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     writeMessageStreamScrollOffset(9, 200);
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createMessageStreamState()}
         autoScrollOnActivate={false}
@@ -1042,6 +1088,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     // 缓存预览 / 历史 timeline 异步填充内容后的提交。
     rerender(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages()}
         autoScrollOnActivate={false}
@@ -1055,6 +1102,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     writeMessageStreamScrollOffset(9, 900);
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createMessageStreamState()}
         autoScrollOnActivate={false}
@@ -1068,6 +1116,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     // 第一段内容只有一屏：900 尚不可达，位置被夹到当前最大可滚动高度。
     rerender(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages(2)}
         autoScrollOnActivate={false}
@@ -1079,6 +1128,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 2000 });
     rerender(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages(3)}
         autoScrollOnActivate={false}
@@ -1091,6 +1141,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     writeMessageStreamScrollOffset(9, 200);
     const { container, rerender } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createMessageStreamState()}
         autoScrollOnActivate
@@ -1103,6 +1154,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
 
     rerender(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages()}
         autoScrollOnActivate
@@ -1116,6 +1168,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
   it("滚动时记录当前位置，供切回时恢复", () => {
     const { container } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages()}
         autoScrollOnActivate={false}
@@ -1135,6 +1188,7 @@ describe("AgentMessageStreamView 完成态 session 重挂载后的滚动位置",
     writeMessageStreamScrollOffset(9, 250);
     const { container } = render(
       <AgentMessageStreamView
+        sessionFileLinks={STREAM_FILE_LINKS}
         sessionId={9}
         state={createStateWithMessages()}
         autoScrollOnActivate={false}
@@ -1187,7 +1241,12 @@ describe("AgentMessageStreamView 用户消息折叠", () => {
         },
       ],
     });
-    const view = render(<AgentMessageStreamView state={state} />);
+    const view = render(
+      <AgentMessageStreamView
+        state={state}
+        sessionFileLinks={STREAM_FILE_LINKS}
+      />,
+    );
     const content = view.container.querySelector<HTMLElement>(
       ".agents-message__text",
     );
@@ -1238,5 +1297,44 @@ describe("AgentMessageStreamView 用户消息折叠", () => {
       screen.queryByRole("button", { name: "Show more" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("开始处理")).toBeInTheDocument();
+  });
+});
+
+describe("AgentMessageStreamView 文件链接能力透传", () => {
+  it("助手消息里的工作区相对路径点击后回传相对路径", async () => {
+    const openFilePath = vi.fn();
+    const user = userEvent.setup();
+    const state = createMessageStreamState({
+      entries: [
+        {
+          id: "a1",
+          kind: "assistant_message",
+          item: {
+            type: "assistant_message",
+            text: "改动见 [a.ts](./src/app/a.ts)。",
+            messageId: "a1",
+          },
+        },
+      ],
+    });
+
+    render(
+      <AgentMessageStreamView
+        state={state}
+        sessionFileLinks={{
+          projectId: 1,
+          sessionId: 10,
+          workspacePath: "/Users/tester/repo",
+          homePath: "/Users/tester",
+          openFilePath,
+        }}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Open file src/app/a.ts" }),
+    );
+
+    expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
   });
 });
