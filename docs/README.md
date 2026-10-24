@@ -63,6 +63,7 @@
 | TypeScript / TSX              | 工程规范、编码风格、[前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md) | [项目代码地图](./architecture-design/project-map.md)、[测试策略](./testing/strategy.md) |
 | Rust（`src-tauri/**/*.rs`）   | [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)、Agent 开发规则 | [项目代码地图](./architecture-design/project-map.md) |
 | UI、页面或组件                | 上述 TypeScript 文档、设计系统指南、大型组件拆分规则                        | Settings 页面布局规范、i18n 章节   |
+| Agent 消息流 / 工具卡 / 链接   | [结构化消息流渲染链](./architecture-design/agent-development-rules.md#结构化消息流渲染链json-模式)、设计系统指南 | 大型组件拆分规则、测试策略        |
 | Tauri command、DTO、event     | [Tauri 契约](./architecture-design/tauri-contract.md)                       | Agent 开发规则、测试策略           |
 | Issue、Session 或完成流程     | [领域状态机](./domain/state-machine.md)                                     | 数据模型、Worktree 与 Git 生命周期 |
 | SQLite、repository、migration | [数据模型与 Migration](./domain/data-model.md)                              | Agent 开发规则、测试策略           |

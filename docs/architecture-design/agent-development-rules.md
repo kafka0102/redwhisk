@@ -281,6 +281,26 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Header 无关联 Issue 时显示 `No linked issue`。
 - Inspector/Dialog 打开关闭导致 xterm 或结构化消息流重建。
 
+## 结构化消息流渲染链（JSON 模式）
+
+改消息流里的卡片、工具卡或链接交互时，先按这条链定位；它横跨 `agents/` 根目录、`session-pane/` 与 `message-stream/`，逐层读源码比按组件名搜索快。
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| Activity | `src/features/agents/agents-activity.tsx` | `useSessionWorkspaceCache` 持有右侧栏与「打开文件」能力（`openFilePathForSession`），构造每个缓存 session 的 `SessionWorkspaceEntry` |
+| 实例池 | `session-pane/agents-session-pane.tsx` | 常驻渲染所有已缓存 session 的 `SessionWorkspacePane`，非当前 session 用 `hidden` 切换（不得卸载） |
+| 每 session 外壳 | `session-pane/session-workspace-pane.tsx` | 按 `displayMode` 分流 json / tui；把 `workspacePath` 与打开文件回调交给 `AgentSessionView` |
+| Session 视图 | `session-pane/agent-session-view.tsx` | **唯一**订阅 `useAgentMessageStream` 的地方；组装 `SessionFileLinks` 并渲染消息流 + 权限卡 + composer |
+| 消息流渲染 | `message-stream/agent-message-stream.tsx` → `agent-message-cards.tsx` | 纯渲染 `state`（滚动 / 空态 / 运行指示），按 entry kind 分发卡片；工具卡正文在 `tool-call-detail.tsx` |
+| 文本渲染 | `message-stream/agent-markdown.tsx` | react-markdown：链接三态（外链 / 工作区文件 / 原文）、行内代码路径、围栏代码交 `message-code-block.tsx` |
+
+必须遵守：
+
+- **跨层能力用单一稳定对象透传**：`SessionFileLinks` 由 `AgentSessionView` 用 `useMemo` / `useCallback` 一次组装后下传。这条链上的 `AgentSessionView` / `AgentMessageStreamView` / `AgentMessageCards` 都是 `memo` 且常驻实例池，每次渲染新建对象会让流式消息整体重渲染。
+- **每 session 绑定只做一次**：`workspaceCache.openFilePathForSession` 与会话无关、身份稳定；绑定 `sessionId` 的位置固定在 `AgentSessionView`。
+- **文本里的路径分类是纯函数**：`message-stream/session-file-links.ts`（链接三态与相对化）、`inline-code-kind.ts`（行内代码语法判定）、`use-workspace-file-existence.ts`（存在性探测，只在 effect 发 IPC）。文件可点一律走侧栏 `SessionFileViewer`，不走浏览器新标签或编辑器 URI。
+- 消息文本是不可信 Markdown：无法解析的链接渲染原文、不透出原始指令；不在前端解析符号链接。
+
 ## Agent provider 接入边界
 
 ### 新增 AgentType 门禁
