@@ -301,6 +301,10 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - **文本里的路径分类是纯函数**：`message-stream/session-file-links.ts`（链接三态与相对化）、`inline-code-kind.ts`（行内代码语法判定）、`use-workspace-file-existence.ts`（存在性探测，只在 effect 发 IPC）。文件可点一律走侧栏 `SessionFileViewer`，不走浏览器新标签或编辑器 URI。
 - 消息文本是不可信 Markdown：无法解析的链接渲染原文、不透出原始指令；不在前端解析符号链接。
 
+## 完成回看
+
+Issue 已完成时的主区是归档视图 `src/features/agents/session-pane/agent-tui-archive-markdown-view.tsx`。JSON 归档和带逐行 `›` 的 TUI 归档都在这个视图里画成用户卡与助手卡，规则见 [ADR-0055](../adr/0055-tui-archive-user-prompt-marker-for-review-cards.md)。运行中的 `AgentSessionView` 只服务未完成的 Session，以及用户确认后的只读 Session。
+
 ## Agent provider 接入边界
 
 ### 新增 AgentType 门禁
