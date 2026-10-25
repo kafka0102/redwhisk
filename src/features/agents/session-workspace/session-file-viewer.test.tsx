@@ -1,3 +1,11 @@
+const { openPath } = vi.hoisted(() => ({
+  openPath: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: (...args: unknown[]) => openPath(...args),
+}));
+
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
@@ -170,6 +178,7 @@ describe("SessionFileViewer", () => {
     window.localStorage.clear();
     resetEditorReadingPositionsForTests();
     monacoEditorApi.reset();
+    openPath.mockReset();
   });
 
   it("renders the editor with the light Monaco theme by default", () => {
@@ -454,4 +463,162 @@ describe("SessionFileViewer", () => {
     });
     expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
   });
+
+  it("shows Open in browser on the path row for html", async () => {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <SessionFileViewer
+          projectId={projectId}
+          sessionId={sessionId}
+          workspacePath="/repo"
+          tab={{
+            fileName: "index.html",
+            filePath: "docs/index.html",
+            content: {
+              ...fileTab.content!,
+              content: "<!doctype html><html></html>\n",
+              filePath: "docs/index.html",
+              language: "html",
+            },
+            isLoading: false,
+            errorMessage: null,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const pathText = screen.getByText("docs/index.html");
+    const pathRow = pathText.parentElement;
+    expect(pathRow).not.toBeNull();
+    const controls = [...pathRow!.querySelectorAll("button, a")];
+    const lastControl = controls[controls.length - 1];
+    expect(lastControl).toBe(
+      screen.getByRole("button", { name: "Open in browser" }),
+    );
+    expect(
+      pathText.compareDocumentPosition(lastControl!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Open in browser" }));
+    expect(openPath).toHaveBeenCalledWith("/repo/docs/index.html");
+  });
+
+  it("shows Open in browser for htm files regardless of case", () => {
+    render(htmlViewerElement({ fileName: "page.HTM", filePath: "page.HTM" }));
+
+    expect(
+      screen.getByRole("button", { name: "Open in browser" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    "readme.md",
+    "photo.png",
+    "notes.pdf",
+    "mark.svg",
+    "index.xhtml",
+    "html",
+  ])("does not show Open in browser for %s", (fileName) => {
+    render(htmlViewerElement({ fileName, filePath: fileName }));
+
+    expect(screen.getByText(fileName)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the path row and Open in browser while loading, failed, empty, or too large", () => {
+    const { rerender } = render(htmlViewerElement({ isLoading: true }));
+    expect(screen.queryByText("docs/index.html")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(htmlViewerElement({ errorMessage: "read failed" }));
+    expect(screen.queryByText("docs/index.html")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(htmlViewerElement({ content: null }));
+    expect(screen.queryByText("docs/index.html")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      htmlViewerElement({
+        content: {
+          ...fileTab.content!,
+          content: "",
+          filePath: "docs/index.html",
+          language: "html",
+          isTooLarge: true,
+        },
+      }),
+    );
+    expect(screen.queryByText("docs/index.html")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("This file is too large to preview."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show Open in browser when the workspace root is empty", () => {
+    const { rerender } = render(htmlViewerElement({}, ""));
+
+    expect(screen.getByText("docs/index.html")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(htmlViewerElement({}, null));
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("alerts with the existing browser failure message when opening fails", async () => {
+    openPath.mockRejectedValue(new Error("blocked"));
+    const user = userEvent.setup();
+    render(htmlViewerElement());
+
+    await user.click(screen.getByRole("button", { name: "Open in browser" }));
+
+    expect(
+      await screen.findByText("Could not open this file in the browser."),
+    ).toBeInTheDocument();
+  });
 });
+
+function htmlViewerElement(
+  tabOverrides: Partial<SessionWorkspaceFileTab> = {},
+  workspacePath: string | null = "/repo",
+) {
+  return (
+    <I18nProvider initialLocale="en">
+      <SessionFileViewer
+        projectId={projectId}
+        sessionId={sessionId}
+        workspacePath={workspacePath}
+        tab={{
+          fileName: "index.html",
+          filePath: "docs/index.html",
+          content: {
+            ...fileTab.content!,
+            content: "<!doctype html><html></html>\n",
+            filePath: "docs/index.html",
+            language: "html",
+          },
+          isLoading: false,
+          errorMessage: null,
+          ...tabOverrides,
+        }}
+      />
+    </I18nProvider>
+  );
+}

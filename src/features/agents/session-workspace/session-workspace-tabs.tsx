@@ -41,6 +41,7 @@ interface SessionWorkspaceTabsProps {
   fileTab: SessionWorkspaceFileTab | null;
   projectId: number;
   sessionId: number;
+  workspacePath?: string | null;
   sessionAgentType: AgentType;
   sessionDisplayMode?: "json" | "tui";
   sessionIssueStatus?: IssueStatus | null;
@@ -62,6 +63,7 @@ export function SessionWorkspaceTabs({
   fileTab,
   projectId,
   sessionId,
+  workspacePath = null,
   sessionAgentType,
   sessionDisplayMode,
   sessionIssueStatus,
@@ -217,6 +219,7 @@ export function SessionWorkspaceTabs({
               projectId={projectId}
               sessionId={sessionId}
               tab={fileTab}
+              workspacePath={workspacePath}
             />
           </div>
         ) : null}

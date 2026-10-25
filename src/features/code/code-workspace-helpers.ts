@@ -6,6 +6,8 @@ import { type useI18n } from "../../shared/i18n/i18n";
 import { isBitmapOrPdfPreview } from "../../shared/workspace/visual-file-preview-model";
 import type { CodeFileTab } from "./code-workspace-cache";
 
+export { isHtmlFile } from "../../shared/workspace/open-html-in-browser";
+
 /** 工作区文件不可访问 / 不是文件 / 读取失败等「文件缺失」类错误原因集合。 */
 export const MISSING_FILE_ERROR_REASONS = new Set([
   "filePathInaccessible",
@@ -29,17 +31,6 @@ export function resolveFileLoadErrorMessage(
 export function isMissingWorkspaceFileError(error: unknown): boolean {
   const reason = toCommandError(error).reason;
   return reason != null && MISSING_FILE_ERROR_REASONS.has(reason);
-}
-
-const HTML_FILE_EXTENSIONS = new Set(["htm", "html"]);
-
-/** 按文件名后缀判断是否为 HTML（大小写不敏感，含 `.htm`）。 */
-export function isHtmlFile(fileName: string): boolean {
-  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-  if (extension === fileName.toLowerCase()) {
-    return false;
-  }
-  return HTML_FILE_EXTENSIONS.has(extension);
 }
 
 /** 当前 tab 是否可显示 markdown 源码/预览切换（语言为 markdown 且文本已成功加载）。 */

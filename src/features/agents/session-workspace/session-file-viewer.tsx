@@ -3,9 +3,14 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
+import { useAlertDialog } from "../../../components/ui";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useMonacoEditorReady } from "../../../shared/use-monaco-editor-ready";
 import { createEditorReadingLoadKey } from "../../../shared/workspace/editor-reading-position";
+import {
+  isHtmlFile,
+  openHtmlInBrowser,
+} from "../../../shared/workspace/open-html-in-browser";
 import { useEditorReadingPosition } from "../../../shared/workspace/use-editor-reading-position";
 import {
   isSvgTextSwitchable,
@@ -20,6 +25,7 @@ interface SessionFileViewerProps {
   projectId: number;
   sessionId: number;
   tab: SessionWorkspaceFileTab;
+  workspacePath?: string | null;
 }
 
 /**
@@ -32,12 +38,19 @@ export function SessionFileViewer({
   projectId,
   sessionId,
   tab,
+  workspacePath = null,
 }: SessionFileViewerProps) {
-  const { messages, contentFontSize, theme } = useI18n();
+  const { messages, contentFontSize, theme, t } = useI18n();
+  const { alertDialog, showAlert } = useAlertDialog();
   const [svgView, setSvgView] = useState<{
     filePath: string;
     mode: SvgPreviewView;
   } | null>(null);
+  const openInBrowserRoot = hasWorkspaceRoot(workspacePath)
+    ? workspacePath
+    : null;
+  const showOpenInBrowser =
+    openInBrowserRoot != null && isHtmlFile(tab.fileName);
   if (svgView?.filePath !== tab.filePath) {
     setSvgView({ filePath: tab.filePath, mode: "image" });
   }
@@ -172,8 +185,58 @@ export function SessionFileViewer({
             )}
           </button>
         ) : null}
+        {showOpenInBrowser ? (
+          <button
+            type="button"
+            className="code-workspace__browser-toggle session-file-viewer__browser-toggle"
+            aria-label={t("agentsFeature.openHtmlInBrowser")}
+            title={t("agentsFeature.openHtmlInBrowser")}
+            onClick={() => {
+              if (!openInBrowserRoot) {
+                return;
+              }
+              void openHtmlInBrowser(openInBrowserRoot, tab.filePath).then(
+                (opened) => {
+                  if (!opened) {
+                    showAlert({
+                      message: t("agentsFeature.openHtmlInBrowserFailed"),
+                      type: "error",
+                    });
+                  }
+                },
+              );
+            }}
+          >
+            <SessionBrowserIcon />
+          </button>
+        ) : null}
       </div>
+      {alertDialog}
       {body}
     </section>
+  );
+}
+
+function hasWorkspaceRoot(
+  workspacePath: string | null | undefined,
+): workspacePath is string {
+  return typeof workspacePath === "string" && workspacePath.trim().length > 0;
+}
+
+function SessionBrowserIcon() {
+  return (
+    <svg aria-hidden="true" width={14} height={14} viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" fill="#34A853" />
+      <path
+        d="M12 2a10 10 0 0 1 8.66 15H13.2A4.6 4.6 0 0 0 12 7.4V2Z"
+        fill="#EA4335"
+      />
+      <path
+        d="M3.34 7A10 10 0 0 0 12 22l3.2-7.6A4.6 4.6 0 0 0 8.2 13.1L3.34 7Z"
+        fill="#FBBC04"
+      />
+      <circle cx="12" cy="12" r="4.5" fill="#fff" />
+      <circle cx="12" cy="12" r="3.1" fill="#4285F4" />
+    </svg>
   );
 }

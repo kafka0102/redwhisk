@@ -1,5 +1,16 @@
 import { openPath } from "@tauri-apps/plugin-opener";
 
+const HTML_FILE_EXTENSIONS = new Set(["htm", "html"]);
+
+/** 按文件名后缀判断是否为 HTML（大小写不敏感，含 `.htm`）。 */
+export function isHtmlFile(fileName: string): boolean {
+  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (extension === fileName.toLowerCase()) {
+    return false;
+  }
+  return HTML_FILE_EXTENSIONS.has(extension);
+}
+
 /** 拼出工作区根目录下文件的绝对路径。 */
 export function joinWorkspaceFilePath(
   workspacePath: string,

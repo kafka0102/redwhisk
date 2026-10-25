@@ -50,6 +50,10 @@
   white-space: nowrap;
 }
 
+.session-file-viewer__browser-toggle {
+  margin-left: auto;
+}
+
 .session-side-panel {
   display: grid;
   grid-template-rows: var(--activity-header-height) minmax(0, 1fr);

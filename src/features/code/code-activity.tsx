@@ -20,6 +20,7 @@ import {
   isSvgTextSwitchable,
   type SvgPreviewView,
 } from "../../shared/workspace/visual-file-preview-model";
+import { openHtmlInBrowser } from "../../shared/workspace/open-html-in-browser";
 import { CodeBreadcrumb } from "./code-breadcrumb";
 import { CodeContent, type CodeRevealRequest } from "./code-content";
 import { CodeSidebar } from "./code-sidebar";
@@ -53,7 +54,6 @@ import { useCodeLanguageReferences } from "./use-code-language-references";
 import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { useCodeFileTreePathActions } from "./use-code-file-tree-path-actions";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
-import { openHtmlInBrowser } from "./open-html-in-browser";
 import { useCodeReadingPositionCleanup } from "./use-code-reading-position-cleanup";
 
 interface CodeActivityProps {

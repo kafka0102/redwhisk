@@ -118,6 +118,7 @@ export const SessionWorkspacePane = memo(function SessionWorkspacePane({
         projectId={projectId}
         sessionId={workspace.sessionId}
         toolTabs={workspace.toolTabs}
+        workspacePath={workspace.workspacePath}
       />
     </div>
   );
