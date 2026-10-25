@@ -50,7 +50,7 @@ detecting_workspace
 
 - 一个项目通常只有一种习惯，所以默认值放项目设置。
 - 每一次完成都可以覆盖默认值。
-- 已经在目标分支上时走就地完成，不出现合并或开 PR。没登录、没 CLI 不禁用选项，选中后下一行状态；执行失败进入 blocked，不改成合并。
+- 已经在目标分支上时不弹窗，直接标记完成。CLI 未安装或未登录时，完成也不弹窗，直接结束；设置里只在「完成后」标签后给红色提示。
 - 「合入 base」和「开 PR/MR」互斥：开 PR 时不本地 merge，也不删远程分支。
 - 变更页「创建 PR/MR」独立于 Issue 完成，解决「base 不是默认分支，但我要向上游开 PR」。
 
@@ -88,7 +88,7 @@ detecting_workspace
 - **PR/MR 目标**：同样用 select。Issue 的 base 分支，或仓库默认分支（`main` / `master` / 远端 default）
 - **创建为草稿**：勾选，默认开。含义是远端请求先以草稿创建，不进入正式评审。页面上不写这段说明；需要时用图标，点击后提示。
 
-CLI 未安装或未登录时不禁用选项。用户选中「提交 PR/MR」后，选项下方一行状态，例如 `gh 未安装，未登录`。真正执行时失败，不改成合并到 base，也不在页面上写安装教程。
+CLI 未安装或未登录时，设置里仍可选择。红色提示紧跟在「完成后」标签后面，不放在下拉框下方，例如 `gh 未安装，未登录`。完成时不弹出选择窗口，直接标记完成。
 
 ```text
 completionAction: merge_to_base | open_pull_request   # 未识别宿主时界面不展示，行为等同 merge_to_base
@@ -105,8 +105,8 @@ prDraft: boolean                                      # 默认 true，仅 open_p
 - 工作分支、base 分支（只读）。
 - 完成后：与设置相同的 select，合并到 base / 提交 PR 或 MR。默认选中项目设置。
 - 若选 C：再出现目标 select 和草稿开关。草稿的说明用图标，点击后提示。
-- CLI 未就绪时，在选中的 C 下面一行状态，选项仍可点。
-- 主按钮随选项变化：`合并并完成` / `创建 PR 并完成`。
+- 只有对应 CLI 已安装且已登录时才弹出此窗口。
+- 主按钮随宿主变化：GitHub 为 `创建 PR 并完成`，GitLab 为 `创建 MR 并完成`。菜单、对话框标题同样区分 Pull Request 与 Merge Request。
 - 取消：中止完成 flow，与今天一致。
 
 运行时覆盖设置：
@@ -115,8 +115,8 @@ prDraft: boolean                                      # 默认 true，仅 open_p
 | --- | --- |
 | 工作分支 == base | 不弹窗，直接标记完成 |
 | 无 git remote / 未识别宿主 | 不出现 C。有 worktree 则走 B，与今天一致 |
-| 未安装 `gh`/`glab` | C 仍可选，下方一行状态。执行失败进入 blocked，不改成合并 |
-| 未登录 | C 仍可选，下方一行状态。执行失败同上。弹窗里不做登录流程 |
+| 未安装 `gh`/`glab` | 不弹窗，直接标记完成 |
+| 未登录 | 不弹窗，直接标记完成 |
 | push 失败 | 阻断，保持 worktree，进入 blocked |
 | 该 head 已有打开的 PR/MR | C 变成「关联已有 PR/MR 并完成」，不再 create |
 | 外部 worktree | B 保持今天的确认/禁止自动清理；C 仍可 push 当前分支开 PR，但不自动删用户目录 |
@@ -162,7 +162,7 @@ linked worktree 的「更多」仍只有删除，不加创建 PR。用户要开 
 5. 当前分支是否已 push
 6. 是否已有打开的 PR/MR（先查再 create）
 
-一期 **直接调用户机器上的 `gh` / `glab`**，不自研 OAuth、不内置 token。没装 CLI 或未登录时不禁用选项，也不写安装教程。执行失败进入 blocked，不要静默降级成本地 merge。
+一期 **直接调用户机器上的 `gh` / `glab`**，不自研 OAuth、不内置 token。没装 CLI 或未登录时，完成不弹窗，直接结束，不要静默降级成本地 merge。
 
 非交互创建示例：
 
@@ -223,10 +223,10 @@ detecting_workspace
 
 1. Settings → General：识别为 GitHub，默认「提交 PR」，草稿开，目标是 Issue base
 2. Settings → General：未识别宿主，不出现完成后选项
-3. Settings → General：识别为 GitLab，未安装/未登录 `glab`，选项仍可选，下方一行状态
+3. Settings → General：识别为 GitLab，未安装/未登录 `glab`，红色提示在「完成后」标签后
 4. 完成弹窗：worktree 分支 `issue-12-redwhisk` → base `main`，默认选中「提交 PR」，可改成「合并到 base」
 5. 已在 base `main` 上：没有弹窗，直接完成
-6. 完成弹窗：未安装 `gh`，C 仍可选，下方一行状态
+6. 未安装 `gh`：不弹窗，直接结束
 7. 完成弹窗：已有打开的 PR，主按钮为「关联已有 PR 并完成」
 8. 变更页「更多」菜单展开，含「创建 Pull Request」
 9. 创建 PR 对话框：源/目标/标题/草稿
@@ -278,11 +278,11 @@ src/features/issues/issue-completion/completion-closeout.prototype.html
 —— 第二阶段：实现（仅在我回复「通过」或「go」之后）——
 
 按 spec 做一期，最小改动：
-1. 项目设置 General：工作树路径下的「完成后」；未识别宿主不出现；选 PR/MR 后才出现目标和草稿；CLI 未就绪只一行状态，不禁用
-2. 完成 flow：在 dirty 处理之后、对账之前增加 B/C 选择；已在 base 上不弹窗，直接完成
+1. 项目设置 General：工作树路径下的「完成后」select；未识别宿主不出现；选 PR/MR 后才出现目标和草稿；CLI 未就绪时红色提示在标签后
+2. 完成 flow：环境就绪才在 dirty 之后、对账之前弹出 B/C；已在 base 上或 CLI 未就绪时不弹窗，直接完成
 3. 动作 C：push + gh/glab 非交互创建草稿 PR/MR，记录 URL；不本地 merge，不自动合 PR
-4. 变更页主 checkout「更多」：创建 PR/MR 对话框，独立于 Issue 完成
-5. 运行时探测决定文案和执行结果。CLI 未就绪不禁用选项，执行失败，不降级成合并
+4. 变更页主 checkout「更多」：GitHub 为创建 Pull Request，GitLab 为创建 Merge Request；独立于 Issue 完成
+5. 运行时探测决定是否弹窗，以及文案用 PR 还是 MR。CLI 未就绪时不弹窗，直接结束，不降级成合并
 6. 全部用户可见文案走 i18n，所有 locale 补齐
 7. 按 AGENTS.md §5 跑门禁并提交
 

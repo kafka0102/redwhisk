@@ -249,7 +249,9 @@
   .hint { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.45; }
   .hint.danger { color: var(--color-danger); }
   .checkline { display: flex; align-items: center; gap: 8px; }
-  .status-line { margin: 2px 0 0; color: var(--color-text-muted); font-size: 12px; }
+  .label-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .status-line { margin: 0; color: var(--color-text-muted); font-size: 12px; }
+  .status-line.is-danger { color: var(--color-danger); }
   .tip { position: relative; display: inline-flex; align-items: center; }
   .info {
     width: 16px; height: 16px; padding: 0;
@@ -551,7 +553,7 @@ const SCENES = [
     id: "s3",
     group: "设置",
     title: "GitLab，glab 未就绪",
-    caption: "已识别 GitLab，glab 未安装且未登录。提交 Merge Request 仍可选，选中后下方一行状态。执行时才会失败。",
+    caption: "已识别 GitLab，glab 未安装且未登录。红色提示在「完成后」后面。完成时不弹窗，直接结束。",
     kind: "settings",
     model: {
       detectedHost: "gitlab",
@@ -619,13 +621,13 @@ const SCENES = [
     id: "s6",
     group: "完成",
     title: "未安装 gh",
-    caption: "本机没装 gh。提交 PR 仍可选，下方一行状态。用户下一步可以继续，执行时会失败，也可以改成合并到 base。",
-    kind: "closeout",
+    caption: "gh 未安装或未登录。完成时不弹出选择窗口，直接结束。",
+    kind: "direct",
     model: {
       detectedHost: "github",
       hostOverride: "auto",
       defaultAction: "open_pull_request",
-      dialogChoice: "open_pr",
+      dialogChoice: "direct",
       targetKind: "issue_base",
       issueBase: "main",
       repoDefault: "main",
@@ -805,6 +807,7 @@ function defaultActionPhrase() {
 function dialogPhrase() {
   const choice = model.dialogChoice;
   if (choice === "stay") return "—（无弹窗，直接完成）";
+  if (choice === "direct") return "—（环境未就绪，不弹窗，直接结束）";
   if (choice === "merge_to_base") return "merge_to_base（合并并完成）";
   if (choice === "link_existing") return "link_existing（关联已有 " + prShort() + " 并完成）";
   if (choice === "open_pr" && sceneById(sceneId).kind === "create") return "open_pr（创建 " + prShort() + "，不改 Issue）";
@@ -816,6 +819,7 @@ function dialogPhrase() {
 function targetPhrase() {
   const scene = sceneById(sceneId);
   if (scene.kind === "stay") return "—（已在 base " + model.workBranch + "，不开 PR）";
+  if (scene.kind === "direct") return "—（环境未就绪，直接结束）";
   if (scene.kind === "create" || scene.kind === "menu") {
     return model.branchTarget + "（仓库默认分支 " + model.repoDefault + "）";
   }
@@ -909,7 +913,7 @@ function cliStatusLine() {
   const parts = [];
   if (!model.cliInstalled) parts.push(cli + " 未安装");
   if (!model.cliAuthed) parts.push("未登录");
-  return '<p class="status-line">' + parts.join("，") + '</p>';
+  return '<span class="status-line is-danger">' + parts.join("，") + '</span>';
 }
 
 function draftControl(disabled) {
@@ -919,7 +923,7 @@ function draftControl(disabled) {
 }
 
 function targetChoices() {
-  return '<div class="field"><label for="pr-target-kind">PR/MR 目标</label><select class="select" id="pr-target-kind" data-field="targetKind">'
+  return '<div class="field"><label for="pr-target-kind">' + prNoun() + ' 目标</label><select class="select" id="pr-target-kind" data-field="targetKind">'
     + option("issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base")
     + option("repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default")
     + '</select></div>';
@@ -929,10 +933,10 @@ function completionSettings() {
   if (effectiveHost() === "none") return "";
   const selected = model.defaultAction === "open_pull_request";
   const prLabel = effectiveHost() === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
-  return '<div class="field"><label for="completion-action">完成后</label><select class="select" id="completion-action" data-field="defaultAction">'
+  return '<div class="field"><div class="label-row"><label for="completion-action">完成后</label>' + cliStatusLine() + '</div><select class="select" id="completion-action" data-field="defaultAction">'
     + option("merge_to_base", "合并到 base 分支", !selected)
     + option("open_pull_request", prLabel, selected)
-    + '</select>' + (selected ? cliStatusLine() : "") + '</div>'
+    + '</select></div>'
     + (selected ? targetChoices() + draftControl(false) : "");
 }
 
@@ -999,17 +1003,16 @@ function closeoutDialog() {
     extra += '<dl class="facts"><dt>已有请求</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd></dl>';
   }
   if (showDetails) extra += targetChoices() + draftControl(false);
-  let primary = "创建 PR 并完成";
+  let primary = "创建 " + prShort() + " 并完成";
   if (model.dialogChoice === "merge_to_base") primary = "合并并完成";
-  else if (model.dialogChoice === "link_existing") primary = "关联已有 PR 并完成";
-  else if (effectiveHost() === "gitlab") primary = "创建 MR 并完成";
+  else if (model.dialogChoice === "link_existing") primary = "关联已有 " + prShort() + " 并完成";
   return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="closeout-title">'
     + '<h3 id="closeout-title">选择完成方式</h3>'
     + '<dl class="facts"><dt>工作分支</dt><dd><code>' + esc(model.workBranch) + '</code></dd><dt>base 分支</dt><dd><code>' + esc(model.issueBase) + '</code></dd></dl>'
     + '<div class="field"><label for="closeout-action">完成后</label><select class="select" id="closeout-action" data-field="dialogChoice">'
     + option("merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base")
     + option(cValue, cLabel, model.dialogChoice === cValue)
-    + '</select>' + (showDetails ? cliStatusLine() : "") + '</div>' + extra
+    + '</select></div>' + extra
     + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button(primary, "btn-primary", "primary", false) + '</div>'
     + '</div></div>';
 }
@@ -1021,7 +1024,7 @@ function changesPage(menuOpen) {
   ];
   const menu = menuOpen ? '<div class="menu" role="menu">'
     + menuItem("签出") + menuItem("拉取") + menuItem("推送") + menuItem("创建分支")
-    + '<button type="button" data-go="s9">创建 Pull Request</button>'
+    + '<button type="button" data-go="s9">创建 ' + prNoun() + '</button>'
     + menuItem("合并分支")
     + '</div>' : "";
   return activityBar("changes") + '<div class="surface"><div class="changes-layout"><div class="changes-side">'
@@ -1045,7 +1048,7 @@ function createDialog() {
   const sameBranch = model.workBranch === model.branchTarget;
   const blocked = disabled || sameBranch;
   return '<div class="overlay"><form class="dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">'
-    + '<div class="dialog-title"><h3 id="create-title">创建 Pull Request</h3>' + (blocked ? infoTip("无法创建", "当前分支就是仓库默认分支，没有对比分支。") : "") + '</div>'
+    + '<div class="dialog-title"><h3 id="create-title">创建 ' + prNoun() + '</h3>' + (blocked ? infoTip("无法创建", "当前分支就是仓库默认分支，没有对比分支。") : "") + '</div>'
     + '<div class="field"><label>源分支</label><input class="control" readonly value="' + esc(model.workBranch) + '" /></div>'
     + '<div class="field"><label for="pr-target">目标分支</label><select class="select" id="pr-target" data-field="branchTarget"' + (disabled ? " disabled" : "") + '>'
     + option("main", "main", model.branchTarget === "main")
@@ -1054,13 +1057,13 @@ function createDialog() {
     + '<div class="field"><label for="pr-title">标题</label><input class="control" id="pr-title" data-field="title" value="' + esc(model.title) + '"' + (disabled ? " disabled" : "") + ' /></div>'
     + '<div class="field"><label for="pr-body">正文</label><textarea class="area" id="pr-body" data-field="body" rows="4"' + (disabled ? " disabled" : "") + '>' + esc(model.body) + '</textarea></div>'
     + draftControl(disabled)
-    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("创建 Pull Request", "btn-primary", "primary", blocked) + '</div>'
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("创建 " + prNoun(), "btn-primary", "primary", blocked) + '</div>'
     + '</form></div>';
 }
 
 function resultBlock() {
   return '<section class="result"><h3>完成信息</h3><dl class="meta">'
-    + '<dt>结果</dt><dd>已创建草稿 Pull Request</dd>'
+    + '<dt>结果</dt><dd>已创建草稿 ' + prNoun() + '</dd>'
     + '<dt>链接</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd>'
     + '</dl></section>';
 }
@@ -1070,7 +1073,7 @@ function renderStage() {
   let inner = "";
   if (scene.kind === "settings") inner = settingsScreen();
   else if (scene.kind === "closeout") inner = activityBar("issues") + '<div class="surface">' + issuePage("进行中") + '</div>' + closeoutDialog();
-  else if (scene.kind === "stay") inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成") + '</div>';
+  else if (scene.kind === "stay" || scene.kind === "direct") inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成") + '</div>';
   else if (scene.kind === "menu") inner = changesPage(true);
   else if (scene.kind === "create") inner = changesPage(false) + createDialog();
   else inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成", resultBlock()) + '</div>';
