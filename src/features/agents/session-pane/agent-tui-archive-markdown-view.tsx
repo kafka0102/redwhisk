@@ -4,8 +4,10 @@ import { AgentMarkdown } from "../message-stream/agent-markdown";
 import { readAgentSessionTerminal } from "../agent-session-commands";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
-  prepareArchiveMarkdownForRender,
+  jsonArchiveReviewCards,
+  prepareTuiArchiveMarkdownForRender,
   TUI_ARCHIVE_READ_MAX_BYTES,
+  type JsonArchiveReviewCard,
 } from "./agent-tui-archive-path";
 
 interface AgentTuiArchiveMarkdownViewProps {
@@ -16,12 +18,11 @@ interface AgentTuiArchiveMarkdownViewProps {
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; markdown: string }
+  | { kind: "cards"; cards: JsonArchiveReviewCard[] }
   | { kind: "empty" }
   | { kind: "error"; message: string };
 
-type ReviewCard =
-  | { kind: "user"; text: string }
-  | { kind: "conclusion"; text: string };
+type ReviewCard = JsonArchiveReviewCard;
 
 /** 连续 `›` 行是一张用户卡；其余行直到下一个 `›` 是一张结论卡。无标记则整篇 Markdown。 */
 function splitReviewCards(markdown: string): ReviewCard[] | null {
@@ -59,7 +60,7 @@ function splitReviewCards(markdown: string): ReviewCard[] | null {
       conclusionLines.pop();
     }
     if (conclusionLines.length > 0) {
-      cards.push({ kind: "conclusion", text: conclusionLines.join("\n") });
+      cards.push({ kind: "assistant", text: conclusionLines.join("\n") });
     }
   }
   return cards;
@@ -68,28 +69,38 @@ function splitReviewCards(markdown: string): ReviewCard[] | null {
 function ReviewCards({ cards }: { cards: ReviewCard[] }) {
   return (
     <div className="agent-tui-archive-markdown__body">
-      {cards.map((card, index) =>
-        card.kind === "user" ? (
-          <article
-            key={`user-${index}`}
-            className="agents-message__entry agents-message__entry--user"
-          >
-            <div className="agents-message__bubble agents-message__bubble--user">
-              <p className="agents-message__text">{card.text}</p>
-            </div>
-          </article>
-        ) : (
-          <article
-            key={`conclusion-${index}`}
-            className="agents-message__entry agents-message__entry--assistant"
-          >
-            <div className="agents-message__bubble agents-message__bubble--assistant">
-              <AgentMarkdown>{card.text}</AgentMarkdown>
-            </div>
-          </article>
-        ),
-      )}
+      {cards.map((card, index) => (
+        <ReviewCardView key={`${card.kind}-${index}`} card={card} />
+      ))}
     </div>
+  );
+}
+
+function ReviewCardView({ card }: { card: ReviewCard }) {
+  if (card.kind === "user") {
+    return (
+      <article className="agents-message__entry agents-message__entry--user">
+        <div className="agents-message__bubble agents-message__bubble--user">
+          <p className="agents-message__text">{card.text}</p>
+        </div>
+      </article>
+    );
+  }
+  if (card.kind === "error") {
+    return (
+      <article className="agents-message__entry agents-message__entry--error">
+        <div className="agents-message__error">
+          <p>{card.text}</p>
+        </div>
+      </article>
+    );
+  }
+  return (
+    <article className="agents-message__entry agents-message__entry--assistant">
+      <div className="agents-message__bubble agents-message__bubble--assistant">
+        <AgentMarkdown>{card.text}</AgentMarkdown>
+      </div>
+    </article>
   );
 }
 
@@ -126,7 +137,16 @@ export function AgentTuiArchiveMarkdownView({
         if (cancelled) {
           return;
         }
-        const markdown = prepareArchiveMarkdownForRender(result.snapshot);
+        const jsonCards = jsonArchiveReviewCards(result.snapshot);
+        if (jsonCards != null) {
+          if (jsonCards.length === 0) {
+            setState({ kind: "empty" });
+            return;
+          }
+          setState({ kind: "cards", cards: jsonCards });
+          return;
+        }
+        const markdown = prepareTuiArchiveMarkdownForRender(result.snapshot);
         if (markdown.trim() === "") {
           setState({ kind: "empty" });
           return;
@@ -169,6 +189,7 @@ export function AgentTuiArchiveMarkdownView({
           {state.message}
         </p>
       ) : null}
+      {state.kind === "cards" ? <ReviewCards cards={state.cards} /> : null}
       {state.kind === "ready" ? (
         <ReadyArchive markdown={state.markdown} />
       ) : null}

@@ -307,7 +307,7 @@ _Avoid_: 实时跟随 profile、内存-only 运行时标记
 _Avoid_: 双进程并行、不终止进程的热切换、改 profile 默认值来代替本次切换、切到 json 后消息流从空白开始、进程已停就隐藏切换
 
 **Issue Session 归档**：
-Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为整份会话日志逐行过滤后的 timeline JSONL，保留全部 Turn 的用户消息、助手消息和错误，不把工具输出留在内存，也不截成最近 50 个 Turn；同一 messageId 的助手消息只留最后一次完整正文；tui 为纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考、输入框里未写完的残句与 TUI chrome 不入档）。回看时 json 以用户卡与助手卡交替展示；新写入的 tui 归档在用户块每一行（含原文空行）前加 `›`，回看据此切成同样的交替卡片，结论块保留来源中的标题与段落空行。没有逐行 `›` 的既有 tui 归档仍整篇按 Markdown 展示。Codex、Claude Code、OpenCode、Grok 的 TUI 都以该 Agent 自己的本机会话记录为事实源逐轮提取；定位或解析不到时回退终端提取。历史错误形态的 TUI 归档不自动迁移。
+Issue 完成时将关联 Agent Session 的 runtime 会话日志固化到 archive 路径后的只读产物；形态由 Session 展示形式快照决定——json 为整份会话日志逐行过滤后的 timeline JSONL，保留全部 Turn 的用户消息、助手消息和错误，不把工具输出留在内存，也不截成最近 50 个 Turn；同一 messageId 的助手消息只留最后一次完整正文；tui 为纯文本，只保留各用户输入及其对应结论性正文（过程性工具输出、中间思考、输入框里未写完的残句与 TUI chrome 不入档）。回看时 json 以用户卡与助手卡交替展示，同一条消息只留最新一份；用户卡超过五行可展开，助手卡不折叠。新写入的 tui 归档在用户块每一行（含原文空行）前加 `›`，回看据此切成同样的交替卡片，用户卡同样超过五行可展开，结论块保留来源中的标题与段落空行且不折叠。没有逐行 `›` 的既有 tui 归档仍整篇按 Markdown 展示。Codex、Claude Code、OpenCode、Grok 的 TUI 都以该 Agent 自己的本机会话记录为事实源逐轮提取；定位或解析不到时回退终端提取。历史错误形态的 TUI 归档不自动迁移。
 _Avoid_: 运行中旁路监听终端并重写成 JSONL、运行中 live log、完整审计仓、完整过程 transcript、SQLite 中的会话正文
 
 **Agent TUI 会话视图**：

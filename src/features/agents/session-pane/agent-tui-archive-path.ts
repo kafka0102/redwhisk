@@ -44,21 +44,23 @@ export function prepareTuiArchiveMarkdownForRender(text: string): string {
   return collapseBlankLines(lines);
 }
 
-/**
- * JSON 归档是 JSONL 信封。抽出用户与助手正文再交给 AgentMarkdown。
- * 普通文本原样走既有预处理。
- */
-export function prepareArchiveMarkdownForRender(text: string): string {
-  const extracted = extractJsonArchiveConversation(text);
-  return prepareTuiArchiveMarkdownForRender(extracted ?? text);
-}
+export type JsonArchiveReviewCard =
+  | { kind: "user"; text: string }
+  | { kind: "assistant"; text: string }
+  | { kind: "error"; text: string };
 
-function extractJsonArchiveConversation(text: string): string | null {
+/**
+ * JSON 时间轴按文件顺序成卡。不是 JSON 归档时返回 null。
+ * 工具、推理和其它类型丢掉。回看直接用这些卡，避免再铺成一篇正文。
+ */
+export function jsonArchiveReviewCards(
+  text: string,
+): JsonArchiveReviewCard[] | null {
   const lines = text.split("\n").filter((line) => line.trim().startsWith("{"));
   if (lines.length === 0) {
     return null;
   }
-  const parts: string[] = [];
+  const cards: ParsedArchiveCard[] = [];
   let parsed = 0;
   for (const line of lines) {
     let value: unknown;
@@ -68,25 +70,118 @@ function extractJsonArchiveConversation(text: string): string | null {
       continue;
     }
     parsed += 1;
-    const item = timelineItem(value);
-    if (item == null) {
-      continue;
-    }
-    const type = stringField(item, "type");
-    const body =
-      type === "user_message" || type === "assistant_message"
-        ? stringField(item, "text")
-        : type === "error"
-          ? stringField(item, "message")
-          : null;
-    if (body != null && body.trim() !== "") {
-      parts.push(body);
+    const parsedCard = jsonArchiveCard(value);
+    if (parsedCard != null) {
+      rememberArchiveCard(cards, parsedCard);
     }
   }
   if (parsed === 0) {
     return null;
   }
-  return parts.join("\n\n");
+  return cards.map((placed) => placed.card);
+}
+
+interface ParsedArchiveCard {
+  card: JsonArchiveReviewCard;
+  messageId: string | null;
+  source: string | null;
+}
+
+function rememberArchiveCard(
+  cards: ParsedArchiveCard[],
+  next: ParsedArchiveCard,
+): void {
+  if (next.card.kind === "user" && next.messageId != null) {
+    const index = cards.findIndex(
+      (existing) =>
+        existing.card.kind === "user" && existing.messageId === next.messageId,
+    );
+    if (index >= 0) {
+      cards[index] = next;
+      return;
+    }
+  }
+  if (next.card.kind === "assistant" && next.messageId != null) {
+    const index = cards.findIndex(
+      (existing) =>
+        existing.card.kind === "assistant" &&
+        existing.messageId === next.messageId &&
+        existing.source === next.source,
+    );
+    if (index >= 0) {
+      cards[index] = next;
+      return;
+    }
+  }
+  if (next.card.kind === "user" && next.messageId == null) {
+    const last = cards[cards.length - 1];
+    if (
+      last?.card.kind === "user" &&
+      sameArchiveUserText(last.card.text, next.card.text)
+    ) {
+      cards[cards.length - 1] = {
+        card: next.card,
+        messageId: last.messageId,
+        source: last.source,
+      };
+      return;
+    }
+  }
+  cards.push(next);
+}
+
+function sameArchiveUserText(left: string, right: string): boolean {
+  return normalizeArchiveNewlines(left) === normalizeArchiveNewlines(right);
+}
+
+function normalizeArchiveNewlines(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function jsonArchiveCard(value: unknown): ParsedArchiveCard | null {
+  const item = timelineItem(value);
+  if (item == null) {
+    return null;
+  }
+  const type = stringField(item, "type");
+  if (type === "error") {
+    const message = stringField(item, "message");
+    if (message == null || message.trim() === "") {
+      return null;
+    }
+    return {
+      card: { kind: "error", text: message },
+      messageId: null,
+      source: null,
+    };
+  }
+  if (type !== "user_message" && type !== "assistant_message") {
+    return null;
+  }
+  const body = stringField(item, "text");
+  if (body == null || body.trim() === "") {
+    return null;
+  }
+  return {
+    card:
+      type === "user_message"
+        ? { kind: "user", text: body }
+        : { kind: "assistant", text: body },
+    messageId: optionalId(item, "messageId"),
+    source:
+      type === "assistant_message" ? optionalId(item, "subagentId") : null,
+  };
+}
+
+function optionalId(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = stringField(record, key);
+  if (value == null || value.trim() === "") {
+    return null;
+  }
+  return value;
 }
 
 function timelineItem(value: unknown): Record<string, unknown> | null {
