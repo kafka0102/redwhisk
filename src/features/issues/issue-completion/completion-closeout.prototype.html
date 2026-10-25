@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · 完成后合入或提交 PR/MR</title>
+<style>
+  :root {
+    --color-app: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f1f2f4;
+    --color-border: #e3e5e8;
+    --color-border-strong: #d1d5db;
+    --color-text: #17181a;
+    --color-text-muted: #5f6368;
+    --color-text-subtle: #8a8f98;
+    --color-accent: #111111;
+    --color-accent-muted: #e9eaee;
+    --color-danger: #b42318;
+    --color-diff-added: #e7f4ea;
+    --color-overlay: rgb(15 23 42 / 18%);
+    --color-popover-shadow: rgb(17 24 39 / 10%);
+    --radius-control: 3px;
+    --radius-card: 5px;
+    --radius-dialog: 7px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    color: var(--color-text);
+    background: var(--color-app);
+    font-size: 13px;
+    line-height: 1.45;
+    letter-spacing: 0;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; letter-spacing: 0; }
+  button { cursor: pointer; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  .proto {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+  .proto-nav {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #f7f7f8;
+    border-right: 1px solid var(--color-border);
+  }
+  .proto-nav header { padding: 14px 14px 8px; }
+  .proto-nav h1 { margin: 0; font-size: 13px; font-weight: 650; }
+  .proto-kicker {
+    margin: 4px 0 0;
+    color: var(--color-text-subtle);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .scene-list { flex: 1; min-height: 0; padding: 4px 0 8px; overflow: auto; }
+  .proto-nav { overflow: hidden; }
+  .scene-group {
+    margin: 10px 14px 4px;
+    color: var(--color-text-subtle);
+    font-size: 11px;
+  }
+  .scene-list button {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    color: var(--color-text-muted);
+  }
+  .scene-list button strong { font-weight: 600; color: var(--color-text-subtle); margin-right: 6px; }
+  .scene-list button[aria-current="true"] {
+    background: var(--color-accent-muted);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  .scene-list button[aria-current="true"] strong { color: var(--color-text); }
+  .gaps {
+    margin-top: auto;
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .gaps h2 { margin: 0 0 6px; font-size: 11px; font-weight: 650; color: var(--color-text); }
+  .gaps ol { margin: 0; padding-left: 16px; }
+  .gaps li + li { margin-top: 4px; }
+  .proto-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+  }
+  .caption {
+    margin: 0;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: #fafafa;
+  }
+  #stage { min-width: 0; min-height: 0; overflow: hidden; }
+  .state {
+    margin: 0;
+    max-height: 148px;
+    overflow: auto;
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-border);
+    background: #fafafa;
+    color: var(--color-text-muted);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  .app { position: relative; display: flex; height: 100%; min-height: 0; background: var(--color-app); }
+  .activity-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 48px;
+    padding: 8px 4px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  .activity-bar .grow { flex: 1; }
+  .activity-btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 6px;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+  .activity-btn[aria-pressed="true"] { background: var(--color-accent-muted); color: var(--color-accent); }
+  .surface { flex: 1; min-width: 0; min-height: 0; display: flex; }
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 180px 8px minmax(0, 1fr);
+    width: 100%;
+    min-height: 0;
+  }
+  .settings-menu { display: grid; align-content: start; gap: 4px; padding: 14px 0; }
+  .settings-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-align: left;
+  }
+  .settings-menu button[aria-pressed="true"] { background: var(--color-surface-muted); color: var(--color-text); }
+  .splitter { position: relative; background: var(--color-surface); }
+  .splitter::before {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 1px;
+    background: var(--color-border);
+  }
+  .settings-content {
+    min-width: 0;
+    overflow: auto;
+    padding: 24px;
+  }
+  .settings-title {
+    width: min(100%, 720px);
+    margin: 0 auto 16px;
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+  .card {
+    display: grid;
+    gap: 12px;
+    width: min(100%, 720px);
+    margin: 0 auto;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+  }
+  .field { display: grid; gap: 6px; }
+  .field label, .block-label {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .control, .select, .area {
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    outline: none;
+  }
+  .control, .select { height: 30px; padding: 0 11px; }
+  .area { min-height: 78px; padding: 8px 11px; resize: vertical; }
+  .control[readonly], .control:disabled, .select:disabled, .area:disabled {
+    color: var(--color-text);
+    background: #fafafa;
+  }
+  .path-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .form-break {
+    margin-top: 4px;
+    padding-top: 4px;
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .summary {
+    padding: 7px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: #fafafa;
+  }
+  .choices { display: grid; gap: 2px; }
+  .choice {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    padding: 4px 0;
+  }
+  .choice input { margin-top: 2px; }
+  .choice.is-disabled .choice-label { color: var(--color-text-subtle); }
+  .hint { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.45; }
+  .hint.danger { color: var(--color-danger); }
+  .checkline { display: flex; align-items: center; gap: 8px; }
+  .env {
+    display: grid;
+    gap: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: #fafafa;
+  }
+  .env-row { display: flex; justify-content: space-between; gap: 12px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+    background: transparent;
+  }
+  .btn-primary { background: var(--color-accent); color: #fff; }
+  .btn-secondary { border-color: var(--color-border); background: #fff; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: 100%;
+    min-height: 0;
+    position: relative;
+  }
+  .issue-top, .changes-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 48px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .issue-top h2, .changes-top h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .chip {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--color-accent-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .issue-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    min-height: 0;
+  }
+  .issue-main { padding: 18px 20px; overflow: auto; }
+  .issue-copy { margin: 0; color: var(--color-text-muted); white-space: pre-wrap; }
+  .issue-side {
+    padding: 14px 16px;
+    border-left: 1px solid var(--color-border);
+    overflow: auto;
+  }
+  .meta { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px 10px; margin: 0; }
+  .meta dt { color: var(--color-text-muted); font-size: 12px; }
+  .meta dd { margin: 0; overflow-wrap: anywhere; }
+  .result {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+  }
+  .result h3 { margin: 0; font-size: 13px; font-weight: 650; }
+  .linkish {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--color-overlay);
+  }
+  .dialog {
+    width: min(440px, 100%);
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border-radius: var(--radius-dialog);
+    background: var(--color-surface);
+    box-shadow: 0 8px 24px var(--color-popover-shadow);
+  }
+  .dialog h3 { margin: 0; font-size: 14px; font-weight: 650; }
+  .dialog .desc { margin: 0; color: var(--color-text-muted); }
+  .facts {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 6px 10px;
+    margin: 0;
+  }
+  .facts dt { color: var(--color-text-muted); font-size: 12px; }
+  .facts dd { margin: 0; }
+  .changes-layout {
+    display: grid;
+    grid-template-columns: 300px 8px minmax(0, 1fr);
+    width: 100%;
+    min-height: 0;
+  }
+  .changes-side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-right: 0;
+  }
+  .branch-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding-right: 4px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .branch-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .branch-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text);
+  }
+  .icon-btn[aria-expanded="true"] { background: var(--color-surface-muted); }
+  .menu {
+    position: absolute;
+    top: 34px;
+    right: 4px;
+    z-index: 2;
+    display: grid;
+    min-width: 180px;
+    padding: 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: #fff;
+    box-shadow: 0 8px 20px var(--color-popover-shadow);
+  }
+  .menu button {
+    height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    text-align: left;
+  }
+  .menu button:hover { background: var(--color-surface-muted); }
+  .panel-h {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .file-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    height: 28px;
+    padding: 0 12px;
+    color: var(--color-text);
+    font-size: 12px;
+  }
+  .file-row em { font-style: normal; color: var(--color-text-subtle); }
+  .diff {
+    min-width: 0;
+    overflow: auto;
+    padding: 12px 0;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .diff div { padding: 0 16px; white-space: pre; }
+  .diff .add { background: var(--color-diff-added); }
+  .diff .meta { display: block; color: var(--color-text-subtle); }
+</style>
+</head>
+<body>
+<div class="proto">
+  <aside class="proto-nav">
+    <header>
+      <h1>静态稿 · 完成收尾</h1>
+      <p class="proto-kicker">一套界面，对齐现有设置、弹窗和变更页。左右键切换场景。</p>
+    </header>
+    <nav class="scene-list" id="scene-list" aria-label="场景"></nav>
+    <div class="gaps">
+      <h2>未决，不猜成功能</h2>
+      <ol>
+        <li>已有 PR 时，目标分支和草稿画成只读。spec 只规定主按钮改为「关联已有」。</li>
+        <li>变更页「已有 PR 则按钮改为查看」在 spec §7，不在这 11 个场景里，这里没有单独一屏。</li>
+        <li>已在 base 上不新做「就地完成」弹窗，沿用现有「是否继续标记完成」。</li>
+        <li>场景 4 的 Issue base 和仓库默认分支都是 main。变更页用 release/1.4 → main 看差异。</li>
+        <li>未安装 CLI 时，不把默认的「提交 PR」自动改成合并。用户要自己改选，或先安装。</li>
+        <li>人就在默认分支时，创建对话框整单禁用。spec 没说改成别的目标（例如 main → develop）后是否放开。</li>
+      </ol>
+    </div>
+  </aside>
+  <div class="proto-main">
+    <p class="caption" id="caption"></p>
+    <div id="stage"></div>
+    <pre class="state" id="state"></pre>
+  </div>
+</div>
+<script>
+const SCENES = [
+  {
+    id: "s1",
+    group: "设置",
+    title: "GitHub，默认提交 PR",
+    caption: "已识别 GitHub，默认提交草稿 PR，目标是 Issue 的 base。用户下一步可改默认动作、目标或草稿，然后保存。",
+    kind: "settings",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "none",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+    },
+  },
+  {
+    id: "s2",
+    group: "设置",
+    title: "未识别宿主",
+    caption: "远程不是 GitHub / GitLab，提交 PR 不可用，默认只剩合并到 base。用户下一步保持今天的本地合入，或在自建实例误判时手动覆盖宿主。",
+    kind: "settings",
+    model: {
+      detectedHost: "none",
+      hostOverride: "auto",
+      defaultAction: "merge_to_base",
+      dialogChoice: "none",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: null,
+      cliInstalled: false,
+      cliAuthed: false,
+    },
+  },
+  {
+    id: "s3",
+    group: "设置",
+    title: "GitLab，glab 未就绪",
+    caption: "已识别 GitLab，但 glab 未安装且未登录。用户下一步先安装并登录；设置里仍可把默认留成提交 MR，完成时会再检查。",
+    kind: "settings",
+    model: {
+      detectedHost: "gitlab",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "none",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: null,
+      cliInstalled: false,
+      cliAuthed: false,
+    },
+  },
+  {
+    id: "s4",
+    group: "完成",
+    title: "提交 PR 或合并",
+    caption: "工作分支 issue-12-redwhisk 相对 base main，默认选中提交 PR。用户下一步可改成合并到 base，或创建 PR 并完成。",
+    kind: "closeout",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "open_pr",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+      cDisabled: false,
+      existingPr: false,
+    },
+  },
+  {
+    id: "s5",
+    group: "完成",
+    title: "已在 base",
+    caption: "人已经在目标分支 main 上，确认弹窗里没有合并或提交 PR。用户下一步点继续，就地标记完成。",
+    kind: "stay",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "stay",
+      targetKind: "none",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: null,
+      workBranch: "main",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+    },
+  },
+  {
+    id: "s6",
+    group: "完成",
+    title: "未安装 gh",
+    caption: "项目默认是提交 PR，但这台机器没装 gh，该选项不可点，也不会自动改成合并。用户下一步改选合并到 base，或先安装 gh。",
+    kind: "closeout",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: null,
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: null,
+      cliInstalled: false,
+      cliAuthed: false,
+      cDisabled: true,
+    },
+  },
+  {
+    id: "s7",
+    group: "完成",
+    title: "已有打开的 PR",
+    caption: "这个 head 已有打开的 PR #128，主按钮是关联而不是再创建。用户下一步关联并完成，或改选合并到 base。",
+    kind: "closeout",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "link_existing",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: "https://github.com/acme/redwhisk/pull/128",
+      cliInstalled: true,
+      cliAuthed: true,
+      cDisabled: false,
+      existingPr: true,
+    },
+  },
+  {
+    id: "s8",
+    group: "变更",
+    title: "更多菜单",
+    caption: "主 checkout 的更多菜单已展开，创建 Pull Request 在创建分支和合并分支之间。用户下一步点它打开对话框；这不改变 Issue 状态。",
+    kind: "menu",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "none",
+      targetKind: "repo_default",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "release/1.4",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+      title: "fix: 修复任务完成后的分支收尾",
+      body: "把完成后的合入与开 PR 分开，避免在 base 上对自己开请求。",
+    },
+  },
+  {
+    id: "s9",
+    group: "变更",
+    title: "创建 PR",
+    caption: "当前分支 release/1.4，目标默认是仓库默认分支 main，草稿开。用户下一步可改目标、标题和草稿，然后创建 Pull Request。",
+    kind: "create",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "open_pr",
+      targetKind: "repo_default",
+      issueBase: "release/1.4",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "release/1.4",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+      createDisabled: false,
+      title: "fix: 修复任务完成后的分支收尾",
+      body: "把完成后的合入与开 PR 分开，避免在 base 上对自己开请求。",
+    },
+  },
+  {
+    id: "s10",
+    group: "变更",
+    title: "当前即默认分支",
+    caption: "当前分支就是仓库默认分支 main，没有可对比的目标。用户下一步不能创建，只能关闭。",
+    kind: "create",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "open_pr",
+      targetKind: "repo_default",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "main",
+      prUrl: null,
+      cliInstalled: true,
+      cliAuthed: true,
+      createDisabled: true,
+      title: "fix: 修复任务完成后的分支收尾",
+      body: "把完成后的合入与开 PR 分开，避免在 base 上对自己开请求。",
+    },
+  },
+  {
+    id: "s11",
+    group: "结果",
+    title: "完成后的 PR 链接",
+    caption: "Issue 已完成，详情里记下了草稿 PR 链接，没有本地合并。用户下一步只读查看链接，应用不会自动合并这个 PR。",
+    kind: "result",
+    model: {
+      detectedHost: "github",
+      hostOverride: "auto",
+      defaultAction: "open_pull_request",
+      dialogChoice: "open_pr",
+      targetKind: "issue_base",
+      issueBase: "main",
+      repoDefault: "main",
+      branchTarget: "main",
+      draft: true,
+      workBranch: "issue-12-redwhisk",
+      prUrl: "https://github.com/acme/redwhisk/pull/128",
+      cliInstalled: true,
+      cliAuthed: true,
+    },
+  },
+];
+
+let sceneId = "s1";
+let model = null;
+let actionNote = "";
+
+function esc(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function sceneById(id) {
+  return SCENES.find((scene) => scene.id === id) ?? SCENES[0];
+}
+
+function effectiveHost() {
+  if (model.hostOverride === "auto") return model.detectedHost;
+  if (model.hostOverride === "none") return "none";
+  return model.hostOverride;
+}
+
+function hostPhrase(host) {
+  if (host === "github") return "github（github.com/acme/redwhisk）";
+  if (host === "gitlab") return "gitlab（gitlab.example.com/acme/redwhisk）";
+  return "none（未识别 GitHub / GitLab 远程）";
+}
+
+function prNoun() {
+  return effectiveHost() === "gitlab" ? "Merge Request" : "Pull Request";
+}
+
+function prShort() {
+  return effectiveHost() === "gitlab" ? "MR" : "PR";
+}
+
+function defaultActionPhrase() {
+  if (model.defaultAction === "merge_to_base") return "merge_to_base（合并到 base 分支）";
+  const name = effectiveHost() === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
+  return "open_pull_request（" + name + "）";
+}
+
+function dialogPhrase() {
+  const choice = model.dialogChoice;
+  if (choice === "stay") return "stay（就地完成，不出现 B/C）";
+  if (choice === "merge_to_base") return "merge_to_base（合并并完成）";
+  if (choice === "link_existing") return "link_existing（关联已有 " + prShort() + " 并完成）";
+  if (choice === "open_pr" && model.cDisabled) return "open_pr（提交 " + prShort() + "，已禁用）";
+  if (choice === "open_pr" && sceneById(sceneId).kind === "create") return "open_pr（创建 " + prShort() + "，不改 Issue）";
+  if (choice === "open_pr") return "open_pr（创建 " + prShort() + " 并完成）";
+  if (choice === "none") return "—（当前没有这张弹窗）";
+  if (model.cDisabled) return "无选中（默认 open_pr 已禁用，未自动改成合并）";
+  return "—";
+}
+
+function targetPhrase() {
+  const scene = sceneById(sceneId);
+  if (scene.kind === "stay") return "—（已在 base " + model.workBranch + "，不开 PR）";
+  if (scene.kind === "create" || scene.kind === "menu") {
+    return model.branchTarget + "（仓库默认分支 " + model.repoDefault + "）";
+  }
+  if (scene.kind === "closeout" && model.cDisabled && model.dialogChoice !== "merge_to_base") {
+    return "issue_base（" + model.issueBase + "，未展示，提交 PR 已禁用）";
+  }
+  const showingPr = model.dialogChoice === "open_pr" || model.dialogChoice === "link_existing" || (scene.kind === "settings" && model.defaultAction === "open_pull_request" && effectiveHost() !== "none");
+  if (!showingPr) return "—（当前不创建 PR/MR）";
+  if (model.dialogChoice === "link_existing") return "issue_base（" + model.issueBase + "，只读，以已有 PR 为准）";
+  if (scene.kind === "settings" || scene.kind === "closeout" || scene.kind === "result") {
+    if (model.targetKind === "repo_default") return "repo_default（" + model.repoDefault + "）";
+    return "issue_base（" + model.issueBase + "）";
+  }
+  return model.branchTarget;
+}
+
+function draftPhrase() {
+  const scene = sceneById(sceneId);
+  const showing = (scene.kind === "settings" && model.defaultAction === "open_pull_request" && effectiveHost() !== "none")
+    || model.dialogChoice === "open_pr"
+    || model.dialogChoice === "link_existing"
+    || scene.kind === "create"
+    || scene.kind === "result";
+  if (scene.kind === "closeout" && model.cDisabled && model.dialogChoice !== "merge_to_base") {
+    return (model.draft ? "开" : "关") + "（未展示，提交 PR 已禁用）";
+  }
+  if (!showing || model.draft === null) return "—";
+  if (model.dialogChoice === "link_existing") return (model.draft ? "开" : "关") + "（只读，以已有 PR 为准）";
+  if (scene.kind === "create" && model.createDisabled) return (model.draft ? "开" : "关") + "（控件禁用）";
+  return model.draft ? "开" : "关";
+}
+
+function applyScene(id) {
+  const scene = sceneById(id);
+  sceneId = scene.id;
+  model = structuredClone(scene.model);
+  model.title = scene.model.title || "fix: 修复任务完成后的分支收尾";
+  model.body = scene.model.body || "把完成后的合入与开 PR 分开，避免在 base 上对自己开请求。";
+  actionNote = "";
+  if (location.hash !== "#" + scene.id) {
+    history.replaceState(null, "", "#" + scene.id);
+  }
+  render();
+}
+
+function renderNav() {
+  const groups = [];
+  for (const scene of SCENES) {
+    const last = groups[groups.length - 1];
+    if (!last || last.name !== scene.group) groups.push({ name: scene.group, items: [scene] });
+    else last.items.push(scene);
+  }
+  document.getElementById("scene-list").innerHTML = groups.map((group) => {
+    const buttons = group.items.map((scene) => {
+      const index = SCENES.indexOf(scene) + 1;
+      const current = scene.id === sceneId ? "true" : "false";
+      return '<button type="button" data-scene="' + scene.id + '" aria-current="' + current + '"><strong>' + index + '</strong>' + esc(scene.title) + '</button>';
+    }).join("");
+    return '<div class="scene-group">' + esc(group.name) + '</div>' + buttons;
+  }).join("");
+}
+
+function icon(name) {
+  const common = 'width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  if (name === "issues") return '<svg ' + common + '><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+  if (name === "agents") return '<svg ' + common + '><rect x="5" y="8" width="14" height="10" rx="2"/><path d="M12 8V5M9 13h.01M15 13h.01"/></svg>';
+  if (name === "changes") return '<svg ' + common + '><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 7h5a4 4 0 0 1 4 4v0"/></svg>';
+  if (name === "terminals") return '<svg ' + common + '><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m8 10 3 2-3 2M13 14h4"/></svg>';
+  return '<svg ' + common + '><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+}
+
+function activityBar(active) {
+  const items = [
+    ["issues", "Issues"],
+    ["agents", "智能体"],
+    ["changes", "变更"],
+    ["terminals", "终端"],
+  ];
+  const top = items.map(([key, label]) => {
+    return '<button class="activity-btn" type="button" aria-label="' + label + '" aria-pressed="' + (active === key) + '">' + icon(key) + '</button>';
+  }).join("");
+  return '<nav class="activity-bar" aria-label="活动栏">' + top
+    + '<div class="grow"></div>'
+    + '<button class="activity-btn" type="button" aria-label="项目设置" aria-pressed="' + (active === "settings") + '">' + icon("settings") + '</button></nav>';
+}
+
+function button(label, variant, action, disabled) {
+  return '<button class="btn ' + variant + '" type="button" data-action="' + action + '"' + (disabled ? " disabled" : "") + '>' + esc(label) + '</button>';
+}
+
+function settingsScreen() {
+  const host = effectiveHost();
+  const prEnabled = host !== "none";
+  const showPrFields = prEnabled && model.defaultAction === "open_pull_request";
+  let summary = "未识别 GitHub / GitLab 远程";
+  if (host === "github" && model.hostOverride === "auto") summary = "已识别为 GitHub（github.com/acme/redwhisk）";
+  else if (host === "gitlab" && model.hostOverride === "auto") summary = "已识别为 GitLab（gitlab.example.com/acme/redwhisk）";
+  else if (host === "github") summary = "已识别结果已被覆盖为 GitHub（github.com/acme/redwhisk）";
+  else if (host === "gitlab") summary = "已识别结果已被覆盖为 GitLab（gitlab.example.com/acme/redwhisk）";
+  else if (model.hostOverride === "none") summary = "已设为不使用 GitHub / GitLab";
+  const prLabel = host === "gitlab" ? "提交 Merge Request" : host === "github" ? "提交 Pull Request" : "提交 Pull Request / Merge Request";
+  const prHint = prEnabled
+    ? "推送工作分支并创建草稿。不在本地合并，也不自动合并该请求。"
+    : "未识别 GitHub / GitLab 远程，不能选。";
+  const env = environmentBlock();
+  const targetBlock = showPrFields ? (
+    '<div class="field"><div class="block-label">PR/MR 目标</div><div class="choices">'
+    + choice("targetKind", "issue_base", "Issue 的 base 分支（main）", model.targetKind === "issue_base", false)
+    + choice("targetKind", "repo_default", "仓库默认分支（main）", model.targetKind === "repo_default", false)
+    + '</div></div>'
+    + '<label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</label>'
+  ) : '<p class="hint">只有默认动作是提交 PR/MR，且宿主可用时，才设置目标和草稿。</p>';
+  return activityBar("settings") + '<div class="surface"><div class="settings-layout">'
+    + '<nav class="settings-menu" aria-label="设置菜单">'
+    + '<button type="button" aria-pressed="true">通用</button>'
+    + '<button type="button" aria-pressed="false">智能体</button>'
+    + '<button type="button" aria-pressed="false">技能</button>'
+    + '<button type="button" aria-pressed="false">标签</button>'
+    + '</nav><div class="splitter"></div><div class="settings-content">'
+    + '<h2 class="settings-title">通用</h2><form class="card" id="settings-form">'
+    + fieldInput("项目名称", "redwhisk", true)
+    + '<div class="field"><label>仓库路径</label><div class="path-row"><input class="control" readonly value="/Users/me/src/redwhisk" /><button class="btn btn-secondary" type="button" disabled>选择文件夹</button></div></div>'
+    + fieldInput("工作树路径", "/Users/me/src/redwhisk.worktrees", true)
+    + '<div class="field"><label>创建工作树后的初始化命令</label><textarea class="area" readonly rows="3">pnpm install</textarea></div>'
+    + '<div class="form-break">任务完成</div>'
+    + '<div class="field"><label for="host-override">远程宿主</label><div class="summary">' + esc(summary) + '</div>'
+    + '<select class="select" id="host-override" data-field="hostOverride">'
+    + option("auto", "自动识别", model.hostOverride === "auto")
+    + option("github", "GitHub", model.hostOverride === "github")
+    + option("gitlab", "GitLab", model.hostOverride === "gitlab")
+    + option("none", "不使用", model.hostOverride === "none")
+    + '</select><p class="hint">自建实例误判时才改覆盖。完成时仍以当时的远程和 CLI 为准。</p></div>'
+    + '<div class="field"><div class="block-label">任务完成后的默认动作</div><div class="choices">'
+    + choice("defaultAction", "merge_to_base", "合并到 base 分支", model.defaultAction === "merge_to_base", false, "干净检查后 rebase/ff 合入 base，再删除 worktree 与工作分支。不 push。")
+    + choice("defaultAction", "open_pull_request", prLabel, model.defaultAction === "open_pull_request", !prEnabled, prHint)
+    + '</div><p class="hint">已经在目标分支上时会就地完成。这里没有「就地完成」这个设置。</p></div>'
+    + targetBlock
+    + env
+    + '<div class="actions">' + button("保存", "btn-primary", "save", false) + '</div>'
+    + '</form></div></div></div>';
+}
+
+function environmentBlock() {
+  const host = effectiveHost();
+  if (host === "none") {
+    return '<div class="field"><div class="block-label">环境状态</div><div class="env"><p class="hint">未识别宿主，不检查 gh / glab。</p></div></div>';
+  }
+  if (model.hostOverride !== "auto" && host !== model.detectedHost) {
+    const cli = host === "gitlab" ? "glab" : "gh";
+    return '<div class="field"><div class="block-label">环境状态</div><div class="env"><p class="hint">覆盖为 ' + (host === "gitlab" ? "GitLab" : "GitHub") + ' 后，完成时再检查 ' + cli + '。这页不重新探测，也不假装已经登录。</p></div></div>';
+  }
+  const cli = host === "gitlab" ? "glab" : "gh";
+  const installed = model.cliInstalled ? "已安装" : "未安装";
+  const authed = model.cliAuthed ? (host === "gitlab" ? "已登录 · acme" : "已登录 · acme") : "未登录";
+  let hint = "";
+  if (!model.cliInstalled) {
+    hint = '<p class="hint">先安装 ' + cli + '，再在终端执行 ' + cli + ' auth login。未就绪时不能创建' + (host === "gitlab" ? " Merge Request" : " Pull Request") + '。完成时会再次检查，不会改成合并到 base。</p>';
+  } else if (!model.cliAuthed) {
+    hint = '<p class="hint">在终端执行 ' + cli + ' auth login。登录可以打开浏览器一次。未登录时不能创建请求。</p>';
+  } else {
+    hint = '<p class="hint">CLI 已就绪。真正创建时还会再查一次登录状态。</p>';
+  }
+  return '<div class="field"><div class="block-label">环境状态</div><div class="env">'
+    + '<div class="env-row"><span>' + cli + '</span><span>' + installed + '</span></div>'
+    + '<div class="env-row"><span>登录</span><span>' + authed + '</span></div>'
+    + hint + '</div></div>';
+}
+
+function fieldInput(label, value, readonly) {
+  return '<div class="field"><label>' + esc(label) + '</label><input class="control" ' + (readonly ? "readonly" : "") + ' value="' + esc(value) + '" /></div>';
+}
+
+function option(value, label, selected) {
+  return '<option value="' + value + '"' + (selected ? " selected" : "") + '>' + esc(label) + '</option>';
+}
+
+function choice(name, value, label, checked, disabled, hint) {
+  return '<label class="choice' + (disabled ? " is-disabled" : "") + '"><input type="radio" name="' + name + '" value="' + value + '"'
+    + (checked ? " checked" : "") + (disabled ? " disabled" : "") + ' /><span><span class="choice-label">' + esc(label) + '</span>'
+    + (hint ? '<span class="hint">' + esc(hint) + '</span>' : "") + '</span></label>';
+}
+
+function issuePage(status, sideExtra) {
+  const managed = sceneById(sceneId).kind === "result"
+    ? "未做本地合并"
+    : model.workBranch === model.issueBase ? "当前分支" : "RedWhisk 托管";
+  const linkRow = sceneById(sceneId).kind === "result"
+    ? '<dt>链接</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd>'
+    : "";
+  return '<div class="page"><header class="issue-top"><h2>#12 完成后合入 base 或提交 PR</h2><span class="chip">' + esc(status) + '</span></header>'
+    + '<div class="issue-body"><div class="issue-main"><p class="issue-copy">隔离工作区里做完这张 Issue 后，选择合入 base，或推送后开草稿 PR。已经在目标分支上时，不再对自己合入或开 PR。</p>'
+    + (sideExtra || "")
+    + '</div><aside class="issue-side"><dl class="meta">'
+    + '<dt>状态</dt><dd>' + esc(status) + '</dd>'
+    + '<dt>当前分支</dt><dd><code>' + esc(model.workBranch) + '</code></dd>'
+    + '<dt>目标分支</dt><dd><code>' + esc(model.issueBase) + '</code></dd>'
+    + '<dt>工作树</dt><dd>' + managed + '</dd>'
+    + linkRow
+    + '</dl></aside></div></div>';
+}
+
+function closeoutDialog() {
+  const host = effectiveHost();
+  const existing = Boolean(model.existingPr);
+  const prLabel = host === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
+  const cValue = existing ? "link_existing" : "open_pr";
+  const cLabel = existing ? "关联已有 " + prNoun() : prLabel;
+  const cDisabled = Boolean(model.cDisabled);
+  const cChecked = model.dialogChoice === cValue;
+  const showDetails = model.dialogChoice === "open_pr";
+  const locked = model.dialogChoice === "link_existing";
+  const cHint = cDisabled
+    ? "未安装 gh，不能提交 Pull Request。"
+    : existing
+      ? "这个分支已有打开的请求，不再新建。"
+      : "推送当前分支并创建草稿。不在本地合并，也不自动合并该请求。";
+  let extra = "";
+  if (cDisabled) {
+    extra += '<p class="hint">未安装 gh。安装后再试。不会自动改成合并到 base。</p>';
+  }
+  if (locked) {
+    extra += '<div class="env"><div class="env-row"><span>已有请求</span><span>打开 · 草稿</span></div><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a><p class="hint">不再创建新的 Pull Request。目标和草稿以这条已有请求为准。</p></div>';
+  }
+  if (showDetails) {
+    extra += '<div class="field"><div class="block-label">PR 目标</div><div class="choices">'
+      + choice("targetKind", "issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base", false)
+      + choice("targetKind", "repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default", false)
+      + '</div></div><label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</label>';
+  }
+  const primaryDisabled = cDisabled && model.dialogChoice !== "merge_to_base";
+  let primary = "创建 PR 并完成";
+  if (model.dialogChoice === "merge_to_base") primary = "合并并完成";
+  else if (model.dialogChoice === "link_existing") primary = "关联已有 PR 并完成";
+  else if (host === "gitlab") primary = "创建 MR 并完成";
+  return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="closeout-title">'
+    + '<h3 id="closeout-title">选择完成方式</h3>'
+    + '<p class="desc">未提交改动已经处理完。选择如何收尾。取消会中止完成。</p>'
+    + '<dl class="facts"><dt>工作分支</dt><dd><code>' + esc(model.workBranch) + '</code></dd><dt>base 分支</dt><dd><code>' + esc(model.issueBase) + '</code></dd></dl>'
+    + '<div class="choices">'
+    + choice("dialogChoice", "merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base", false, "合入 " + model.issueBase + " 后删除 worktree 与工作分支。不 push，不开 PR。")
+    + choice("dialogChoice", cValue, cLabel, cChecked, cDisabled, cHint)
+    + '</div>' + extra
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button(primary, "btn-primary", "primary", primaryDisabled) + '</div>'
+    + '</div></div>';
+}
+
+function stayDialog() {
+  return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="stay-title">'
+    + '<h3 id="stay-title">已检测到提交</h3>'
+    + '<p class="desc">代码已提交成功。是否继续标记完成？</p>'
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("继续", "btn-primary", "primary", false) + '</div>'
+    + '</div></div>';
+}
+
+function changesPage(menuOpen) {
+  const files = [
+    ["M", "src/features/issues/use-issue-completion-flow.ts"],
+    ["M", "src/features/settings/settings-general-panel.tsx"],
+  ];
+  const menu = menuOpen ? '<div class="menu" role="menu">'
+    + menuItem("签出") + menuItem("拉取") + menuItem("推送") + menuItem("创建分支")
+    + '<button type="button" data-go="s9">创建 Pull Request</button>'
+    + menuItem("合并分支")
+    + '</div>' : "";
+  return activityBar("changes") + '<div class="surface"><div class="changes-layout"><div class="changes-side">'
+    + '<div class="branch-bar"><div class="branch-name">' + icon("changes") + '<span>' + esc(model.workBranch) + '</span></div>'
+    + '<button class="icon-btn" type="button" aria-label="更多" aria-expanded="' + menuOpen + '">···</button>' + menu + '</div>'
+    + '<div class="panel-h">未提交 2</div>'
+    + files.map((file) => '<div class="file-row"><em>' + file[0] + '</em><span>' + esc(file[1]) + '</span></div>').join("")
+    + '<div class="panel-h">已提交</div>'
+    + '<div class="file-row"><span>' + esc(model.title) + '</span></div>'
+    + '</div><div class="splitter"></div><div class="diff"><div class="meta">src/features/issues/use-issue-completion-flow.ts</div>'
+    + '<div>  未提交改动处理之后</div><div class="add">+ 选择合并到 base，或提交 PR</div><div class="add">+ 已在 base 上则就地完成</div></div>'
+    + '</div></div>';
+}
+
+function menuItem(label) {
+  return '<button type="button" data-action="inert">' + esc(label) + '</button>';
+}
+
+function createDialog() {
+  const disabled = Boolean(model.createDisabled);
+  const sameBranch = model.workBranch === model.branchTarget;
+  const blocked = disabled || sameBranch;
+  return '<div class="overlay"><form class="dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">'
+    + '<h3 id="create-title">创建 Pull Request</h3>'
+    + '<div class="field"><label>源分支</label><input class="control" readonly value="' + esc(model.workBranch) + '" /></div>'
+    + '<div class="field"><label for="pr-target">目标分支</label><select class="select" id="pr-target" data-field="branchTarget"' + (disabled ? " disabled" : "") + '>'
+    + option("main", "main", model.branchTarget === "main")
+    + option("develop", "develop", model.branchTarget === "develop")
+    + '</select></div>'
+    + '<div class="field"><label for="pr-title">标题</label><input class="control" id="pr-title" data-field="title" value="' + esc(model.title) + '"' + (disabled ? " disabled" : "") + ' /></div>'
+    + '<div class="field"><label for="pr-body">正文</label><textarea class="area" id="pr-body" data-field="body" rows="4"' + (disabled ? " disabled" : "") + '>' + esc(model.body) + '</textarea></div>'
+    + '<label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + (disabled ? " disabled" : "") + ' />创建为草稿</label>'
+    + (blocked ? '<p class="hint">当前分支就是仓库默认分支，没有对比分支。</p>' : '<p class="hint">创建后不修改 Issue 状态，也不在本地合并。</p>')
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("创建 Pull Request", "btn-primary", "primary", blocked) + '</div>'
+    + '</form></div>';
+}
+
+function resultBlock() {
+  return '<section class="result"><h3>完成信息</h3><dl class="meta">'
+    + '<dt>结果</dt><dd>已创建草稿 Pull Request</dd>'
+    + '<dt>链接</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd>'
+    + '<dt>选项</dt><dd>提交 Pull Request</dd>'
+    + '</dl></section>';
+}
+
+function renderStage() {
+  const scene = sceneById(sceneId);
+  let inner = "";
+  if (scene.kind === "settings") inner = settingsScreen();
+  else if (scene.kind === "closeout") inner = activityBar("issues") + '<div class="surface">' + issuePage("进行中") + '</div>' + closeoutDialog();
+  else if (scene.kind === "stay") inner = activityBar("issues") + '<div class="surface">' + issuePage("进行中") + '</div>' + stayDialog();
+  else if (scene.kind === "menu") inner = changesPage(true);
+  else if (scene.kind === "create") inner = changesPage(false) + createDialog();
+  else inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成", resultBlock()) + '</div>';
+  document.getElementById("stage").innerHTML = '<div class="app">' + inner + '</div>';
+  document.getElementById("caption").textContent = scene.caption;
+}
+
+function renderState() {
+  const scene = sceneById(sceneId);
+  const index = SCENES.indexOf(scene) + 1;
+  const lines = [
+    "场景: " + index + " " + scene.title,
+    "宿主: " + hostPhrase(effectiveHost()),
+    "覆盖: " + model.hostOverride,
+    "默认动作: " + defaultActionPhrase(),
+    "弹窗选项: " + dialogPhrase(),
+    "工作分支: " + model.workBranch,
+    "目标分支: " + targetPhrase(),
+    "草稿: " + draftPhrase(),
+    "操作: " + (actionNote || "—"),
+  ];
+  document.getElementById("state").textContent = lines.join("\n");
+}
+
+function render() {
+  renderNav();
+  renderStage();
+  renderState();
+}
+
+function onSceneClick(event) {
+  const button = event.target.closest("[data-scene]");
+  if (!button) return;
+  applyScene(button.dataset.scene);
+}
+
+function coerceHostSideEffects() {
+  if (effectiveHost() === "none" && model.defaultAction === "open_pull_request") {
+    model.defaultAction = "merge_to_base";
+  }
+}
+
+function onStageChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const field = target.dataset.field;
+  if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "defaultAction") {
+    model.defaultAction = target.value;
+  } else if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "dialogChoice") {
+    model.dialogChoice = target.value;
+  } else if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "targetKind") {
+    model.targetKind = target.value;
+  } else if (field === "hostOverride" && target instanceof HTMLSelectElement) {
+    model.hostOverride = target.value;
+    coerceHostSideEffects();
+  } else if (field === "branchTarget" && target instanceof HTMLSelectElement) {
+    model.branchTarget = target.value;
+    model.createDisabled = model.workBranch === model.branchTarget;
+  } else if (field === "draft" && target instanceof HTMLInputElement) {
+    model.draft = target.checked;
+  } else {
+    return;
+  }
+  actionNote = "";
+  render();
+}
+
+function onStageInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+  if (target.dataset.field === "title") model.title = target.value;
+  else if (target.dataset.field === "body") model.body = target.value;
+  else return;
+  renderState();
+}
+
+function onStageClick(event) {
+  const link = event.target.closest("a");
+  if (link) {
+    event.preventDefault();
+    actionNote = "已点链接 " + link.getAttribute("href") + "。静态稿不打开浏览器。";
+    renderState();
+    return;
+  }
+  const go = event.target.closest("[data-go]");
+  if (go) {
+    applyScene(go.dataset.go);
+    return;
+  }
+  const action = event.target.closest("[data-action]");
+  if (!action || action.disabled) return;
+  const kind = action.dataset.action;
+  if (kind === "save") actionNote = "已点保存。只记在这页内存里，不写设置。";
+  else if (kind === "cancel") actionNote = "已点取消。完成 flow 中止；变更页对话框只关闭。静态稿留在本场景。";
+  else if (kind === "primary") actionNote = "已点主按钮「" + action.textContent + "」。静态稿不 push，不调用 gh/glab，不改 Issue。";
+  else if (kind === "inert") actionNote = "已点「" + action.textContent + "」。这是现有菜单项，静态稿不执行。";
+  else return;
+  renderState();
+}
+
+document.getElementById("scene-list").addEventListener("click", onSceneClick);
+document.getElementById("stage").addEventListener("change", onStageChange);
+document.getElementById("stage").addEventListener("input", onStageInput);
+document.getElementById("stage").addEventListener("click", onStageClick);
+document.getElementById("stage").addEventListener("submit", (event) => event.preventDefault());
+document.addEventListener("keydown", (event) => {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+  const index = SCENES.findIndex((scene) => scene.id === sceneId);
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    event.preventDefault();
+    applyScene(SCENES[(index + 1) % SCENES.length].id);
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    event.preventDefault();
+    applyScene(SCENES[(index - 1 + SCENES.length) % SCENES.length].id);
+  }
+});
+window.addEventListener("hashchange", () => {
+  const next = location.hash.replace("#", "");
+  if (SCENES.some((scene) => scene.id === next) && next !== sceneId) applyScene(next);
+});
+
+applyScene(SCENES.some((scene) => scene.id === location.hash.replace("#", "")) ? location.hash.replace("#", "") : "s1");
+</script>
+</body>
+</html>
