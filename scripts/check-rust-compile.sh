@@ -15,3 +15,8 @@ cd "$REPO_ROOT/src-tauri"
 # 不要加 --release：release 的 lto 与单 codegen-unit 只用于发版。
 echo "Rust 正式构建检查: cargo check --offline --lib --bins"
 cargo check --offline --lib --bins
+
+# 正式构建检查不能带 cfg(test)。库内的 #[cfg(test)] 模块要另编一次，
+# 否则缺字段这类错误要等到 cargo test 才出现。--no-run 只编译，不执行用例。
+echo "Rust 测试代码编译: cargo test --offline --lib --no-run"
+cargo test --offline --lib --no-run

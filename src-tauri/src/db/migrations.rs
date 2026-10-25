@@ -273,6 +273,14 @@ impl MigrationRunner {
 
         self.migrations.clone()
     }
+
+    /// 内置 migration 的版本顺序。测试用它核对实际应用结果，避免再手写一份清单。
+    pub fn registered_versions(&self) -> Vec<String> {
+        self.migrations()
+            .into_iter()
+            .map(|migration| migration.version.to_string())
+            .collect()
+    }
 }
 
 fn default_migrations() -> Vec<Migration> {

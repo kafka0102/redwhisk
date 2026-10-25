@@ -425,6 +425,9 @@ bash scripts/check-rust-compile.sh
 ```
 
 该脚本在 `src-tauri` 执行 `cargo check --offline --lib --bins`（dev profile）。它类型检查并借用检查桌面应用实际会编译的库和二进制，不生成机器码、不链接、不跑测试、不打 Tauri 或 macOS 安装包。依赖已缓存时是增量检查，用来代替做完再编一整包。
+随后脚本再执行 `cargo test --offline --lib --no-run`，编译库内 `#[cfg(test)]` 模块且不运行用例。这一步补正式构建检查看不到的测试代码；它仍然不能代替前面的 `--lib --bins`。
+
+改动 `src-tauri/src` 时再跑 `bash scripts/check-rust-user-strings.sh`。它只看本次 diff 的新增字符串，含中文即失败（注释除外）。错误用英文 code，展示文案放前端 locales。
 
 检查实际代码，不能只看测试能否编过：
 

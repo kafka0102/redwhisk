@@ -62,7 +62,7 @@ detecting_workspace
 | --- | --- | --- | --- | --- |
 | A | 就地完成 | 当前就在目标分支上（无隔离 worktree，或工作分支 == base） | 不弹窗，直接标记 Issue 完成 | 不 merge 到自己；不开 head=base 的 PR |
 | B | 合入 base | RedWhisk 托管 worktree，工作分支 ≠ base | 现有 reconcile：干净检查 → rebase/ff → 删 worktree 与工作分支 | 不 push，不开 PR |
-| C | 提交 PR/MR | 工作分支 ≠ 所选目标，且宿主是 GitHub/GitLab | push 工作分支 → 创建草稿 PR/MR → 记下 URL → Issue 完成 | 不本地 merge；默认不删远程分支；不自动 merge PR。未安装或未登录不隐藏、不禁用 |
+| C | 提交 PR/MR | 隔离 worktree，工作分支 ≠ 所选目标，且宿主是 GitHub/GitLab，并且对应 CLI 已安装且已登录 | push 工作分支 → 创建草稿 PR/MR → 记下 URL → Issue 完成 | 不本地 merge；默认不删远程分支；不自动 merge PR。未安装或未登录时不出现这个动作：完成不弹窗，直接标记完成 |
 
 文案（产品口径，实现时走 i18n）：
 

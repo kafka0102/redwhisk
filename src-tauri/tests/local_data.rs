@@ -16,73 +16,8 @@ fn local_data_initialization_creates_database_and_records_migration() {
 
     assert!(database.path.ends_with("redwhisk.sqlite3"));
     assert!(database.path.exists());
-    assert_eq!(
-        status.applied_versions,
-        vec![
-            "0001_core",
-            "0002_projects",
-            "0003_project_integer_ids",
-            "0004_issues",
-            "0005_issue_actions",
-            "0006_agent_profiles_and_project_overrides",
-            "0007_restructure_agent_profiles",
-            "0008_agent_sessions_and_session_events",
-            "0009_agent_sessions_project_id",
-            "0010_project_completion_policy",
-            "0011_completion_attempts",
-            "0012_agent_commit_completion_attempts",
-            "0013_agent_commit_completion_result",
-            "0014_completion_attempt_failure_reason",
-            "0015_completion_attempt_git_operation_blocked",
-            "0016_agent_session_latest_output",
-            "0017_allow_claude_agent_profiles",
-            "0018_issue_attachments",
-            "0019_agent_profiles_del",
-            "0020_issues_and_agent_sessions_del",
-            "0021_project_terminal_configs",
-            "0022_agent_worktree_execution",
-            "0023_project_labels",
-            "0024_issue_labels",
-            "0025_agent_session_list_order",
-            "0026_agent_sessions_active_issue_unique_index",
-            "0027_issue_completion_flows",
-            "0028_agent_session_turn_state",
-            "0029_saved_agent_skills",
-            "0030_drop_label_agent_profile",
-            "0031_drop_completion_policy",
-            "0032_issue_completion_flows_unified",
-            "0033_project_terminal_shortcut_commands",
-            "0034_agent_session_turn_ended_at",
-            "0035_agent_sessions_workflow_skill_name",
-            "0036_project_scoped_issue_session_numbers",
-            "0037_issues_project_scoped_number_unique",
-            "0038_agent_sessions_project_scoped_number_unique",
-            "0039_agent_session_processing_duration",
-            "0040_user_profiles",
-            "0041_issue_timeline_actor",
-            "0042_app_update_state",
-            "0043_issue_action_agent_actor",
-            "0044_issue_comments",
-            "0045_agent_session_turn_source",
-            "0046_issues_status_changed_at",
-            // ADR-0020：display_mode/enabled 列与 opencode/grok 枚举由 0047 引入。
-            "0047_agent_display_mode_enabled_and_opencode_grok",
-            "0048_agent_sessions_display_mode",
-            "0049_projects_removed_at",
-            "0050_agent_sessions_provider_session_id",
-            "0051_agent_sessions_startup_model",
-            "0052_agent_sessions_session_token_usage",
-            "0053_agent_profiles_deepseek",
-            "0054_agent_profiles_display_order",
-            "0055_tui_hook_registration_preference",
-            "0056_agent_sessions_runtime_log_path",
-            "0057_project_completion_closeout",
-        ]
-    );
-    assert_eq!(
-        status.current_version,
-        Some("0057_project_completion_closeout".to_string())
-    );
+    assert_eq!(status.applied_versions, expected_versions());
+    assert_eq!(status.current_version, expected_versions().last().cloned());
 
     let schema_migrations_count: i64 = database
         .connection
@@ -106,73 +41,11 @@ fn migrations_are_idempotent_after_first_run() {
     let first_status = runner.run(&database.connection).expect("first run");
     let second_status = runner.run(&database.connection).expect("second run");
 
-    assert_eq!(
-        first_status.applied_versions,
-        vec![
-            "0001_core",
-            "0002_projects",
-            "0003_project_integer_ids",
-            "0004_issues",
-            "0005_issue_actions",
-            "0006_agent_profiles_and_project_overrides",
-            "0007_restructure_agent_profiles",
-            "0008_agent_sessions_and_session_events",
-            "0009_agent_sessions_project_id",
-            "0010_project_completion_policy",
-            "0011_completion_attempts",
-            "0012_agent_commit_completion_attempts",
-            "0013_agent_commit_completion_result",
-            "0014_completion_attempt_failure_reason",
-            "0015_completion_attempt_git_operation_blocked",
-            "0016_agent_session_latest_output",
-            "0017_allow_claude_agent_profiles",
-            "0018_issue_attachments",
-            "0019_agent_profiles_del",
-            "0020_issues_and_agent_sessions_del",
-            "0021_project_terminal_configs",
-            "0022_agent_worktree_execution",
-            "0023_project_labels",
-            "0024_issue_labels",
-            "0025_agent_session_list_order",
-            "0026_agent_sessions_active_issue_unique_index",
-            "0027_issue_completion_flows",
-            "0028_agent_session_turn_state",
-            "0029_saved_agent_skills",
-            "0030_drop_label_agent_profile",
-            "0031_drop_completion_policy",
-            "0032_issue_completion_flows_unified",
-            "0033_project_terminal_shortcut_commands",
-            "0034_agent_session_turn_ended_at",
-            "0035_agent_sessions_workflow_skill_name",
-            "0036_project_scoped_issue_session_numbers",
-            "0037_issues_project_scoped_number_unique",
-            "0038_agent_sessions_project_scoped_number_unique",
-            "0039_agent_session_processing_duration",
-            "0040_user_profiles",
-            "0041_issue_timeline_actor",
-            "0042_app_update_state",
-            "0043_issue_action_agent_actor",
-            "0044_issue_comments",
-            "0045_agent_session_turn_source",
-            "0046_issues_status_changed_at",
-            // ADR-0020：display_mode/enabled 列与 opencode/grok 枚举由 0047 引入。
-            "0047_agent_display_mode_enabled_and_opencode_grok",
-            "0048_agent_sessions_display_mode",
-            "0049_projects_removed_at",
-            "0050_agent_sessions_provider_session_id",
-            "0051_agent_sessions_startup_model",
-            "0052_agent_sessions_session_token_usage",
-            "0053_agent_profiles_deepseek",
-            "0054_agent_profiles_display_order",
-            "0055_tui_hook_registration_preference",
-            "0056_agent_sessions_runtime_log_path",
-            "0057_project_completion_closeout",
-        ]
-    );
+    assert_eq!(first_status.applied_versions, expected_versions());
     assert!(second_status.applied_versions.is_empty());
     assert_eq!(
         second_status.current_version,
-        Some("0057_project_completion_closeout".to_string())
+        expected_versions().last().cloned()
     );
 
     let schema_migrations_count: i64 = database
@@ -181,7 +54,7 @@ fn migrations_are_idempotent_after_first_run() {
             row.get(0)
         })
         .expect("schema migration count");
-    assert_eq!(schema_migrations_count, 57);
+    assert_eq!(schema_migrations_count, expected_versions().len() as i64);
 }
 
 #[test]
@@ -244,4 +117,8 @@ fn command_error_serializes_with_code_message_and_typed_details() {
     assert_eq!(value["message"], "本地数据初始化失败。");
     assert_eq!(value["details"][0]["@type"], "DatabasePath");
     assert_eq!(value["details"][0]["path"], "/tmp/redwhisk");
+}
+
+fn expected_versions() -> Vec<String> {
+    MigrationRunner::default().registered_versions()
 }

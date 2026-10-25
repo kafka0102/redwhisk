@@ -72,8 +72,15 @@ jobs:
       - name: Rust 正式构建检查
         run: bash scripts/check-rust-compile.sh
 
+      - name: Rust 新增字符串
+        run: bash scripts/check-rust-user-strings.sh --from "${{ github.event.pull_request.base.sha }}"
+
       - name: Rust 测试
         run: cargo test --lib
+        working-directory: src-tauri
+
+      - name: Migration 注册测试
+        run: cargo test --offline --test local_data
         working-directory: src-tauri
 
       # 两个门禁默认只查未提交改动，提交后再跑等于空转；CI 里改用 PR 全量 diff 口径。
