@@ -415,7 +415,14 @@
     "status": "状态",
     "unknown": "未知",
     "updatedAt": "更新时间",
-    "pullRequestUrl": "链接"
+    "pullRequestUrl": "链接",
+    "pullRequestTitle": "标题",
+    "pullRequestState": "状态",
+    "pullRequestChecks": "检查",
+    "requestStateOpen": "打开",
+    "requestStateDraft": "草稿",
+    "requestStateClosed": "已关闭",
+    "requestStateMerged": "已合并"
   },
   "agentsFeature": {
     "agentSessions": "智能体会话",
@@ -983,7 +990,10 @@
       "worktreeMissingBranch": "关联 worktree 缺少工作分支信息，无法删除。",
       "worktreeMissingWorkDir": "关联 worktree 缺少工作目录信息，无法删除。",
       "worktreeNotFound": "未找到关联的 worktree，无需删除。",
-      "worktreeNotManaged": "当前 worktree 非 RedWhisk 管理，无法删除。"
+      "worktreeNotManaged": "当前 worktree 非 RedWhisk 管理，无法删除。",
+      "forgeNotReady": "GitHub / GitLab 环境未就绪。",
+      "projectNotFound": "项目不存在。",
+      "branchMissing": "当前分支不存在。"
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "同名 worktree 已被占用，请删除后再运行。"
@@ -995,7 +1005,11 @@
       "default": "Project 不存在。"
     },
     "PROJECT_VALIDATION_FAILED": {
-      "projectWindowOpen": "该项目已在其他窗口打开，无法从列表移除或删除。"
+      "projectWindowOpen": "该项目已在其他窗口打开，无法从列表移除或删除。",
+      "forgeUnknown": "未识别 GitHub 或 GitLab 远程。",
+      "branchMissing": "当前分支不存在。",
+      "workspaceNotInProject": "工作区不属于当前项目。",
+      "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。"
     },
     "PROJECT_PERSISTENCE_FAILED": {
       "loadFailed": "Project 读取失败。",

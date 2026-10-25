@@ -59,9 +59,13 @@ pub struct UpdateProjectSettingsInput {
     pub repo_path: String,
     pub worktree_location: ProjectWorktreeLocation,
     pub worktree_setup_command: String,
-    pub completion_action: ProjectCompletionAction,
-    pub pr_target: ProjectPrTarget,
-    pub pr_draft: bool,
+    /// 缺省表示不改已保存的完成设置，避免探测未完成时写回默认值。
+    #[serde(default)]
+    pub completion_action: Option<ProjectCompletionAction>,
+    #[serde(default)]
+    pub pr_target: Option<ProjectPrTarget>,
+    #[serde(default)]
+    pub pr_draft: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

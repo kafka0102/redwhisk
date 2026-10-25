@@ -121,6 +121,7 @@ function GeneralSettingsForm({
     useState<ProjectCompletionAction>("merge_to_base");
   const [prTarget, setPrTarget] = useState<ProjectPrTarget>("issue_base");
   const [prDraft, setPrDraft] = useState(true);
+  const [completionReady, setCompletionReady] = useState(false);
   const [completionBaseline, setCompletionBaseline] = useState<{
     action: ProjectCompletionAction;
     target: ProjectPrTarget;
@@ -143,7 +144,8 @@ function GeneralSettingsForm({
     trimmedProjectPath !== projectPath ||
     worktreeLocationValue !== worktreeLocation ||
     worktreeSetupCommandValue !== worktreeSetupCommand ||
-    (completionBaseline != null &&
+    (completionReady &&
+      completionBaseline != null &&
       (completionAction !== completionBaseline.action ||
         prTarget !== completionBaseline.target ||
         prDraft !== completionBaseline.draft));
@@ -172,6 +174,7 @@ function GeneralSettingsForm({
         setCompletionAction(inspection.completionAction);
         setPrTarget(inspection.prTarget);
         setPrDraft(inspection.prDraft);
+        setCompletionReady(true);
         setCompletionBaseline({
           action: inspection.completionAction,
           target: inspection.prTarget,
@@ -181,11 +184,7 @@ function GeneralSettingsForm({
       .catch(() => {
         if (!cancelled) {
           setHost("none");
-          setCompletionBaseline({
-            action: "merge_to_base",
-            target: "issue_base",
-            draft: true,
-          });
+          setCompletionReady(false);
         }
       });
     return () => {
@@ -245,15 +244,15 @@ function GeneralSettingsForm({
         repoPath: trimmedProjectPath,
         worktreeLocation: worktreeLocationValue,
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
-        completionAction,
-        prTarget,
-        prDraft,
+        ...(completionReady ? { completionAction, prTarget, prDraft } : {}),
       });
-      setCompletionBaseline({
-        action: completionAction,
-        target: prTarget,
-        draft: prDraft,
-      });
+      if (completionReady) {
+        setCompletionBaseline({
+          action: completionAction,
+          target: prTarget,
+          draft: prDraft,
+        });
+      }
     } catch (error: unknown) {
       setErrorMessage(getCommandErrorMessage(error, t));
     } finally {

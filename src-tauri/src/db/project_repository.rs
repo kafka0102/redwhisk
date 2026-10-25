@@ -241,19 +241,22 @@ impl<'connection> ProjectRepository<'connection> {
         repo_path: &str,
         worktree_location: ProjectWorktreeLocation,
         worktree_setup_command: &str,
-        completion_action: ProjectCompletionAction,
-        pr_target: ProjectPrTarget,
-        pr_draft: bool,
+        completion_action: Option<ProjectCompletionAction>,
+        pr_target: Option<ProjectPrTarget>,
+        pr_draft: Option<bool>,
     ) -> rusqlite::Result<ProjectSummary> {
+        let completion_action = completion_action.map(project_completion_action_to_str);
+        let pr_target = pr_target.map(project_pr_target_to_str);
+        let pr_draft = pr_draft.map(|value| if value { 1 } else { 0 });
         self.connection.execute(
             "UPDATE projects
              SET name = ?1,
                  repo_path = ?2,
                  worktree_location = ?3,
                  worktree_setup_command = ?4,
-                 completion_action = ?5,
-                 pr_target = ?6,
-                 pr_draft = ?7,
+                 completion_action = COALESCE(?5, completion_action),
+                 pr_target = COALESCE(?6, pr_target),
+                 pr_draft = COALESCE(?7, pr_draft),
                  removed_at = NULL
              WHERE id = ?8",
             params![
@@ -261,9 +264,9 @@ impl<'connection> ProjectRepository<'connection> {
                 repo_path,
                 project_worktree_location_to_str(&worktree_location),
                 worktree_setup_command,
-                project_completion_action_to_str(completion_action),
-                project_pr_target_to_str(pr_target),
-                if pr_draft { 1 } else { 0 },
+                completion_action,
+                pr_target,
+                pr_draft,
                 id
             ],
         )?;

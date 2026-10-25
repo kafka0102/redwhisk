@@ -8,6 +8,7 @@ use tauri::State;
 use super::commands::prepare_project_data_dir;
 use super::service::ProjectService;
 use crate::app_state::AppState;
+use crate::git::change_request::view_change_request;
 use crate::git::change_request::{
     current_branch_name, find_open_change_request, local_branch_names, publish_change_request,
     suggested_change_request_text, workspace_belongs_to_repo, ChangeRequestInput,
@@ -117,9 +118,13 @@ fn create_change_request_blocking(
     let workspace = ensure_workspace(&project.repo_path, &input.workspace_path)?;
     let forge = inspect_forge(&workspace);
     if forge.host == ForgeHost::None {
-        return Err(validation_error("未识别 GitHub / GitLab 远程"));
+        return Err(coded_error(
+            "forgeUnknown",
+            "GitHub or GitLab remote was not recognized.",
+        ));
     }
-    let head = current_branch_name(&workspace).ok_or_else(|| validation_error("当前分支不存在"))?;
+    let head = current_branch_name(&workspace)
+        .ok_or_else(|| coded_error("branchMissing", "The current branch does not exist."))?;
     let url = publish_change_request(ChangeRequestInput {
         repo_path: &workspace,
         host: forge.host,
@@ -129,23 +134,62 @@ fn create_change_request_blocking(
         body: &input.body,
         draft: input.draft,
     })
-    .map_err(validation_error)?;
+    .map_err(command_failed)?;
     Ok(CreateChangeRequestResponse { url })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewChangeRequestInput {
+    pub project_id: i64,
+    pub reference: String,
+}
+
+#[tauri::command]
+pub async fn view_project_change_request(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ViewChangeRequestInput,
+) -> Result<crate::git::change_request::ChangeRequestStatus, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || view_change_request_blocking(data_dir, input))
+        .await
+        .map_err(join_error)?
+}
+
+fn view_change_request_blocking(
+    data_dir: PathBuf,
+    input: ViewChangeRequestInput,
+) -> Result<crate::git::change_request::ChangeRequestStatus, CommandError> {
+    let project = ProjectService::project_summary_in_data_dir(&data_dir, input.project_id)?;
+    let repo = PathBuf::from(&project.repo_path);
+    let forge = inspect_forge(&repo);
+    view_change_request(&repo, forge.host, &input.reference).map_err(command_failed)
 }
 
 fn ensure_workspace(repo_path: &str, workspace_path: &str) -> Result<PathBuf, CommandError> {
     let repo = PathBuf::from(repo_path);
     let workspace = PathBuf::from(workspace_path);
     if !workspace_belongs_to_repo(&repo, &workspace) {
-        return Err(validation_error("工作区不属于当前项目"));
+        return Err(coded_error(
+            "workspaceNotInProject",
+            "The workspace does not belong to this project.",
+        ));
     }
     Ok(workspace)
 }
 
-fn validation_error(message: impl Into<String>) -> CommandError {
-    let message = message.into();
-    CommandError::new(CommandErrorCode::ProjectValidationFailed, message.clone())
-        .with_detail(ErrorDetail::new("Cause").with_value("message", message))
+fn coded_error(reason: &str, message: &str) -> CommandError {
+    CommandError::new(CommandErrorCode::ProjectValidationFailed, message).with_reason(reason)
+}
+
+fn command_failed(detail: String) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::ProjectValidationFailed,
+        "Failed to create or read the pull request or merge request.",
+    )
+    .with_reason("changeRequestFailed")
+    .with_detail(ErrorDetail::new("Cause").with_value("message", detail))
 }
 
 fn join_error(error: impl std::fmt::Display) -> CommandError {

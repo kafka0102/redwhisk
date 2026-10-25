@@ -19,17 +19,17 @@ pub(crate) fn publish_issue_change_request(
     let repo_path = Path::new(&ctx.session.working_dir);
     let forge = inspect_forge(repo_path);
     if !forge.ready() {
-        return Err("GitHub / GitLab 环境未就绪".to_string());
+        return Err("forgeNotReady".to_string());
     }
     let project = ProjectRepository::new(connection)
         .find_by_repo_path(ctx.repo_path)
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| "项目不存在".to_string())?;
+        .ok_or_else(|| "projectNotFound".to_string())?;
     let head = ctx
         .world
         .current_branch
         .clone()
-        .ok_or_else(|| "当前分支不存在".to_string())?;
+        .ok_or_else(|| "branchMissing".to_string())?;
     let resolved_base = if base.is_empty() {
         match project.pr_target {
             ProjectPrTarget::RepoDefault => repo_default_branch(repo_path)

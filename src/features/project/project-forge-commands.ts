@@ -54,3 +54,23 @@ export function createChangeRequest(
 ): Promise<{ url: string }> {
   return invokeCommand<{ url: string }>("create_change_request", { input });
 }
+
+export interface ChangeRequestCheck {
+  name: string;
+  status: string;
+}
+
+export interface ChangeRequestStatus {
+  title: string;
+  state: string;
+  checks: ChangeRequestCheck[];
+}
+
+export function viewProjectChangeRequest(input: {
+  projectId: number;
+  reference: string;
+}): Promise<ChangeRequestStatus> {
+  return invokeCommand<ChangeRequestStatus>("view_project_change_request", {
+    input,
+  });
+}

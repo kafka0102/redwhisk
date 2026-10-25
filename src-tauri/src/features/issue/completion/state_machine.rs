@@ -341,6 +341,7 @@ fn detect_commit(
 
 fn after_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
     match route_closeout(
+        world.workspace_mode == WorkspaceMode::Worktree,
         world.branch_mismatch,
         world.forge_known,
         world.forge_ready,

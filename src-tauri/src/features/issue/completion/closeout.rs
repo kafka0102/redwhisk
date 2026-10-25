@@ -15,12 +15,14 @@ pub enum CloseoutRoute {
 }
 
 pub fn route_closeout(
+    isolated_worktree: bool,
     branch_mismatch: bool,
     forge_known: bool,
     forge_ready: bool,
     action: Option<CloseoutAction>,
 ) -> CloseoutRoute {
-    if !branch_mismatch {
+    // 没有隔离 worktree，或已经在 base 上：不弹窗，直接完成。
+    if !isolated_worktree || !branch_mismatch {
         return CloseoutRoute::Complete;
     }
     if !forge_known {
@@ -44,7 +46,15 @@ mod tests {
     #[test]
     fn on_base_completes_without_dialog() {
         assert_eq!(
-            route_closeout(false, true, true, None),
+            route_closeout(true, false, true, true, None),
+            CloseoutRoute::Complete
+        );
+    }
+
+    #[test]
+    fn current_checkout_completes_without_dialog() {
+        assert_eq!(
+            route_closeout(false, true, true, true, None),
             CloseoutRoute::Complete
         );
     }
@@ -52,7 +62,7 @@ mod tests {
     #[test]
     fn unknown_host_keeps_merge() {
         assert_eq!(
-            route_closeout(true, false, false, None),
+            route_closeout(true, true, false, false, None),
             CloseoutRoute::Reconcile
         );
     }
@@ -60,7 +70,7 @@ mod tests {
     #[test]
     fn unready_cli_ends_directly() {
         assert_eq!(
-            route_closeout(true, true, false, None),
+            route_closeout(true, true, true, false, None),
             CloseoutRoute::Complete
         );
     }
@@ -68,11 +78,17 @@ mod tests {
     #[test]
     fn ready_cli_prompts_then_opens() {
         assert_eq!(
-            route_closeout(true, true, true, None),
+            route_closeout(true, true, true, true, None),
             CloseoutRoute::Prompt
         );
         assert_eq!(
-            route_closeout(true, true, true, Some(CloseoutAction::OpenPullRequest)),
+            route_closeout(
+                true,
+                true,
+                true,
+                true,
+                Some(CloseoutAction::OpenPullRequest)
+            ),
             CloseoutRoute::OpenPullRequest
         );
     }

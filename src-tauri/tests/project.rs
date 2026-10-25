@@ -1151,9 +1151,9 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
-            completion_action: ProjectCompletionAction::MergeToBase,
-            pr_target: ProjectPrTarget::IssueBase,
-            pr_draft: true,
+            completion_action: Some(ProjectCompletionAction::MergeToBase),
+            pr_target: Some(ProjectPrTarget::IssueBase),
+            pr_draft: Some(true),
         })
         .expect("update project settings");
 
@@ -1166,6 +1166,44 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             .expect("canonical repo")
             .to_string_lossy()
     );
+
+    let opened = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: stored_project.id,
+            name: "RedWhisk Desktop".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
+            completion_action: Some(ProjectCompletionAction::OpenPullRequest),
+            pr_target: None,
+            pr_draft: None,
+        })
+        .expect("set completion action");
+    assert_eq!(
+        opened.completion_action,
+        ProjectCompletionAction::OpenPullRequest
+    );
+    assert_eq!(opened.pr_target, ProjectPrTarget::IssueBase);
+    assert!(opened.pr_draft);
+
+    let preserved = service
+        .update_project_settings(UpdateProjectSettingsInput {
+            project_id: stored_project.id,
+            name: "Renamed".to_string(),
+            repo_path: repo_dir.to_string_lossy().to_string(),
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: "".to_string(),
+            completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+        })
+        .expect("rename without completion fields");
+    assert_eq!(preserved.name, "Renamed");
+    assert_eq!(
+        preserved.completion_action,
+        ProjectCompletionAction::OpenPullRequest
+    );
+    assert!(preserved.pr_draft);
 }
 
 #[test]
@@ -1192,9 +1230,9 @@ fn update_project_settings_rejects_blank_name() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
-            completion_action: ProjectCompletionAction::MergeToBase,
-            pr_target: ProjectPrTarget::IssueBase,
-            pr_draft: true,
+            completion_action: Some(ProjectCompletionAction::MergeToBase),
+            pr_target: Some(ProjectPrTarget::IssueBase),
+            pr_draft: Some(true),
         })
         .expect_err("blank name should fail");
 
@@ -1236,9 +1274,9 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             repo_path: moved_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "pnpm install\npnpm test".to_string(),
-            completion_action: ProjectCompletionAction::MergeToBase,
-            pr_target: ProjectPrTarget::IssueBase,
-            pr_draft: true,
+            completion_action: Some(ProjectCompletionAction::MergeToBase),
+            pr_target: Some(ProjectPrTarget::IssueBase),
+            pr_draft: Some(true),
         })
         .expect("updated project");
 
@@ -1289,9 +1327,9 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoInternal,
             worktree_setup_command: "".to_string(),
-            completion_action: ProjectCompletionAction::MergeToBase,
-            pr_target: ProjectPrTarget::IssueBase,
-            pr_draft: true,
+            completion_action: Some(ProjectCompletionAction::MergeToBase),
+            pr_target: Some(ProjectPrTarget::IssueBase),
+            pr_draft: Some(true),
         })
         .expect_err("repo internal worktrees should require .gitignore entry");
 
@@ -1328,9 +1366,9 @@ fn update_project_settings_rejects_non_git_repo_path() {
             repo_path: invalid_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
-            completion_action: ProjectCompletionAction::MergeToBase,
-            pr_target: ProjectPrTarget::IssueBase,
-            pr_draft: true,
+            completion_action: Some(ProjectCompletionAction::MergeToBase),
+            pr_target: Some(ProjectPrTarget::IssueBase),
+            pr_draft: Some(true),
         })
         .expect_err("non git repo should be rejected");
 

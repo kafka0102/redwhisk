@@ -415,7 +415,14 @@
     "status": "Status",
     "unknown": "unknown",
     "updatedAt": "Updated",
-    "pullRequestUrl": "Link"
+    "pullRequestUrl": "Link",
+    "pullRequestTitle": "Title",
+    "pullRequestState": "State",
+    "pullRequestChecks": "Checks",
+    "requestStateOpen": "Open",
+    "requestStateDraft": "Draft",
+    "requestStateClosed": "Closed",
+    "requestStateMerged": "Merged"
   },
   "agentsFeature": {
     "agentSessions": "Agent sessions",
@@ -983,7 +990,10 @@
       "worktreeMissingBranch": "The linked worktree is missing working branch info and cannot be deleted.",
       "worktreeMissingWorkDir": "The linked worktree is missing working directory info and cannot be deleted.",
       "worktreeNotFound": "No linked worktree found; nothing to delete.",
-      "worktreeNotManaged": "The current worktree is not managed by RedWhisk and cannot be deleted."
+      "worktreeNotManaged": "The current worktree is not managed by RedWhisk and cannot be deleted.",
+      "forgeNotReady": "GitHub or GitLab is not ready.",
+      "projectNotFound": "Project not found.",
+      "branchMissing": "The current branch does not exist."
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "A worktree with the same name is already occupied. Remove it before running."
@@ -995,7 +1005,11 @@
       "default": "Project not found."
     },
     "PROJECT_VALIDATION_FAILED": {
-      "projectWindowOpen": "This project is open in another window and cannot be removed or deleted."
+      "projectWindowOpen": "This project is open in another window and cannot be removed or deleted.",
+      "forgeUnknown": "The GitHub or GitLab remote was not recognized.",
+      "branchMissing": "The current branch does not exist.",
+      "workspaceNotInProject": "The workspace does not belong to this project.",
+      "changeRequestFailed": "Failed to create or read the pull request or merge request."
     },
     "PROJECT_PERSISTENCE_FAILED": {
       "loadFailed": "Failed to load Project.",

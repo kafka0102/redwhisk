@@ -126,6 +126,7 @@ pub fn run() {
             features::project::commands::inspect_project_forge,
             features::project::change_request_commands::preview_change_request,
             features::project::change_request_commands::create_change_request,
+            features::project::change_request_commands::view_project_change_request,
             features::project::commands::validate_project_repo_path,
             features::project_terminal::commands::create_project_terminal,
             features::project_terminal::commands::create_temporary_project_terminal,

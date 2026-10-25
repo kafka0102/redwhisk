@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { getIssueSummary, type IssueSummaryRecord } from "../issue-commands";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { IssueSummaryChangeRequest } from "./issue-summary-change-request";
 
 interface IssueSummaryDialogProps {
   issueId: number;
@@ -193,7 +193,7 @@ export function IssueSummaryDialog({
                   </p>
                   {summary.completion?.failureReason ? (
                     <p>
-                      {`${messages.issueSummary.failureReason}: ${summary.completion.failureReason}`}
+                      {`${messages.issueSummary.failureReason}: ${localizedFailureReason(summary.completion.failureReason, t)}`}
                     </p>
                   ) : null}
                   {summary.completion?.createdAt ? (
@@ -207,21 +207,10 @@ export function IssueSummaryDialog({
                     </p>
                   ) : null}
                   {summary.completion?.pullRequestUrl ? (
-                    <p>
-                      {`${t("issueSummary.pullRequestUrl")}: `}
-                      <button
-                        type="button"
-                        className="underline"
-                        onClick={() => {
-                          const url = summary.completion?.pullRequestUrl;
-                          if (url) {
-                            void openUrl(url);
-                          }
-                        }}
-                      >
-                        {summary.completion.pullRequestUrl}
-                      </button>
-                    </p>
+                    <IssueSummaryChangeRequest
+                      projectId={projectId}
+                      url={summary.completion.pullRequestUrl}
+                    />
                   ) : null}
                 </section>
                 <section className="issue-dialog__panel">
@@ -263,6 +252,15 @@ function formatOptionalTimestamp(
   return epochMilliseconds != null
     ? formatLocalTimestamp(epochMilliseconds)
     : fallback;
+}
+
+function localizedFailureReason(
+  reason: string,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const key = `errors.ISSUE_VALIDATION_FAILED.${reason}`;
+  const translated = t(key);
+  return translated === key ? reason : translated;
 }
 
 function getFocusableDialogElements(

@@ -32,7 +32,7 @@ pub(crate) fn completion_message(
         IssueCompletionPhase::ConfirmingContinueAfterCommit => {
             "代码已提交成功。确定继续标记完成吗？".to_string()
         }
-        IssueCompletionPhase::PromptingCloseoutAction => "选择完成方式。".to_string(),
+        IssueCompletionPhase::PromptingCloseoutAction => "promptCloseout".to_string(),
         IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::ReconcilingWorktree => {
             "Issue 已完成。".to_string()
         }
