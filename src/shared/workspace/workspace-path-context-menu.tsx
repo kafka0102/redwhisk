@@ -1,10 +1,12 @@
 import { useCallback, type ReactElement } from "react";
+import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
 } from "../../components/ui/context-menu";
+import { useAlertDialog } from "../../components/ui/use-alert-dialog";
 import { copyTextToClipboard } from "../commands/copy-text-to-clipboard";
 import { useI18n } from "../i18n/i18n";
 import { toast } from "../toast";
@@ -14,6 +16,8 @@ export interface WorkspacePathContextMenuTarget {
   relativePath: string;
   x: number;
   y: number;
+  /** 未标明时按文件揭示。只有文件树的目录行传入 directory。 */
+  kind?: "directory" | "file";
 }
 
 export interface WorkspacePathContextMenuProps {
@@ -49,6 +53,11 @@ export function WorkspacePathContextMenu({
   onClose,
 }: WorkspacePathContextMenuProps): ReactElement {
   const { messages, t } = useI18n();
+  const { alertDialog, showAlert } = useAlertDialog();
+  const showOpenInFinder = canOpenWorkspacePathInFinder(
+    workspacePath,
+    target?.relativePath,
+  );
 
   const handleCopy = useCallback(
     async (text: string) => {
@@ -60,82 +69,105 @@ export function WorkspacePathContextMenu({
     [messages.agentsFeature.copiedToClipboard],
   );
 
+  const handleOpenInFinder = useCallback(() => {
+    if (!target || !workspacePath || !target.relativePath) {
+      return;
+    }
+    const absolutePath = joinWorkspacePath(workspacePath, target.relativePath);
+    void openWorkspacePathInFinder(absolutePath, target.kind).catch(() => {
+      showAlert({
+        message: t("agentsFeature.openInFinderFailed"),
+        type: "error",
+      });
+    });
+  }, [showAlert, t, target, workspacePath]);
+
   return (
-    <ContextMenu
-      open={target !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-    >
-      <ContextMenuContent anchor={target ? { x: target.x, y: target.y } : null}>
-        {createActions ? (
-          <>
-            <ContextMenuItem
-              onClick={() => {
-                if (target) {
-                  createActions.onCreateFile();
-                }
-              }}
-            >
-              {t("agentsFeature.newFile")}
-            </ContextMenuItem>
-            <ContextMenuItem
-              onClick={() => {
-                if (target) {
-                  createActions.onCreateDirectory();
-                }
-              }}
-            >
-              {t("agentsFeature.newFolder")}
-            </ContextMenuItem>
-          </>
-        ) : null}
-        <ContextMenuItem
-          onClick={() => {
-            if (target) {
-              void handleCopy(target.displayName);
-            }
-          }}
+    <>
+      <ContextMenu
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            onClose();
+          }
+        }}
+      >
+        <ContextMenuContent
+          anchor={target ? { x: target.x, y: target.y } : null}
         >
-          {messages.agentsFeature.copyFileName}
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => {
-            if (target) {
-              void handleCopy(target.relativePath);
-            }
-          }}
-        >
-          {messages.agentsFeature.copyRelativePath}
-        </ContextMenuItem>
-        {workspacePath ? (
+          {createActions ? (
+            <>
+              <ContextMenuItem
+                onClick={() => {
+                  if (target) {
+                    createActions.onCreateFile();
+                  }
+                }}
+              >
+                {t("agentsFeature.newFile")}
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  if (target) {
+                    createActions.onCreateDirectory();
+                  }
+                }}
+              >
+                {t("agentsFeature.newFolder")}
+              </ContextMenuItem>
+            </>
+          ) : null}
           <ContextMenuItem
             onClick={() => {
               if (target) {
-                void handleCopy(
-                  joinWorkspacePath(workspacePath, target.relativePath),
-                );
+                void handleCopy(target.displayName);
               }
             }}
           >
-            {messages.agentsFeature.copyAbsolutePath}
+            {messages.agentsFeature.copyFileName}
           </ContextMenuItem>
-        ) : null}
-        {deleteAction ? (
           <ContextMenuItem
             onClick={() => {
               if (target) {
-                deleteAction.onDelete();
+                void handleCopy(target.relativePath);
               }
             }}
           >
-            {t("agentsFeature.deleteEntry")}
+            {messages.agentsFeature.copyRelativePath}
           </ContextMenuItem>
-        ) : null}
-      </ContextMenuContent>
-    </ContextMenu>
+          {workspacePath ? (
+            <ContextMenuItem
+              onClick={() => {
+                if (target) {
+                  void handleCopy(
+                    joinWorkspacePath(workspacePath, target.relativePath),
+                  );
+                }
+              }}
+            >
+              {messages.agentsFeature.copyAbsolutePath}
+            </ContextMenuItem>
+          ) : null}
+          {showOpenInFinder ? (
+            <ContextMenuItem onClick={handleOpenInFinder}>
+              {t("agentsFeature.openInFinder")}
+            </ContextMenuItem>
+          ) : null}
+          {deleteAction ? (
+            <ContextMenuItem
+              onClick={() => {
+                if (target) {
+                  deleteAction.onDelete();
+                }
+              }}
+            >
+              {t("agentsFeature.deleteEntry")}
+            </ContextMenuItem>
+          ) : null}
+        </ContextMenuContent>
+      </ContextMenu>
+      {alertDialog}
+    </>
   );
 }
 
@@ -144,4 +176,25 @@ function joinWorkspacePath(
   relativePath: string,
 ): string {
   return `${workspacePath.replace(/\/+$/, "")}/${relativePath}`;
+}
+
+function canOpenWorkspacePathInFinder(
+  workspacePath: string | null | undefined,
+  relativePath: string | null | undefined,
+): boolean {
+  return isMacPlatform() && Boolean(workspacePath) && Boolean(relativePath);
+}
+
+function isMacPlatform(): boolean {
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+}
+
+function openWorkspacePathInFinder(
+  absolutePath: string,
+  kind: "directory" | "file" | undefined,
+): Promise<void> {
+  if (kind === "directory") {
+    return openPath(absolutePath);
+  }
+  return revealItemInDir(absolutePath);
 }

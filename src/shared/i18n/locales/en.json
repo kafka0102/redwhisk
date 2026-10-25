@@ -615,6 +615,8 @@
     "copyFileName": "Copy file name",
     "copyRelativePath": "Copy relative path",
     "copyAbsolutePath": "Copy absolute path",
+    "openInFinder": "Open in Finder",
+    "openInFinderFailed": "Could not open this item in Finder.",
     "copiedToClipboard": "Copied to clipboard",
     "newFile": "New File",
     "newFolder": "New Folder",

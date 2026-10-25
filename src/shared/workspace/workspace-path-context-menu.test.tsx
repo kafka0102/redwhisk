@@ -10,7 +10,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
 import { toast } from "../toast";
-import { WorkspacePathContextMenu } from "./workspace-path-context-menu";
+import {
+  WorkspacePathContextMenu,
+  type WorkspacePathContextMenuTarget,
+} from "./workspace-path-context-menu";
+
+const revealItemInDir = vi.hoisted(() => vi.fn());
+const openPath = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath,
+  revealItemInDir,
+}));
 
 vi.mock("../toast", () => ({
   toast: {
@@ -95,6 +106,11 @@ describe("WorkspacePathContextMenu", () => {
     toastSuccessMock.mockReset();
     writeTextMock.mockReset();
     writeTextMock.mockResolvedValue(undefined);
+    revealItemInDir.mockReset();
+    openPath.mockReset();
+    revealItemInDir.mockResolvedValue(undefined);
+    openPath.mockResolvedValue(undefined);
+    setNavigatorPlatform("MacIntel");
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: writeTextMock },
@@ -191,4 +207,232 @@ describe("WorkspacePathContextMenu", () => {
       expect(writeTextMock).toHaveBeenCalledWith("a.ts");
     });
   });
+
+  it("shows Open in Finder after the copy actions and reveals the file", async () => {
+    revealItemInDir.mockReset();
+    openPath.mockReset();
+    revealItemInDir.mockResolvedValue(undefined);
+    openPath.mockResolvedValue(undefined);
+
+    render(<Harness />);
+    openFileRowMenu(40, 80);
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+      "Open in Finder",
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Finder" }));
+
+    await waitFor(() => {
+      expect(revealItemInDir).toHaveBeenCalledWith("/repo/src/a.ts");
+    });
+    expect(openPath).not.toHaveBeenCalledWith("/repo/src");
+  });
+
+  it("opens a directory itself instead of revealing it in the parent", async () => {
+    renderFinderMenu({
+      displayName: "src",
+      kind: "directory",
+      relativePath: "src",
+    });
+    openFileRowMenu(40, 80);
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open in Finder" }),
+    );
+
+    await waitFor(() => {
+      expect(openPath).toHaveBeenCalledWith("/repo/src");
+    });
+    expect(revealItemInDir).not.toHaveBeenCalled();
+  });
+
+  it("reveals a workspace-root file in Finder", async () => {
+    renderFinderMenu({
+      displayName: "README.md",
+      relativePath: "README.md",
+    });
+    openFileRowMenu(40, 80);
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open in Finder" }),
+    );
+
+    await waitFor(() => {
+      expect(revealItemInDir).toHaveBeenCalledWith("/repo/README.md");
+    });
+    expect(openPath).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", null],
+    ["empty", ""],
+  ] as const)(
+    "hides Open in Finder and absolute copy when the workspace root is %s",
+    async (_label, workspacePath) => {
+      renderFinderMenu({ workspacePath });
+      openFileRowMenu(40, 80);
+
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual([
+        "Copy file name",
+        "Copy relative path",
+      ]);
+      expect(
+        screen.queryByRole("menuitem", { name: "Open in Finder" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("menuitem", { name: "Copy absolute path" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("hides Open in Finder when the relative path is empty", async () => {
+    renderFinderMenu({ relativePath: "" });
+    openFileRowMenu(40, 80);
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Copy absolute path" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Open in Finder" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(["Win32", "Linux x86_64"])(
+    "hides Open in Finder on %s",
+    async (platform) => {
+      setNavigatorPlatform(platform);
+      renderFinderMenu();
+      openFileRowMenu(40, 80);
+
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual([
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+      ]);
+      expect(
+        screen.queryByRole("menuitem", { name: "Open in Finder" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("places Open in Finder after the copy actions and before delete", async () => {
+    renderFinderMenu({ withCreateAndDelete: true });
+    openFileRowMenu(40, 80);
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "New File",
+      "New Folder",
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+      "Open in Finder",
+      "Delete",
+    ]);
+  });
+
+  it("shows the Finder failure alert instead of the browser failure", async () => {
+    revealItemInDir.mockRejectedValue(new Error("denied"));
+    renderFinderMenu();
+    openFileRowMenu(40, 80);
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Open in Finder" }),
+    );
+
+    expect(
+      await screen.findByText("Could not open this item in Finder."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Could not open this file in the browser."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels the action 在 Finder 中打开 in Chinese", async () => {
+    renderFinderMenu({ locale: "zh" });
+    openFileRowMenu(40, 80);
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "复制文件名",
+      "复制相对路径",
+      "复制绝对路径",
+      "在 Finder 中打开",
+    ]);
+  });
 });
+
+function renderFinderMenu(
+  options: {
+    displayName?: string;
+    kind?: WorkspacePathContextMenuTarget["kind"];
+    locale?: "en" | "zh";
+    relativePath?: string;
+    withCreateAndDelete?: boolean;
+    workspacePath?: string | null;
+  } = {},
+): void {
+  const displayName = options.displayName ?? "a.ts";
+  const relativePath = options.relativePath ?? "src/a.ts";
+  const workspacePath =
+    options.workspacePath === undefined ? "/repo" : options.workspacePath;
+
+  function FinderMenuHarness(): ReactElement {
+    const [target, setTarget] = useState<WorkspacePathContextMenuTarget | null>(
+      null,
+    );
+
+    return (
+      <I18nProvider fixedLocale={options.locale ?? "en"}>
+        <button
+          type="button"
+          data-testid="file-row"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setTarget({
+              displayName,
+              kind: options.kind,
+              relativePath,
+              x: event.clientX,
+              y: event.clientY,
+            });
+          }}
+        >
+          {displayName}
+        </button>
+        <WorkspacePathContextMenu
+          createActions={
+            options.withCreateAndDelete
+              ? {
+                  onCreateDirectory: () => {},
+                  onCreateFile: () => {},
+                }
+              : null
+          }
+          deleteAction={
+            options.withCreateAndDelete ? { onDelete: () => {} } : null
+          }
+          target={target}
+          workspacePath={workspacePath}
+          onClose={() => setTarget(null)}
+        />
+      </I18nProvider>
+    );
+  }
+
+  render(<FinderMenuHarness />);
+}
+
+function setNavigatorPlatform(platform: string): void {
+  Object.defineProperty(navigator, "platform", {
+    configurable: true,
+    value: platform,
+  });
+}

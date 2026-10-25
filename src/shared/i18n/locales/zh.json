@@ -615,6 +615,8 @@
     "copyFileName": "复制文件名",
     "copyRelativePath": "复制相对路径",
     "copyAbsolutePath": "复制绝对路径",
+    "openInFinder": "在 Finder 中打开",
+    "openInFinderFailed": "无法在 Finder 中打开。",
     "copiedToClipboard": "已复制到剪贴板",
     "newFile": "新建文件",
     "newFolder": "新建文件夹",

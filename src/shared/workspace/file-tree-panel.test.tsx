@@ -70,6 +70,14 @@ vi.mock("../toast", () => ({
 const toastSuccessMock = vi.mocked(toast.success);
 const toastErrorMock = vi.mocked(toast.error);
 
+const revealItemInDir = vi.hoisted(() => vi.fn());
+const openPath = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath,
+  revealItemInDir,
+}));
+
 vi.mock("react-arborist", () => ({
   Tree: forwardRef(function MockTree(
     {
@@ -609,6 +617,41 @@ describe("FileTreePanel", () => {
         );
       });
     });
+
+    it("opens the directory itself in Finder from a directory row", async () => {
+      const previousPlatform = navigator.platform;
+      setNavigatorPlatform("MacIntel");
+      openPath.mockReset();
+      revealItemInDir.mockReset();
+      openPath.mockResolvedValue(undefined);
+      revealItemInDir.mockResolvedValue(undefined);
+
+      try {
+        const row = renderPanelAndOpenableRow(
+          {
+            id: "src",
+            name: "src",
+            path: "src",
+            kind: "directory",
+            isIgnored: false,
+            children: [],
+          },
+          "/repo",
+        );
+
+        fireEvent.contextMenu(row, { clientX: 40, clientY: 80 });
+        fireEvent.click(
+          await screen.findByRole("menuitem", { name: "Open in Finder" }),
+        );
+
+        await waitFor(() => {
+          expect(openPath).toHaveBeenCalledWith("/repo/src");
+        });
+        expect(revealItemInDir).not.toHaveBeenCalled();
+      } finally {
+        setNavigatorPlatform(previousPlatform);
+      }
+    });
   });
 
   describe("inline create", () => {
@@ -1026,6 +1069,13 @@ function renderMenuTargetRow(): HTMLElement {
 
 function renderWithI18n(component: ReactNode) {
   return render(<I18nProvider fixedLocale="en">{component}</I18nProvider>);
+}
+
+function setNavigatorPlatform(platform: string): void {
+  Object.defineProperty(navigator, "platform", {
+    configurable: true,
+    value: platform,
+  });
 }
 
 function renderPanelAndOpenableRow(
