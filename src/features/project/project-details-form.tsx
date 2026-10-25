@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -40,6 +40,7 @@ interface ProjectDetailsFormProps {
   worktreeSetupCommand?: string;
   worktreeSetupCommandLabel?: string;
   worktreeSetupCommandPlaceholder?: string;
+  afterWorktreeLocation?: ReactNode;
 }
 
 export function ProjectDetailsForm({
@@ -69,6 +70,7 @@ export function ProjectDetailsForm({
   worktreeSetupCommand = "",
   worktreeSetupCommandLabel,
   worktreeSetupCommandPlaceholder = "",
+  afterWorktreeLocation,
 }: ProjectDetailsFormProps) {
   const worktreeOptions = buildWorktreeLocationOptions(repoPath);
 
@@ -148,6 +150,7 @@ export function ProjectDetailsForm({
           </Select>
         </div>
       ) : null}
+      {afterWorktreeLocation}
       {worktreeSetupCommandLabel ? (
         <div className="grid gap-1.5">
           <Label

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { getIssueSummary, type IssueSummaryRecord } from "../issue-commands";
 import { getCommandErrorMessage } from "../../../shared/commands/command-error";
@@ -203,6 +204,23 @@ export function IssueSummaryDialog({
                   {summary.completion?.source ? (
                     <p>
                       {`${messages.issueSummary.source}: ${summary.completion.source}`}
+                    </p>
+                  ) : null}
+                  {summary.completion?.pullRequestUrl ? (
+                    <p>
+                      {`${t("issueSummary.pullRequestUrl")}: `}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => {
+                          const url = summary.completion?.pullRequestUrl;
+                          if (url) {
+                            void openUrl(url);
+                          }
+                        }}
+                      >
+                        {summary.completion.pullRequestUrl}
+                      </button>
                     </p>
                   ) : null}
                 </section>

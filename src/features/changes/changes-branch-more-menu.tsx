@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
@@ -25,7 +25,12 @@ import {
 } from "../agents/agent-session-commands";
 import { CheckoutBranchDialog } from "./checkout-branch-dialog";
 import { CreateBranchDialog } from "./create-branch-dialog";
+import { CreateChangeRequestDialog } from "./create-change-request-dialog";
 import { MergeBranchDialog } from "./merge-branch-dialog";
+import {
+  inspectProjectForge,
+  type ForgeHostName,
+} from "../project/project-forge-commands";
 
 export interface ChangesBranchMoreMenuProps {
   projectId: number;
@@ -51,11 +56,44 @@ export function ChangesBranchMoreMenu({
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
+  const [createRequestOpen, setCreateRequestOpen] = useState(false);
+  const [detectedHost, setDetectedHost] = useState<ForgeHostName>("none");
   const [mergeBranchOpen, setMergeBranchOpen] = useState(false);
 
   const isBusy = busyAction !== null;
   const isProjectRoot = selectedRoot?.isProjectRoot === true;
   const workspacePath = selectedRoot?.path ?? null;
+  const forgeHost = isProjectRoot ? detectedHost : "none";
+  const requestLabel =
+    forgeHost === "gitlab"
+      ? t("changeRequest.createMergeRequest")
+      : t("changeRequest.createPullRequest");
+
+  useEffect(() => {
+    if (!isProjectRoot) {
+      return;
+    }
+    let cancelled = false;
+    void inspectProjectForge(projectId)
+      .then((inspection) => {
+        if (cancelled) {
+          return;
+        }
+        setDetectedHost(
+          inspection.host === "github" || inspection.host === "gitlab"
+            ? inspection.host
+            : "none",
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetectedHost("none");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isProjectRoot, projectId]);
 
   async function runRemoteAction(
     action: "pull" | "push",
@@ -214,6 +252,17 @@ export function ChangesBranchMoreMenu({
               >
                 {t("changesBranchMenu.createBranch")}
               </DropdownMenuItem>
+              {forgeHost === "none" ? null : (
+                <DropdownMenuItem
+                  disabled={isBusy}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setCreateRequestOpen(true);
+                  }}
+                >
+                  {requestLabel}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={isBusy}
                 onClick={(event) => {
@@ -259,6 +308,15 @@ export function ChangesBranchMoreMenu({
           projectId={projectId}
           workspacePath={workspacePath}
           onSuccess={onSuccess}
+        />
+      ) : null}
+      {workspacePath && forgeHost !== "none" ? (
+        <CreateChangeRequestDialog
+          open={createRequestOpen}
+          onOpenChange={setCreateRequestOpen}
+          projectId={projectId}
+          workspacePath={workspacePath}
+          host={forgeHost}
         />
       ) : null}
       {workspacePath ? (

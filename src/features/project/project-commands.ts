@@ -47,6 +47,9 @@ export interface UpdateProjectSettingsInput {
   repoPath: string;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
+  completionAction?: "merge_to_base" | "open_pull_request";
+  prTarget?: "issue_base" | "repo_default";
+  prDraft?: boolean;
 }
 
 export interface ProjectRecord {

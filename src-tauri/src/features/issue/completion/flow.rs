@@ -7,6 +7,7 @@ use crate::features::issue::completion::git_reconcile::{
 use crate::features::issue::completion::state_machine::{
     CompletionEvent, CompletionState, CompletionWorld,
 };
+use crate::git::forge::inspect_forge;
 use crate::git::status::GitSnapshot;
 use crate::git::worktree::inspect_execution_path;
 use crate::types::agent_session::{
@@ -60,6 +61,9 @@ pub(crate) fn completion_state_from_record(record: &IssueCompletionFlowRecord) -
         ignore_dirty: record.ignore_dirty,
         worktree_cleanup_decision: record.worktree_cleanup_decision,
         continue_after_commit: record.continue_after_commit,
+        closeout_action: None,
+        closeout_base: None,
+        closeout_draft: true,
         actual_path: record.actual_path.clone(),
         failure_reason: record.failure_reason.clone(),
     }
@@ -94,6 +98,7 @@ pub(crate) fn gather_completion_world(
             .unwrap_or_else(|_| target_branch.clone().unwrap_or_default())
     };
     let branch_mismatch = target_branch.as_deref() != Some(current_branch.as_str());
+    let forge = inspect_forge(Path::new(repo_path));
     let missing_worktree_error = if workspace_missing && owner == WorktreeOwner::Redwhisk {
         redwhisk_missing_worktree_is_closed_out(repo_path, session).err()
     } else {
@@ -107,6 +112,8 @@ pub(crate) fn gather_completion_world(
         target_branch,
         current_branch: Some(current_branch),
         branch_mismatch,
+        forge_known: forge.known(),
+        forge_ready: forge.ready(),
         actual_path: actual.path.clone(),
         drifted: actual.drifted,
         session_closed_out: is_session_closed_out(session),
@@ -133,6 +140,15 @@ pub(crate) fn derive_completion_event(
         return CompletionEvent::CleanupDecided {
             cleanup: input.worktree_cleanup_decision.unwrap(),
         };
+    }
+    if state.phase == IssueCompletionPhase::PromptingCloseoutAction {
+        if let Some(action) = input.closeout_action {
+            return CompletionEvent::CloseoutDecided {
+                action,
+                base: input.closeout_base.clone().unwrap_or_default(),
+                draft: input.closeout_draft.unwrap_or(true),
+            };
+        }
     }
     if input.dirty_decision == Some(DirtyWorkspaceOption::Cancel) {
         return CompletionEvent::DirtyDecided(DirtyWorkspaceOption::Cancel);
@@ -161,6 +177,9 @@ pub(crate) fn phase_to_completion_action(phase: IssueCompletionPhase) -> Complet
         }
         IssueCompletionPhase::ConfirmingContinueAfterCommit => {
             CompleteIssueFlowAction::ConfirmContinueAfterCommit
+        }
+        IssueCompletionPhase::PromptingCloseoutAction => {
+            CompleteIssueFlowAction::PromptCloseoutAction
         }
         // 瞬态：单次 command 内穿越，不应作为终态出现；保守映射为 Completed。
         IssueCompletionPhase::DetectingWorkspace | IssueCompletionPhase::ReconcilingWorktree => {

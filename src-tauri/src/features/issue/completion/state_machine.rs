@@ -19,7 +19,9 @@ use crate::git::status::{GitChangedFile, GitSnapshot};
 use crate::types::agent_session::{WorkspaceMode, WorktreeOwner};
 use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::issue::IssueStatus;
-use crate::types::issue_completion::{DirtyWorkspaceOption, IssueCompletionPhase};
+use crate::types::issue_completion::{CloseoutAction, DirtyWorkspaceOption, IssueCompletionPhase};
+
+use super::closeout::{route_closeout, CloseoutRoute};
 
 /// machine 的 slim state：phase + 它读写的决策 / 载荷字段。
 ///
@@ -33,6 +35,9 @@ pub struct CompletionState {
     pub ignore_dirty: bool,
     pub worktree_cleanup_decision: Option<bool>,
     pub continue_after_commit: Option<bool>,
+    pub closeout_action: Option<CloseoutAction>,
+    pub closeout_base: Option<String>,
+    pub closeout_draft: bool,
     pub actual_path: Option<String>,
     pub failure_reason: Option<String>,
 }
@@ -46,6 +51,9 @@ impl CompletionState {
             ignore_dirty: false,
             worktree_cleanup_decision: None,
             continue_after_commit: None,
+            closeout_action: None,
+            closeout_base: None,
+            closeout_draft: true,
             actual_path: None,
             failure_reason: None,
         }
@@ -87,6 +95,8 @@ pub struct CompletionWorld {
     pub target_branch: Option<String>,
     pub current_branch: Option<String>,
     pub branch_mismatch: bool,
+    pub forge_known: bool,
+    pub forge_ready: bool,
     pub actual_path: String,
     pub drifted: bool,
     pub session_closed_out: bool,
@@ -112,6 +122,12 @@ pub enum CompletionEvent {
     ContinueConfirmed { proceed: bool },
     /// External worktree 删除确认（仅 `ConfirmingWorktreeCleanup`）。
     CleanupDecided { cleanup: bool },
+    /// 完成选择（仅 `PromptingCloseoutAction`）。
+    CloseoutDecided {
+        action: CloseoutAction,
+        base: String,
+        draft: bool,
+    },
 }
 
 /// 结果相关 effect 的失败策略：machine 声明「失败时怎么办」，执行由 service 完成。
@@ -141,6 +157,12 @@ pub enum Effect {
     /// 成功 → 继续执行同 Transition 其余 effect（抵达 Completed）；
     /// 失败 → 按 `on_failure` 处置（typically `Block`）。
     AttemptRebaseAndCleanup { on_failure: FailurePolicy },
+    /// 推送并创建 PR/MR。失败按 `on_failure` 停在 Blocked，不本地合并。
+    PublishPullRequest {
+        on_failure: FailurePolicy,
+        base: String,
+        draft: bool,
+    },
     /// 完成事务（原子）：改 Issue 状态、关 session、归档日志、写审计、写 / 更新 attempt、清 flow。
     CommitCompletion {
         snapshot: GitSnapshot,
@@ -208,6 +230,20 @@ pub fn advance(
             IssueCompletionPhase::ConfirmingWorktreeCleanup,
             CompletionEvent::CleanupDecided { cleanup },
         ) => Ok(decide_cleanup(state, world, cleanup)),
+        (
+            IssueCompletionPhase::PromptingCloseoutAction,
+            CompletionEvent::CloseoutDecided {
+                action,
+                base,
+                draft,
+            },
+        ) => {
+            let mut next = state.clone();
+            next.closeout_action = Some(action);
+            next.closeout_base = Some(base);
+            next.closeout_draft = draft;
+            Ok(after_dirty(&next, world))
+        }
         (phase, event) => Err(InvalidTransition { phase, event }),
     }
 }
@@ -230,7 +266,7 @@ fn begin_detection(state: &CompletionState, world: &CompletionWorld) -> Transiti
     if !world.snapshot.is_clean && !state.dirty_already_skipped() {
         return prompt_dirty(state, world);
     }
-    reconcile(state, world)
+    after_dirty(state, world)
 }
 
 fn decide_dirty(
@@ -247,7 +283,7 @@ fn decide_dirty(
                 .with_phase(IssueCompletionPhase::ReconcilingWorktree);
             next.dirty_decision = Some(DirtyWorkspaceOption::Skip);
             next.actual_path = Some(world.actual_path.clone());
-            reconcile(&next, world)
+            after_dirty(&next, world)
         }
     }
 }
@@ -289,18 +325,59 @@ fn detect_commit(
     head: String,
     attempt_id: i64,
 ) -> Transition {
-    let mut next = state
-        .clone()
-        .with_phase(IssueCompletionPhase::ConfirmingContinueAfterCommit);
-    next.actual_path = Some(world.actual_path.clone());
-    Transition {
-        new_state: next,
-        effects: vec![Effect::RecordCompletionAttempt {
+    let mut routed = after_dirty(state, world);
+    routed.new_state.actual_path = Some(world.actual_path.clone());
+    routed.effects.insert(
+        0,
+        Effect::RecordCompletionAttempt {
             result: CompletionAttemptResultForEffect::Completed,
             head,
             changed_files: vec![],
             attempt_id: Some(attempt_id),
-        }],
+        },
+    );
+    routed
+}
+
+fn after_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
+    match route_closeout(
+        world.branch_mismatch,
+        world.forge_known,
+        world.forge_ready,
+        state.closeout_action,
+    ) {
+        CloseoutRoute::Reconcile => reconcile(state, world),
+        CloseoutRoute::Complete => complete(state, world),
+        CloseoutRoute::Prompt => prompt_closeout(state, world),
+        CloseoutRoute::OpenPullRequest => open_pull_request(state, world),
+    }
+}
+
+fn prompt_closeout(state: &CompletionState, world: &CompletionWorld) -> Transition {
+    let mut next = state
+        .clone()
+        .with_phase(IssueCompletionPhase::PromptingCloseoutAction);
+    next.actual_path = Some(world.actual_path.clone());
+    Transition {
+        new_state: next,
+        effects: vec![],
+    }
+}
+
+fn open_pull_request(state: &CompletionState, world: &CompletionWorld) -> Transition {
+    Transition {
+        new_state: state.clone().with_phase(IssueCompletionPhase::Completed),
+        effects: vec![
+            Effect::PublishPullRequest {
+                on_failure: FailurePolicy::Block,
+                base: state.closeout_base.clone().unwrap_or_default(),
+                draft: state.closeout_draft,
+            },
+            Effect::CommitCompletion {
+                snapshot: world.snapshot.clone(),
+                option: world.attempt_option,
+            },
+        ],
     }
 }
 
@@ -310,7 +387,7 @@ fn confirm_continue(state: &CompletionState, world: &CompletionWorld, proceed: b
             .clone()
             .with_phase(IssueCompletionPhase::ReconcilingWorktree);
         next.continue_after_commit = Some(true);
-        reconcile(&next, world)
+        after_dirty(&next, world)
     } else {
         let mut next = cancelled(state, world, "user_cancelled_after_commit").new_state;
         next.continue_after_commit = Some(false);
@@ -450,6 +527,8 @@ mod tests {
             target_branch: Some("main".to_string()),
             current_branch: Some("main".to_string()),
             branch_mismatch: false,
+            forge_known: false,
+            forge_ready: false,
             actual_path: "/repo".to_string(),
             drifted: false,
             session_closed_out: false,
@@ -605,7 +684,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_phase(&t, IssueCompletionPhase::ConfirmingContinueAfterCommit);
+        assert_phase(&t, IssueCompletionPhase::Completed);
         match &t.effects[0] {
             Effect::RecordCompletionAttempt {
                 result: CompletionAttemptResultForEffect::Completed,

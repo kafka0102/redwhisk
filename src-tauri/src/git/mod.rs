@@ -1,8 +1,10 @@
 pub mod branch_sync;
+pub mod change_request;
 pub mod checkout_branch;
 pub mod checkout_branches;
 pub mod command;
 pub mod create_branch;
+pub mod forge;
 pub mod github_commit_probe;
 pub mod github_remote;
 pub mod merge_branch;

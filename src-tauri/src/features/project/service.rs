@@ -6,6 +6,7 @@ use crate::db::project_repository::ProjectRepository;
 use crate::git::repository::is_git_repository;
 use crate::git::worktree::list_code_workspaces;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
+use crate::types::project::ProjectForgeInspection;
 use crate::types::project::{
     CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
     ProjectSummary, ProjectWorktreeLocation, UpdateProjectSettingsInput,
@@ -129,6 +130,9 @@ impl<'connection> ProjectService<'connection> {
                 &validated_repo.repo_path.to_string_lossy(),
                 input.worktree_location,
                 input.worktree_setup_command.trim(),
+                input.completion_action,
+                input.pr_target,
+                input.pr_draft,
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -231,6 +235,34 @@ impl<'connection> ProjectService<'connection> {
         let database = open_project_database(data_dir)?;
         let repository = ProjectRepository::new(&database.connection);
         ProjectService::new(repository).update_project_settings(input)
+    }
+
+    pub fn inspect_forge_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<ProjectForgeInspection, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        let project = ProjectService::new(repository).project_by_id(project_id)?;
+        let status = crate::git::forge::inspect_forge(Path::new(&project.repo_path));
+        Ok(ProjectForgeInspection {
+            host: status.host.as_str().to_string(),
+            remote_label: status.remote_label,
+            cli_installed: status.cli_installed,
+            cli_authenticated: status.cli_authenticated,
+            repo_default_branch: status.repo_default_branch,
+            completion_action: project.completion_action,
+            pr_target: project.pr_target,
+            pr_draft: project.pr_draft,
+        })
+    }
+
+    pub fn project_summary_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<ProjectSummary, CommandError> {
+        let database = open_project_database(data_dir)?;
+        ProjectService::new(ProjectRepository::new(&database.connection)).project_by_id(project_id)
     }
 
     fn project_by_id(&self, project_id: i64) -> Result<ProjectSummary, CommandError> {
@@ -427,6 +459,9 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         repo_path: project.repo_path,
         worktree_location: project.worktree_location,
         worktree_setup_command: project.worktree_setup_command,
+        completion_action: project.completion_action,
+        pr_target: project.pr_target,
+        pr_draft: project.pr_draft,
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,

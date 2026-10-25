@@ -155,6 +155,16 @@ pub fn update_project_settings(
 }
 
 #[tauri::command]
+pub fn inspect_project_forge(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+) -> Result<crate::types::project::ProjectForgeInspection, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    ProjectService::inspect_forge_in_data_dir(data_dir, project_id)
+}
+
+#[tauri::command]
 pub fn validate_project_repo_path(
     input: ValidateProjectRepoPathInput,
 ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
@@ -304,7 +314,7 @@ fn project_join_error(error: impl std::fmt::Display) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-fn prepare_project_data_dir(
+pub(crate) fn prepare_project_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<std::path::PathBuf, CommandError> {

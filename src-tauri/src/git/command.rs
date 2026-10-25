@@ -52,10 +52,14 @@ pub fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitCommandErro
 fn build_git_command(repo_path: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("git");
     command.args(args).current_dir(repo_path);
+    apply_interactive_path(&mut command);
+    command
+}
+
+pub fn apply_interactive_path(command: &mut Command) {
     if let Some(path) = interactive_shell_path() {
         command.env("PATH", path);
     }
-    command
 }
 
 /// GUI（Dock/Finder）启动时进程 PATH 来自 launchd，不含用户在 `.zshrc` 写入的

@@ -257,6 +257,8 @@ pub struct IssueSummaryCompletionInfo {
     pub changed_files_json: Option<String>,
     pub created_at: i64,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pull_request_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

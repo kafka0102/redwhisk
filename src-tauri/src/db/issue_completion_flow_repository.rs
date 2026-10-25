@@ -158,6 +158,7 @@ fn issue_completion_phase_from_str(value: &str) -> rusqlite::Result<IssueComplet
         "confirming_continue_after_commit" => {
             Ok(IssueCompletionPhase::ConfirmingContinueAfterCommit)
         }
+        "prompting_closeout_action" => Ok(IssueCompletionPhase::PromptingCloseoutAction),
         "reconciling_worktree" => Ok(IssueCompletionPhase::ReconcilingWorktree),
         "confirming_worktree_cleanup" => Ok(IssueCompletionPhase::ConfirmingWorktreeCleanup),
         "completed" => Ok(IssueCompletionPhase::Completed),

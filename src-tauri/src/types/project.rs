@@ -4,6 +4,20 @@ use crate::types::session_workspace::CodeWorkspaceRoot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum ProjectCompletionAction {
+    MergeToBase,
+    OpenPullRequest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectPrTarget {
+    IssueBase,
+    RepoDefault,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ProjectWorktreeLocation {
     RepoSibling,
     RepoInternal,
@@ -45,6 +59,9 @@ pub struct UpdateProjectSettingsInput {
     pub repo_path: String,
     pub worktree_location: ProjectWorktreeLocation,
     pub worktree_setup_command: String,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -68,12 +85,28 @@ pub struct ProjectSummary {
     pub repo_path: String,
     pub worktree_location: ProjectWorktreeLocation,
     pub worktree_setup_command: String,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
     pub created_at: i64,
     pub last_opened_at: i64,
     #[serde(skip)]
     pub removed_at: Option<i64>,
     #[serde(default)]
     pub code_workspaces: Vec<CodeWorkspaceRoot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectForgeInspection {
+    pub host: String,
+    pub remote_label: Option<String>,
+    pub cli_installed: bool,
+    pub cli_authenticated: bool,
+    pub repo_default_branch: Option<String>,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -90,6 +123,9 @@ pub struct ProjectListItem {
     pub repo_path: String,
     pub worktree_location: ProjectWorktreeLocation,
     pub worktree_setup_command: String,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
     pub created_at: i64,
     pub last_opened_at: i64,
     pub path_status: ProjectPathStatus,

@@ -42,6 +42,9 @@ export interface CompletionFlowDecisionPorts {
   requestDirtyDecision: (
     result: CompleteIssueFlowResult,
   ) => Promise<{ decision: DirtyWorkspaceOption; branchName: string | null }>;
+  requestCloseoutDecision: (
+    result: CompleteIssueFlowResult,
+  ) => Promise<CloseoutFlowDecision | null>;
   confirmContinueAfterCommit: () => Promise<boolean>;
   confirmWorktreeCleanup: (targetBranch: string | null) => Promise<boolean>;
   messages: {
@@ -49,6 +52,12 @@ export interface CompletionFlowDecisionPorts {
     noCommitDetected: string;
     commitTurnFinishedDirty: string;
   };
+}
+
+export interface CloseoutFlowDecision {
+  action: "merge_to_base" | "open_pull_request";
+  base: string;
+  draft: boolean;
 }
 
 export interface RunCompletionFlowInput {
@@ -119,6 +128,9 @@ export async function runCompletionFlow(
   let actualPath: string | null = input.initialActualPath ?? null;
   let continueAfterCommit: boolean | null = null;
   let worktreeCleanupDecision: boolean | null = null;
+  let closeoutAction: CloseoutFlowDecision["action"] | null = null;
+  let closeoutBase: string | null = null;
+  let closeoutDraft: boolean | null = null;
 
   while (true) {
     ports.onLoadingChange?.(true);
@@ -132,6 +144,9 @@ export async function runCompletionFlow(
       actualPath,
       continueAfterCommit,
       worktreeCleanupDecision,
+      ...(closeoutAction != null
+        ? { closeoutAction, closeoutBase, closeoutDraft }
+        : {}),
     });
 
     // 决策一次性消费，下一轮不再重复发送。
@@ -140,6 +155,9 @@ export async function runCompletionFlow(
     actualPath = null;
     continueAfterCommit = null;
     worktreeCleanupDecision = null;
+    closeoutAction = null;
+    closeoutBase = null;
+    closeoutDraft = null;
 
     if (result.action === "completed") {
       ports.onLoadingChange?.(false);
@@ -212,6 +230,19 @@ export async function runCompletionFlow(
       worktreeCleanupDecision = await ports.confirmWorktreeCleanup(
         result.targetBranch,
       );
+      continue;
+    }
+
+    if (result.action === "prompt_closeout_action") {
+      ports.onLoadingChange?.(false);
+      const decision = await ports.requestCloseoutDecision(result);
+      if (decision == null) {
+        dirtyDecision = "cancel";
+      } else {
+        closeoutAction = decision.action;
+        closeoutBase = decision.base;
+        closeoutDraft = decision.draft;
+      }
       continue;
     }
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
@@ -8,6 +8,13 @@ import {
   updateProjectSettings,
   validateProjectRepoPath,
 } from "../project/project-commands";
+import { ProjectCompletionFields } from "../project/project-completion-fields";
+import {
+  inspectProjectForge,
+  type ForgeHostName,
+  type ProjectCompletionAction,
+  type ProjectPrTarget,
+} from "../project/project-forge-commands";
 import { ProjectDetailsForm } from "../project/project-details-form";
 import {
   detectWorktreeSetupCommand,
@@ -29,6 +36,7 @@ interface GeneralSettingsPanelProps {
 interface GeneralSettingsFormProps {
   messages: I18nMessages;
   onSave: (input: GeneralSettingsSaveInput) => Promise<void>;
+  projectId: number;
   projectName: string;
   projectPath: string;
   worktreeLocation: ProjectWorktreeLocation;
@@ -37,7 +45,13 @@ interface GeneralSettingsFormProps {
 
 type GeneralSettingsSaveInput = Pick<
   UpdateProjectSettingsInput,
-  "name" | "repoPath" | "worktreeLocation" | "worktreeSetupCommand"
+  | "name"
+  | "repoPath"
+  | "worktreeLocation"
+  | "worktreeSetupCommand"
+  | "completionAction"
+  | "prTarget"
+  | "prDraft"
 >;
 
 export function GeneralSettingsPanel({
@@ -57,6 +71,9 @@ export function GeneralSettingsPanel({
       repoPath: input.repoPath,
       worktreeLocation: input.worktreeLocation,
       worktreeSetupCommand: input.worktreeSetupCommand,
+      completionAction: input.completionAction,
+      prTarget: input.prTarget,
+      prDraft: input.prDraft,
     });
     onProjectUpdated?.({
       id: updatedProject.id,
@@ -75,6 +92,7 @@ export function GeneralSettingsPanel({
       key={`${projectId}:${projectName}:${projectPath}:${worktreeLocation}:${worktreeSetupCommand}`}
       messages={messages}
       onSave={handleGeneralSettingsSave}
+      projectId={projectId}
       projectName={projectName}
       projectPath={projectPath}
       worktreeLocation={worktreeLocation}
@@ -86,12 +104,28 @@ export function GeneralSettingsPanel({
 function GeneralSettingsForm({
   messages,
   onSave,
+  projectId,
   projectName,
   projectPath,
   worktreeLocation,
   worktreeSetupCommand,
 }: GeneralSettingsFormProps) {
   const { t } = useI18n();
+  const [host, setHost] = useState<ForgeHostName>("none");
+  const [cliInstalled, setCliInstalled] = useState(true);
+  const [cliAuthenticated, setCliAuthenticated] = useState(true);
+  const [repoDefaultBranch, setRepoDefaultBranch] = useState<string | null>(
+    null,
+  );
+  const [completionAction, setCompletionAction] =
+    useState<ProjectCompletionAction>("merge_to_base");
+  const [prTarget, setPrTarget] = useState<ProjectPrTarget>("issue_base");
+  const [prDraft, setPrDraft] = useState(true);
+  const [completionBaseline, setCompletionBaseline] = useState<{
+    action: ProjectCompletionAction;
+    target: ProjectPrTarget;
+    draft: boolean;
+  } | null>(null);
   const [projectNameValue, setProjectNameValue] = useState(projectName);
   const [projectPathValue, setProjectPathValue] = useState(projectPath);
   const [worktreeLocationValue, setWorktreeLocationValue] =
@@ -108,13 +142,56 @@ function GeneralSettingsForm({
     trimmedProjectName !== projectName ||
     trimmedProjectPath !== projectPath ||
     worktreeLocationValue !== worktreeLocation ||
-    worktreeSetupCommandValue !== worktreeSetupCommand;
+    worktreeSetupCommandValue !== worktreeSetupCommand ||
+    (completionBaseline != null &&
+      (completionAction !== completionBaseline.action ||
+        prTarget !== completionBaseline.target ||
+        prDraft !== completionBaseline.draft));
   const isSaveDisabled =
     isSaving ||
     isChoosingRepoPath ||
     trimmedProjectName.length === 0 ||
     trimmedProjectPath.length === 0 ||
     !isDirty;
+
+  useEffect(() => {
+    let cancelled = false;
+    void inspectProjectForge(projectId)
+      .then((inspection) => {
+        if (cancelled) {
+          return;
+        }
+        const nextHost =
+          inspection.host === "github" || inspection.host === "gitlab"
+            ? inspection.host
+            : "none";
+        setHost(nextHost);
+        setCliInstalled(inspection.cliInstalled);
+        setCliAuthenticated(inspection.cliAuthenticated);
+        setRepoDefaultBranch(inspection.repoDefaultBranch);
+        setCompletionAction(inspection.completionAction);
+        setPrTarget(inspection.prTarget);
+        setPrDraft(inspection.prDraft);
+        setCompletionBaseline({
+          action: inspection.completionAction,
+          target: inspection.prTarget,
+          draft: inspection.prDraft,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHost("none");
+          setCompletionBaseline({
+            action: "merge_to_base",
+            target: "issue_base",
+            draft: true,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   async function handleChooseRepoPath() {
     setErrorMessage(null);
@@ -168,6 +245,14 @@ function GeneralSettingsForm({
         repoPath: trimmedProjectPath,
         worktreeLocation: worktreeLocationValue,
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
+        completionAction,
+        prTarget,
+        prDraft,
+      });
+      setCompletionBaseline({
+        action: completionAction,
+        target: prTarget,
+        draft: prDraft,
       });
     } catch (error: unknown) {
       setErrorMessage(getCommandErrorMessage(error, t));
@@ -198,6 +283,21 @@ function GeneralSettingsForm({
       submittingLabel={messages.settings.saving}
       worktreeLocation={worktreeLocationValue}
       worktreeLocationLabel={messages.settings.worktreePath}
+      afterWorktreeLocation={
+        <ProjectCompletionFields
+          host={host}
+          cliInstalled={cliInstalled}
+          cliAuthenticated={cliAuthenticated}
+          repoDefaultBranch={repoDefaultBranch}
+          action={completionAction}
+          target={prTarget}
+          draft={prDraft}
+          disabled={isSaving}
+          onActionChange={setCompletionAction}
+          onTargetChange={setPrTarget}
+          onDraftChange={setPrDraft}
+        />
+      }
       worktreeSetupCommand={worktreeSetupCommandValue}
       worktreeSetupCommandLabel={messages.settings.worktreeSetupAfterCreation}
       worktreeSetupCommandPlaceholder={

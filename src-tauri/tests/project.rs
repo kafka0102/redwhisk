@@ -6,7 +6,7 @@ use redwhisk_lib::features::project::ProjectService;
 use redwhisk_lib::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectPathStatus, ProjectWorktreeLocation,
+    CreateProjectInput, OpenProjectInput, ProjectCompletionAction, ProjectPathStatus, ProjectPrTarget, ProjectWorktreeLocation,
     UpdateProjectSettingsInput,
 };
 use redwhisk_lib::types::project_terminal::{
@@ -1151,6 +1151,9 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+            completion_action: ProjectCompletionAction::MergeToBase,
+            pr_target: ProjectPrTarget::IssueBase,
+            pr_draft: true,
         })
         .expect("update project settings");
 
@@ -1189,6 +1192,9 @@ fn update_project_settings_rejects_blank_name() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+            completion_action: ProjectCompletionAction::MergeToBase,
+            pr_target: ProjectPrTarget::IssueBase,
+            pr_draft: true,
         })
         .expect_err("blank name should fail");
 
@@ -1230,6 +1236,9 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             repo_path: moved_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "pnpm install\npnpm test".to_string(),
+            completion_action: ProjectCompletionAction::MergeToBase,
+            pr_target: ProjectPrTarget::IssueBase,
+            pr_draft: true,
         })
         .expect("updated project");
 
@@ -1280,6 +1289,9 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoInternal,
             worktree_setup_command: "".to_string(),
+            completion_action: ProjectCompletionAction::MergeToBase,
+            pr_target: ProjectPrTarget::IssueBase,
+            pr_draft: true,
         })
         .expect_err("repo internal worktrees should require .gitignore entry");
 
@@ -1316,6 +1328,9 @@ fn update_project_settings_rejects_non_git_repo_path() {
             repo_path: invalid_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+            completion_action: ProjectCompletionAction::MergeToBase,
+            pr_target: ProjectPrTarget::IssueBase,
+            pr_draft: true,
         })
         .expect_err("non git repo should be rejected");
 

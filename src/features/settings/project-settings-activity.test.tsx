@@ -1734,6 +1734,9 @@ describe("ProjectSettingsActivity", () => {
         repoPath: "/tmp/redwhisk",
         worktreeLocation: "repo_internal",
         worktreeSetupCommand: "",
+        completionAction: "merge_to_base",
+        prTarget: "issue_base",
+        prDraft: true,
       }),
     );
   });
@@ -2112,6 +2115,9 @@ describe("ProjectSettingsActivity", () => {
         repoPath: "/tmp/redwhisk",
         worktreeLocation: "repo_sibling",
         worktreeSetupCommand: "",
+        completionAction: "merge_to_base",
+        prTarget: "issue_base",
+        prDraft: true,
       }),
     );
     expect(onProjectUpdated).toHaveBeenCalledWith(
@@ -2164,6 +2170,9 @@ describe("ProjectSettingsActivity", () => {
         repoPath: "/tmp/other-repo",
         worktreeLocation: "repo_sibling",
         worktreeSetupCommand: "",
+        completionAction: "merge_to_base",
+        prTarget: "issue_base",
+        prDraft: true,
       }),
     );
   });

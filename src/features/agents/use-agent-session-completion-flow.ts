@@ -87,10 +87,12 @@ export function useAgentSessionCompletionFlow({
     isDetectingAgentCommitCompletion,
     isSubmittingMergePrompt,
     dirtyWorkspaceDialog,
+    closeoutDialog,
     mergePromptSessionId,
     mergePromptContent,
     completeLinkedIssueClean,
     resolveDirtyWorkspaceDecision,
+    resolveCloseoutDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   } = useAgentSessionCompletionResolution({
@@ -323,6 +325,7 @@ export function useAgentSessionCompletionFlow({
     isCompletionLoadingDialogDismissed,
     setIsCompletionLoadingDialogDismissed,
     dirtyWorkspaceDialog,
+    closeoutDialog,
     mergePromptSessionId,
     mergePromptContent,
     isSubmittingMergePrompt,
@@ -339,6 +342,7 @@ export function useAgentSessionCompletionFlow({
     handleTransitionAction,
     handleTransitionMainAction,
     resolveDirtyWorkspaceDecision,
+    resolveCloseoutDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   };

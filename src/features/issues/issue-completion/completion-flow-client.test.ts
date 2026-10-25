@@ -67,6 +67,11 @@ function ports(
     })),
     confirmContinueAfterCommit: vi.fn(async () => true),
     confirmWorktreeCleanup: vi.fn(async () => false),
+    requestCloseoutDecision: vi.fn(async () => ({
+      action: "merge_to_base" as const,
+      base: "main",
+      draft: true,
+    })),
     messages: {
       gitOperationBlocked: "git blocked",
       noCommitDetected: "no commit",
@@ -105,6 +110,42 @@ describe("runCompletionFlow", () => {
     });
     expect(onLoadingChange).toHaveBeenCalledWith(true);
     expect(onLoadingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("sends the closeout choice after the prompt", async () => {
+    const complete = vi
+      .fn()
+      .mockResolvedValueOnce(flowResult("prompt_closeout_action"))
+      .mockResolvedValueOnce(flowResult("completed"));
+    const requestCloseoutDecision = vi.fn(async () => ({
+      action: "open_pull_request" as const,
+      base: "main",
+      draft: true,
+    }));
+
+    await runCompletionFlow(
+      { projectId: 1, issueId: 10 },
+      ports({ requestCloseoutDecision }),
+      {
+        completeIssueFlow: complete,
+        delay: async () => undefined,
+        maxDetectAttempts: 1,
+        detectIntervalMs: 0,
+      },
+    );
+
+    expect(complete).toHaveBeenLastCalledWith({
+      projectId: 1,
+      issueId: 10,
+      dirtyDecision: null,
+      branchName: null,
+      actualPath: null,
+      continueAfterCommit: null,
+      worktreeCleanupDecision: null,
+      closeoutAction: "open_pull_request",
+      closeoutBase: "main",
+      closeoutDraft: true,
+    });
   });
 
   it("forwards ignoreDirty and initial dirty decision", async () => {

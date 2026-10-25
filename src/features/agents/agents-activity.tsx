@@ -36,7 +36,7 @@ import {
 import { useSessionToolTabs } from "./use-session-tool-tabs";
 import { useAgentSessionList } from "./use-agent-session-list";
 import { useAgentSessionCompletionFlow } from "./use-agent-session-completion-flow";
-import { IssueCompletionDirtyWorkspaceDialog } from "../issues/issue-completion/issue-completion-dirty-workspace-dialog";
+import { IssueCompletionPrompts } from "../issues/issue-completion/issue-completion-prompts";
 import { AgentMergePromptDialog } from "./agent-merge-prompt-dialog";
 import { SessionSidePanel } from "./session-side-panel/session-side-panel";
 import { SessionBrowserTab } from "./session-workspace/session-browser-tab";
@@ -316,6 +316,7 @@ export function AgentsActivity({
   const {
     setIsCompletionLoadingDialogDismissed,
     dirtyWorkspaceDialog,
+    closeoutDialog,
     mergePromptSessionId,
     isSubmittingMergePrompt,
     isCompletionLoadingDialogOpen,
@@ -329,6 +330,7 @@ export function AgentsActivity({
     handleTransitionAction,
     handleTransitionMainAction,
     resolveDirtyWorkspaceDecision,
+    resolveCloseoutDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   } = useAgentSessionCompletionFlow({
@@ -598,19 +600,12 @@ export function AgentsActivity({
         ) : null}
       </section>
 
-      {dirtyWorkspaceDialog ? (
-        <IssueCompletionDirtyWorkspaceDialog
-          title={messages.issues.completionDirtyTitle}
-          message={messages.issues.completionDirtyMessage}
-          branchName={dirtyWorkspaceDialog.branchName}
-          branchNameEditable={dirtyWorkspaceDialog.branchNameEditable}
-          branchNameLabel={messages.issues.completionBranchNameLabel}
-          autoCommitLabel={messages.issues.completionAutoCommit}
-          skipLabel={messages.issues.completionSkipDirty}
-          cancelLabel={messages.issues.completionCancel}
-          onDecision={resolveDirtyWorkspaceDecision}
-        />
-      ) : null}
+      <IssueCompletionPrompts
+        dirty={dirtyWorkspaceDialog}
+        closeout={closeoutDialog}
+        onDirtyDecision={resolveDirtyWorkspaceDecision}
+        onCloseoutDecision={resolveCloseoutDecision}
+      />
       <LoadingDialog
         closeLabel={messages.agentsFeature.closeCompletionLoading}
         message={messages.agentsFeature.completionSubmitting}

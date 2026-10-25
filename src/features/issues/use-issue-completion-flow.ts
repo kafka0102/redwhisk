@@ -120,6 +120,8 @@ export function useIssueCompletionFlow({
   const {
     completeIssueWithCompletionChecks,
     resolveDirtyWorkspaceDecision,
+    closeoutDialog,
+    resolveCloseoutDecision,
     handOffWorktreeMergeConflict,
   } = useIssueCompletionResolution({
     locale,
@@ -396,5 +398,7 @@ export function useIssueCompletionFlow({
     handleAdvanceStatus,
     handleDeleteIssue,
     resolveDirtyWorkspaceDecision,
+    closeoutDialog,
+    resolveCloseoutDecision,
   };
 }

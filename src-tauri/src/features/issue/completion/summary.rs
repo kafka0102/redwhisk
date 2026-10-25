@@ -7,6 +7,16 @@ use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueSummaryCompletionInfo;
 use crate::types::issue_action::IssueActionType;
 
+fn load_pull_request_url(connection: &Connection, issue_id: i64) -> Option<String> {
+    connection
+        .query_row(
+            "SELECT url FROM issue_pull_requests WHERE issue_id = ?1",
+            [issue_id],
+            |row| row.get(0),
+        )
+        .ok()
+}
+
 fn summary_completion_from_attempt(attempt: CompletionAttemptRecord) -> IssueSummaryCompletionInfo {
     IssueSummaryCompletionInfo {
         option: attempt.option.as_str().to_string(),
@@ -18,6 +28,7 @@ fn summary_completion_from_attempt(attempt: CompletionAttemptRecord) -> IssueSum
         changed_files_json: Some(attempt.changed_files_json),
         created_at: attempt.created_at,
         source: "completion_attempt".to_string(),
+        pull_request_url: None,
     }
 }
 
@@ -62,6 +73,7 @@ fn latest_completion_from_issue_action(
         changed_files_json: None,
         created_at: action.created_at,
         source: "issue_action_fallback".to_string(),
+        pull_request_url: load_pull_request_url(connection, issue_id),
     }))
 }
 
@@ -77,7 +89,9 @@ pub(crate) fn resolve_issue_summary_completion(
         .cloned();
 
     if let Some(attempt) = completed_attempt {
-        return Ok(Some(summary_completion_from_attempt(attempt)));
+        let mut info = summary_completion_from_attempt(attempt);
+        info.pull_request_url = load_pull_request_url(connection, issue_id);
+        return Ok(Some(info));
     }
 
     if attempts.is_empty() {

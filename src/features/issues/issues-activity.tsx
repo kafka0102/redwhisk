@@ -8,7 +8,7 @@ import {
   type IssueStatus,
 } from "./issue-commands";
 import { IssueAttachmentPreviewDialog } from "./issue-form/issue-attachment-preview-dialog";
-import { IssueCompletionDirtyWorkspaceDialog } from "./issue-completion/issue-completion-dirty-workspace-dialog";
+import { IssueCompletionPrompts } from "./issue-completion/issue-completion-prompts";
 import {
   EMPTY_FORM,
   ISSUE_PAGE_SIZE,
@@ -582,6 +582,8 @@ export function IssuesActivity({
     handleAdvanceStatus,
     handleDeleteIssue,
     resolveDirtyWorkspaceDecision,
+    closeoutDialog,
+    resolveCloseoutDecision,
   } = useIssueCompletionFlow({
     projectId,
     locale,
@@ -779,19 +781,12 @@ export function IssuesActivity({
           }
         }}
       />
-      {dirtyWorkspaceDialog ? (
-        <IssueCompletionDirtyWorkspaceDialog
-          title={messages.issues.completionDirtyTitle}
-          message={messages.issues.completionDirtyMessage}
-          branchName={dirtyWorkspaceDialog.branchName}
-          branchNameEditable={dirtyWorkspaceDialog.branchNameEditable}
-          branchNameLabel={messages.issues.completionBranchNameLabel}
-          autoCommitLabel={messages.issues.completionAutoCommit}
-          skipLabel={messages.issues.completionSkipDirty}
-          cancelLabel={messages.issues.completionCancel}
-          onDecision={resolveDirtyWorkspaceDecision}
-        />
-      ) : null}
+      <IssueCompletionPrompts
+        dirty={dirtyWorkspaceDialog}
+        closeout={closeoutDialog}
+        onDirtyDecision={resolveDirtyWorkspaceDecision}
+        onCloseoutDecision={resolveCloseoutDecision}
+      />
       {alertDialog}
       {confirmationDialog}
     </main>

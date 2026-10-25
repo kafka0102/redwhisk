@@ -313,6 +313,7 @@ export type IssueCompletionPhase =
   | "prompting_dirty_decision"
   | "auto_committing"
   | "confirming_continue_after_commit"
+  | "prompting_closeout_action"
   | "reconciling_worktree"
   | "confirming_worktree_cleanup"
   | "completed"
@@ -325,24 +326,22 @@ export type CompleteIssueFlowAction =
   | "waiting_auto_commit"
   | "confirm_continue_after_commit"
   | "confirm_worktree_cleanup"
+  | "prompt_closeout_action"
   | "blocked"
   | "cancelled";
 
 export interface CompleteIssueFlowInput {
   projectId: number;
   issueId: number;
-  /** dirty 三选项；仅在与 `prompting_dirty_decision` 继续时使用。 */
   dirtyDecision?: DirtyWorkspaceOption | null;
-  /** 用户选了「不提交（忽略未提交改动）」。 */
   ignoreDirty?: boolean | null;
-  /** 用户在弹框中确认/修正的分支名（情况三/session 关闭时手填兜底）。 */
   branchName?: string | null;
-  /** 用户在弹框中确认/修正的实际执行路径（兜底用）。 */
   actualPath?: string | null;
-  /** 「确定继续标记完成吗」确认；仅在 `confirming_continue_after_commit` 继续时使用。 */
   continueAfterCommit?: boolean | null;
-  /** External worktree 删除确认；仅在 `confirming_worktree_cleanup` 继续时使用。 */
   worktreeCleanupDecision?: boolean | null;
+  closeoutAction?: "merge_to_base" | "open_pull_request" | null;
+  closeoutBase?: string | null;
+  closeoutDraft?: boolean | null;
 }
 
 export interface IssueCompletionFlowRecord {
@@ -389,6 +388,7 @@ export interface IssueSummaryCompletionInfo {
   changedFilesJson: string | null;
   createdAt: number;
   source: string;
+  pullRequestUrl?: string | null;
 }
 
 export interface IssueSummaryRecord {

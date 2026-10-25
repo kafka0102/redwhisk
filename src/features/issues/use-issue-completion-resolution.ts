@@ -15,6 +15,7 @@ import {
   WorktreeMergeConflictError,
   type WorktreeMergeConflictSessionDetail,
 } from "./issue-completion/completion-flow-client";
+import { useCloseoutPrompt } from "./issue-completion/use-closeout-prompt";
 import { buildWorktreeMergeConflictPrompt } from "./issue-completion/issue-completion-helpers";
 import {
   EMPTY_FORM,
@@ -86,6 +87,9 @@ export function useIssueCompletionResolution({
   messages,
   onOpenAgentsActivity,
 }: UseIssueCompletionResolutionOptions) {
+  const { closeoutDialog, requestCloseoutDecision, resolveCloseoutDecision } =
+    useCloseoutPrompt();
+
   function requestDirtyWorkspaceDecision(
     result: CompleteIssueFlowResult,
   ): Promise<{ decision: DirtyWorkspaceOption; branchName: string | null }> {
@@ -126,6 +130,7 @@ export function useIssueCompletionResolution({
           }
         },
         requestDirtyDecision: requestDirtyWorkspaceDecision,
+        requestCloseoutDecision,
         confirmContinueAfterCommit: () =>
           confirm({
             title: messages.issues.completionContinueAfterCommitTitle,
@@ -197,6 +202,8 @@ export function useIssueCompletionResolution({
   return {
     completeIssueWithCompletionChecks,
     resolveDirtyWorkspaceDecision,
+    closeoutDialog,
+    resolveCloseoutDecision,
     handOffWorktreeMergeConflict,
   };
 }

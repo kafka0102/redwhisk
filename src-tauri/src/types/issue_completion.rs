@@ -17,6 +17,8 @@ pub enum IssueCompletionPhase {
     AutoCommitting,
     /// 提交完成后的「确定继续标记完成吗」确认。
     ConfirmingContinueAfterCommit,
+    /// 环境就绪且不在 base 上时，选择合并或提交 PR/MR。
+    PromptingCloseoutAction,
     /// worktree 路径比对 / rebase 合并 / 失败消息 / 新建 session。
     ReconcilingWorktree,
     /// External worktree（含运行中漂移 worktree）的删除确认。
@@ -36,6 +38,7 @@ impl IssueCompletionPhase {
             Self::PromptingDirtyDecision => "prompting_dirty_decision",
             Self::AutoCommitting => "auto_committing",
             Self::ConfirmingContinueAfterCommit => "confirming_continue_after_commit",
+            Self::PromptingCloseoutAction => "prompting_closeout_action",
             Self::ReconcilingWorktree => "reconciling_worktree",
             Self::ConfirmingWorktreeCleanup => "confirming_worktree_cleanup",
             Self::Completed => "completed",
@@ -59,6 +62,23 @@ pub enum DirtyWorkspaceOption {
     Skip,
     /// 取消完成流程。
     Cancel,
+}
+
+/// 完成弹窗里的选择。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseoutAction {
+    MergeToBase,
+    OpenPullRequest,
+}
+
+impl CloseoutAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MergeToBase => "merge_to_base",
+            Self::OpenPullRequest => "open_pull_request",
+        }
+    }
 }
 
 impl DirtyWorkspaceOption {
@@ -108,6 +128,10 @@ pub struct CompleteIssueFlowInput {
     pub continue_after_commit: Option<bool>,
     /// External worktree 删除确认；仅在 `ConfirmingWorktreeCleanup` 继续时使用。
     pub worktree_cleanup_decision: Option<bool>,
+    /// 完成选择；仅在 `PromptingCloseoutAction` 继续时使用。
+    pub closeout_action: Option<CloseoutAction>,
+    pub closeout_base: Option<String>,
+    pub closeout_draft: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -123,6 +147,8 @@ pub enum CompleteIssueFlowAction {
     ConfirmContinueAfterCommit,
     /// 处于 External worktree，需用户确认是否删除。
     ConfirmWorktreeCleanup,
+    /// 选择合并到 base，或提交 PR/MR。
+    PromptCloseoutAction,
     /// rebase/合并失败等阻塞（已向 session 发消息或新建 session）。
     Blocked,
     /// 用户取消完成流程。

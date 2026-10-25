@@ -1,6 +1,8 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::types::project::{ProjectSummary, ProjectWorktreeLocation};
+use crate::types::project::{
+    ProjectCompletionAction, ProjectPrTarget, ProjectSummary, ProjectWorktreeLocation,
+};
 use crate::types::project_terminal_config::ProjectTerminalConfig;
 
 pub struct ProjectRepository<'connection> {
@@ -19,7 +21,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_repo_path(&self, repo_path: &str) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at, completion_action, pr_target, pr_draft
                  FROM projects
                  WHERE repo_path = ?1
                    AND removed_at IS NULL",
@@ -35,7 +37,7 @@ impl<'connection> ProjectRepository<'connection> {
     ) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at, completion_action, pr_target, pr_draft
                  FROM projects
                  WHERE repo_path = ?1",
                 params![repo_path],
@@ -47,7 +49,7 @@ impl<'connection> ProjectRepository<'connection> {
     pub fn find_by_id(&self, id: i64) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at, completion_action, pr_target, pr_draft
                  FROM projects
                  WHERE id = ?1
                    AND removed_at IS NULL",
@@ -59,7 +61,7 @@ impl<'connection> ProjectRepository<'connection> {
 
     pub fn list_recent(&self) -> rusqlite::Result<Vec<ProjectSummary>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+            "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at, completion_action, pr_target, pr_draft
              FROM projects
              WHERE removed_at IS NULL
              ORDER BY last_opened_at DESC, created_at DESC, name ASC",
@@ -112,7 +114,7 @@ impl<'connection> ProjectRepository<'connection> {
     ) -> rusqlite::Result<Option<ProjectSummary>> {
         self.connection
             .query_row(
-                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at
+                "SELECT id, name, repo_path, worktree_location, worktree_setup_command, created_at, last_opened_at, removed_at, completion_action, pr_target, pr_draft
                  FROM projects
                  WHERE id = ?1",
                 params![id],
@@ -239,6 +241,9 @@ impl<'connection> ProjectRepository<'connection> {
         repo_path: &str,
         worktree_location: ProjectWorktreeLocation,
         worktree_setup_command: &str,
+        completion_action: ProjectCompletionAction,
+        pr_target: ProjectPrTarget,
+        pr_draft: bool,
     ) -> rusqlite::Result<ProjectSummary> {
         self.connection.execute(
             "UPDATE projects
@@ -246,13 +251,19 @@ impl<'connection> ProjectRepository<'connection> {
                  repo_path = ?2,
                  worktree_location = ?3,
                  worktree_setup_command = ?4,
+                 completion_action = ?5,
+                 pr_target = ?6,
+                 pr_draft = ?7,
                  removed_at = NULL
-             WHERE id = ?5",
+             WHERE id = ?8",
             params![
                 name,
                 repo_path,
                 project_worktree_location_to_str(&worktree_location),
                 worktree_setup_command,
+                project_completion_action_to_str(completion_action),
+                project_pr_target_to_str(pr_target),
+                if pr_draft { 1 } else { 0 },
                 id
             ],
         )?;
@@ -379,6 +390,9 @@ fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectSummary>
         created_at: row.get(5)?,
         last_opened_at: row.get(6)?,
         removed_at: row.get(7)?,
+        completion_action: project_completion_action_from_str(&row.get::<_, String>(8)?)?,
+        pr_target: project_pr_target_from_str(&row.get::<_, String>(9)?)?,
+        pr_draft: row.get::<_, i64>(10)? != 0,
         code_workspaces: Vec::new(),
     })
 }
@@ -405,6 +419,38 @@ pub fn project_worktree_location_from_str(
         "repo_internal" => Ok(ProjectWorktreeLocation::RepoInternal),
         "user_home" => Ok(ProjectWorktreeLocation::UserHome),
         _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+pub fn project_completion_action_from_str(
+    value: &str,
+) -> rusqlite::Result<ProjectCompletionAction> {
+    match value {
+        "merge_to_base" => Ok(ProjectCompletionAction::MergeToBase),
+        "open_pull_request" => Ok(ProjectCompletionAction::OpenPullRequest),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+pub fn project_completion_action_to_str(value: ProjectCompletionAction) -> &'static str {
+    match value {
+        ProjectCompletionAction::MergeToBase => "merge_to_base",
+        ProjectCompletionAction::OpenPullRequest => "open_pull_request",
+    }
+}
+
+pub fn project_pr_target_from_str(value: &str) -> rusqlite::Result<ProjectPrTarget> {
+    match value {
+        "issue_base" => Ok(ProjectPrTarget::IssueBase),
+        "repo_default" => Ok(ProjectPrTarget::RepoDefault),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+pub fn project_pr_target_to_str(value: ProjectPrTarget) -> &'static str {
+    match value {
+        ProjectPrTarget::IssueBase => "issue_base",
+        ProjectPrTarget::RepoDefault => "repo_default",
     }
 }
 

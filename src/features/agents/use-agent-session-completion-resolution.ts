@@ -20,6 +20,7 @@ import {
   runCompletionFlow,
   WorktreeMergeConflictError,
 } from "../issues/issue-completion/completion-flow-client";
+import { useCloseoutPrompt } from "../issues/issue-completion/use-closeout-prompt";
 import { buildWorktreeMergeConflictPrompt } from "../issues/issue-completion/issue-completion-helpers";
 import {
   type DirtyWorkspaceDecisionResolver,
@@ -88,6 +89,8 @@ export function useAgentSessionCompletionResolution({
   const [mergePromptContent, setMergePromptContent] = useState<string | null>(
     null,
   );
+  const { closeoutDialog, requestCloseoutDecision, resolveCloseoutDecision } =
+    useCloseoutPrompt();
 
   function showIssueMarkedDoneToast() {
     toast.success(messages.toast.issueMarkedDone);
@@ -228,6 +231,7 @@ export function useAgentSessionCompletionResolution({
         {
           onWaitingAutoCommitChange: setIsDetectingAgentCommitCompletion,
           requestDirtyDecision: requestDirtyWorkspaceDecision,
+          requestCloseoutDecision,
           confirmContinueAfterCommit: () =>
             confirm({
               title: messages.issues.completionContinueAfterCommitTitle,
@@ -363,10 +367,12 @@ export function useAgentSessionCompletionResolution({
     isDetectingAgentCommitCompletion,
     isSubmittingMergePrompt,
     dirtyWorkspaceDialog,
+    closeoutDialog,
     mergePromptSessionId,
     mergePromptContent,
     completeLinkedIssueClean,
     resolveDirtyWorkspaceDecision,
+    resolveCloseoutDecision,
     handleConfirmMergePrompt,
     handleCloseMergePrompt,
   };

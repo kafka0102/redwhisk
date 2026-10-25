@@ -166,6 +166,32 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                     }
                     transaction.commit().map_err(issue_database_error)?;
                 }
+                Effect::PublishPullRequest {
+                    on_failure,
+                    base,
+                    draft,
+                } => {
+                    if let Err(error) = super::publish::publish_issue_change_request(
+                        self.service.issue_repository.connection(),
+                        ctx,
+                        base,
+                        *draft,
+                    ) {
+                        match on_failure {
+                            FailurePolicy::Block => {
+                                new_state.phase = IssueCompletionPhase::Blocked;
+                                new_state.failure_reason = Some(error);
+                                break;
+                            }
+                            FailurePolicy::HardError => {
+                                return Err(CommandError::new(
+                                    CommandErrorCode::IssueValidationFailed,
+                                    "创建 Pull Request / Merge Request 失败。",
+                                ));
+                            }
+                        }
+                    }
+                }
                 Effect::AttemptRebaseAndCleanup { on_failure } => {
                     // Skip / ignore_dirty：对账前先丢弃 Agent worktree 未提交改动（ADR-0026）。
                     let reconcile_result = if new_state.dirty_already_skipped() {
@@ -411,6 +437,8 @@ mod tests {
             target_branch: None,
             current_branch: None,
             branch_mismatch: false,
+            forge_known: false,
+            forge_ready: false,
             actual_path: "/tmp/repo".to_string(),
             drifted: false,
             session_closed_out: false,
@@ -858,6 +886,8 @@ mod tests {
             target_branch: Some("main".to_string()),
             current_branch: Some("main".to_string()),
             branch_mismatch: true,
+            forge_known: false,
+            forge_ready: false,
             actual_path: repo_path.clone(),
             drifted: false,
             session_closed_out: false,
