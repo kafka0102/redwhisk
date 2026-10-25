@@ -209,6 +209,14 @@
     outline: none;
   }
   .control, .select { height: 30px; padding: 0 11px; }
+  .select {
+    appearance: none;
+    padding-right: 28px;
+    background-image: linear-gradient(45deg, transparent 50%, #5f6368 50%), linear-gradient(135deg, #5f6368 50%, transparent 50%);
+    background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
   .area { min-height: 78px; padding: 8px 11px; resize: vertical; }
   .control[readonly], .control:disabled, .select:disabled, .area:disabled {
     color: var(--color-text);
@@ -241,7 +249,7 @@
   .hint { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.45; }
   .hint.danger { color: var(--color-danger); }
   .checkline { display: flex; align-items: center; gap: 8px; }
-  .status-line { margin: 2px 0 0 24px; color: var(--color-text-muted); font-size: 12px; }
+  .status-line { margin: 2px 0 0; color: var(--color-text-muted); font-size: 12px; }
   .tip { position: relative; display: inline-flex; align-items: center; }
   .info {
     width: 16px; height: 16px; padding: 0;
@@ -481,7 +489,7 @@
       <ol>
         <li>已有 PR 时不展示目标和草稿，只留链接和「关联已有」。</li>
         <li>变更页已有 PR 改为「查看」，不在这 11 屏里。</li>
-        <li>已在 base 上沿用现有「是否继续标记完成」。</li>
+        <li>已在 base 上不弹窗，直接标记完成。</li>
         <li>场景 4 的两个目标都是 main。变更页用 release/1.4 → main。</li>
         <li>人在默认分支时整单禁用。改成别的目标后要不要放开，spec 没写。</li>
       </ol>
@@ -589,7 +597,7 @@ const SCENES = [
     id: "s5",
     group: "完成",
     title: "已在 base",
-    caption: "人已经在目标分支 main 上，确认弹窗里没有合并或提交 PR。用户下一步点继续，就地标记完成。",
+    caption: "已在目标分支 main。点完成不弹窗，直接标记完成。",
     kind: "stay",
     model: {
       detectedHost: "github",
@@ -796,7 +804,7 @@ function defaultActionPhrase() {
 
 function dialogPhrase() {
   const choice = model.dialogChoice;
-  if (choice === "stay") return "stay（就地完成，不出现 B/C）";
+  if (choice === "stay") return "—（无弹窗，直接完成）";
   if (choice === "merge_to_base") return "merge_to_base（合并并完成）";
   if (choice === "link_existing") return "link_existing（关联已有 " + prShort() + " 并完成）";
   if (choice === "open_pr" && sceneById(sceneId).kind === "create") return "open_pr（创建 " + prShort() + "，不改 Issue）";
@@ -911,20 +919,20 @@ function draftControl(disabled) {
 }
 
 function targetChoices() {
-  return '<div class="field"><div class="block-label">PR/MR 目标</div><div class="choices">'
-    + choice("targetKind", "issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base", false)
-    + choice("targetKind", "repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default", false)
-    + '</div></div>';
+  return '<div class="field"><label for="pr-target-kind">PR/MR 目标</label><select class="select" id="pr-target-kind" data-field="targetKind">'
+    + option("issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base")
+    + option("repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default")
+    + '</select></div>';
 }
 
 function completionSettings() {
   if (effectiveHost() === "none") return "";
   const selected = model.defaultAction === "open_pull_request";
   const prLabel = effectiveHost() === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
-  return '<div class="field"><div class="block-label">完成后</div><div class="choices">'
-    + choice("defaultAction", "merge_to_base", "合并到 base 分支", !selected, false)
-    + choice("defaultAction", "open_pull_request", prLabel, selected, false)
-    + '</div>' + (selected ? cliStatusLine() : "") + '</div>'
+  return '<div class="field"><label for="completion-action">完成后</label><select class="select" id="completion-action" data-field="defaultAction">'
+    + option("merge_to_base", "合并到 base 分支", !selected)
+    + option("open_pull_request", prLabel, selected)
+    + '</select>' + (selected ? cliStatusLine() : "") + '</div>'
     + (selected ? targetChoices() + draftControl(false) : "");
 }
 
@@ -939,7 +947,11 @@ function settingsScreen() {
     + '<h2 class="settings-title">通用</h2><form class="card" id="settings-form">'
     + fieldInput("项目名称", "redwhisk", true)
     + '<div class="field"><label>仓库路径</label><div class="path-row"><input class="control" readonly value="/Users/me/src/redwhisk" /><button class="btn btn-secondary" type="button" disabled>选择文件夹</button></div></div>'
-    + fieldInput("工作树路径", "/Users/me/src/redwhisk.worktrees", true)
+    + '<div class="field"><label for="worktree-location">工作树路径</label><select class="select" id="worktree-location">'
+    + option("sibling", "/Users/me/src/redwhisk.worktrees", true)
+    + option("internal", "/Users/me/src/redwhisk/.worktrees", false)
+    + option("home", "~/.redwhisk/worktrees/redwhisk", false)
+    + '</select></div>'
     + completionSettings()
     + '<div class="field"><label>创建工作树后的初始化命令</label><textarea class="area" readonly rows="3">pnpm install</textarea></div>'
     + '<div class="actions">' + button("保存", "btn-primary", "save", false) + '</div>'
@@ -994,19 +1006,11 @@ function closeoutDialog() {
   return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="closeout-title">'
     + '<h3 id="closeout-title">选择完成方式</h3>'
     + '<dl class="facts"><dt>工作分支</dt><dd><code>' + esc(model.workBranch) + '</code></dd><dt>base 分支</dt><dd><code>' + esc(model.issueBase) + '</code></dd></dl>'
-    + '<div class="choices">'
-    + choice("dialogChoice", "merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base", false)
-    + choice("dialogChoice", cValue, cLabel, model.dialogChoice === cValue, false)
-    + '</div>' + (showDetails ? cliStatusLine() : "") + extra
+    + '<div class="field"><label for="closeout-action">完成后</label><select class="select" id="closeout-action" data-field="dialogChoice">'
+    + option("merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base")
+    + option(cValue, cLabel, model.dialogChoice === cValue)
+    + '</select>' + (showDetails ? cliStatusLine() : "") + '</div>' + extra
     + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button(primary, "btn-primary", "primary", false) + '</div>'
-    + '</div></div>';
-}
-
-function stayDialog() {
-  return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="stay-title">'
-    + '<h3 id="stay-title">已检测到提交</h3>'
-    + '<p class="desc">代码已提交成功。是否继续标记完成？</p>'
-    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("继续", "btn-primary", "primary", false) + '</div>'
     + '</div></div>';
 }
 
@@ -1066,7 +1070,7 @@ function renderStage() {
   let inner = "";
   if (scene.kind === "settings") inner = settingsScreen();
   else if (scene.kind === "closeout") inner = activityBar("issues") + '<div class="surface">' + issuePage("进行中") + '</div>' + closeoutDialog();
-  else if (scene.kind === "stay") inner = activityBar("issues") + '<div class="surface">' + issuePage("进行中") + '</div>' + stayDialog();
+  else if (scene.kind === "stay") inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成") + '</div>';
   else if (scene.kind === "menu") inner = changesPage(true);
   else if (scene.kind === "create") inner = changesPage(false) + createDialog();
   else inner = activityBar("issues") + '<div class="surface">' + issuePage("已完成", resultBlock()) + '</div>';
@@ -1112,12 +1116,8 @@ function onStageChange(event) {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const field = target.dataset.field;
-  if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "defaultAction") {
-    model.defaultAction = target.value;
-  } else if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "dialogChoice") {
-    model.dialogChoice = target.value;
-  } else if (target instanceof HTMLInputElement && target.type === "radio" && target.name === "targetKind") {
-    model.targetKind = target.value;
+  if (target instanceof HTMLSelectElement && (field === "defaultAction" || field === "dialogChoice" || field === "targetKind")) {
+    model[field] = target.value;
   } else if (field === "hostOverride" && target instanceof HTMLSelectElement) {
     model.hostOverride = target.value;
     coerceHostSideEffects();
