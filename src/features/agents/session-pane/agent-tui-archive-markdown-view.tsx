@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { AgentMarkdown } from "../message-stream/agent-markdown";
 import { readAgentSessionTerminal } from "../agent-session-commands";
+import { ExpandableText } from "../expandable-text";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
   jsonArchiveReviewCards,
@@ -23,6 +24,8 @@ type LoadState =
   | { kind: "error"; message: string };
 
 type ReviewCard = JsonArchiveReviewCard;
+
+const ARCHIVE_USER_MESSAGE_MAX_LINES = 5;
 
 /** 连续 `›` 行是一张用户卡；其余行直到下一个 `›` 是一张结论卡。无标记则整篇 Markdown。 */
 function splitReviewCards(markdown: string): ReviewCard[] | null {
@@ -77,11 +80,18 @@ function ReviewCards({ cards }: { cards: ReviewCard[] }) {
 }
 
 function ReviewCardView({ card }: { card: ReviewCard }) {
+  const { messages } = useI18n();
   if (card.kind === "user") {
     return (
       <article className="agents-message__entry agents-message__entry--user">
         <div className="agents-message__bubble agents-message__bubble--user">
-          <p className="agents-message__text">{card.text}</p>
+          <ExpandableText
+            className="agents-message__text"
+            text={card.text}
+            maxLines={ARCHIVE_USER_MESSAGE_MAX_LINES}
+            expandLabel={messages.agentsFeature.expandUserMessage}
+            collapseLabel={messages.agentsFeature.collapseUserMessage}
+          />
         </div>
       </article>
     );

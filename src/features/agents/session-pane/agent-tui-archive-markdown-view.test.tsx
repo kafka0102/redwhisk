@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { I18nProvider } from "../../../shared/i18n/i18n";
 import { AgentTuiArchiveMarkdownView } from "./agent-tui-archive-markdown-view";
 
 const commandMocks = vi.hoisted(() => ({
@@ -506,4 +513,394 @@ function timelineLine(item: Record<string, unknown>): string {
   return JSON.stringify({
     event: { type: "timeline", item },
   });
+}
+
+describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
+  let resizeCallbacks: ResizeObserverCallback[] = [];
+
+  beforeEach(() => {
+    commandMocks.readAgentSessionTerminal.mockReset();
+    resizeCallbacks = [];
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe() {}
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function notifyResize() {
+    act(() => {
+      for (const callback of resizeCallbacks) {
+        callback([], {} as ResizeObserver);
+      }
+    });
+  }
+
+  function mockContentMetrics(
+    element: HTMLElement,
+    metrics: { clientHeight: number; scrollHeight: number },
+  ) {
+    Object.defineProperty(element, "clientHeight", {
+      configurable: true,
+      get: () => metrics.clientHeight,
+    });
+    Object.defineProperty(element, "scrollHeight", {
+      configurable: true,
+      get: () => metrics.scrollHeight,
+    });
+  }
+
+  it("JSON 归档的长用户卡折叠为五行，展开后看全文，再收起", async () => {
+    const longText = Array.from(
+      { length: 12 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: [
+        timelineLine({
+          type: "user_message",
+          text: longText,
+          messageId: "u1",
+        }),
+        timelineLine({
+          type: "assistant_message",
+          text: "短结论",
+          messageId: "a1",
+        }),
+      ].join("\n"),
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const userCard = (await screen.findAllByRole("article")).find((card) =>
+      card.classList.contains("agents-message__entry--user"),
+    );
+    if (!userCard) {
+      throw new Error("missing user card");
+    }
+    const content = userCard.querySelector<HTMLElement>(
+      ".agents-message__text",
+    );
+    if (!content) {
+      throw new Error("missing user text");
+    }
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
+    notifyResize();
+
+    expect(content.style.webkitLineClamp).toBe("5");
+    expect(content.className).toContain("expandable-text__content--clamped");
+    expect(content.textContent).toBe(longText);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(content.className).not.toContain(
+      "expandable-text__content--clamped",
+    );
+    expect(content.style.webkitLineClamp).toBe("");
+    expect(content.textContent).toBe(longText);
+    expect(screen.getByRole("button", { name: "Collapse" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(content.className).toContain("expandable-text__content--clamped");
+    expect(content.style.webkitLineClamp).toBe("5");
+    expect(screen.getByRole("button", { name: "Show more" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      userCard.querySelector(".agents-message__bubble--user")?.className ?? "",
+    ).not.toMatch(/shadow/);
+  });
+
+  it("不超过五行的 JSON 用户卡没有展开按钮", async () => {
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: [
+        timelineLine({
+          type: "user_message",
+          text: "短句",
+          messageId: "u1",
+        }),
+      ].join("\n"),
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const content = await userText();
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
+    notifyResize();
+
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+    expect(content.textContent).toBe("短句");
+  });
+
+  it("原文很长但尺寸未超出五行时没有展开按钮", async () => {
+    const longText = Array.from(
+      { length: 12 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: timelineLine({
+        type: "user_message",
+        text: longText,
+        messageId: "u1",
+      }),
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const content = await userText();
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
+    notifyResize();
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
+    notifyResize();
+    expect(
+      screen.getByRole("button", { name: "Show more" }),
+    ).toBeInTheDocument();
+  });
+
+  it("带逐行 › 的长用户卡折叠为五行，展开后看全文，再收起", async () => {
+    const longText = Array.from(
+      { length: 8 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
+    const snapshot = [
+      ...longText.split("\n").map((line) => `› ${line}`),
+      "",
+      "短结论",
+      "",
+    ].join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot,
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const content = await userText();
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
+    notifyResize();
+
+    expect(content.textContent).toBe(longText);
+    expect(content.style.webkitLineClamp).toBe("5");
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(content.style.webkitLineClamp).toBe("");
+    expect(content.textContent).toBe(longText);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(content.style.webkitLineClamp).toBe("5");
+  });
+
+  it("不超过五行的 TUI 用户卡没有展开按钮", async () => {
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: ["› 短句", "", "结论", ""].join("\n"),
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const content = await userText();
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
+    notifyResize();
+
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+    expect(content.textContent).toBe("短句");
+  });
+
+  it("中文 locale 的展开与收起使用已有文案", async () => {
+    const longText = Array.from(
+      { length: 8 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: timelineLine({
+        type: "user_message",
+        text: longText,
+        messageId: "u1",
+      }),
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="zh">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const content = await userText();
+    mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
+    notifyResize();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开更多" }));
+    expect(screen.getByRole("button", { name: "收起" })).toBeInTheDocument();
+  });
+
+  it("助手卡、结论卡和错误卡不折叠", async () => {
+    const assistantText = Array.from(
+      { length: 12 },
+      (_, index) => `assist ${index + 1}`,
+    ).join("\n");
+    const errorText = Array.from(
+      { length: 12 },
+      (_, index) => `error ${index + 1}`,
+    ).join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: [
+        timelineLine({
+          type: "user_message",
+          text: "短句",
+          messageId: "u1",
+        }),
+        timelineLine({ type: "error", message: errorText }),
+        timelineLine({
+          type: "assistant_message",
+          text: assistantText,
+          messageId: "a1",
+        }),
+      ].join("\n"),
+      isActive: false,
+    });
+
+    const { unmount } = render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    const cards = await screen.findAllByRole("article");
+    const userContent = await userText();
+    mockContentMetrics(userContent, { clientHeight: 70, scrollHeight: 71 });
+    for (const card of cards) {
+      if (card.classList.contains("agents-message__entry--user")) {
+        continue;
+      }
+      expect(card.querySelector(".expandable-text")).toBeNull();
+      for (const element of card.querySelectorAll<HTMLElement>("*")) {
+        expect(element.style.webkitLineClamp).toBe("");
+      }
+    }
+    notifyResize();
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-markdown").textContent).toBe(
+      assistantText,
+    );
+    expect(
+      cards.find((card) =>
+        card.classList.contains("agents-message__entry--error"),
+      )?.textContent,
+    ).toBe(errorText);
+    unmount();
+
+    const conclusionText = ["# 标题", "", "很长的结论"].join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: ["› 短句", "", conclusionText, ""].join("\n"),
+      isActive: false,
+    });
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+    const conclusion = (await screen.findAllByRole("article")).find((card) =>
+      card.classList.contains("agents-message__entry--assistant"),
+    );
+    if (!conclusion) {
+      throw new Error("missing conclusion card");
+    }
+    expect(conclusion.querySelector(".expandable-text")).toBeNull();
+    for (const element of conclusion.querySelectorAll<HTMLElement>("*")) {
+      expect(element.style.webkitLineClamp).toBe("");
+    }
+    expect(
+      conclusion.querySelector("[data-testid='agent-markdown']")?.textContent,
+    ).toBe(conclusionText);
+    expect(
+      screen.queryByRole("button", { name: "Show more" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("没有逐行 › 的旧归档仍整篇 Markdown，且不被五行截断", async () => {
+    const snapshot = [
+      "## 仍在",
+      "",
+      ...Array.from({ length: 12 }, (_, index) => `kept ${index + 1}`),
+    ].join("\n");
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot,
+      isActive: false,
+    });
+
+    render(
+      <I18nProvider initialLocale="en">
+        <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />
+      </I18nProvider>,
+    );
+
+    expect((await screen.findByTestId("agent-markdown")).textContent).toBe(
+      snapshot,
+    );
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+    expect(document.querySelector(".expandable-text")).toBeNull();
+    for (const element of document.querySelectorAll<HTMLElement>(
+      ".agent-tui-archive-markdown *",
+    )) {
+      expect(element.style.webkitLineClamp).toBe("");
+    }
+  });
+});
+
+async function userText(): Promise<HTMLElement> {
+  const userCard = (await screen.findAllByRole("article")).find((card) =>
+    card.classList.contains("agents-message__entry--user"),
+  );
+  const content = userCard?.querySelector<HTMLElement>(".agents-message__text");
+  if (!content) {
+    throw new Error("missing user text");
+  }
+  return content;
 }
