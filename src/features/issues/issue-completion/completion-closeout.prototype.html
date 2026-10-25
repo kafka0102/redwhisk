@@ -241,6 +241,38 @@
   .hint { margin: 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.45; }
   .hint.danger { color: var(--color-danger); }
   .checkline { display: flex; align-items: center; gap: 8px; }
+  .status-line { margin: 2px 0 0 24px; color: var(--color-text-muted); font-size: 12px; }
+  .tip { position: relative; display: inline-flex; align-items: center; }
+  .info {
+    width: 16px; height: 16px; padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 14px;
+  }
+  .tip-pop {
+    display: none;
+    position: absolute;
+    z-index: 6;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 220px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: #fff;
+    box-shadow: 0 8px 20px var(--color-popover-shadow);
+    color: var(--color-text);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.45;
+    text-align: left;
+  }
+  .tip.is-open .tip-pop { display: block; }
+  .dialog-title { display: flex; align-items: center; gap: 8px; }
+  .dialog-title h3 { margin: 0; }
   .env {
     display: grid;
     gap: 4px;
@@ -447,12 +479,11 @@
     <div class="gaps">
       <h2>未决，不猜成功能</h2>
       <ol>
-        <li>已有 PR 时，目标分支和草稿画成只读。spec 只规定主按钮改为「关联已有」。</li>
-        <li>变更页「已有 PR 则按钮改为查看」在 spec §7，不在这 11 个场景里，这里没有单独一屏。</li>
-        <li>已在 base 上不新做「就地完成」弹窗，沿用现有「是否继续标记完成」。</li>
-        <li>场景 4 的 Issue base 和仓库默认分支都是 main。变更页用 release/1.4 → main 看差异。</li>
-        <li>未安装 CLI 时，不把默认的「提交 PR」自动改成合并。用户要自己改选，或先安装。</li>
-        <li>人就在默认分支时，创建对话框整单禁用。spec 没说改成别的目标（例如 main → develop）后是否放开。</li>
+        <li>已有 PR 时不展示目标和草稿，只留链接和「关联已有」。</li>
+        <li>变更页已有 PR 改为「查看」，不在这 11 屏里。</li>
+        <li>已在 base 上沿用现有「是否继续标记完成」。</li>
+        <li>场景 4 的两个目标都是 main。变更页用 release/1.4 → main。</li>
+        <li>人在默认分支时整单禁用。改成别的目标后要不要放开，spec 没写。</li>
       </ol>
     </div>
   </aside>
@@ -490,7 +521,7 @@ const SCENES = [
     id: "s2",
     group: "设置",
     title: "未识别宿主",
-    caption: "远程不是 GitHub / GitLab，提交 PR 不可用，默认只剩合并到 base。用户下一步保持今天的本地合入，或在自建实例误判时手动覆盖宿主。",
+    caption: "未识别 GitHub / GitLab。通用设置里不出现完成后选项，完成时与今天一样合并到 base。",
     kind: "settings",
     model: {
       detectedHost: "none",
@@ -512,7 +543,7 @@ const SCENES = [
     id: "s3",
     group: "设置",
     title: "GitLab，glab 未就绪",
-    caption: "已识别 GitLab，但 glab 未安装且未登录。用户下一步先安装并登录；设置里仍可把默认留成提交 MR，完成时会再检查。",
+    caption: "已识别 GitLab，glab 未安装且未登录。提交 Merge Request 仍可选，选中后下方一行状态。执行时才会失败。",
     kind: "settings",
     model: {
       detectedHost: "gitlab",
@@ -580,13 +611,13 @@ const SCENES = [
     id: "s6",
     group: "完成",
     title: "未安装 gh",
-    caption: "项目默认是提交 PR，但这台机器没装 gh，该选项不可点，也不会自动改成合并。用户下一步改选合并到 base，或先安装 gh。",
+    caption: "本机没装 gh。提交 PR 仍可选，下方一行状态。用户下一步可以继续，执行时会失败，也可以改成合并到 base。",
     kind: "closeout",
     model: {
       detectedHost: "github",
       hostOverride: "auto",
       defaultAction: "open_pull_request",
-      dialogChoice: null,
+      dialogChoice: "open_pr",
       targetKind: "issue_base",
       issueBase: "main",
       repoDefault: "main",
@@ -596,7 +627,7 @@ const SCENES = [
       prUrl: null,
       cliInstalled: false,
       cliAuthed: false,
-      cDisabled: true,
+      cDisabled: false,
     },
   },
   {
@@ -768,11 +799,9 @@ function dialogPhrase() {
   if (choice === "stay") return "stay（就地完成，不出现 B/C）";
   if (choice === "merge_to_base") return "merge_to_base（合并并完成）";
   if (choice === "link_existing") return "link_existing（关联已有 " + prShort() + " 并完成）";
-  if (choice === "open_pr" && model.cDisabled) return "open_pr（提交 " + prShort() + "，已禁用）";
   if (choice === "open_pr" && sceneById(sceneId).kind === "create") return "open_pr（创建 " + prShort() + "，不改 Issue）";
   if (choice === "open_pr") return "open_pr（创建 " + prShort() + " 并完成）";
   if (choice === "none") return "—（当前没有这张弹窗）";
-  if (model.cDisabled) return "无选中（默认 open_pr 已禁用，未自动改成合并）";
   return "—";
 }
 
@@ -782,12 +811,8 @@ function targetPhrase() {
   if (scene.kind === "create" || scene.kind === "menu") {
     return model.branchTarget + "（仓库默认分支 " + model.repoDefault + "）";
   }
-  if (scene.kind === "closeout" && model.cDisabled && model.dialogChoice !== "merge_to_base") {
-    return "issue_base（" + model.issueBase + "，未展示，提交 PR 已禁用）";
-  }
-  const showingPr = model.dialogChoice === "open_pr" || model.dialogChoice === "link_existing" || (scene.kind === "settings" && model.defaultAction === "open_pull_request" && effectiveHost() !== "none");
-  if (!showingPr) return "—（当前不创建 PR/MR）";
-  if (model.dialogChoice === "link_existing") return "issue_base（" + model.issueBase + "，只读，以已有 PR 为准）";
+  const showingPr = model.dialogChoice === "open_pr" || (scene.kind === "settings" && model.defaultAction === "open_pull_request" && effectiveHost() !== "none");
+  if (!showingPr) return model.dialogChoice === "link_existing" ? "—（关联已有请求）" : "—（当前不创建 PR/MR）";
   if (scene.kind === "settings" || scene.kind === "closeout" || scene.kind === "result") {
     if (model.targetKind === "repo_default") return "repo_default（" + model.repoDefault + "）";
     return "issue_base（" + model.issueBase + "）";
@@ -799,14 +824,9 @@ function draftPhrase() {
   const scene = sceneById(sceneId);
   const showing = (scene.kind === "settings" && model.defaultAction === "open_pull_request" && effectiveHost() !== "none")
     || model.dialogChoice === "open_pr"
-    || model.dialogChoice === "link_existing"
     || scene.kind === "create"
     || scene.kind === "result";
-  if (scene.kind === "closeout" && model.cDisabled && model.dialogChoice !== "merge_to_base") {
-    return (model.draft ? "开" : "关") + "（未展示，提交 PR 已禁用）";
-  }
   if (!showing || model.draft === null) return "—";
-  if (model.dialogChoice === "link_existing") return (model.draft ? "开" : "关") + "（只读，以已有 PR 为准）";
   if (scene.kind === "create" && model.createDisabled) return (model.draft ? "开" : "关") + "（控件禁用）";
   return model.draft ? "开" : "关";
 }
@@ -869,28 +889,46 @@ function button(label, variant, action, disabled) {
   return '<button class="btn ' + variant + '" type="button" data-action="' + action + '"' + (disabled ? " disabled" : "") + '>' + esc(label) + '</button>';
 }
 
-function settingsScreen() {
+function infoTip(label, text) {
+  return '<span class="tip"><button class="info" type="button" aria-label="' + esc(label) + '" aria-expanded="false">i</button><span class="tip-pop">' + esc(text) + '</span></span>';
+}
+
+function cliStatusLine() {
   const host = effectiveHost();
-  const prEnabled = host !== "none";
-  const showPrFields = prEnabled && model.defaultAction === "open_pull_request";
-  let summary = "未识别 GitHub / GitLab 远程";
-  if (host === "github" && model.hostOverride === "auto") summary = "已识别为 GitHub（github.com/acme/redwhisk）";
-  else if (host === "gitlab" && model.hostOverride === "auto") summary = "已识别为 GitLab（gitlab.example.com/acme/redwhisk）";
-  else if (host === "github") summary = "已识别结果已被覆盖为 GitHub（github.com/acme/redwhisk）";
-  else if (host === "gitlab") summary = "已识别结果已被覆盖为 GitLab（gitlab.example.com/acme/redwhisk）";
-  else if (model.hostOverride === "none") summary = "已设为不使用 GitHub / GitLab";
-  const prLabel = host === "gitlab" ? "提交 Merge Request" : host === "github" ? "提交 Pull Request" : "提交 Pull Request / Merge Request";
-  const prHint = prEnabled
-    ? "推送工作分支并创建草稿。不在本地合并，也不自动合并该请求。"
-    : "未识别 GitHub / GitLab 远程，不能选。";
-  const env = environmentBlock();
-  const targetBlock = showPrFields ? (
-    '<div class="field"><div class="block-label">PR/MR 目标</div><div class="choices">'
-    + choice("targetKind", "issue_base", "Issue 的 base 分支（main）", model.targetKind === "issue_base", false)
-    + choice("targetKind", "repo_default", "仓库默认分支（main）", model.targetKind === "repo_default", false)
-    + '</div></div>'
-    + '<label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</label>'
-  ) : '<p class="hint">只有默认动作是提交 PR/MR，且宿主可用时，才设置目标和草稿。</p>';
+  if (host !== "github" && host !== "gitlab") return "";
+  if (model.cliInstalled && model.cliAuthed) return "";
+  const cli = host === "gitlab" ? "glab" : "gh";
+  const parts = [];
+  if (!model.cliInstalled) parts.push(cli + " 未安装");
+  if (!model.cliAuthed) parts.push("未登录");
+  return '<p class="status-line">' + parts.join("，") + '</p>';
+}
+
+function draftControl(disabled) {
+  return '<div class="checkline"><label><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + (disabled ? " disabled" : "") + ' />创建为草稿</label>'
+    + infoTip("创建为草稿", "在远端先以草稿创建，不进入正式评审。")
+    + '</div>';
+}
+
+function targetChoices() {
+  return '<div class="field"><div class="block-label">PR/MR 目标</div><div class="choices">'
+    + choice("targetKind", "issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base", false)
+    + choice("targetKind", "repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default", false)
+    + '</div></div>';
+}
+
+function completionSettings() {
+  if (effectiveHost() === "none") return "";
+  const selected = model.defaultAction === "open_pull_request";
+  const prLabel = effectiveHost() === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
+  return '<div class="field"><div class="block-label">完成后</div><div class="choices">'
+    + choice("defaultAction", "merge_to_base", "合并到 base 分支", !selected, false)
+    + choice("defaultAction", "open_pull_request", prLabel, selected, false)
+    + '</div>' + (selected ? cliStatusLine() : "") + '</div>'
+    + (selected ? targetChoices() + draftControl(false) : "");
+}
+
+function settingsScreen() {
   return activityBar("settings") + '<div class="surface"><div class="settings-layout">'
     + '<nav class="settings-menu" aria-label="设置菜单">'
     + '<button type="button" aria-pressed="true">通用</button>'
@@ -902,49 +940,10 @@ function settingsScreen() {
     + fieldInput("项目名称", "redwhisk", true)
     + '<div class="field"><label>仓库路径</label><div class="path-row"><input class="control" readonly value="/Users/me/src/redwhisk" /><button class="btn btn-secondary" type="button" disabled>选择文件夹</button></div></div>'
     + fieldInput("工作树路径", "/Users/me/src/redwhisk.worktrees", true)
+    + completionSettings()
     + '<div class="field"><label>创建工作树后的初始化命令</label><textarea class="area" readonly rows="3">pnpm install</textarea></div>'
-    + '<div class="form-break">任务完成</div>'
-    + '<div class="field"><label for="host-override">远程宿主</label><div class="summary">' + esc(summary) + '</div>'
-    + '<select class="select" id="host-override" data-field="hostOverride">'
-    + option("auto", "自动识别", model.hostOverride === "auto")
-    + option("github", "GitHub", model.hostOverride === "github")
-    + option("gitlab", "GitLab", model.hostOverride === "gitlab")
-    + option("none", "不使用", model.hostOverride === "none")
-    + '</select><p class="hint">自建实例误判时才改覆盖。完成时仍以当时的远程和 CLI 为准。</p></div>'
-    + '<div class="field"><div class="block-label">任务完成后的默认动作</div><div class="choices">'
-    + choice("defaultAction", "merge_to_base", "合并到 base 分支", model.defaultAction === "merge_to_base", false, "干净检查后 rebase/ff 合入 base，再删除 worktree 与工作分支。不 push。")
-    + choice("defaultAction", "open_pull_request", prLabel, model.defaultAction === "open_pull_request", !prEnabled, prHint)
-    + '</div><p class="hint">已经在目标分支上时会就地完成。这里没有「就地完成」这个设置。</p></div>'
-    + targetBlock
-    + env
     + '<div class="actions">' + button("保存", "btn-primary", "save", false) + '</div>'
     + '</form></div></div></div>';
-}
-
-function environmentBlock() {
-  const host = effectiveHost();
-  if (host === "none") {
-    return '<div class="field"><div class="block-label">环境状态</div><div class="env"><p class="hint">未识别宿主，不检查 gh / glab。</p></div></div>';
-  }
-  if (model.hostOverride !== "auto" && host !== model.detectedHost) {
-    const cli = host === "gitlab" ? "glab" : "gh";
-    return '<div class="field"><div class="block-label">环境状态</div><div class="env"><p class="hint">覆盖为 ' + (host === "gitlab" ? "GitLab" : "GitHub") + ' 后，完成时再检查 ' + cli + '。这页不重新探测，也不假装已经登录。</p></div></div>';
-  }
-  const cli = host === "gitlab" ? "glab" : "gh";
-  const installed = model.cliInstalled ? "已安装" : "未安装";
-  const authed = model.cliAuthed ? (host === "gitlab" ? "已登录 · acme" : "已登录 · acme") : "未登录";
-  let hint = "";
-  if (!model.cliInstalled) {
-    hint = '<p class="hint">先安装 ' + cli + '，再在终端执行 ' + cli + ' auth login。未就绪时不能创建' + (host === "gitlab" ? " Merge Request" : " Pull Request") + '。完成时会再次检查，不会改成合并到 base。</p>';
-  } else if (!model.cliAuthed) {
-    hint = '<p class="hint">在终端执行 ' + cli + ' auth login。登录可以打开浏览器一次。未登录时不能创建请求。</p>';
-  } else {
-    hint = '<p class="hint">CLI 已就绪。真正创建时还会再查一次登录状态。</p>';
-  }
-  return '<div class="field"><div class="block-label">环境状态</div><div class="env">'
-    + '<div class="env-row"><span>' + cli + '</span><span>' + installed + '</span></div>'
-    + '<div class="env-row"><span>登录</span><span>' + authed + '</span></div>'
-    + hint + '</div></div>';
 }
 
 function fieldInput(label, value, readonly) {
@@ -962,14 +961,12 @@ function choice(name, value, label, checked, disabled, hint) {
 }
 
 function issuePage(status, sideExtra) {
-  const managed = sceneById(sceneId).kind === "result"
-    ? "未做本地合并"
-    : model.workBranch === model.issueBase ? "当前分支" : "RedWhisk 托管";
+  const managed = model.workBranch === model.issueBase ? "当前分支" : "RedWhisk 托管";
   const linkRow = sceneById(sceneId).kind === "result"
     ? '<dt>链接</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd>'
     : "";
   return '<div class="page"><header class="issue-top"><h2>#12 完成后合入 base 或提交 PR</h2><span class="chip">' + esc(status) + '</span></header>'
-    + '<div class="issue-body"><div class="issue-main"><p class="issue-copy">隔离工作区里做完这张 Issue 后，选择合入 base，或推送后开草稿 PR。已经在目标分支上时，不再对自己合入或开 PR。</p>'
+    + '<div class="issue-body"><div class="issue-main"><p class="issue-copy">调整完成后的分支收尾。</p>'
     + (sideExtra || "")
     + '</div><aside class="issue-side"><dl class="meta">'
     + '<dt>状态</dt><dd>' + esc(status) + '</dd>'
@@ -981,47 +978,27 @@ function issuePage(status, sideExtra) {
 }
 
 function closeoutDialog() {
-  const host = effectiveHost();
   const existing = Boolean(model.existingPr);
-  const prLabel = host === "gitlab" ? "提交 Merge Request" : "提交 Pull Request";
   const cValue = existing ? "link_existing" : "open_pr";
-  const cLabel = existing ? "关联已有 " + prNoun() : prLabel;
-  const cDisabled = Boolean(model.cDisabled);
-  const cChecked = model.dialogChoice === cValue;
+  const cLabel = existing ? "关联已有 " + prNoun() : (effectiveHost() === "gitlab" ? "提交 Merge Request" : "提交 Pull Request");
   const showDetails = model.dialogChoice === "open_pr";
-  const locked = model.dialogChoice === "link_existing";
-  const cHint = cDisabled
-    ? "未安装 gh，不能提交 Pull Request。"
-    : existing
-      ? "这个分支已有打开的请求，不再新建。"
-      : "推送当前分支并创建草稿。不在本地合并，也不自动合并该请求。";
   let extra = "";
-  if (cDisabled) {
-    extra += '<p class="hint">未安装 gh。安装后再试。不会自动改成合并到 base。</p>';
+  if (model.dialogChoice === "link_existing" && model.prUrl) {
+    extra += '<dl class="facts"><dt>已有请求</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd></dl>';
   }
-  if (locked) {
-    extra += '<div class="env"><div class="env-row"><span>已有请求</span><span>打开 · 草稿</span></div><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a><p class="hint">不再创建新的 Pull Request。目标和草稿以这条已有请求为准。</p></div>';
-  }
-  if (showDetails) {
-    extra += '<div class="field"><div class="block-label">PR 目标</div><div class="choices">'
-      + choice("targetKind", "issue_base", "Issue 的 base 分支（" + model.issueBase + "）", model.targetKind === "issue_base", false)
-      + choice("targetKind", "repo_default", "仓库默认分支（" + model.repoDefault + "）", model.targetKind === "repo_default", false)
-      + '</div></div><label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</label>';
-  }
-  const primaryDisabled = cDisabled && model.dialogChoice !== "merge_to_base";
+  if (showDetails) extra += targetChoices() + draftControl(false);
   let primary = "创建 PR 并完成";
   if (model.dialogChoice === "merge_to_base") primary = "合并并完成";
   else if (model.dialogChoice === "link_existing") primary = "关联已有 PR 并完成";
-  else if (host === "gitlab") primary = "创建 MR 并完成";
+  else if (effectiveHost() === "gitlab") primary = "创建 MR 并完成";
   return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="closeout-title">'
     + '<h3 id="closeout-title">选择完成方式</h3>'
-    + '<p class="desc">未提交改动已经处理完。选择如何收尾。取消会中止完成。</p>'
     + '<dl class="facts"><dt>工作分支</dt><dd><code>' + esc(model.workBranch) + '</code></dd><dt>base 分支</dt><dd><code>' + esc(model.issueBase) + '</code></dd></dl>'
     + '<div class="choices">'
-    + choice("dialogChoice", "merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base", false, "合入 " + model.issueBase + " 后删除 worktree 与工作分支。不 push，不开 PR。")
-    + choice("dialogChoice", cValue, cLabel, cChecked, cDisabled, cHint)
-    + '</div>' + extra
-    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button(primary, "btn-primary", "primary", primaryDisabled) + '</div>'
+    + choice("dialogChoice", "merge_to_base", "合并到 base 分支", model.dialogChoice === "merge_to_base", false)
+    + choice("dialogChoice", cValue, cLabel, model.dialogChoice === cValue, false)
+    + '</div>' + (showDetails ? cliStatusLine() : "") + extra
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button(primary, "btn-primary", "primary", false) + '</div>'
     + '</div></div>';
 }
 
@@ -1064,7 +1041,7 @@ function createDialog() {
   const sameBranch = model.workBranch === model.branchTarget;
   const blocked = disabled || sameBranch;
   return '<div class="overlay"><form class="dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">'
-    + '<h3 id="create-title">创建 Pull Request</h3>'
+    + '<div class="dialog-title"><h3 id="create-title">创建 Pull Request</h3>' + (blocked ? infoTip("无法创建", "当前分支就是仓库默认分支，没有对比分支。") : "") + '</div>'
     + '<div class="field"><label>源分支</label><input class="control" readonly value="' + esc(model.workBranch) + '" /></div>'
     + '<div class="field"><label for="pr-target">目标分支</label><select class="select" id="pr-target" data-field="branchTarget"' + (disabled ? " disabled" : "") + '>'
     + option("main", "main", model.branchTarget === "main")
@@ -1072,8 +1049,7 @@ function createDialog() {
     + '</select></div>'
     + '<div class="field"><label for="pr-title">标题</label><input class="control" id="pr-title" data-field="title" value="' + esc(model.title) + '"' + (disabled ? " disabled" : "") + ' /></div>'
     + '<div class="field"><label for="pr-body">正文</label><textarea class="area" id="pr-body" data-field="body" rows="4"' + (disabled ? " disabled" : "") + '>' + esc(model.body) + '</textarea></div>'
-    + '<label class="checkline"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + (disabled ? " disabled" : "") + ' />创建为草稿</label>'
-    + (blocked ? '<p class="hint">当前分支就是仓库默认分支，没有对比分支。</p>' : '<p class="hint">创建后不修改 Issue 状态，也不在本地合并。</p>')
+    + draftControl(disabled)
     + '<div class="actions">' + button("取消", "btn-secondary", "cancel", false) + button("创建 Pull Request", "btn-primary", "primary", blocked) + '</div>'
     + '</form></div>';
 }
@@ -1082,7 +1058,6 @@ function resultBlock() {
   return '<section class="result"><h3>完成信息</h3><dl class="meta">'
     + '<dt>结果</dt><dd>已创建草稿 Pull Request</dd>'
     + '<dt>链接</dt><dd><a class="linkish" href="' + esc(model.prUrl) + '">' + esc(model.prUrl) + '</a></dd>'
-    + '<dt>选项</dt><dd>提交 Pull Request</dd>'
     + '</dl></section>';
 }
 
@@ -1105,7 +1080,6 @@ function renderState() {
   const lines = [
     "场景: " + index + " " + scene.title,
     "宿主: " + hostPhrase(effectiveHost()),
-    "覆盖: " + model.hostOverride,
     "默认动作: " + defaultActionPhrase(),
     "弹窗选项: " + dialogPhrase(),
     "工作分支: " + model.workBranch,
@@ -1168,7 +1142,28 @@ function onStageInput(event) {
   renderState();
 }
 
+function closeTips(except) {
+  document.getElementById("stage").querySelectorAll(".tip.is-open").forEach((node) => {
+    if (node === except) return;
+    node.classList.remove("is-open");
+    const infoButton = node.querySelector(".info");
+    if (infoButton) infoButton.setAttribute("aria-expanded", "false");
+  });
+}
+
 function onStageClick(event) {
+  const info = event.target.closest(".info");
+  if (info) {
+    event.preventDefault();
+    event.stopPropagation();
+    const tip = info.closest(".tip");
+    const willOpen = !tip.classList.contains("is-open");
+    closeTips(willOpen ? tip : null);
+    tip.classList.toggle("is-open", willOpen);
+    info.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    return;
+  }
+  if (!event.target.closest(".tip")) closeTips(null);
   const link = event.target.closest("a");
   if (link) {
     event.preventDefault();
