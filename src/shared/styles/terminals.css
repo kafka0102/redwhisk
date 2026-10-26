@@ -395,14 +395,21 @@
 
 /* TUI Issue 完成归档：Markdown 富文本回看（对齐 JSON AgentMarkdown） */
 .agent-tui-archive-markdown {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  overflow: auto;
-  padding: 12px 16px;
+  overflow: hidden;
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.agent-tui-archive-markdown__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
 }
 
 .agent-tui-archive-markdown__status {

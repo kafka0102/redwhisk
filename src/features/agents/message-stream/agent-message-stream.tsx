@@ -10,10 +10,9 @@
 // - `AgentMessageStreamView`：纯渲染，接收外部 `state`，供 `AgentSessionView` 父组件
 //   统一订阅后下传，避免双订阅。
 
-import { ArrowDown, ArrowUp, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import {
   memo,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -33,6 +32,8 @@ import {
   readMessageStreamScrollOffset,
   writeMessageStreamScrollOffset,
 } from "./message-stream-scroll-offset";
+import { PIN_TO_BOTTOM_THRESHOLD_PX, useScrollNav } from "./scroll-nav";
+import { ScrollNavButton } from "./scroll-nav-button";
 import type {
   MessageStreamEntry,
   MessageStreamState,
@@ -45,18 +46,6 @@ interface AgentMessageStreamProps {
   /** 本地文件链接能力；独立场景（无侧栏）不传，本地路径只显示文本。 */
   sessionFileLinks?: SessionFileLinks;
 }
-
-/** 距底部阈值（px），小于此值视为"贴底"，新内容自动跟随滚动。 */
-const PIN_TO_BOTTOM_THRESHOLD_PX = 80;
-
-/** 滚动停稳判定（ms）：最后一次 scroll 事件后超过该时长视为静态。 */
-const SCROLL_IDLE_TIMEOUT_MS = 150;
-
-/** 长内容跳转按钮的方向；hidden 时不渲染按钮。 */
-type ScrollNavTarget = "hidden" | "to-bottom" | "to-top";
-
-/** 最近一次滚动方向；null 表示已停稳（静态）。 */
-type ScrollDirection = "down" | "up" | null;
 
 /** 自包含变体：内部订阅事件流，用于独立场景与测试。 */
 export function AgentMessageStream({
@@ -125,11 +114,11 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const { messages, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isPinnedRef = useRef(true);
-  const [navTarget, setNavTarget] = useState<ScrollNavTarget>("hidden");
-  // 滚动中的方向判定：上一次 scrollTop（null 表示还没有采样）与最近一次滚动方向。
-  const lastScrollTopRef = useRef<number | null>(null);
-  const scrollDirectionRef = useRef<ScrollDirection>(null);
-  const scrollIdleTimerRef = useRef<number | null>(null);
+  const {
+    navTarget,
+    measureNav,
+    handleScroll: trackScrollDirection,
+  } = useScrollNav(scrollRef);
   // 只读（Issue 已完成）session 重挂载时的滚动位置恢复目标。
   // Agents Activity 切菜单会整体卸载，切回时消息流 DOM 重建、位置归零；不做恢复会
   // 触发贴底跟随跳到底部，破坏用户来回切窗口复制文本的位置。
@@ -252,43 +241,6 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     }
     return installSelectionDragClamp({ element: node });
   }, []);
-  // 计算长内容跳转按钮方向：内容超过两屏时始终显示。
-  // 滚动中按方向判定（下滚向下、上滚向上），停稳后按位置判定
-  // （未贴底显示向下，便于快速到底；贴底显示向上）。
-  const measureNav = useCallback(() => {
-    const node = scrollRef.current;
-    if (!node) {
-      return;
-    }
-    const { scrollHeight, clientHeight, scrollTop } = node;
-    const longEnough = scrollHeight > clientHeight * 2;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const direction = scrollDirectionRef.current;
-    let next: ScrollNavTarget = "hidden";
-    if (longEnough) {
-      if (direction === "down") {
-        next = "to-bottom";
-      } else if (direction === "up") {
-        next = "to-top";
-      } else {
-        next =
-          distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX
-            ? "to-top"
-            : "to-bottom";
-      }
-    }
-    setNavTarget((prev) => (prev === next ? prev : next));
-  }, []);
-  // 滚动停稳后（SCROLL_IDLE_TIMEOUT_MS 内无新的 scroll 事件）退出方向判定，
-  // 交回位置判定，避免箭头长期停留在方向结果上。
-  useEffect(() => {
-    return () => {
-      if (scrollIdleTimerRef.current !== null) {
-        window.clearTimeout(scrollIdleTimerRef.current);
-        scrollIdleTimerRef.current = null;
-      }
-    };
-  }, []);
   // 内容变化（消息条目 / 思考占位）后等 DOM 提交再重测，覆盖流式增长场景。
   useEffect(() => {
     const id = requestAnimationFrame(measureNav);
@@ -315,24 +267,10 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     ) {
       writeMessageStreamScrollOffset(sessionId, node.scrollTop);
     }
-    // 位置真正变化时记录方向并重置停稳计时；同位置的重复事件不改变方向。
-    const previousTop = lastScrollTopRef.current;
-    lastScrollTopRef.current = node.scrollTop;
-    if (previousTop !== null && node.scrollTop !== previousTop) {
-      scrollDirectionRef.current = node.scrollTop > previousTop ? "down" : "up";
-      if (scrollIdleTimerRef.current !== null) {
-        window.clearTimeout(scrollIdleTimerRef.current);
-      }
-      scrollIdleTimerRef.current = window.setTimeout(() => {
-        scrollIdleTimerRef.current = null;
-        scrollDirectionRef.current = null;
-        measureNav();
-      }, SCROLL_IDLE_TIMEOUT_MS);
-    }
     const distanceFromBottom =
       node.scrollHeight - node.scrollTop - node.clientHeight;
     isPinnedRef.current = distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX;
-    measureNav();
+    trackScrollDirection(node);
   }
 
   return (
@@ -412,37 +350,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
           </div>
         ) : null}
       </div>
-      {navTarget !== "hidden" ? (
-        <button
-          type="button"
-          className="agents-message-stream__nav"
-          aria-label={
-            navTarget === "to-bottom"
-              ? messages.agentsFeature.scrollToBottom
-              : messages.agentsFeature.scrollToTop
-          }
-          onClick={() => {
-            const node = scrollRef.current;
-            if (!node) {
-              return;
-            }
-            const toTop = navTarget === "to-top";
-            const reduceMotion = window.matchMedia(
-              "(prefers-reduced-motion: reduce)",
-            ).matches;
-            node.scrollTo({
-              top: toTop ? 0 : node.scrollHeight,
-              behavior: reduceMotion ? "auto" : "smooth",
-            });
-          }}
-        >
-          {navTarget === "to-bottom" ? (
-            <ArrowDown aria-hidden="true" size={16} strokeWidth={2} />
-          ) : (
-            <ArrowUp aria-hidden="true" size={16} strokeWidth={2} />
-          )}
-        </button>
-      ) : null}
+      <ScrollNavButton navTarget={navTarget} scrollRef={scrollRef} />
     </div>
   );
 });

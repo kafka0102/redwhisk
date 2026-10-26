@@ -509,6 +509,107 @@ describe("AgentTuiArchiveMarkdownView", () => {
   });
 });
 
+describe("AgentTuiArchiveMarkdownView 长内容跳转按钮", () => {
+  beforeEach(() => {
+    commandMocks.readAgentSessionTerminal.mockReset();
+  });
+
+  function mockScrollMetrics(
+    element: HTMLElement,
+    metrics: { clientHeight: number; scrollHeight: number },
+  ) {
+    Object.defineProperty(element, "clientHeight", {
+      configurable: true,
+      get: () => metrics.clientHeight,
+    });
+    Object.defineProperty(element, "scrollHeight", {
+      configurable: true,
+      get: () => metrics.scrollHeight,
+    });
+  }
+
+  async function renderArchive() {
+    commandMocks.readAgentSessionTerminal.mockResolvedValue({
+      snapshot: [
+        timelineLine({
+          type: "user_message",
+          text: "问题",
+          messageId: "u1",
+        }),
+        timelineLine({
+          type: "assistant_message",
+          text: "结论",
+          messageId: "a1",
+        }),
+      ].join("\n"),
+      isActive: false,
+    });
+
+    const view = render(
+      <AgentTuiArchiveMarkdownView projectId={1} sessionId={9} />,
+    );
+    await screen.findAllByRole("article");
+    const scroll = view.container.querySelector<HTMLElement>(
+      ".agent-tui-archive-markdown__scroll",
+    );
+    if (!scroll) {
+      throw new Error("missing archive scroll container");
+    }
+    mockScrollMetrics(scroll, { clientHeight: 100, scrollHeight: 500 });
+    return { ...view, scroll };
+  }
+
+  it("贴底时显示回到顶部按钮，点击后滚到顶部", async () => {
+    const { scroll } = await renderArchive();
+    scroll.scrollTop = 400;
+    fireEvent.scroll(scroll);
+
+    const button = await screen.findByRole("button", {
+      name: "Scroll to top",
+    });
+    const scrollTo = vi.fn();
+    scroll.scrollTo = scrollTo;
+    fireEvent.click(button);
+
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+  });
+
+  it("向上滚动时即使未贴底也显示回到顶部按钮", async () => {
+    const { scroll } = await renderArchive();
+    scroll.scrollTop = 400;
+    fireEvent.scroll(scroll);
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+
+    expect(
+      screen.getByRole("button", { name: "Scroll to top" }),
+    ).toBeInTheDocument();
+  });
+
+  it("贴顶时显示回到底部按钮", async () => {
+    const { scroll } = await renderArchive();
+    scroll.scrollTop = 0;
+    fireEvent.scroll(scroll);
+
+    expect(
+      await screen.findByRole("button", { name: "Scroll to bottom" }),
+    ).toBeInTheDocument();
+  });
+
+  it("内容不足两屏时不显示跳转按钮", async () => {
+    const { scroll } = await renderArchive();
+    mockScrollMetrics(scroll, { clientHeight: 100, scrollHeight: 150 });
+    fireEvent.scroll(scroll);
+
+    expect(
+      screen.queryByRole("button", { name: "Scroll to bottom" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Scroll to top" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 function timelineLine(item: Record<string, unknown>): string {
   return JSON.stringify({
     event: { type: "timeline", item },

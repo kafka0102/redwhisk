@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type UIEvent } from "react";
 
 import { AgentMarkdown } from "../message-stream/agent-markdown";
 import { readAgentSessionTerminal } from "../agent-session-commands";
@@ -10,6 +10,8 @@ import {
   TUI_ARCHIVE_READ_MAX_BYTES,
   type JsonArchiveReviewCard,
 } from "./agent-tui-archive-path";
+import { useScrollNav } from "../message-stream/scroll-nav";
+import { ScrollNavButton } from "../message-stream/scroll-nav-button";
 
 interface AgentTuiArchiveMarkdownViewProps {
   projectId: number;
@@ -127,6 +129,8 @@ export function AgentTuiArchiveMarkdownView({
   const [trackedKey, setTrackedKey] = useState(
     () => `${projectId}:${sessionId}`,
   );
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const { navTarget, measureNav, handleScroll } = useScrollNav(scrollRef);
   const sessionKey = `${projectId}:${sessionId}`;
   // session 切换时在 render 阶段同步重置（避免 effect 内同步 setState）。
   if (trackedKey !== sessionKey) {
@@ -179,30 +183,47 @@ export function AgentTuiArchiveMarkdownView({
     };
   }, [messages.agentsFeature.tuiArchiveLoadFailed, projectId, sessionId]);
 
+  // 归档内容异步填充，等 DOM 提交后再测量按钮方向；随状态变化重测。
+  useEffect(() => {
+    const id = requestAnimationFrame(measureNav);
+    return () => cancelAnimationFrame(id);
+  }, [measureNav, state]);
+
+  function handleScrollEvent(event: UIEvent<HTMLDivElement>) {
+    handleScroll(event.currentTarget);
+  }
+
   return (
     <div
       className="agent-tui-archive-markdown"
       aria-label={messages.agentsFeature.tuiArchiveView}
     >
-      {state.kind === "loading" ? (
-        <p className="agent-tui-archive-markdown__status" role="status">
-          {messages.agentsFeature.tuiArchiveLoading}
-        </p>
-      ) : null}
-      {state.kind === "empty" ? (
-        <p className="agent-tui-archive-markdown__status" role="status">
-          {messages.agentsFeature.tuiArchiveEmpty}
-        </p>
-      ) : null}
-      {state.kind === "error" ? (
-        <p className="agent-tui-archive-markdown__status" role="alert">
-          {state.message}
-        </p>
-      ) : null}
-      {state.kind === "cards" ? <ReviewCards cards={state.cards} /> : null}
-      {state.kind === "ready" ? (
-        <ReadyArchive markdown={state.markdown} />
-      ) : null}
+      <div
+        ref={scrollRef}
+        className="agent-tui-archive-markdown__scroll"
+        onScroll={handleScrollEvent}
+      >
+        {state.kind === "loading" ? (
+          <p className="agent-tui-archive-markdown__status" role="status">
+            {messages.agentsFeature.tuiArchiveLoading}
+          </p>
+        ) : null}
+        {state.kind === "empty" ? (
+          <p className="agent-tui-archive-markdown__status" role="status">
+            {messages.agentsFeature.tuiArchiveEmpty}
+          </p>
+        ) : null}
+        {state.kind === "error" ? (
+          <p className="agent-tui-archive-markdown__status" role="alert">
+            {state.message}
+          </p>
+        ) : null}
+        {state.kind === "cards" ? <ReviewCards cards={state.cards} /> : null}
+        {state.kind === "ready" ? (
+          <ReadyArchive markdown={state.markdown} />
+        ) : null}
+      </div>
+      <ScrollNavButton navTarget={navTarget} scrollRef={scrollRef} />
     </div>
   );
 }
