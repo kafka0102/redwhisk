@@ -9,7 +9,7 @@ import {
 } from "../../../components/ui";
 import { SessionFileViewer } from "./session-file-viewer";
 import { useSessionFileReadingPositionCleanup } from "./use-session-file-reading-position-cleanup";
-import { DiffViewer } from "../../../shared/workspace/diff-viewer";
+import { SessionChangeDiff } from "./session-change-diff";
 import { useI18n } from "../../../shared/i18n/i18n";
 import type {
   AgentSessionStatus,
@@ -234,7 +234,13 @@ export function SessionWorkspaceTabs({
                 state={changeTab.multiDiff}
               />
             ) : (
-              <DiffViewer tab={changeTab} />
+              <SessionChangeDiff
+                key={`${changeTab.commitHash ?? "worktree"}:${changeTab.filePath}`}
+                projectId={projectId}
+                sessionId={sessionId}
+                tab={changeTab}
+                workspacePath={workspacePath}
+              />
             )}
           </div>
         ) : null}

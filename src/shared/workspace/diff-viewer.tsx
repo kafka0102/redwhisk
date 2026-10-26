@@ -1,6 +1,6 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useI18n } from "../i18n/i18n";
 import { useMonacoEditorReady } from "../use-monaco-editor-ready";
@@ -40,6 +40,13 @@ interface DiffViewerProps {
    * - `content`：按行数 × 字号推算像素高度（multi-diff 内容撑开）
    */
   heightMode?: "fill" | "content";
+  /**
+   * 路径行右侧动作。不传时没有 Markdown 预览和浏览器按钮。
+   * 图片 / PDF 与文本 diff 都会放在状态条最右侧。
+   */
+  statusActions?: ReactNode;
+  /** 替换文本 diff 编辑器，例如变更后 Markdown 预览。不影响图片 / PDF。 */
+  bodyOverride?: ReactNode;
 }
 
 function SvgDiffTextToggle({
@@ -84,6 +91,8 @@ export function DiffViewer({
   tab,
   showStatusBar = true,
   heightMode = "fill",
+  statusActions,
+  bodyOverride,
 }: DiffViewerProps) {
   const { messages, t, contentFontSize, theme } = useI18n();
   const isMonacoReady = useMonacoEditorReady();
@@ -187,6 +196,7 @@ export function DiffViewer({
                 onToggle={(filePath, mode) => setSvgView({ filePath, mode })}
               />
             ) : null}
+            {statusActions}
           </div>
         ) : null}
         <div
@@ -213,7 +223,7 @@ export function DiffViewer({
     );
   }
 
-  if (!isMonacoReady) {
+  if (!isMonacoReady && bodyOverride == null) {
     return (
       <p className="session-viewer-state">
         {messages.agentsFeature.loadingDiff}
@@ -258,31 +268,35 @@ export function DiffViewer({
               onToggle={(filePath, mode) => setSvgView({ filePath, mode })}
             />
           ) : null}
+          {statusActions}
         </div>
       ) : null}
-      <DiffEditor
-        height={editorHeight}
-        theme={theme === "dark" ? "vs-dark" : "light"}
-        language={diff.language ?? undefined}
-        modified={diff.modifiedContent}
-        original={diff.originalContent}
-        options={{
-          fontSize: contentFontSize,
-          minimap: { enabled: false },
-          readOnly: true,
-          renderSideBySide: diff.kind !== "added" && diff.kind !== "untracked",
-          scrollBeyondLastLine: false,
-          ...(heightMode === "content"
-            ? {
-                scrollbar: {
-                  vertical: "hidden" as const,
-                  handleMouseWheel: false,
-                },
-                overviewRulerLanes: 0,
-              }
-            : {}),
-        }}
-      />
+      {bodyOverride ?? (
+        <DiffEditor
+          height={editorHeight}
+          theme={theme === "dark" ? "vs-dark" : "light"}
+          language={diff.language ?? undefined}
+          modified={diff.modifiedContent}
+          original={diff.originalContent}
+          options={{
+            fontSize: contentFontSize,
+            minimap: { enabled: false },
+            readOnly: true,
+            renderSideBySide:
+              diff.kind !== "added" && diff.kind !== "untracked",
+            scrollBeyondLastLine: false,
+            ...(heightMode === "content"
+              ? {
+                  scrollbar: {
+                    vertical: "hidden" as const,
+                    handleMouseWheel: false,
+                  },
+                  overviewRulerLanes: 0,
+                }
+              : {}),
+          }}
+        />
+      )}
     </section>
   );
 }
