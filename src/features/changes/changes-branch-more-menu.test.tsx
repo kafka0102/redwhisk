@@ -10,6 +10,7 @@ import {
   pushProjectWorktree,
 } from "../../shared/workspace/workspace-commands";
 import { listAgentSessions } from "../agents/agent-session-commands";
+import { inspectProjectForge } from "../project/project-forge-commands";
 import { ChangesBranchMoreMenu } from "./changes-branch-more-menu";
 
 vi.mock("./checkout-branch-dialog", () => ({
@@ -37,6 +38,10 @@ vi.mock("../agents/agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
 }));
 
+vi.mock("../project/project-forge-commands", () => ({
+  inspectProjectForge: vi.fn(),
+}));
+
 vi.mock("../../shared/toast", () => ({
   toast: {
     success: vi.fn(),
@@ -48,6 +53,7 @@ const pullMock = vi.mocked(pullProjectWorktree);
 const pushMock = vi.mocked(pushProjectWorktree);
 const deleteMock = vi.mocked(deleteCodeWorkspaceWorktree);
 const listSessionsMock = vi.mocked(listAgentSessions);
+const inspectForgeMock = vi.mocked(inspectProjectForge);
 const toastSuccessMock = vi.mocked(toast.success);
 
 const projectRoot = {
@@ -92,6 +98,17 @@ describe("ChangesBranchMoreMenu", () => {
     deleteMock.mockResolvedValue(undefined);
     listSessionsMock.mockReset();
     listSessionsMock.mockResolvedValue({ sessions: [] });
+    inspectForgeMock.mockReset();
+    inspectForgeMock.mockResolvedValue({
+      host: "none",
+      remoteLabel: null,
+      cliInstalled: false,
+      cliAuthenticated: false,
+      repoDefaultBranch: "main",
+      completionAction: "merge_to_base",
+      prTarget: "issue_base",
+      prDraft: false,
+    });
     toastSuccessMock.mockReset();
   });
 
@@ -128,6 +145,26 @@ describe("ChangesBranchMoreMenu", () => {
     const menu = await screen.findByRole("menu");
     await user.click(within(menu).getByText("创建分支"));
     expect(await screen.findByRole("dialog")).toHaveTextContent("创建分支弹窗");
+  });
+
+  it("widens the project root menu to keep create merge request on one line", async () => {
+    inspectForgeMock.mockResolvedValueOnce({
+      host: "gitlab",
+      remoteLabel: "origin",
+      cliInstalled: true,
+      cliAuthenticated: true,
+      repoDefaultBranch: "main",
+      completionAction: "open_pull_request",
+      prTarget: "issue_base",
+      prDraft: false,
+    });
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = await screen.findByRole("menu");
+    expect(await within(menu).findByText("创建 Merge Request")).toBeVisible();
+    expect(menu).toHaveClass("min-w-48", "whitespace-nowrap");
   });
 
   it("does not show checkout on linked worktree", async () => {

@@ -213,7 +213,7 @@ export function ChangesBranchMoreMenu({
         >
           <Ellipsis aria-hidden="true" size={14} strokeWidth={1.8} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="min-w-48 whitespace-nowrap">
           {isProjectRoot ? (
             <>
               <DropdownMenuItem
