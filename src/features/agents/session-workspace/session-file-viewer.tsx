@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { useAlertDialog } from "../../../components/ui";
+import { CodeMarkdownPreview } from "../../code/code-markdown-preview";
 import { useI18n } from "../../../shared/i18n/i18n";
 import { useMonacoEditorReady } from "../../../shared/use-monaco-editor-ready";
 import { createEditorReadingLoadKey } from "../../../shared/workspace/editor-reading-position";
@@ -46,6 +47,10 @@ export function SessionFileViewer({
     filePath: string;
     mode: SvgPreviewView;
   } | null>(null);
+  const [markdownView, setMarkdownView] = useState<{
+    filePath: string;
+    mode: "source" | "preview";
+  } | null>(null);
   const openInBrowserRoot = hasWorkspaceRoot(workspacePath)
     ? workspacePath
     : null;
@@ -54,8 +59,13 @@ export function SessionFileViewer({
   if (svgView?.filePath !== tab.filePath) {
     setSvgView({ filePath: tab.filePath, mode: "image" });
   }
+  if (markdownView?.filePath !== tab.filePath) {
+    setMarkdownView({ filePath: tab.filePath, mode: "source" });
+  }
   const svgViewMode =
     svgView?.filePath === tab.filePath ? svgView.mode : "image";
+  const markdownMode =
+    markdownView?.filePath === tab.filePath ? markdownView.mode : "source";
   const isMonacoReady = useMonacoEditorReady();
   const { handleEditorMount } = useEditorReadingPosition({
     readingKey: sessionFileReadingPositionKey(
@@ -123,6 +133,7 @@ export function SessionFileViewer({
     );
   }
 
+  const showMarkdownPreview = tab.content.language === "markdown";
   let body: ReactNode;
   if (showVisual && previewKind) {
     body = (
@@ -133,6 +144,15 @@ export function SessionFileViewer({
         label={tab.fileName}
         mimeType={visualPreviewMimeType(tab.content.filePath, previewKind)}
       />
+    );
+  } else if (showMarkdownPreview && markdownMode === "preview") {
+    body = (
+      <div
+        className="code-workspace__markdown-preview"
+        style={{ fontSize: contentFontSize }}
+      >
+        <CodeMarkdownPreview content={tab.content.content} theme={theme} />
+      </div>
     );
   } else if (!isMonacoReady) {
     body = (
@@ -208,6 +228,27 @@ export function SessionFileViewer({
             }}
           >
             <SessionBrowserIcon />
+          </button>
+        ) : null}
+        {showMarkdownPreview ? (
+          <button
+            type="button"
+            className="code-workspace__markdown-toggle session-file-viewer__browser-toggle"
+            aria-label={t("agentsFeature.toggleMarkdownPreview")}
+            aria-pressed={markdownMode === "preview"}
+            title={t("agentsFeature.toggleMarkdownPreview")}
+            onClick={() =>
+              setMarkdownView({
+                filePath: tab.filePath,
+                mode: markdownMode === "preview" ? "source" : "preview",
+              })
+            }
+          >
+            {markdownMode === "preview" ? (
+              <EyeOff aria-hidden="true" size={14} strokeWidth={1.9} />
+            ) : (
+              <Eye aria-hidden="true" size={14} strokeWidth={1.9} />
+            )}
           </button>
         ) : null}
       </div>

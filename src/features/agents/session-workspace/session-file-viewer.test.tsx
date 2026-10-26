@@ -6,6 +6,19 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: (...args: unknown[]) => openPath(...args),
 }));
 
+const mermaidMock = vi.hoisted(() => {
+  return {
+    initialize: vi.fn(),
+    render: vi.fn(async (_id: string, _source: string) => ({
+      svg: '<svg data-testid="mermaid-svg"><text>diagram</text></svg>',
+    })),
+  };
+});
+
+vi.mock("mermaid", () => ({
+  default: mermaidMock,
+}));
+
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
@@ -179,6 +192,13 @@ describe("SessionFileViewer", () => {
     resetEditorReadingPositionsForTests();
     monacoEditorApi.reset();
     openPath.mockReset();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.render.mockReset();
+    mermaidMock.render.mockImplementation(
+      async (_id: string, _source: string) => ({
+        svg: '<svg data-testid="mermaid-svg"><text>diagram</text></svg>',
+      }),
+    );
   });
 
   it("renders the editor with the light Monaco theme by default", () => {
@@ -593,6 +613,255 @@ describe("SessionFileViewer", () => {
       await screen.findByText("Could not open this file in the browser."),
     ).toBeInTheDocument();
   });
+
+  it("toggles markdown preview from the right side of the path row", async () => {
+    const user = userEvent.setup();
+    render(markdownViewerElement());
+
+    const pathText = screen.getByText("docs/readme.md");
+    const pathRow = pathText.parentElement;
+    expect(pathRow).not.toBeNull();
+    const controls = [...pathRow!.querySelectorAll("button, a")];
+    const toggle = screen.getByRole("button", { name: "Markdown preview" });
+    expect(controls[controls.length - 1]).toBe(toggle);
+    expect(toggle).toHaveAttribute("aria-label", "Markdown preview");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Hello" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Hello" })).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-editor")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByRole("heading", { name: "Hello" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("names the markdown preview toggle in Chinese", () => {
+    render(markdownViewerElement({}, "zh"));
+
+    expect(
+      screen.getByRole("button", { name: "Markdown 预览" }),
+    ).toHaveAttribute("aria-label", "Markdown 预览");
+  });
+
+  it.each([
+    ["mdx", "note.mdx"],
+    ["html", "page.html"],
+    ["", "notes.txt"],
+    [null, "notes.txt"],
+  ] as const)(
+    "does not show Markdown preview when language is %s",
+    (language, fileName) => {
+      render(
+        markdownViewerElement({
+          fileName,
+          filePath: fileName,
+          content: {
+            ...fileTab.content!,
+            content: "# Hello\n",
+            filePath: fileName,
+            language,
+          },
+        }),
+      );
+
+      expect(screen.getByText(fileName)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Markdown preview" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps only the browser action for html and htm files", () => {
+    const { rerender } = render(htmlViewerElement());
+
+    expect(
+      screen.getByRole("button", { name: "Open in browser" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+
+    rerender(htmlViewerElement({ fileName: "page.HTM", filePath: "page.HTM" }));
+    expect(
+      screen.getByRole("button", { name: "Open in browser" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows neither preview nor browser action for page.vue", () => {
+    render(
+      htmlViewerElement({
+        fileName: "page.vue",
+        filePath: "page.vue",
+        content: {
+          ...fileTab.content!,
+          content: "<template></template>\n",
+          filePath: "page.vue",
+          language: "html",
+        },
+      }),
+    );
+
+    expect(screen.getByText("page.vue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides both path actions when a markdown file is unavailable", () => {
+    const unavailableContent = {
+      ...fileTab.content!,
+      content: "# Hello\n",
+      filePath: "docs/readme.md",
+      language: "markdown" as const,
+    };
+    const { rerender } = render(markdownViewerElement({ isLoading: true }));
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(markdownViewerElement({ errorMessage: "read failed" }));
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(markdownViewerElement({ content: null }));
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      markdownViewerElement({
+        content: { ...unavailableContent, isTooLarge: true },
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      markdownViewerElement({
+        content: { ...unavailableContent, isBinary: true },
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Markdown preview" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open in browser" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("returns to source when the open markdown file changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      markdownViewerElement({
+        fileName: "a.md",
+        filePath: "a.md",
+        content: {
+          ...fileTab.content!,
+          content: "# Hello\n",
+          filePath: "a.md",
+          language: "markdown",
+        },
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+    expect(screen.getByRole("heading", { name: "Hello" })).toBeInTheDocument();
+
+    rerender(
+      markdownViewerElement({
+        fileName: "b.md",
+        filePath: "b.md",
+        content: {
+          ...fileTab.content!,
+          content: "# Other\n",
+          filePath: "b.md",
+          language: "markdown",
+        },
+      }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Markdown preview" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByRole("heading", { name: "Hello" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("returns to source after the markdown viewer is closed and opened again", async () => {
+    const user = userEvent.setup();
+    const view = render(markdownViewerElement());
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+    expect(screen.getByRole("heading", { name: "Hello" })).toBeInTheDocument();
+
+    view.unmount();
+    render(markdownViewerElement());
+
+    expect(
+      screen.getByRole("button", { name: "Markdown preview" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByRole("heading", { name: "Hello" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("renders a mermaid fence with the code workspace preview", async () => {
+    const user = userEvent.setup();
+    render(
+      markdownViewerElement({
+        content: {
+          ...fileTab.content!,
+          content: "```mermaid\nflowchart TD\n  A --> B\n```\n",
+          filePath: "docs/readme.md",
+          language: "markdown",
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+
+    expect(
+      await screen.findByTestId("code-mermaid-diagram"),
+    ).toBeInTheDocument();
+  });
 });
 
 function htmlViewerElement(
@@ -613,6 +882,34 @@ function htmlViewerElement(
             content: "<!doctype html><html></html>\n",
             filePath: "docs/index.html",
             language: "html",
+          },
+          isLoading: false,
+          errorMessage: null,
+          ...tabOverrides,
+        }}
+      />
+    </I18nProvider>
+  );
+}
+
+function markdownViewerElement(
+  tabOverrides: Partial<SessionWorkspaceFileTab> = {},
+  locale: "en" | "zh" = "en",
+) {
+  return (
+    <I18nProvider initialLocale={locale}>
+      <SessionFileViewer
+        projectId={projectId}
+        sessionId={sessionId}
+        workspacePath="/repo"
+        tab={{
+          fileName: "readme.md",
+          filePath: "docs/readme.md",
+          content: {
+            ...fileTab.content!,
+            content: "# Hello\n",
+            filePath: "docs/readme.md",
+            language: "markdown",
           },
           isLoading: false,
           errorMessage: null,
