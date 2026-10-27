@@ -267,6 +267,8 @@
   background: transparent;
   color: var(--color-text);
   text-align: left;
+  /* 与代码树一致：右键打开菜单时不在文件名上留下文本选区。 */
+  user-select: none;
 }
 
 .session-change-row:hover,
@@ -512,6 +514,8 @@
   background: transparent;
   color: var(--color-text);
   text-align: left;
+  /* 与代码树一致：右键打开菜单时不在文件名上留下文本选区。 */
+  user-select: none;
 }
 
 .session-commit-file:hover,
