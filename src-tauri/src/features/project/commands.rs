@@ -155,13 +155,19 @@ pub fn update_project_settings(
 }
 
 #[tauri::command]
-pub fn inspect_project_forge(
+pub async fn inspect_project_forge(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     project_id: i64,
 ) -> Result<crate::types::project::ProjectForgeInspection, CommandError> {
+    // 变更页和设置页挂载就会调用。gh/glab auth status 打网络且没有超时，
+    // 同步 command 会占住主线程，窗口转圈、页面出不来。
     let data_dir = prepare_project_data_dir(&app, &state)?;
-    ProjectService::inspect_forge_in_data_dir(data_dir, project_id)
+    tauri::async_runtime::spawn_blocking(move || {
+        ProjectService::inspect_forge_in_data_dir(data_dir, project_id)
+    })
+    .await
+    .map_err(project_join_error)?
 }
 
 #[tauri::command]
