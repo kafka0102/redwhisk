@@ -118,6 +118,30 @@ export function ChangesBranchMoreMenu({
     }
   }
 
+  async function handleCreateRequest(): Promise<void> {
+    if (isBusy || forgeHost === "none") {
+      return;
+    }
+    try {
+      const inspection = await inspectProjectForge(projectId);
+      if (!inspection.cliInstalled) {
+        showAlert({
+          type: "error",
+          message: t("completionCloseout.cliNotInstalled", {
+            cli: forgeHost === "gitlab" ? "glab" : "gh",
+          }),
+        });
+        return;
+      }
+      setCreateRequestOpen(true);
+    } catch (error) {
+      showAlert({
+        type: "error",
+        message: getCommandErrorMessage(error, t),
+      });
+    }
+  }
+
   function handlePull(): void {
     void runRemoteAction(
       "pull",
@@ -257,7 +281,7 @@ export function ChangesBranchMoreMenu({
                   disabled={isBusy}
                   onClick={(event) => {
                     event.preventDefault();
-                    setCreateRequestOpen(true);
+                    void handleCreateRequest();
                   }}
                 >
                   {requestLabel}

@@ -28,6 +28,11 @@ vi.mock("./merge-branch-dialog", () => ({
     open ? <div role="dialog">合并分支弹窗</div> : null,
 }));
 
+vi.mock("./create-change-request-dialog", () => ({
+  CreateChangeRequestDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog">创建请求弹窗</div> : null,
+}));
+
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   pullProjectWorktree: vi.fn(),
   pushProjectWorktree: vi.fn(),
@@ -165,6 +170,47 @@ describe("ChangesBranchMoreMenu", () => {
     const menu = await screen.findByRole("menu");
     expect(await within(menu).findByText("创建 Merge Request")).toBeVisible();
     expect(menu).toHaveClass("min-w-48", "whitespace-nowrap");
+  });
+
+  it("reports a missing forge cli without opening the create dialog", async () => {
+    inspectForgeMock.mockResolvedValue({
+      host: "gitlab",
+      remoteLabel: "origin",
+      cliInstalled: false,
+      cliAuthenticated: false,
+      repoDefaultBranch: "main",
+      completionAction: "open_pull_request",
+      prTarget: "issue_base",
+      prDraft: false,
+    });
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(await screen.findByText("创建 Merge Request"));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent("glab 未安装");
+    expect(screen.queryByText("创建请求弹窗")).not.toBeInTheDocument();
+  });
+
+  it("opens the create dialog when the forge cli is installed", async () => {
+    inspectForgeMock.mockResolvedValue({
+      host: "github",
+      remoteLabel: "origin",
+      cliInstalled: true,
+      cliAuthenticated: true,
+      repoDefaultBranch: "main",
+      completionAction: "open_pull_request",
+      prTarget: "issue_base",
+      prDraft: false,
+    });
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(await screen.findByText("创建 Pull Request"));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent("创建请求弹窗");
   });
 
   it("does not show checkout on linked worktree", async () => {
