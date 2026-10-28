@@ -3017,7 +3017,7 @@ dependencies = [
 
 [[package]]
 name = "redwhisk"
-version = "0.0.19"
+version = "0.0.20"
 dependencies = [
  "base64 0.22.1",
  "chrono",
