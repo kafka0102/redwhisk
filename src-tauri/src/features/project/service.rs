@@ -46,6 +46,10 @@ impl<'connection> ProjectService<'connection> {
                         &repo_path,
                         input.worktree_location,
                         setup_command,
+                        input.completion_action,
+                        input.pr_target,
+                        input.pr_draft,
+                        input.confirm_completion_action,
                     )
                     .map_err(project_database_error)?;
                 return Ok(populate_code_workspaces(project));
@@ -60,6 +64,10 @@ impl<'connection> ProjectService<'connection> {
                 &repo_path,
                 input.worktree_location,
                 setup_command,
+                input.completion_action,
+                input.pr_target,
+                input.pr_draft,
+                input.confirm_completion_action,
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -133,6 +141,7 @@ impl<'connection> ProjectService<'connection> {
                 input.completion_action,
                 input.pr_target,
                 input.pr_draft,
+                input.confirm_completion_action,
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -254,6 +263,7 @@ impl<'connection> ProjectService<'connection> {
             completion_action: project.completion_action,
             pr_target: project.pr_target,
             pr_draft: project.pr_draft,
+            confirm_completion_action: project.confirm_completion_action,
         })
     }
 
@@ -462,6 +472,7 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         completion_action: project.completion_action,
         pr_target: project.pr_target,
         pr_draft: project.pr_draft,
+        confirm_completion_action: project.confirm_completion_action,
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,

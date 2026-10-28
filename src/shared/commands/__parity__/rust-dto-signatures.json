@@ -372,6 +372,9 @@
       "fields": {
         "actualPath": "optional",
         "branchName": "optional",
+        "closeoutAction": "optional",
+        "closeoutBase": "optional",
+        "closeoutDraft": "optional",
         "continueAfterCommit": "optional",
         "dirtyDecision": "optional",
         "ignoreDirty": "optional",
@@ -427,7 +430,11 @@
     },
     "CreateProjectInput": {
       "fields": {
+        "completionAction": "optional",
+        "confirmCompletionAction": "optional",
         "name": "required",
+        "prDraft": "optional",
+        "prTarget": "optional",
         "repoPath": "required",
         "worktreeLocation": "required",
         "worktreeSetupCommand": "required"
@@ -757,6 +764,7 @@
         "headAfter": "required",
         "headBefore": "required",
         "option": "required",
+        "pullRequestUrl": "optional",
         "result": "required",
         "source": "required"
       }
@@ -980,6 +988,19 @@
         "branch": "required"
       }
     },
+    "ProjectForgeInspection": {
+      "fields": {
+        "cliAuthenticated": "required",
+        "cliInstalled": "required",
+        "completionAction": "required",
+        "confirmCompletionAction": "required",
+        "host": "required",
+        "prDraft": "required",
+        "prTarget": "required",
+        "remoteLabel": "required",
+        "repoDefaultBranch": "required"
+      }
+    },
     "ProjectGitBranchListInput": {
       "fields": {
         "projectId": "required"
@@ -1009,12 +1030,16 @@
     },
     "ProjectListItem": {
       "fields": {
+        "completionAction": "required",
+        "confirmCompletionAction": "required",
         "createdAt": "required",
         "hasOpenWindow": "required",
         "id": "required",
         "lastOpenedAt": "required",
         "name": "required",
         "pathStatus": "required",
+        "prDraft": "required",
+        "prTarget": "required",
         "repoPath": "required",
         "worktreeLocation": "required",
         "worktreeSetupCommand": "required"
@@ -1043,10 +1068,14 @@
     "ProjectSummary": {
       "fields": {
         "codeWorkspaces": "required",
+        "completionAction": "required",
+        "confirmCompletionAction": "required",
         "createdAt": "required",
         "id": "required",
         "lastOpenedAt": "required",
         "name": "required",
+        "prDraft": "required",
+        "prTarget": "required",
         "repoPath": "required",
         "worktreeLocation": "required",
         "worktreeSetupCommand": "required"
@@ -1539,7 +1568,11 @@
     },
     "UpdateProjectSettingsInput": {
       "fields": {
+        "completionAction": "optional",
+        "confirmCompletionAction": "optional",
         "name": "required",
+        "prDraft": "optional",
+        "prTarget": "optional",
         "projectId": "required",
         "repoPath": "required",
         "worktreeLocation": "required",
@@ -1850,6 +1883,13 @@
         "remote"
       ]
     },
+    "CloseoutAction": {
+      "rename": "snake_case",
+      "variants": [
+        "merge_to_base",
+        "open_pull_request"
+      ]
+    },
     "CodeLanguageDocumentKind": {
       "rename": "camelCase",
       "variants": [
@@ -1926,6 +1966,7 @@
         "waiting_auto_commit",
         "confirm_continue_after_commit",
         "confirm_worktree_cleanup",
+        "prompt_closeout_action",
         "blocked",
         "cancelled"
       ]
@@ -1952,6 +1993,7 @@
         "completed",
         "no_commit_detected",
         "commit_detected",
+        "commit_turn_finished_dirty",
         "git_operation_blocked"
       ]
     },
@@ -2007,6 +2049,7 @@
         "prompting_dirty_decision",
         "auto_committing",
         "confirming_continue_after_commit",
+        "prompting_closeout_action",
         "reconciling_worktree",
         "confirming_worktree_cleanup",
         "completed",
@@ -2059,6 +2102,13 @@
         "other"
       ]
     },
+    "ProjectCompletionAction": {
+      "rename": "snake_case",
+      "variants": [
+        "merge_to_base",
+        "open_pull_request"
+      ]
+    },
     "ProjectLabelScope": {
       "rename": "snake_case",
       "variants": [
@@ -2071,6 +2121,13 @@
       "variants": [
         "available",
         "missing"
+      ]
+    },
+    "ProjectPrTarget": {
+      "rename": "snake_case",
+      "variants": [
+        "issue_base",
+        "repo_default"
       ]
     },
     "ProjectWorktreeLocation": {

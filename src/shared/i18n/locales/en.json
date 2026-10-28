@@ -1102,6 +1102,9 @@
   },
   "completionCloseout": {
     "afterCompletion": "After completion",
+    "confirmCompletionAction": "Confirm completion action",
+    "confirmCompletionActionNo": "No",
+    "confirmCompletionActionYes": "Yes",
     "mergeToBase": "Merge into base",
     "openPullRequest": "Open a Pull Request",
     "openMergeRequest": "Open a Merge Request",

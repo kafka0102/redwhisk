@@ -8,3 +8,8 @@ pub mod state_machine;
 pub(crate) mod summary;
 pub(crate) mod transaction;
 pub(crate) mod use_case;
+
+#[cfg(test)]
+mod confirm_saved_action_tests;
+#[cfg(test)]
+mod state_machine_advance_tests;

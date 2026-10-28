@@ -31,6 +31,15 @@ pub struct CreateProjectInput {
     pub repo_path: String,
     pub worktree_location: ProjectWorktreeLocation,
     pub worktree_setup_command: String,
+    /// 缺省时新建走列默认：合并到 base、Issue base、草稿列默认、不确认。
+    #[serde(default)]
+    pub completion_action: Option<ProjectCompletionAction>,
+    #[serde(default)]
+    pub pr_target: Option<ProjectPrTarget>,
+    #[serde(default)]
+    pub pr_draft: Option<bool>,
+    #[serde(default)]
+    pub confirm_completion_action: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -66,6 +75,9 @@ pub struct UpdateProjectSettingsInput {
     pub pr_target: Option<ProjectPrTarget>,
     #[serde(default)]
     pub pr_draft: Option<bool>,
+    /// 缺省表示不改已保存的是否确认，避免旧客户端把值写回否。
+    #[serde(default)]
+    pub confirm_completion_action: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -92,6 +104,7 @@ pub struct ProjectSummary {
     pub completion_action: ProjectCompletionAction,
     pub pr_target: ProjectPrTarget,
     pub pr_draft: bool,
+    pub confirm_completion_action: bool,
     pub created_at: i64,
     pub last_opened_at: i64,
     #[serde(skip)]
@@ -111,6 +124,7 @@ pub struct ProjectForgeInspection {
     pub completion_action: ProjectCompletionAction,
     pub pr_target: ProjectPrTarget,
     pub pr_draft: bool,
+    pub confirm_completion_action: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -130,6 +144,7 @@ pub struct ProjectListItem {
     pub completion_action: ProjectCompletionAction,
     pub pr_target: ProjectPrTarget,
     pub pr_draft: bool,
+    pub confirm_completion_action: bool,
     pub created_at: i64,
     pub last_opened_at: i64,
     pub path_status: ProjectPathStatus,

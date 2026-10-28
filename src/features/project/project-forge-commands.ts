@@ -13,6 +13,7 @@ export interface ProjectForgeInspection {
   completionAction: ProjectCompletionAction;
   prTarget: ProjectPrTarget;
   prDraft: boolean;
+  confirmCompletionAction: boolean;
 }
 
 export interface ChangeRequestPreview extends ProjectForgeInspection {

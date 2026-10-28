@@ -1,6 +1,7 @@
 //! 脏工作区处理完之后，决定要不要弹出完成选择。
 
 use crate::types::issue_completion::CloseoutAction;
+use crate::types::project::ProjectPrTarget;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseoutRoute {
@@ -12,6 +13,13 @@ pub enum CloseoutRoute {
     Prompt,
     /// 用户选了提交 PR/MR。
     OpenPullRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppliedCloseout {
+    pub action: CloseoutAction,
+    pub base: String,
+    pub draft: bool,
 }
 
 pub fn route_closeout(
@@ -35,6 +43,54 @@ pub fn route_closeout(
         None => CloseoutRoute::Prompt,
         Some(CloseoutAction::MergeToBase) => CloseoutRoute::Reconcile,
         Some(CloseoutAction::OpenPullRequest) => CloseoutRoute::OpenPullRequest,
+    }
+}
+
+/// 否，且今天会弹出完成选择窗、本次还没有选择：用已保存动作收尾。
+pub fn applied_saved_closeout(
+    isolated_worktree: bool,
+    branch_mismatch: bool,
+    forge_known: bool,
+    forge_ready: bool,
+    decided: Option<CloseoutAction>,
+    confirm_completion_action: bool,
+    saved_action: CloseoutAction,
+    saved_target: ProjectPrTarget,
+    issue_base: Option<&str>,
+    repo_default_branch: Option<&str>,
+    draft: bool,
+) -> Option<AppliedCloseout> {
+    if confirm_completion_action || decided.is_some() {
+        return None;
+    }
+    if route_closeout(
+        isolated_worktree,
+        branch_mismatch,
+        forge_known,
+        forge_ready,
+        None,
+    ) != CloseoutRoute::Prompt
+    {
+        return None;
+    }
+    Some(AppliedCloseout {
+        action: saved_action,
+        base: resolved_saved_base(saved_target, issue_base, repo_default_branch),
+        draft,
+    })
+}
+
+fn resolved_saved_base(
+    saved_target: ProjectPrTarget,
+    issue_base: Option<&str>,
+    repo_default_branch: Option<&str>,
+) -> String {
+    match saved_target {
+        ProjectPrTarget::RepoDefault => repo_default_branch
+            .or(issue_base)
+            .unwrap_or("main")
+            .to_string(),
+        ProjectPrTarget::IssueBase => issue_base.unwrap_or("main").to_string(),
     }
 }
 

@@ -17,9 +17,10 @@ use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueRecord;
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
+    CloseoutAction, CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
     IssueCompletionFlowRecord, IssueCompletionPhase,
 };
+use crate::types::project::{ProjectCompletionAction, ProjectSummary};
 
 pub(crate) fn legacy_completion_flow_action_error(
     action: CompleteIssueFlowAction,
@@ -76,6 +77,7 @@ pub(crate) fn gather_completion_world(
     actual: &ActualExecutionPath,
     snapshot: GitSnapshot,
     forced_option: Option<CompletionAttemptOption>,
+    project: &ProjectSummary,
 ) -> CompletionWorld {
     let workspace_missing = session.workspace_mode == WorkspaceMode::Worktree
         && session
@@ -120,6 +122,18 @@ pub(crate) fn gather_completion_world(
         missing_worktree_error,
         snapshot,
         attempt_option: forced_option.unwrap_or(CompletionAttemptOption::CompleteManual),
+        confirm_completion_action: project.confirm_completion_action,
+        saved_closeout_action: saved_closeout_action(project.completion_action),
+        saved_pr_target: project.pr_target,
+        repo_default_branch: forge.repo_default_branch,
+        saved_closeout_draft: project.pr_draft,
+    }
+}
+
+fn saved_closeout_action(action: ProjectCompletionAction) -> CloseoutAction {
+    match action {
+        ProjectCompletionAction::MergeToBase => CloseoutAction::MergeToBase,
+        ProjectCompletionAction::OpenPullRequest => CloseoutAction::OpenPullRequest,
     }
 }
 

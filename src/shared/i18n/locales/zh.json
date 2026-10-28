@@ -1102,6 +1102,9 @@
   },
   "completionCloseout": {
     "afterCompletion": "完成后",
+    "confirmCompletionAction": "完成后是否确认合并方式",
+    "confirmCompletionActionNo": "否",
+    "confirmCompletionActionYes": "是",
     "mergeToBase": "合并到 base 分支",
     "openPullRequest": "提交 Pull Request",
     "openMergeRequest": "提交 Merge Request",
