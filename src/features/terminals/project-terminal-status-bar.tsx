@@ -1,5 +1,11 @@
 import { Settings, TerminalSquare } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
   DropdownMenu,
@@ -16,8 +22,15 @@ import {
   readProjectTerminalCwd,
   saveProjectTerminalShortcutCommand,
   writeProjectTerminal,
-  type ProjectTerminalShortcutCommandRecord,
 } from "./project-terminal-commands";
+import {
+  currentProjectTerminalShortcutCommandGeneration,
+  invalidateProjectTerminalShortcutCommands,
+  isProjectTerminalShortcutCommandCacheStale,
+  publishProjectTerminalShortcutCommands,
+  readProjectTerminalShortcutCommands,
+  subscribeProjectTerminalShortcutCommands,
+} from "./project-terminal-shortcut-command-cache";
 import { TerminalShortcutCommandsDialog } from "./terminal-shortcut-commands-dialog";
 
 const TERMINAL_CWD_POLL_MS = 2_000;
@@ -38,9 +51,20 @@ export function ProjectTerminalStatusBar({
   focusTerminal,
 }: ProjectTerminalStatusBarProps) {
   const { messages, t } = useI18n();
-  const [commands, setCommands] = useState<
-    ProjectTerminalShortcutCommandRecord[]
-  >([]);
+  const subscribeToCommands = useCallback(
+    (listener: () => void) =>
+      subscribeProjectTerminalShortcutCommands(projectId, listener),
+    [projectId],
+  );
+  const readCommands = useCallback(
+    () => readProjectTerminalShortcutCommands(projectId),
+    [projectId],
+  );
+  const commands = useSyncExternalStore(
+    subscribeToCommands,
+    readCommands,
+    readCommands,
+  );
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [currentCwd, setCurrentCwd] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -50,18 +74,33 @@ export function ProjectTerminalStatusBar({
 
   const refreshCommands = useCallback(async () => {
     setCommandError(null);
+    const generation =
+      currentProjectTerminalShortcutCommandGeneration(projectId);
     try {
       const result = await listProjectTerminalShortcutCommands({ projectId });
-      if (!isMountedRef.current) {
-        return;
-      }
-      setCommands(result.commands);
+      publishProjectTerminalShortcutCommands(
+        projectId,
+        generation,
+        result.commands,
+      );
     } catch (error: unknown) {
-      if (isMountedRef.current) {
+      if (
+        isMountedRef.current &&
+        generation ===
+          currentProjectTerminalShortcutCommandGeneration(projectId)
+      ) {
         setCommandError(getCommandErrorMessage(error, t));
       }
     }
   }, [projectId, t]);
+
+  function handleShortcutMenuOpenChange(open: boolean) {
+    // 只有保存/删除推进了 generation、而这份快照还没跟上时才补一次请求。
+    if (!open || !isProjectTerminalShortcutCommandCacheStale(projectId)) {
+      return;
+    }
+    void refreshCommands();
+  }
 
   // 初次加载常用命令列表。
   useEffect(() => {
@@ -121,6 +160,11 @@ export function ProjectTerminalStatusBar({
     setManageDialogOpen(true);
   }
 
+  async function reloadCommandsAfterMutation() {
+    invalidateProjectTerminalShortcutCommands(projectId);
+    await refreshCommands();
+  }
+
   async function handleSaveCommand(input: {
     id?: number;
     command: string;
@@ -132,12 +176,12 @@ export function ProjectTerminalStatusBar({
       command: input.command,
       sortOrder: input.sortOrder,
     });
-    await refreshCommands();
+    await reloadCommandsAfterMutation();
   }
 
   async function handleDeleteCommand(id: number) {
     await deleteProjectTerminalShortcutCommand({ id });
-    await refreshCommands();
+    await reloadCommandsAfterMutation();
   }
 
   const displayPath = currentCwd ? formatHomePathForDisplay(currentCwd) : "";
@@ -148,7 +192,7 @@ export function ProjectTerminalStatusBar({
       aria-label={messages.agentsFeature.terminalStatusBar}
       role="toolbar"
     >
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={handleShortcutMenuOpenChange}>
         <DropdownMenuTrigger
           aria-label={messages.agentsFeature.shortcutCommands}
           className="project-terminal-status-bar__shortcut-trigger"
