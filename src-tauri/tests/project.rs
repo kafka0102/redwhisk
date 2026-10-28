@@ -6,8 +6,8 @@ use redwhisk_lib::features::project::ProjectService;
 use redwhisk_lib::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectCompletionAction, ProjectPathStatus, ProjectPrTarget, ProjectWorktreeLocation,
-    UpdateProjectSettingsInput,
+    CreateProjectInput, OpenProjectInput, ProjectCompletionAction, ProjectPathStatus,
+    ProjectPrTarget, ProjectWorktreeLocation, UpdateProjectSettingsInput,
 };
 use redwhisk_lib::types::project_terminal::{
     CreateProjectTerminalInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
@@ -60,6 +60,11 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "worktree_location",
             "worktree_setup_command",
             "removed_at",
+            "completion_action",
+            "pr_target",
+            "pr_draft",
+            "confirm_completion_action",
+            "forge_host",
         ],
     );
     assert_eq!(
@@ -451,6 +456,11 @@ fn create_project_persists_git_repo_with_confirmed_name() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("created project");
 
@@ -492,6 +502,11 @@ fn create_project_persists_worktree_settings() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::UserHome,
             worktree_setup_command: "pnpm install\npnpm test  ".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("created project");
 
@@ -518,6 +533,11 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("direct project");
     let equivalent_project = service
@@ -526,6 +546,11 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             repo_path: repo_dir.join(".").to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("equivalent project");
 
@@ -563,6 +588,11 @@ fn create_project_rejects_non_git_directory_without_insert() {
             repo_path: non_git_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect_err("non git repo should be rejected");
 
@@ -592,6 +622,11 @@ fn create_project_reports_missing_path_as_invalid_without_insert() {
             repo_path: missing_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect_err("missing path should be rejected");
 
@@ -620,6 +655,11 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
         repo_path: repo_dir.to_string_lossy().to_string(),
         worktree_location: ProjectWorktreeLocation::RepoSibling,
         worktree_setup_command: "".to_string(),
+
+        confirm_completion_action: None,
+        pr_target: None,
+        pr_draft: None,
+        completion_action: None,
     };
 
     let first_project = service
@@ -653,6 +693,11 @@ fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updat
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "echo setup".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("create project");
 
@@ -675,6 +720,11 @@ fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updat
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::UserHome,
             worktree_setup_command: "echo restored".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("restore project");
 
@@ -1154,6 +1204,8 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             completion_action: Some(ProjectCompletionAction::MergeToBase),
             pr_target: Some(ProjectPrTarget::IssueBase),
             pr_draft: Some(true),
+
+            confirm_completion_action: None,
         })
         .expect("update project settings");
 
@@ -1177,6 +1229,8 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             completion_action: Some(ProjectCompletionAction::OpenPullRequest),
             pr_target: None,
             pr_draft: None,
+
+            confirm_completion_action: None,
         })
         .expect("set completion action");
     assert_eq!(
@@ -1196,6 +1250,8 @@ fn update_project_settings_persists_project_name_and_repo_path() {
             completion_action: None,
             pr_target: None,
             pr_draft: None,
+
+            confirm_completion_action: None,
         })
         .expect("rename without completion fields");
     assert_eq!(preserved.name, "Renamed");
@@ -1233,6 +1289,8 @@ fn update_project_settings_rejects_blank_name() {
             completion_action: Some(ProjectCompletionAction::MergeToBase),
             pr_target: Some(ProjectPrTarget::IssueBase),
             pr_draft: Some(true),
+
+            confirm_completion_action: None,
         })
         .expect_err("blank name should fail");
 
@@ -1264,6 +1322,11 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("created project");
 
@@ -1277,6 +1340,8 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             completion_action: Some(ProjectCompletionAction::MergeToBase),
             pr_target: Some(ProjectPrTarget::IssueBase),
             pr_draft: Some(true),
+
+            confirm_completion_action: None,
         })
         .expect("updated project");
 
@@ -1317,6 +1382,11 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("created project");
 
@@ -1330,6 +1400,8 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             completion_action: Some(ProjectCompletionAction::MergeToBase),
             pr_target: Some(ProjectPrTarget::IssueBase),
             pr_draft: Some(true),
+
+            confirm_completion_action: None,
         })
         .expect_err("repo internal worktrees should require .gitignore entry");
 
@@ -1356,6 +1428,11 @@ fn update_project_settings_rejects_non_git_repo_path() {
             repo_path: initial_repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("created project");
 
@@ -1369,6 +1446,8 @@ fn update_project_settings_rejects_non_git_repo_path() {
             completion_action: Some(ProjectCompletionAction::MergeToBase),
             pr_target: Some(ProjectPrTarget::IssueBase),
             pr_draft: Some(true),
+
+            confirm_completion_action: None,
         })
         .expect_err("non git repo should be rejected");
 
@@ -1528,6 +1607,11 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::RepoSibling,
             worktree_setup_command: "echo setup".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("create project");
 
@@ -1633,6 +1717,11 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             repo_path: repo_dir.to_string_lossy().to_string(),
             worktree_location: ProjectWorktreeLocation::UserHome,
             worktree_setup_command: "echo brand-new".to_string(),
+
+            confirm_completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            completion_action: None,
         })
         .expect("create after hard delete");
 

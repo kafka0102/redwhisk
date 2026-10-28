@@ -37,6 +37,7 @@ pub struct ChangeRequestPreview {
     pub completion_action: ProjectCompletionAction,
     pub pr_target: ProjectPrTarget,
     pub pr_draft: bool,
+    pub confirm_completion_action: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -101,6 +102,7 @@ fn preview_change_request_blocking(
         completion_action: project.completion_action,
         pr_target: project.pr_target,
         pr_draft: project.pr_draft,
+        confirm_completion_action: project.confirm_completion_action,
     })
 }
 

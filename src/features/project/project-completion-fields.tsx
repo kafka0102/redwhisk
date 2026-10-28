@@ -23,10 +23,14 @@ interface ProjectCompletionFieldsProps {
   action: ProjectCompletionAction;
   target: ProjectPrTarget;
   draft: boolean;
+  confirmCompletionAction: boolean;
   disabled: boolean;
+  showRequestDetails?: boolean;
+  showCliStatus?: boolean;
   onActionChange: (value: ProjectCompletionAction) => void;
   onTargetChange: (value: ProjectPrTarget) => void;
   onDraftChange: (value: boolean) => void;
+  onConfirmCompletionActionChange: (value: boolean) => void;
 }
 
 export function ProjectCompletionFields({
@@ -37,10 +41,14 @@ export function ProjectCompletionFields({
   action,
   target,
   draft,
+  confirmCompletionAction,
   disabled,
+  showRequestDetails = true,
+  showCliStatus = true,
   onActionChange,
   onTargetChange,
   onDraftChange,
+  onConfirmCompletionActionChange,
 }: ProjectCompletionFieldsProps) {
   const { t } = useI18n();
   if (host !== "github" && host !== "gitlab") {
@@ -48,8 +56,9 @@ export function ProjectCompletionFields({
   }
   const gitlab = host === "gitlab";
   const cli = gitlab ? "glab" : "gh";
-  const status =
-    cliInstalled && cliAuthenticated
+  const status = !showCliStatus
+    ? null
+    : cliInstalled && cliAuthenticated
       ? null
       : !cliInstalled && !cliAuthenticated
         ? t("completionCloseout.cliNotReady", { cli })
@@ -85,6 +94,10 @@ export function ProjectCompletionFields({
           })
         : t("completionCloseout.repoDefaultTargetPlain"),
     },
+  ];
+  const confirmItems = [
+    { value: "no", label: t("completionCloseout.confirmCompletionActionNo") },
+    { value: "yes", label: t("completionCloseout.confirmCompletionActionYes") },
   ];
 
   return (
@@ -124,7 +137,36 @@ export function ProjectCompletionFields({
           </SelectContent>
         </Select>
       </div>
-      {action === "open_pull_request" ? (
+      <div className="grid gap-1.5">
+        <Label
+          htmlFor="project-confirm-completion-action"
+          className="text-xs text-muted-foreground"
+        >
+          {t("completionCloseout.confirmCompletionAction")}
+        </Label>
+        <Select
+          items={confirmItems}
+          value={confirmCompletionAction ? "yes" : "no"}
+          disabled={disabled}
+          onValueChange={(value) => {
+            if (value === "yes" || value === "no") {
+              onConfirmCompletionActionChange(value === "yes");
+            }
+          }}
+        >
+          <SelectTrigger
+            id="project-confirm-completion-action"
+            className="w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no">{confirmItems[0].label}</SelectItem>
+            <SelectItem value="yes">{confirmItems[1].label}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {showRequestDetails && action === "open_pull_request" ? (
         <>
           <div className="grid gap-1.5">
             <Label

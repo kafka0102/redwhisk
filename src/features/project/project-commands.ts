@@ -11,6 +11,10 @@ export interface CreateProjectInput {
   repoPath: string;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
+  completionAction?: "merge_to_base" | "open_pull_request";
+  prTarget?: "issue_base" | "repo_default";
+  prDraft?: boolean;
+  confirmCompletionAction?: boolean;
 }
 
 export interface ValidateProjectRepoPathInput {
@@ -20,6 +24,9 @@ export interface ValidateProjectRepoPathInput {
 export interface ValidateProjectRepoPathResponse {
   repoPath: string;
   suggestedName: string;
+  host: "github" | "gitlab" | "none";
+  completionAction: "merge_to_base" | "open_pull_request";
+  confirmCompletionAction: boolean;
 }
 
 export interface OpenProjectInput {
@@ -50,6 +57,7 @@ export interface UpdateProjectSettingsInput {
   completionAction?: "merge_to_base" | "open_pull_request";
   prTarget?: "issue_base" | "repo_default";
   prDraft?: boolean;
+  confirmCompletionAction?: boolean;
 }
 
 export interface ProjectRecord {
@@ -58,6 +66,10 @@ export interface ProjectRecord {
   repoPath: string;
   worktreeLocation: ProjectWorktreeLocation;
   worktreeSetupCommand: string;
+  completionAction: "merge_to_base" | "open_pull_request";
+  prTarget: "issue_base" | "repo_default";
+  prDraft: boolean;
+  confirmCompletionAction: boolean;
   createdAt: number;
   lastOpenedAt: number;
   // Rust ProjectSummary.code_workspaces 是 Vec<CodeWorkspaceRoot>，无 skip_serializing_if，

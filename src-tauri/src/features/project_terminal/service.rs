@@ -1299,6 +1299,11 @@ mod tests {
                 repo_path: ".".to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         );
         assert!(project.is_err());
@@ -1315,6 +1320,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1428,6 +1438,11 @@ mod tests {
                 repo_path: repo_dir.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1521,6 +1536,11 @@ mod tests {
                 repo_path: repo_dir.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1618,6 +1638,11 @@ mod tests {
                 repo_path: repo_dir.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1671,6 +1696,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1729,6 +1759,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -1785,6 +1820,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create owner project");
@@ -1795,6 +1835,11 @@ mod tests {
                 repo_path: other_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create other project");
@@ -1879,6 +1924,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create owner project");
@@ -1889,6 +1939,11 @@ mod tests {
                 repo_path: other_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create other project");
@@ -2021,6 +2076,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2101,6 +2161,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2223,6 +2288,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2354,6 +2424,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2475,6 +2550,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2548,6 +2628,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2679,6 +2764,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2812,6 +2902,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -2958,6 +3053,11 @@ mod tests {
                 repo_path: repo_dir.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -3057,6 +3157,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -3122,6 +3227,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -3189,6 +3299,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -3270,6 +3385,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");
@@ -3329,6 +3449,11 @@ mod tests {
                 repo_path: current_repo.to_string_lossy().to_string(),
                 worktree_location: ProjectWorktreeLocation::RepoSibling,
                 worktree_setup_command: "".to_string(),
+
+                confirm_completion_action: None,
+                pr_target: None,
+                pr_draft: None,
+                completion_action: None,
             },
         )
         .expect("create project");

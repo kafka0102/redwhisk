@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::forge::{detect_forge_host, ForgeHost};
 use crate::git::repository::is_git_repository;
 use crate::git::worktree::list_code_workspaces;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -12,6 +13,8 @@ use crate::types::project::{
     ProjectSummary, ProjectWorktreeLocation, UpdateProjectSettingsInput,
     ValidateProjectRepoPathResponse,
 };
+
+use super::completion_defaults::completion_suggestion;
 
 pub struct ProjectService<'connection> {
     repository: ProjectRepository<'connection>,
@@ -46,6 +49,11 @@ impl<'connection> ProjectService<'connection> {
                         &repo_path,
                         input.worktree_location,
                         setup_command,
+                        input.completion_action,
+                        input.pr_target,
+                        input.pr_draft,
+                        input.confirm_completion_action,
+                        detect_forge_host(&validated_repo.repo_path).stored_class(),
                     )
                     .map_err(project_database_error)?;
                 return Ok(populate_code_workspaces(project));
@@ -60,6 +68,11 @@ impl<'connection> ProjectService<'connection> {
                 &repo_path,
                 input.worktree_location,
                 setup_command,
+                input.completion_action,
+                input.pr_target,
+                input.pr_draft,
+                input.confirm_completion_action,
+                detect_forge_host(&validated_repo.repo_path).stored_class(),
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -133,6 +146,8 @@ impl<'connection> ProjectService<'connection> {
                 input.completion_action,
                 input.pr_target,
                 input.pr_draft,
+                input.confirm_completion_action,
+                detect_forge_host(&validated_repo.repo_path).stored_class(),
             )
             .map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
@@ -142,10 +157,40 @@ impl<'connection> ProjectService<'connection> {
         repo_path: &str,
     ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
         let validated_repo = validate_repo_path(repo_path)?;
+        let suggestion = completion_suggestion(detect_forge_host(&validated_repo.repo_path), None);
 
         Ok(ValidateProjectRepoPathResponse {
             repo_path: validated_repo.repo_path.to_string_lossy().to_string(),
             suggested_name: validated_repo.suggested_name,
+            host: suggestion.host,
+            completion_action: suggestion.completion_action,
+            confirm_completion_action: suggestion.confirm_completion_action,
+        })
+    }
+
+    pub fn validate_project_repo_path_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        repo_path: &str,
+    ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
+        let validated_repo = validate_repo_path(repo_path)?;
+        let database = open_project_database(data_dir)?;
+        let host = detect_forge_host(&validated_repo.repo_path);
+        let canonical = validated_repo.repo_path.to_string_lossy();
+        let saved = if host == ForgeHost::None {
+            None
+        } else {
+            ProjectRepository::new(&database.connection)
+                .latest_same_host_completion(canonical.as_ref(), host.stored_class())
+                .map_err(project_database_error)?
+        };
+        let suggestion = completion_suggestion(host, saved);
+
+        Ok(ValidateProjectRepoPathResponse {
+            repo_path: validated_repo.repo_path.to_string_lossy().to_string(),
+            suggested_name: validated_repo.suggested_name,
+            host: suggestion.host,
+            completion_action: suggestion.completion_action,
+            confirm_completion_action: suggestion.confirm_completion_action,
         })
     }
 
@@ -254,6 +299,7 @@ impl<'connection> ProjectService<'connection> {
             completion_action: project.completion_action,
             pr_target: project.pr_target,
             pr_draft: project.pr_draft,
+            confirm_completion_action: project.confirm_completion_action,
         })
     }
 
@@ -462,6 +508,7 @@ fn project_list_item(project: ProjectSummary) -> ProjectListItem {
         completion_action: project.completion_action,
         pr_target: project.pr_target,
         pr_draft: project.pr_draft,
+        confirm_completion_action: project.confirm_completion_action,
         created_at: project.created_at,
         last_opened_at: project.last_opened_at,
         path_status,

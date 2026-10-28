@@ -52,6 +52,7 @@ type GeneralSettingsSaveInput = Pick<
   | "completionAction"
   | "prTarget"
   | "prDraft"
+  | "confirmCompletionAction"
 >;
 
 export function GeneralSettingsPanel({
@@ -71,9 +72,14 @@ export function GeneralSettingsPanel({
       repoPath: input.repoPath,
       worktreeLocation: input.worktreeLocation,
       worktreeSetupCommand: input.worktreeSetupCommand,
-      completionAction: input.completionAction,
-      prTarget: input.prTarget,
-      prDraft: input.prDraft,
+      ...(input.completionAction !== undefined
+        ? { completionAction: input.completionAction }
+        : {}),
+      ...(input.prTarget !== undefined ? { prTarget: input.prTarget } : {}),
+      ...(input.prDraft !== undefined ? { prDraft: input.prDraft } : {}),
+      ...(input.confirmCompletionAction !== undefined
+        ? { confirmCompletionAction: input.confirmCompletionAction }
+        : {}),
     });
     onProjectUpdated?.({
       id: updatedProject.id,
@@ -121,11 +127,13 @@ function GeneralSettingsForm({
     useState<ProjectCompletionAction>("merge_to_base");
   const [prTarget, setPrTarget] = useState<ProjectPrTarget>("issue_base");
   const [prDraft, setPrDraft] = useState(true);
+  const [confirmCompletionAction, setConfirmCompletionAction] = useState(false);
   const [completionReady, setCompletionReady] = useState(false);
   const [completionBaseline, setCompletionBaseline] = useState<{
     action: ProjectCompletionAction;
     target: ProjectPrTarget;
     draft: boolean;
+    confirm: boolean;
   } | null>(null);
   const [projectNameValue, setProjectNameValue] = useState(projectName);
   const [projectPathValue, setProjectPathValue] = useState(projectPath);
@@ -148,7 +156,8 @@ function GeneralSettingsForm({
       completionBaseline != null &&
       (completionAction !== completionBaseline.action ||
         prTarget !== completionBaseline.target ||
-        prDraft !== completionBaseline.draft));
+        prDraft !== completionBaseline.draft ||
+        confirmCompletionAction !== completionBaseline.confirm));
   const isSaveDisabled =
     isSaving ||
     isChoosingRepoPath ||
@@ -174,11 +183,13 @@ function GeneralSettingsForm({
         setCompletionAction(inspection.completionAction);
         setPrTarget(inspection.prTarget);
         setPrDraft(inspection.prDraft);
+        setConfirmCompletionAction(inspection.confirmCompletionAction);
         setCompletionReady(true);
         setCompletionBaseline({
           action: inspection.completionAction,
           target: inspection.prTarget,
           draft: inspection.prDraft,
+          confirm: inspection.confirmCompletionAction,
         });
       })
       .catch(() => {
@@ -244,13 +255,16 @@ function GeneralSettingsForm({
         repoPath: trimmedProjectPath,
         worktreeLocation: worktreeLocationValue,
         worktreeSetupCommand: worktreeSetupCommandValue.trim(),
-        ...(completionReady ? { completionAction, prTarget, prDraft } : {}),
+        ...(completionReady
+          ? { completionAction, prTarget, prDraft, confirmCompletionAction }
+          : {}),
       });
       if (completionReady) {
         setCompletionBaseline({
           action: completionAction,
           target: prTarget,
           draft: prDraft,
+          confirm: confirmCompletionAction,
         });
       }
     } catch (error: unknown) {
@@ -291,10 +305,12 @@ function GeneralSettingsForm({
           action={completionAction}
           target={prTarget}
           draft={prDraft}
+          confirmCompletionAction={confirmCompletionAction}
           disabled={isSaving}
           onActionChange={setCompletionAction}
           onTargetChange={setPrTarget}
           onDraftChange={setPrDraft}
+          onConfirmCompletionActionChange={setConfirmCompletionAction}
         />
       }
       worktreeSetupCommand={worktreeSetupCommandValue}

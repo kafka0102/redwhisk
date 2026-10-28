@@ -444,6 +444,11 @@ mod tests {
             missing_worktree_error: None,
             snapshot: snapshot(head),
             attempt_option: CompletionAttemptOption::CompleteManual,
+            confirm_completion_action: true,
+            saved_closeout_action: crate::types::issue_completion::CloseoutAction::MergeToBase,
+            saved_pr_target: crate::types::project::ProjectPrTarget::IssueBase,
+            repo_default_branch: None,
+            saved_closeout_draft: true,
         }
     }
 
@@ -892,6 +897,11 @@ mod tests {
             missing_worktree_error: None,
             snapshot: snapshot("abc123"),
             attempt_option: CompletionAttemptOption::CompleteManual,
+            confirm_completion_action: true,
+            saved_closeout_action: crate::types::issue_completion::CloseoutAction::MergeToBase,
+            saved_pr_target: crate::types::project::ProjectPrTarget::IssueBase,
+            repo_default_branch: None,
+            saved_closeout_draft: true,
         };
         let ctx = EffectContext {
             repo_path: repo_path.as_str(),

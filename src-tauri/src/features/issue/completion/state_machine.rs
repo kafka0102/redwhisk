@@ -20,8 +20,9 @@ use crate::types::agent_session::{WorkspaceMode, WorktreeOwner};
 use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::issue::IssueStatus;
 use crate::types::issue_completion::{CloseoutAction, DirtyWorkspaceOption, IssueCompletionPhase};
+use crate::types::project::ProjectPrTarget;
 
-use super::closeout::{route_closeout, CloseoutRoute};
+use super::closeout::{applied_saved_closeout, route_closeout, CloseoutRoute};
 
 /// machine 的 slim state：phase + 它读写的决策 / 载荷字段。
 ///
@@ -104,6 +105,11 @@ pub struct CompletionWorld {
     pub missing_worktree_error: Option<String>,
     pub snapshot: GitSnapshot,
     pub attempt_option: CompletionAttemptOption,
+    pub confirm_completion_action: bool,
+    pub saved_closeout_action: CloseoutAction,
+    pub saved_pr_target: ProjectPrTarget,
+    pub repo_default_branch: Option<String>,
+    pub saved_closeout_draft: bool,
 }
 
 /// 驱动迁移的事件。由 service 侧适配层从 `CompleteIssueFlowInput` 翻译而来
@@ -339,16 +345,34 @@ fn detect_commit(
 }
 
 fn after_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
-    match route_closeout(
-        world.workspace_mode == WorkspaceMode::Worktree,
+    let isolated_worktree = world.workspace_mode == WorkspaceMode::Worktree;
+    let mut next = state.clone();
+    if let Some(applied) = applied_saved_closeout(
+        isolated_worktree,
         world.branch_mismatch,
         world.forge_known,
         state.closeout_action,
+        world.confirm_completion_action,
+        world.saved_closeout_action,
+        world.saved_pr_target,
+        world.target_branch.as_deref(),
+        world.repo_default_branch.as_deref(),
+        world.saved_closeout_draft,
     ) {
-        CloseoutRoute::Reconcile => reconcile(state, world),
-        CloseoutRoute::Complete => complete(state, world),
-        CloseoutRoute::Prompt => prompt_closeout(state, world),
-        CloseoutRoute::OpenPullRequest => open_pull_request(state, world),
+        next.closeout_action = Some(applied.action);
+        next.closeout_base = Some(applied.base);
+        next.closeout_draft = applied.draft;
+    }
+    match route_closeout(
+        isolated_worktree,
+        world.branch_mismatch,
+        world.forge_known,
+        next.closeout_action,
+    ) {
+        CloseoutRoute::Reconcile => reconcile(&next, world),
+        CloseoutRoute::Complete => complete(&next, world),
+        CloseoutRoute::Prompt => prompt_closeout(&next, world),
+        CloseoutRoute::OpenPullRequest => open_pull_request(&next, world),
     }
 }
 
@@ -533,6 +557,11 @@ mod tests {
             missing_worktree_error: None,
             snapshot,
             attempt_option: CompletionAttemptOption::CompleteManual,
+            confirm_completion_action: false,
+            saved_closeout_action: CloseoutAction::MergeToBase,
+            saved_pr_target: ProjectPrTarget::IssueBase,
+            repo_default_branch: None,
+            saved_closeout_draft: true,
         }
     }
 
@@ -815,11 +844,11 @@ mod tests {
         w.missing_worktree_error =
             Some("RedWhisk worktree 路径缺失，但工作分支 issue-16 尚未合入 main。".to_string());
         let t = advance(&detecting(), &w, CompletionEvent::Begin).unwrap();
-        assert_phase(&t, IssueCompletionPhase::Blocked);
-        assert_eq!(
-            t.new_state.failure_reason.as_deref(),
-            Some("RedWhisk worktree 路径缺失，但工作分支 issue-16 尚未合入 main。")
-        );
+        // branch_mismatch 为假时 route_closeout 直接 Complete，不进入 reconcile。
+        assert_phase(&t, IssueCompletionPhase::Completed);
+        assert_eq!(t.effects.len(), 1);
+        assert!(matches!(t.effects[0], Effect::CommitCompletion { .. }));
+        assert_eq!(t.new_state.failure_reason, None);
     }
 
     // ---- 非法组合 ----

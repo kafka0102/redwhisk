@@ -640,7 +640,11 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
     vi.unstubAllGlobals();
   });
 
-  function notifyResize() {
+  // findBy 在首帧就返回，而 ResizeObserver 要等 useEffect 才注册。
+  async function notifyResize(): Promise<void> {
+    await waitFor(() => {
+      expect(resizeCallbacks.length).toBeGreaterThan(0);
+    });
     act(() => {
       for (const callback of resizeCallbacks) {
         callback([], {} as ResizeObserver);
@@ -702,7 +706,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
       throw new Error("missing user text");
     }
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
-    notifyResize();
+    await notifyResize();
 
     expect(content.style.webkitLineClamp).toBe("5");
     expect(content.className).toContain("expandable-text__content--clamped");
@@ -751,7 +755,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
 
     const content = await userText();
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
-    notifyResize();
+    await notifyResize();
 
     expect(
       screen.queryByRole("button", { name: "Show more" }),
@@ -781,13 +785,13 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
 
     const content = await userText();
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
-    notifyResize();
+    await notifyResize();
     expect(
       screen.queryByRole("button", { name: "Show more" }),
     ).not.toBeInTheDocument();
 
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
-    notifyResize();
+    await notifyResize();
     expect(
       screen.getByRole("button", { name: "Show more" }),
     ).toBeInTheDocument();
@@ -817,7 +821,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
 
     const content = await userText();
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
-    notifyResize();
+    await notifyResize();
 
     expect(content.textContent).toBe(longText);
     expect(content.style.webkitLineClamp).toBe("5");
@@ -842,7 +846,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
 
     const content = await userText();
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 71 });
-    notifyResize();
+    await notifyResize();
 
     expect(
       screen.queryByRole("button", { name: "Show more" }),
@@ -872,7 +876,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
 
     const content = await userText();
     mockContentMetrics(content, { clientHeight: 70, scrollHeight: 280 });
-    notifyResize();
+    await notifyResize();
 
     fireEvent.click(screen.getByRole("button", { name: "展开更多" }));
     expect(screen.getByRole("button", { name: "收起" })).toBeInTheDocument();
@@ -922,7 +926,7 @@ describe("AgentTuiArchiveMarkdownView 用户卡折叠", () => {
         expect(element.style.webkitLineClamp).toBe("");
       }
     }
-    notifyResize();
+    await notifyResize();
     expect(
       screen.queryByRole("button", { name: "Show more" }),
     ).not.toBeInTheDocument();

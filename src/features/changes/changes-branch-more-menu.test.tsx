@@ -113,6 +113,7 @@ describe("ChangesBranchMoreMenu", () => {
       completionAction: "merge_to_base",
       prTarget: "issue_base",
       prDraft: false,
+      confirmCompletionAction: false,
     });
     toastSuccessMock.mockReset();
   });
@@ -162,6 +163,7 @@ describe("ChangesBranchMoreMenu", () => {
       completionAction: "open_pull_request",
       prTarget: "issue_base",
       prDraft: false,
+      confirmCompletionAction: false,
     });
     const user = userEvent.setup();
     renderMenu();
@@ -182,6 +184,7 @@ describe("ChangesBranchMoreMenu", () => {
       completionAction: "open_pull_request",
       prTarget: "issue_base",
       prDraft: false,
+      confirmCompletionAction: false,
     });
     const user = userEvent.setup();
     renderMenu();
@@ -203,6 +206,7 @@ describe("ChangesBranchMoreMenu", () => {
       completionAction: "open_pull_request",
       prTarget: "issue_base",
       prDraft: false,
+      confirmCompletionAction: false,
     });
     const user = userEvent.setup();
     renderMenu();

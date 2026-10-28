@@ -209,6 +209,10 @@ describe("command client", () => {
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
+      completionAction: "merge_to_base",
+      prTarget: "issue_base",
+      prDraft: true,
+      confirmCompletionAction: false,
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_624_800_000,
     });
@@ -227,6 +231,10 @@ describe("command client", () => {
       repoPath: "/Users/kafka0102/workspace/kafka/redwhisk",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
+      completionAction: "merge_to_base",
+      prTarget: "issue_base",
+      prDraft: true,
+      confirmCompletionAction: false,
       createdAt: 1_780_581_600_000,
       lastOpenedAt: 1_780_624_800_000,
     });

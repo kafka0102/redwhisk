@@ -160,6 +160,7 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
             &actual,
             snapshot,
             forced_option,
+            project,
         );
         let transition = state_machine::advance(&state, &world, event).map_err(|_| {
             CommandError::new(
@@ -376,6 +377,7 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
                 &actual,
                 snapshot.clone(),
                 None,
+                &project,
             );
             let transition = state_machine::advance(
                 &state,

@@ -7,7 +7,7 @@ use crate::features::issue::completion::git_reconcile::{
 use crate::features::issue::completion::state_machine::{
     CompletionEvent, CompletionState, CompletionWorld,
 };
-use crate::git::forge::{detect_forge_host, ForgeHost};
+use crate::git::forge::{inspect_forge_remote, ForgeHost};
 use crate::git::status::GitSnapshot;
 use crate::git::worktree::inspect_execution_path;
 use crate::types::agent_session::{
@@ -17,9 +17,10 @@ use crate::types::completion_attempt::CompletionAttemptOption;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::issue::IssueRecord;
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
+    CloseoutAction, CompleteIssueFlowAction, CompleteIssueFlowInput, DirtyWorkspaceOption,
     IssueCompletionFlowRecord, IssueCompletionPhase,
 };
+use crate::types::project::{ProjectCompletionAction, ProjectSummary};
 
 pub(crate) fn legacy_completion_flow_action_error(
     action: CompleteIssueFlowAction,
@@ -76,6 +77,7 @@ pub(crate) fn gather_completion_world(
     actual: &ActualExecutionPath,
     snapshot: GitSnapshot,
     forced_option: Option<CompletionAttemptOption>,
+    project: &ProjectSummary,
 ) -> CompletionWorld {
     let workspace_missing = session.workspace_mode == WorkspaceMode::Worktree
         && session
@@ -98,7 +100,8 @@ pub(crate) fn gather_completion_world(
             .unwrap_or_else(|_| target_branch.clone().unwrap_or_default())
     };
     let branch_mismatch = target_branch.as_deref() != Some(current_branch.as_str());
-    let forge_known = detect_forge_host(Path::new(repo_path)) != ForgeHost::None;
+    let remote = inspect_forge_remote(Path::new(repo_path));
+    let forge_known = remote.host != ForgeHost::None;
     let missing_worktree_error = if workspace_missing && owner == WorktreeOwner::Redwhisk {
         redwhisk_missing_worktree_is_closed_out(repo_path, session).err()
     } else {
@@ -119,6 +122,18 @@ pub(crate) fn gather_completion_world(
         missing_worktree_error,
         snapshot,
         attempt_option: forced_option.unwrap_or(CompletionAttemptOption::CompleteManual),
+        confirm_completion_action: project.confirm_completion_action,
+        saved_closeout_action: saved_closeout_action(project.completion_action),
+        saved_pr_target: project.pr_target,
+        repo_default_branch: remote.repo_default_branch,
+        saved_closeout_draft: project.pr_draft,
+    }
+}
+
+fn saved_closeout_action(action: ProjectCompletionAction) -> CloseoutAction {
+    match action {
+        ProjectCompletionAction::MergeToBase => CloseoutAction::MergeToBase,
+        ProjectCompletionAction::OpenPullRequest => CloseoutAction::OpenPullRequest,
     }
 }
 

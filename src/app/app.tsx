@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { AppShell } from "./app-shell";
@@ -12,13 +6,13 @@ import { resolveAppSurface } from "./app-surface";
 import { Toaster } from "../components/ui/sonner";
 import { LoadingDialog } from "../components/ui/loading-dialog";
 import "./app.css";
-import { ProjectDetailsForm } from "../features/project/project-details-form";
-import { ProjectHome } from "../features/project/project-home";
 import {
-  detectWorktreeSetupCommand,
-  initialWorktreeSetupCommand,
-} from "../features/project/worktree-setup-command";
-import { I18nProvider, useI18n } from "../shared/i18n/i18n";
+  CreateProjectDialog,
+  type CreateProjectDialogDraft,
+} from "../features/project/create-project-dialog";
+import { ProjectHome } from "../features/project/project-home";
+import { initialWorktreeSetupCommand } from "../features/project/worktree-setup-command";
+import { I18nProvider } from "../shared/i18n/i18n";
 import i18next, { getDefaultLocale } from "../shared/i18n/i18n-instance";
 import {
   createProject,
@@ -54,13 +48,8 @@ export interface ProjectSummary {
   codeWorkspaces?: CodeWorkspaceRoot[];
 }
 
-interface CreateProjectDraft {
-  name: string;
+interface CreateProjectDraft extends CreateProjectDialogDraft {
   openInNewWindow: boolean;
-  repoPath: string;
-  suggestedName: string;
-  worktreeLocation: ProjectWorktreeLocation;
-  worktreeSetupCommand: string;
 }
 
 export function App() {
@@ -251,6 +240,13 @@ function ProjectApp() {
             "",
             validatedProject.repoPath,
           ),
+          host:
+            validatedProject.host === "github" ||
+            validatedProject.host === "gitlab"
+              ? validatedProject.host
+              : "none",
+          completionAction: validatedProject.completionAction,
+          confirmCompletionAction: validatedProject.confirmCompletionAction,
         });
       } catch (error) {
         setProjectCreationError(getCommandErrorMessage(error, translate));
@@ -513,154 +509,4 @@ function openInitialProjectFromUrl(): Promise<ProjectRecord | null> {
   }
 
   return openProject({ projectId });
-}
-
-interface CreateProjectDialogProps {
-  initialDraft: CreateProjectDraft;
-  onClose: () => void;
-  onCreate: (input: CreateProjectInput) => Promise<void>;
-}
-
-function CreateProjectDialog({
-  initialDraft,
-  onClose,
-  onCreate,
-}: CreateProjectDialogProps) {
-  const { messages, t } = useI18n();
-  const [projectNameValue, setProjectNameValue] = useState(initialDraft.name);
-  const [projectPathValue, setProjectPathValue] = useState(
-    initialDraft.repoPath,
-  );
-  const [worktreeLocationValue, setWorktreeLocationValue] =
-    useState<ProjectWorktreeLocation>(initialDraft.worktreeLocation);
-  const [worktreeSetupCommandValue, setWorktreeSetupCommandValue] = useState(
-    initialDraft.worktreeSetupCommand,
-  );
-  const [suggestedName, setSuggestedName] = useState(
-    initialDraft.suggestedName,
-  );
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isChoosingRepoPath, setIsChoosingRepoPath] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const trimmedProjectName = projectNameValue.trim();
-  const trimmedProjectPath = projectPathValue.trim();
-  const isSubmitDisabled =
-    isSubmitting ||
-    isChoosingRepoPath ||
-    trimmedProjectName.length === 0 ||
-    trimmedProjectPath.length === 0;
-
-  async function handleChooseRepoPath() {
-    setErrorMessage(null);
-    setIsChoosingRepoPath(true);
-
-    try {
-      const selectedPath = await open({
-        directory: true,
-        multiple: false,
-        title: messages.createProject.selectGitRepository,
-      });
-
-      if (typeof selectedPath !== "string") {
-        return;
-      }
-
-      const validatedProject = await validateProjectRepoPath({
-        repoPath: selectedPath,
-      });
-      const shouldReplaceName =
-        trimmedProjectName.length === 0 || trimmedProjectName === suggestedName;
-      const currentDetectedCommand =
-        detectWorktreeSetupCommand(projectPathValue);
-      const nextDetectedCommand = detectWorktreeSetupCommand(
-        validatedProject.repoPath,
-      );
-
-      setProjectPathValue(validatedProject.repoPath);
-      setSuggestedName(validatedProject.suggestedName);
-      if (shouldReplaceName) {
-        setProjectNameValue(validatedProject.suggestedName);
-      }
-      if (
-        worktreeSetupCommandValue.trim().length === 0 ||
-        worktreeSetupCommandValue === currentDetectedCommand
-      ) {
-        setWorktreeSetupCommandValue(nextDetectedCommand ?? "");
-      }
-    } catch (error: unknown) {
-      setErrorMessage(getCommandErrorMessage(error, t));
-    } finally {
-      setIsChoosingRepoPath(false);
-    }
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isSubmitDisabled) {
-      return;
-    }
-
-    setErrorMessage(null);
-    setIsSubmitting(true);
-
-    try {
-      await onCreate({
-        name: trimmedProjectName,
-        repoPath: trimmedProjectPath,
-        worktreeLocation: worktreeLocationValue,
-        worktreeSetupCommand: worktreeSetupCommandValue.trim(),
-      });
-    } catch (error: unknown) {
-      setErrorMessage(getCommandErrorMessage(error, t));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="issue-dialog-overlay" role="presentation">
-      <div
-        className="issue-dialog issue-dialog--compact"
-        role="dialog"
-        aria-label={messages.createProject.dialogTitle}
-      >
-        <div className="issue-dialog__header">
-          <h3>{messages.createProject.dialogTitle}</h3>
-        </div>
-        <div className="issue-dialog__body issue-dialog__body--single">
-          <ProjectDetailsForm
-            ariaStatusLabel={messages.createProject.status}
-            cancelLabel={messages.settings.cancel}
-            chooseFolderLabel={messages.projectHome.chooseFolder}
-            className="settings-card settings-general-card project-details-card"
-            errorMessage={errorMessage}
-            isChoosingRepoPath={isChoosingRepoPath}
-            isSubmitting={isSubmitting}
-            onCancel={onClose}
-            onChooseRepoPath={handleChooseRepoPath}
-            onNameChange={setProjectNameValue}
-            onSubmit={handleSubmit}
-            onWorktreeLocationChange={setWorktreeLocationValue}
-            onWorktreeSetupCommandChange={setWorktreeSetupCommandValue}
-            projectName={projectNameValue}
-            projectNameLabel={messages.settings.projectName}
-            repoPath={projectPathValue}
-            repoPathLabel={messages.settings.repositoryPath}
-            submitDisabled={isSubmitDisabled}
-            submitLabel={messages.createProject.create}
-            submittingLabel={messages.createProject.creating}
-            worktreeLocation={worktreeLocationValue}
-            worktreeLocationLabel={messages.settings.worktreePath}
-            worktreeSetupCommand={worktreeSetupCommandValue}
-            worktreeSetupCommandLabel={
-              messages.settings.worktreeSetupAfterCreation
-            }
-            worktreeSetupCommandPlaceholder={
-              messages.createProject.worktreeSetupPlaceholder
-            }
-          />
-        </div>
-      </div>
-    </div>
-  );
 }

@@ -43,6 +43,15 @@ impl ForgeHost {
             Self::None => None,
         }
     }
+
+    /// 持久化来源类别。无 remote 与非 GitHub/GitLab 记为 other，不使用响应里的 none。
+    pub fn stored_class(self) -> &'static str {
+        match self {
+            Self::Github => "github",
+            Self::Gitlab => "gitlab",
+            Self::None => "other",
+        }
+    }
 }
 
 impl ForgeStatus {
