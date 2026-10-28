@@ -57,17 +57,21 @@ describe("openHtmlInBrowser", () => {
 });
 
 const BRIEFING_HTML_PATH =
-  "/Users/yujianjia/workspace/lixiang/show-case/pages/cloud-service-ontology-briefing/index.html";
+  "/Users/yujianjia/workspace/lixiang/show-case.worktrees/issue-8-show-case/.scratch/cloud-service-ontology-briefing/architecture-permission-options.html";
 
 describe("opener capability", () => {
-  it("allows open_path to launch an absolute workspace html file", () => {
+  it("allows open_path to launch an html file inside a dot directory", () => {
     const capability = readOpenerCapability(
       readFileSync(
         resolve(process.cwd(), "src-tauri/capabilities/default.json"),
         "utf8",
       ),
     );
+    const tauriConfig = readTauriConfig(
+      readFileSync(resolve(process.cwd(), "src-tauri/tauri.conf.json"), "utf8"),
+    );
 
+    expect(readOpenerRequireLiteralLeadingDot(tauriConfig)).toBe(false);
     expect(
       openerScopeAllowsPath(openerAllowPaths(capability), BRIEFING_HTML_PATH),
     ).toBe(true);
@@ -84,6 +88,10 @@ interface OpenerCapability {
   permissions?: unknown[];
 }
 
+interface TauriConfig {
+  plugins?: unknown;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -94,6 +102,24 @@ function readOpenerCapability(source: string): OpenerCapability {
     return { permissions: [] };
   }
   return { permissions: parsed.permissions };
+}
+
+function readTauriConfig(source: string): TauriConfig {
+  const parsed: unknown = JSON.parse(source);
+  if (!isRecord(parsed)) {
+    return {};
+  }
+  return { plugins: parsed.plugins };
+}
+
+function readOpenerRequireLiteralLeadingDot(
+  config: TauriConfig,
+): boolean | null {
+  if (!isRecord(config.plugins) || !isRecord(config.plugins.opener)) {
+    return null;
+  }
+  const value = config.plugins.opener.requireLiteralLeadingDot;
+  return typeof value === "boolean" ? value : null;
 }
 
 function openerAllowPaths(capability: OpenerCapability): string[] {
