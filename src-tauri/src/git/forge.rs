@@ -29,6 +29,15 @@ impl ForgeHost {
             Self::None => "none",
         }
     }
+
+    /// 持久化来源类别。无 remote 与非 GitHub/GitLab 记为 other，不使用响应里的 none。
+    pub fn stored_class(self) -> &'static str {
+        match self {
+            Self::Github => "github",
+            Self::Gitlab => "gitlab",
+            Self::None => "other",
+        }
+    }
 }
 
 impl ForgeStatus {
@@ -85,6 +94,17 @@ pub fn inspect_forge(repo_path: &Path) -> ForgeStatus {
         cli_installed,
         cli_authenticated,
     )
+}
+
+/// 只识别 remote 宿主，不检查命令行。无 remote、解析失败和 GitHub Enterprise 都是 None。
+pub fn forge_host(repo_path: &Path) -> ForgeHost {
+    resolve_remote_url(repo_path)
+        .ok()
+        .flatten()
+        .as_deref()
+        .and_then(parse_forge_url)
+        .map(|(host, _)| host)
+        .unwrap_or(ForgeHost::None)
 }
 
 fn forge_status(

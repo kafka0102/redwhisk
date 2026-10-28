@@ -64,6 +64,7 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "pr_target",
             "pr_draft",
             "confirm_completion_action",
+            "forge_host",
         ],
     );
     assert_eq!(

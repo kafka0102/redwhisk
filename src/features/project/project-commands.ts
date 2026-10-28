@@ -24,6 +24,9 @@ export interface ValidateProjectRepoPathInput {
 export interface ValidateProjectRepoPathResponse {
   repoPath: string;
   suggestedName: string;
+  host: "github" | "gitlab" | "none";
+  completionAction: "merge_to_base" | "open_pull_request";
+  confirmCompletionAction: boolean;
 }
 
 export interface OpenProjectInput {

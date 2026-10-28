@@ -193,6 +193,9 @@ const PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_VERSION: &str =
     "0058_project_confirm_completion_action";
 const PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_SQL: &str =
     include_str!("../../migrations/0058_project_confirm_completion_action.sql");
+const PROJECT_FORGE_HOST_MIGRATION_VERSION: &str = "0059_project_forge_host";
+const PROJECT_FORGE_HOST_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0059_project_forge_host.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -520,6 +523,10 @@ fn default_migrations() -> Vec<Migration> {
         Migration {
             version: PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_VERSION,
             sql: PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_FORGE_HOST_MIGRATION_VERSION,
+            sql: PROJECT_FORGE_HOST_MIGRATION_SQL,
         },
     ]
 }

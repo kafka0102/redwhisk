@@ -91,6 +91,9 @@ pub struct ValidateProjectRepoPathInput {
 pub struct ValidateProjectRepoPathResponse {
     pub repo_path: String,
     pub suggested_name: String,
+    pub host: String,
+    pub completion_action: ProjectCompletionAction,
+    pub confirm_completion_action: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

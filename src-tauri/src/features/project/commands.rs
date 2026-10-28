@@ -171,10 +171,17 @@ pub async fn inspect_project_forge(
 }
 
 #[tauri::command]
-pub fn validate_project_repo_path(
+pub async fn validate_project_repo_path(
+    app: tauri::AppHandle,
     input: ValidateProjectRepoPathInput,
 ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
-    ProjectService::validate_project_repo_path(&input.repo_path)
+    let data_dir = project_data_dir(&app)?;
+    let repo_path = input.repo_path;
+    tauri::async_runtime::spawn_blocking(move || {
+        ProjectService::validate_project_repo_path_in_data_dir(data_dir, &repo_path)
+    })
+    .await
+    .map_err(project_join_error)?
 }
 
 #[tauri::command]

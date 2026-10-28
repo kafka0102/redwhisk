@@ -324,6 +324,9 @@ describe("App project entry", () => {
     validateProjectRepoPathMock.mockImplementation(async ({ repoPath }) => ({
       repoPath,
       suggestedName: repoPath.split("/").pop() ?? "repo",
+      host: "none",
+      completionAction: "merge_to_base",
+      confirmCompletionAction: false,
     }));
   });
 
@@ -1083,6 +1086,10 @@ describe("App project entry", () => {
       repoPath: "/Users/kafka0102/workspace/new-repo",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
+      completionAction: "merge_to_base",
+      confirmCompletionAction: false,
+      prTarget: "issue_base",
+      prDraft: false,
     });
     expect(
       await screen.findByRole("heading", { name: "Issues" }),
@@ -1350,6 +1357,10 @@ describe("App project entry", () => {
       repoPath: "/Users/kafka0102/workspace/new-repo",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
+      completionAction: "merge_to_base",
+      confirmCompletionAction: false,
+      prTarget: "issue_base",
+      prDraft: false,
     });
     expect(openProjectWindowMock).toHaveBeenCalledWith({
       projectId: 4,

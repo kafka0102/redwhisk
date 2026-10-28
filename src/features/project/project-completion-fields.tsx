@@ -25,6 +25,8 @@ interface ProjectCompletionFieldsProps {
   draft: boolean;
   confirmCompletionAction: boolean;
   disabled: boolean;
+  showRequestDetails?: boolean;
+  showCliStatus?: boolean;
   onActionChange: (value: ProjectCompletionAction) => void;
   onTargetChange: (value: ProjectPrTarget) => void;
   onDraftChange: (value: boolean) => void;
@@ -41,6 +43,8 @@ export function ProjectCompletionFields({
   draft,
   confirmCompletionAction,
   disabled,
+  showRequestDetails = true,
+  showCliStatus = true,
   onActionChange,
   onTargetChange,
   onDraftChange,
@@ -52,8 +56,9 @@ export function ProjectCompletionFields({
   }
   const gitlab = host === "gitlab";
   const cli = gitlab ? "glab" : "gh";
-  const status =
-    cliInstalled && cliAuthenticated
+  const status = !showCliStatus
+    ? null
+    : cliInstalled && cliAuthenticated
       ? null
       : !cliInstalled && !cliAuthenticated
         ? t("completionCloseout.cliNotReady", { cli })
@@ -161,7 +166,7 @@ export function ProjectCompletionFields({
           </SelectContent>
         </Select>
       </div>
-      {action === "open_pull_request" ? (
+      {showRequestDetails && action === "open_pull_request" ? (
         <>
           <div className="grid gap-1.5">
             <Label

@@ -6,6 +6,9 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::types::project::{
     ProjectCompletionAction, ProjectPrTarget, ProjectSummary, ProjectWorktreeLocation,
 };
+
+const DEFAULT_FORGE_HOST: &str = "other";
+
 pub struct ProjectRepository<'connection> {
     connection: &'connection Connection,
 }
@@ -135,6 +138,7 @@ impl<'connection> ProjectRepository<'connection> {
         pr_target: Option<ProjectPrTarget>,
         pr_draft: Option<bool>,
         confirm_completion_action: Option<bool>,
+        forge_host: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         let completion_action = completion_action.map(project_completion_action_to_str);
         let pr_target = pr_target.map(project_pr_target_to_str);
@@ -151,9 +155,10 @@ impl<'connection> ProjectRepository<'connection> {
                  pr_target = COALESCE(?6, pr_target),
                  pr_draft = COALESCE(?7, pr_draft),
                  confirm_completion_action = COALESCE(?8, confirm_completion_action),
+                 forge_host = ?9,
                  removed_at = NULL,
                  last_opened_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
-             WHERE id = ?9",
+             WHERE id = ?10",
             params![
                 name,
                 repo_path,
@@ -163,6 +168,7 @@ impl<'connection> ProjectRepository<'connection> {
                 pr_target,
                 pr_draft,
                 confirm_completion_action,
+                forge_host,
                 id
             ],
         )?;
@@ -198,6 +204,7 @@ impl<'connection> ProjectRepository<'connection> {
             None,
             None,
             None,
+            DEFAULT_FORGE_HOST,
         )
     }
 
@@ -211,6 +218,7 @@ impl<'connection> ProjectRepository<'connection> {
         pr_target: Option<ProjectPrTarget>,
         pr_draft: Option<bool>,
         confirm_completion_action: Option<bool>,
+        forge_host: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         let completion_action = completion_action.map(project_completion_action_to_str);
         let pr_target = pr_target.map(project_pr_target_to_str);
@@ -220,7 +228,7 @@ impl<'connection> ProjectRepository<'connection> {
         self.connection.execute(
             "INSERT OR IGNORE INTO projects (
                 name, repo_path, created_at, last_opened_at, worktree_location, worktree_setup_command,
-                completion_action, pr_target, pr_draft, confirm_completion_action
+                completion_action, pr_target, pr_draft, confirm_completion_action, forge_host
              )
              VALUES (
                 ?1, ?2,
@@ -230,7 +238,8 @@ impl<'connection> ProjectRepository<'connection> {
                 COALESCE(?5, 'merge_to_base'),
                 COALESCE(?6, 'issue_base'),
                 COALESCE(?7, 1),
-                COALESCE(?8, 0)
+                COALESCE(?8, 0),
+                ?9
              )",
             params![
                 name,
@@ -241,6 +250,7 @@ impl<'connection> ProjectRepository<'connection> {
                 pr_target,
                 pr_draft,
                 confirm_completion_action,
+                forge_host,
             ],
         )?;
 
@@ -270,6 +280,7 @@ impl<'connection> ProjectRepository<'connection> {
             None,
             None,
             None,
+            DEFAULT_FORGE_HOST,
         )
     }
 
@@ -296,6 +307,7 @@ impl<'connection> ProjectRepository<'connection> {
         pr_target: Option<ProjectPrTarget>,
         pr_draft: Option<bool>,
         confirm_completion_action: Option<bool>,
+        forge_host: &str,
     ) -> rusqlite::Result<ProjectSummary> {
         let completion_action = completion_action.map(project_completion_action_to_str);
         let pr_target = pr_target.map(project_pr_target_to_str);
@@ -312,8 +324,9 @@ impl<'connection> ProjectRepository<'connection> {
                  pr_target = COALESCE(?6, pr_target),
                  pr_draft = COALESCE(?7, pr_draft),
                  confirm_completion_action = COALESCE(?8, confirm_completion_action),
+                 forge_host = ?9,
                  removed_at = NULL
-             WHERE id = ?9",
+             WHERE id = ?10",
             params![
                 name,
                 repo_path,
@@ -323,12 +336,39 @@ impl<'connection> ProjectRepository<'connection> {
                 pr_target,
                 pr_draft,
                 confirm_completion_action,
+                forge_host,
                 id
             ],
         )?;
 
         self.find_by_id(id)?
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    /// 同类完成后建议只读已保存类别，排除正在填写的路径和已移除项目。
+    pub fn latest_same_host_completion(
+        &self,
+        repo_path: &str,
+        forge_host: &str,
+    ) -> rusqlite::Result<Option<(ProjectCompletionAction, bool)>> {
+        self.connection
+            .query_row(
+                "SELECT completion_action, confirm_completion_action
+                 FROM projects
+                 WHERE removed_at IS NULL
+                   AND repo_path != ?1
+                   AND forge_host = ?2
+                 ORDER BY last_opened_at DESC, created_at DESC, name ASC
+                 LIMIT 1",
+                params![repo_path, forge_host],
+                |row| {
+                    Ok((
+                        project_completion_action_from_str(&row.get::<_, String>(0)?)?,
+                        row.get::<_, i64>(1)? != 0,
+                    ))
+                },
+            )
+            .optional()
     }
 }
 

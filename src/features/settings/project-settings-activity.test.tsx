@@ -254,6 +254,9 @@ describe("ProjectSettingsActivity", () => {
     validateProjectRepoPathMock.mockImplementation(async ({ repoPath }) => ({
       repoPath,
       suggestedName: repoPath.split("/").pop() ?? "repo",
+      host: "none",
+      completionAction: "merge_to_base",
+      confirmCompletionAction: false,
     }));
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") return { profiles: [projectProfile] };
