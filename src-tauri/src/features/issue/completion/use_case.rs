@@ -4,6 +4,8 @@
 //! `IssueService` 仅保留 command 入口校验与 CRUD / timeline；本 module 是完成流程
 //! 的可测 seam（ADR-0012 follow-up）。
 
+use std::path::Path;
+
 use crate::agent::session_registry::AgentSessionRegistry;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::completion_attempt_repository::CompletionAttemptRepository;
@@ -22,6 +24,7 @@ use crate::features::issue::completion::state_machine::{
 use crate::features::issue::service::IssueService;
 use crate::features::issue::time::current_epoch_millis_for_db;
 use crate::features::issue::validation::{issue_database_error, issue_not_found};
+use crate::git::forge::{cli_is_installed, detect_forge_host};
 use crate::git::operation_state::{
     format_git_operation_state, git_operation_blocking_message, GitOperationBlockContext,
     GitOperationState,
@@ -35,7 +38,7 @@ use crate::types::issue::{
     DetectAgentCommitCompletionResult, IssueRecord, IssueStatus,
 };
 use crate::types::issue_completion::{
-    CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult,
+    CloseoutAction, CompleteIssueFlowAction, CompleteIssueFlowInput, CompleteIssueFlowResult,
     IssueCompletionFlowRecord, IssueCompletionPhase,
 };
 use crate::types::project::ProjectSummary;
@@ -71,6 +74,30 @@ impl<'service, 'connection> CompletionFlow<'service, 'connection> {
             state.worktree_cleanup_decision = input.worktree_cleanup_decision;
         }
         let event = derive_completion_event(&input, &state);
+        // 只在用户真正选择创建 PR/MR 时检查 CLI；完成检测和弹窗渲染不做 gh/glab 探测。
+        if matches!(
+            &event,
+            CompletionEvent::CloseoutDecided {
+                action: CloseoutAction::OpenPullRequest,
+                ..
+            }
+        ) {
+            let host = detect_forge_host(Path::new(&session.working_dir));
+            let Some(cli) = host.cli_name() else {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "The GitHub or GitLab remote was not recognized.",
+                )
+                .with_reason("forgeUnknown"));
+            };
+            if !cli_is_installed(cli) {
+                return Err(CommandError::new(
+                    CommandErrorCode::IssueValidationFailed,
+                    "The required forge CLI is not installed.",
+                )
+                .with_reason("forgeCliMissing"));
+            }
+        }
         // closed 快速完成路径仅对 Begin 生效；非 Begin（ContinueConfirmed / CleanupDecided 等）
         // 仍读真实快照，与既有 continue_after_commit 路径一致。
         let closed_fast_path = matches!(event, CompletionEvent::Begin)

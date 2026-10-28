@@ -1,9 +1,15 @@
 //! 从 git remote 识别 GitHub / GitLab，并查看本机 gh / glab 是否可用。
 
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
 
 use super::command::{apply_interactive_path, run_git, GitCommandError};
+
+/// `auth status` 会访问远端；离线或凭据失效时 glab 要等满 30 秒才返回。
+/// 状态展示只需要一个可用/不可用的判定，给短超时避免拖住设置页。
+const CLI_AUTH_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForgeHost {
@@ -27,6 +33,14 @@ impl ForgeHost {
             Self::Github => "github",
             Self::Gitlab => "gitlab",
             Self::None => "none",
+        }
+    }
+
+    pub fn cli_name(self) -> Option<&'static str> {
+        match self {
+            Self::Github => Some("gh"),
+            Self::Gitlab => Some("glab"),
+            Self::None => None,
         }
     }
 }
@@ -63,48 +77,60 @@ impl From<ForgeStatus> for ForgeStatusDto {
     }
 }
 
+/// 只读 git remote 的识别结果，不启动 gh / glab。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForgeRemoteStatus {
+    pub host: ForgeHost,
+    pub remote_label: Option<String>,
+    pub repo_default_branch: Option<String>,
+}
+
 pub fn inspect_forge(repo_path: &Path) -> ForgeStatus {
-    let remote = resolve_remote_url(repo_path).ok().flatten();
-    let parsed = remote.as_deref().and_then(parse_forge_url);
-    let Some((host, label)) = parsed else {
-        return forge_status(repo_path, ForgeHost::None, None, false, false);
-    };
-    let cli = match host {
-        ForgeHost::Github => "gh",
-        ForgeHost::Gitlab => "glab",
-        ForgeHost::None => {
-            return forge_status(repo_path, host, Some(label), false, false);
-        }
+    let remote = inspect_forge_remote(repo_path);
+    let Some(cli) = remote.host.cli_name() else {
+        return ForgeStatus {
+            host: ForgeHost::None,
+            remote_label: remote.remote_label,
+            cli_installed: false,
+            cli_authenticated: false,
+            repo_default_branch: None,
+        };
     };
     let cli_installed = cli_is_installed(cli);
     let cli_authenticated = cli_installed && cli_is_authenticated(cli);
-    forge_status(
-        repo_path,
-        host,
-        Some(label),
+    ForgeStatus {
+        host: remote.host,
+        remote_label: remote.remote_label,
         cli_installed,
         cli_authenticated,
-    )
+        repo_default_branch: remote.repo_default_branch,
+    }
 }
 
-fn forge_status(
-    repo_path: &Path,
-    host: ForgeHost,
-    remote_label: Option<String>,
-    cli_installed: bool,
-    cli_authenticated: bool,
-) -> ForgeStatus {
-    ForgeStatus {
-        host,
-        remote_label,
-        cli_installed,
-        cli_authenticated,
-        repo_default_branch: if host == ForgeHost::None {
-            None
-        } else {
-            repo_default_branch(repo_path)
+pub fn inspect_forge_remote(repo_path: &Path) -> ForgeRemoteStatus {
+    match resolve_remote_forge(repo_path) {
+        Some((host, label)) => ForgeRemoteStatus {
+            host,
+            remote_label: Some(label),
+            repo_default_branch: repo_default_branch(repo_path),
+        },
+        None => ForgeRemoteStatus {
+            host: ForgeHost::None,
+            remote_label: None,
+            repo_default_branch: None,
         },
     }
+}
+
+pub fn detect_forge_host(repo_path: &Path) -> ForgeHost {
+    resolve_remote_forge(repo_path)
+        .map(|(host, _)| host)
+        .unwrap_or(ForgeHost::None)
+}
+
+fn resolve_remote_forge(repo_path: &Path) -> Option<(ForgeHost, String)> {
+    let remote = resolve_remote_url(repo_path).ok().flatten()?;
+    parse_forge_url(&remote)
 }
 
 pub fn repo_default_branch(repo_path: &Path) -> Option<String> {
@@ -184,23 +210,38 @@ fn cli_command(cli: &str, args: &[&str]) -> Command {
     command
 }
 
-fn cli_is_installed(cli: &str) -> bool {
-    cli_command(cli, &["--version"])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+/// 只做 PATH 查找，不启动 CLI。`auth status` / `--version` 都可能触发
+/// 包装脚本、冷启动或网络等待，不能用于「是否安装」这种高频判断。
+pub fn cli_is_installed(cli: &str) -> bool {
+    let mut search_paths: Vec<OsString> = Vec::new();
+    if let Some(path) = crate::agent::command_detector::resolved_interactive_shell_path() {
+        search_paths.push(path);
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        search_paths.push(path);
+    }
+    search_paths.iter().any(|path| {
+        std::env::split_paths(path)
+            .any(|dir| !dir.as_os_str().is_empty() && dir.join(cli).is_file())
+    })
 }
 
 fn cli_is_authenticated(cli: &str) -> bool {
-    cli_command(cli, &["auth", "status"])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    crate::agent::command_lookup_process::output_with_timeout(
+        cli_command(cli, &["auth", "status"]),
+        CLI_AUTH_TIMEOUT,
+    )
+    .map(|output| output.status.success())
+    .unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_forge_url, ForgeHost};
+    use std::process::Command;
+
+    use tempfile::tempdir;
+
+    use super::{detect_forge_host, inspect_forge_remote, parse_forge_url, ForgeHost};
 
     #[test]
     fn parses_github_and_gitlab_urls() {
@@ -213,5 +254,33 @@ mod tests {
             Some(ForgeHost::Gitlab)
         );
         assert!(parse_forge_url("https://bitbucket.org/acme/redwhisk.git").is_none());
+    }
+
+    #[test]
+    fn detects_host_from_git_remote_without_cli() {
+        let temp = tempdir().expect("temp dir");
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(&repo).expect("repo dir");
+        assert!(Command::new("git")
+            .arg("init")
+            .arg(&repo)
+            .status()
+            .expect("git init")
+            .success());
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "git@gitlab.com:acme/redwhisk.git",
+            ])
+            .status()
+            .expect("git remote add")
+            .success());
+
+        assert_eq!(detect_forge_host(&repo), ForgeHost::Gitlab);
+        assert_eq!(inspect_forge_remote(&repo).host, ForgeHost::Gitlab);
     }
 }

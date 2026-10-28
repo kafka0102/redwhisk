@@ -96,7 +96,6 @@ pub struct CompletionWorld {
     pub current_branch: Option<String>,
     pub branch_mismatch: bool,
     pub forge_known: bool,
-    pub forge_ready: bool,
     pub actual_path: String,
     pub drifted: bool,
     pub session_closed_out: bool,
@@ -344,7 +343,6 @@ fn after_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
         world.workspace_mode == WorkspaceMode::Worktree,
         world.branch_mismatch,
         world.forge_known,
-        world.forge_ready,
         state.closeout_action,
     ) {
         CloseoutRoute::Reconcile => reconcile(state, world),
@@ -529,7 +527,6 @@ mod tests {
             current_branch: Some("main".to_string()),
             branch_mismatch: false,
             forge_known: false,
-            forge_ready: false,
             actual_path: "/repo".to_string(),
             drifted: false,
             session_closed_out: false,

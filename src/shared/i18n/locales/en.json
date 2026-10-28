@@ -994,6 +994,7 @@
       "worktreeNotFound": "No linked worktree found; nothing to delete.",
       "worktreeNotManaged": "The current worktree is not managed by RedWhisk and cannot be deleted.",
       "forgeNotReady": "GitHub or GitLab is not ready.",
+      "forgeCliMissing": "gh / glab was not found. Install and sign in before creating a pull request or merge request.",
       "projectNotFound": "Project not found.",
       "branchMissing": "The current branch does not exist."
     },
@@ -1009,6 +1010,7 @@
     "PROJECT_VALIDATION_FAILED": {
       "projectWindowOpen": "This project is open in another window and cannot be removed or deleted.",
       "forgeUnknown": "The GitHub or GitLab remote was not recognized.",
+      "forgeCliMissing": "gh / glab was not found. Install and sign in before creating a pull request or merge request.",
       "branchMissing": "The current branch does not exist.",
       "workspaceNotInProject": "The workspace does not belong to this project.",
       "changeRequestFailed": "Failed to create or read the pull request or merge request."

@@ -994,6 +994,7 @@
       "worktreeNotFound": "未找到关联的 worktree，无需删除。",
       "worktreeNotManaged": "当前 worktree 非 RedWhisk 管理，无法删除。",
       "forgeNotReady": "GitHub / GitLab 环境未就绪。",
+      "forgeCliMissing": "未找到 gh / glab 命令，请先安装并登录后再创建 Pull Request / Merge Request。",
       "projectNotFound": "项目不存在。",
       "branchMissing": "当前分支不存在。"
     },
@@ -1009,6 +1010,7 @@
     "PROJECT_VALIDATION_FAILED": {
       "projectWindowOpen": "该项目已在其他窗口打开，无法从列表移除或删除。",
       "forgeUnknown": "未识别 GitHub 或 GitLab 远程。",
+      "forgeCliMissing": "未找到 gh / glab 命令，请先安装并登录后再创建 Pull Request / Merge Request。",
       "branchMissing": "当前分支不存在。",
       "workspaceNotInProject": "工作区不属于当前项目。",
       "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。"

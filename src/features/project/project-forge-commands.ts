@@ -15,12 +15,17 @@ export interface ProjectForgeInspection {
   prDraft: boolean;
 }
 
-export interface ChangeRequestPreview extends ProjectForgeInspection {
+export interface ChangeRequestPreview {
+  host: ForgeHostName;
   currentBranch: string | null;
+  repoDefaultBranch: string | null;
   branches: string[];
   existingUrl: string | null;
   title: string;
   body: string;
+  completionAction: ProjectCompletionAction;
+  prTarget: ProjectPrTarget;
+  prDraft: boolean;
 }
 
 export interface CreateChangeRequestInput {

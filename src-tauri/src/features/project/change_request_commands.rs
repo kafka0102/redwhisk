@@ -10,10 +10,10 @@ use super::service::ProjectService;
 use crate::app_state::AppState;
 use crate::git::change_request::view_change_request;
 use crate::git::change_request::{
-    current_branch_name, find_open_change_request, local_branch_names, publish_change_request,
-    suggested_change_request_text, workspace_belongs_to_repo, ChangeRequestInput,
+    current_branch_name, local_branch_names, publish_change_request, suggested_change_request_text,
+    workspace_belongs_to_repo, ChangeRequestInput,
 };
-use crate::git::forge::{inspect_forge, ForgeHost};
+use crate::git::forge::{cli_is_installed, detect_forge_host, inspect_forge_remote, ForgeHost};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::{ProjectCompletionAction, ProjectPrTarget};
 
@@ -28,8 +28,6 @@ pub struct PreviewChangeRequestInput {
 #[serde(rename_all = "camelCase")]
 pub struct ChangeRequestPreview {
     pub host: String,
-    pub cli_installed: bool,
-    pub cli_authenticated: bool,
     pub current_branch: Option<String>,
     pub repo_default_branch: Option<String>,
     pub branches: Vec<String>,
@@ -88,20 +86,16 @@ fn preview_change_request_blocking(
 ) -> Result<ChangeRequestPreview, CommandError> {
     let project = ProjectService::project_summary_in_data_dir(&data_dir, input.project_id)?;
     let workspace = ensure_workspace(&project.repo_path, &input.workspace_path)?;
-    let forge = inspect_forge(&workspace);
+    let forge = inspect_forge_remote(&workspace);
     let current_branch = current_branch_name(&workspace);
     let (title, body) = suggested_change_request_text(&workspace);
-    let existing_url = current_branch
-        .as_deref()
-        .and_then(|head| find_open_change_request(&workspace, forge.host, head));
     Ok(ChangeRequestPreview {
         host: forge.host.as_str().to_string(),
-        cli_installed: forge.cli_installed,
-        cli_authenticated: forge.cli_authenticated,
         current_branch,
         repo_default_branch: forge.repo_default_branch,
         branches: local_branch_names(&workspace),
-        existing_url,
+        // 远端已有请求的查询会调用 gh/glab，不能在弹窗打开时阻塞；创建时会复用已有请求。
+        existing_url: None,
         title,
         body,
         completion_action: project.completion_action,
@@ -116,11 +110,17 @@ fn create_change_request_blocking(
 ) -> Result<CreateChangeRequestResponse, CommandError> {
     let project = ProjectService::project_summary_in_data_dir(&data_dir, input.project_id)?;
     let workspace = ensure_workspace(&project.repo_path, &input.workspace_path)?;
-    let forge = inspect_forge(&workspace);
+    let forge = inspect_forge_remote(&workspace);
     if forge.host == ForgeHost::None {
         return Err(coded_error(
             "forgeUnknown",
             "GitHub or GitLab remote was not recognized.",
+        ));
+    }
+    if !forge.host.cli_name().is_some_and(cli_is_installed) {
+        return Err(coded_error(
+            "forgeCliMissing",
+            "The required forge CLI is not installed.",
         ));
     }
     let head = current_branch_name(&workspace)
@@ -163,8 +163,8 @@ fn view_change_request_blocking(
 ) -> Result<crate::git::change_request::ChangeRequestStatus, CommandError> {
     let project = ProjectService::project_summary_in_data_dir(&data_dir, input.project_id)?;
     let repo = PathBuf::from(&project.repo_path);
-    let forge = inspect_forge(&repo);
-    view_change_request(&repo, forge.host, &input.reference).map_err(command_failed)
+    let host = detect_forge_host(&repo);
+    view_change_request(&repo, host, &input.reference).map_err(command_failed)
 }
 
 fn ensure_workspace(repo_path: &str, workspace_path: &str) -> Result<PathBuf, CommandError> {

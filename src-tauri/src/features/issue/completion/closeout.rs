@@ -18,7 +18,6 @@ pub fn route_closeout(
     isolated_worktree: bool,
     branch_mismatch: bool,
     forge_known: bool,
-    forge_ready: bool,
     action: Option<CloseoutAction>,
 ) -> CloseoutRoute {
     // 没有隔离 worktree，或已经在 base 上：不弹窗，直接完成。
@@ -27,9 +26,6 @@ pub fn route_closeout(
     }
     if !forge_known {
         return CloseoutRoute::Reconcile;
-    }
-    if !forge_ready {
-        return CloseoutRoute::Complete;
     }
     match action {
         None => CloseoutRoute::Prompt,
@@ -46,7 +42,7 @@ mod tests {
     #[test]
     fn on_base_completes_without_dialog() {
         assert_eq!(
-            route_closeout(true, false, true, true, None),
+            route_closeout(true, false, true, None),
             CloseoutRoute::Complete
         );
     }
@@ -54,7 +50,7 @@ mod tests {
     #[test]
     fn current_checkout_completes_without_dialog() {
         assert_eq!(
-            route_closeout(false, true, true, true, None),
+            route_closeout(false, true, true, None),
             CloseoutRoute::Complete
         );
     }
@@ -62,33 +58,27 @@ mod tests {
     #[test]
     fn unknown_host_keeps_merge() {
         assert_eq!(
-            route_closeout(true, true, false, false, None),
+            route_closeout(true, true, false, None),
             CloseoutRoute::Reconcile
         );
     }
 
     #[test]
-    fn unready_cli_ends_directly() {
+    fn known_host_prompts_without_probing_cli() {
         assert_eq!(
-            route_closeout(true, true, true, false, None),
-            CloseoutRoute::Complete
+            route_closeout(true, true, true, None),
+            CloseoutRoute::Prompt
         );
     }
 
     #[test]
-    fn ready_cli_prompts_then_opens() {
+    fn known_host_prompts_then_opens() {
         assert_eq!(
-            route_closeout(true, true, true, true, None),
+            route_closeout(true, true, true, None),
             CloseoutRoute::Prompt
         );
         assert_eq!(
-            route_closeout(
-                true,
-                true,
-                true,
-                true,
-                Some(CloseoutAction::OpenPullRequest)
-            ),
+            route_closeout(true, true, true, Some(CloseoutAction::OpenPullRequest)),
             CloseoutRoute::OpenPullRequest
         );
     }

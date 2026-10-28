@@ -7,7 +7,7 @@ use crate::features::issue::completion::git_reconcile::{
 use crate::features::issue::completion::state_machine::{
     CompletionEvent, CompletionState, CompletionWorld,
 };
-use crate::git::forge::inspect_forge;
+use crate::git::forge::{detect_forge_host, ForgeHost};
 use crate::git::status::GitSnapshot;
 use crate::git::worktree::inspect_execution_path;
 use crate::types::agent_session::{
@@ -98,7 +98,7 @@ pub(crate) fn gather_completion_world(
             .unwrap_or_else(|_| target_branch.clone().unwrap_or_default())
     };
     let branch_mismatch = target_branch.as_deref() != Some(current_branch.as_str());
-    let forge = inspect_forge(Path::new(repo_path));
+    let forge_known = detect_forge_host(Path::new(repo_path)) != ForgeHost::None;
     let missing_worktree_error = if workspace_missing && owner == WorktreeOwner::Redwhisk {
         redwhisk_missing_worktree_is_closed_out(repo_path, session).err()
     } else {
@@ -112,8 +112,7 @@ pub(crate) fn gather_completion_world(
         target_branch,
         current_branch: Some(current_branch),
         branch_mismatch,
-        forge_known: forge.known(),
-        forge_ready: forge.ready(),
+        forge_known,
         actual_path: actual.path.clone(),
         drifted: actual.drifted,
         session_closed_out: is_session_closed_out(session),
