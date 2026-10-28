@@ -28,6 +28,7 @@ import { useAgentMessageStream } from "./use-agent-message-stream";
 import { useExpandTimelineEntry } from "./use-expand-timeline-entry";
 import { AgentMessageCards } from "./agent-message-cards";
 import { installSelectionDragClamp } from "./selection-drag-clamp";
+import { useParentOutputStalled } from "./parent-output-stall";
 import {
   readMessageStreamScrollOffset,
   writeMessageStreamScrollOffset,
@@ -149,6 +150,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
   const hasClaudeOutput =
     isClaude && entries.some((entry) => entry.kind !== "user_message");
   const shouldShowThinking = isTurnActive && (!isClaude || !hasClaudeOutput);
+  const parentOutputStalled = useParentOutputStalled(entries, isTurnActive);
 
   // 新内容到达时，若用户贴底则滚动到底。
   const lastSignature =
@@ -345,7 +347,11 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
                 strokeWidth={2}
                 className="agents-message__spinner"
               />
-              <span>{messages.agentsFeature.thinking}</span>
+              <span>
+                {parentOutputStalled
+                  ? t("agentsFeature.parentOutputStalled")
+                  : messages.agentsFeature.thinking}
+              </span>
             </div>
           </div>
         ) : null}

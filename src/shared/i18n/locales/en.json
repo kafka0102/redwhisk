@@ -537,6 +537,7 @@
     "expandUserMessage": "Show more",
     "collapseUserMessage": "Collapse",
     "thinking": "Thinking...",
+    "parentOutputStalled": "No new output for 3 minutes",
     "scrollToBottom": "Scroll to bottom",
     "scrollToTop": "Scroll to top",
     "turnInterrupted": "This turn may not have finished normally (interrupted). Send a message to continue.",

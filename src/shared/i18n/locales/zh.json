@@ -537,6 +537,7 @@
     "expandUserMessage": "展开更多",
     "collapseUserMessage": "收起",
     "thinking": "正在思考…",
+    "parentOutputStalled": "已超过 3 分钟没有新输出",
     "scrollToBottom": "回到底部",
     "scrollToTop": "回到顶部",
     "turnInterrupted": "本轮可能未正常完成（异常中断）。可重新发送消息继续。",
