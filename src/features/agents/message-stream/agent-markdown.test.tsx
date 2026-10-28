@@ -430,6 +430,12 @@ describe("AgentMarkdown 表格", () => {
     expect(columns[0]?.style.minWidth).toBe("4ch");
     expect(columns[1]?.style.width).toBe("4ch");
     expect(columns[1]?.style.minWidth).toBe("4ch");
+    for (const cell of container.querySelectorAll("th, td")) {
+      expect((cell as HTMLElement).style.width).toBe(
+        (cell as HTMLElement).style.maxWidth,
+      );
+      expect((cell as HTMLElement).style.maxWidth).not.toBe("");
+    }
   });
 
   it("列宽贴单元格而不是更短的列名", () => {

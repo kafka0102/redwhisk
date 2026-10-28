@@ -304,7 +304,8 @@
 }
 
 /* 表格单独滚动。格子改回 normal，避免气泡的 break-word 把列压成一个字。
-   content-box 让 Nch 是内容宽，内边距和边框加在外面。类名只由 AgentMarkdown 输出。 */
+   列内容宽写在格子的 width/min/max 上，content-box 让 Nch 不含内边距。
+   类名只由 AgentMarkdown 输出。 */
 .agents-message__table-scroll {
   max-width: 100%;
   overflow-x: auto;

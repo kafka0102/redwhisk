@@ -52,6 +52,7 @@ interface MarkdownTreeNode {
   type: string;
   tagName?: string;
   value?: string;
+  properties?: Record<string, unknown>;
   children?: MarkdownTreeNode[];
 }
 
@@ -141,11 +142,76 @@ function markdownTreeNode(node: unknown): MarkdownTreeNode | null {
   return node as MarkdownTreeNode;
 }
 
+function cellStyle(node: { properties?: Record<string, unknown> } | undefined):
+  | {
+      width?: string;
+      minWidth?: string;
+      maxWidth?: string;
+      textAlign?: "center" | "right";
+    }
+  | undefined {
+  const size = columnContentSize(node);
+  const textAlign = tableCellAlign(node?.properties?.align);
+  if (size === undefined && textAlign === undefined) {
+    return undefined;
+  }
+  return {
+    ...(size === undefined
+      ? {}
+      : { width: size, minWidth: size, maxWidth: size }),
+    ...(textAlign === undefined ? {} : { textAlign }),
+  };
+}
+
 function tableCellAlign(align: unknown): "center" | "right" | undefined {
   if (align === "center" || align === "right") {
     return align;
   }
   return undefined;
+}
+
+function findTables(node: MarkdownTreeNode): MarkdownTreeNode[] {
+  const tables: MarkdownTreeNode[] = [];
+  if (node.type === "element" && node.tagName === "table") {
+    tables.push(node);
+  }
+  for (const child of node.children ?? []) {
+    tables.push(...findTables(child));
+  }
+  return tables;
+}
+
+/** 把列内容宽写到格子上。只写在 col 上时，浏览器会把内边距算进列宽，短列会被挤成一字一行。 */
+function annotateTableColumnWidths(tree: MarkdownTreeNode): void {
+  for (const table of findTables(tree)) {
+    const widths = columnWidths(table);
+    for (const row of tableRows(table)) {
+      rowCells(row).forEach((cell, index) => {
+        const units = widths[index];
+        if (units === undefined) {
+          return;
+        }
+        const properties = (cell.properties ??= {});
+        properties.dataColumnCh = String(units);
+      });
+    }
+  }
+}
+
+function rehypeAssistantTableWidths() {
+  return (tree: MarkdownTreeNode): void => {
+    annotateTableColumnWidths(tree);
+  };
+}
+
+function columnContentSize(
+  node: { properties?: Record<string, unknown> } | undefined,
+): string | undefined {
+  const raw = node?.properties?.dataColumnCh;
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    return undefined;
+  }
+  return `${raw}ch`;
 }
 
 /**
@@ -235,23 +301,18 @@ function createMarkdownComponents(
       );
     },
     th({ children, node }) {
-      const textAlign = tableCellAlign(node?.properties?.align);
       return (
         <th
           className="agents-message__table-cell agents-message__table-head"
-          style={textAlign === undefined ? undefined : { textAlign }}
+          style={cellStyle(node)}
         >
           {children}
         </th>
       );
     },
     td({ children, node }) {
-      const textAlign = tableCellAlign(node?.properties?.align);
       return (
-        <td
-          className="agents-message__table-cell"
-          style={textAlign === undefined ? undefined : { textAlign }}
-        >
+        <td className="agents-message__table-cell" style={cellStyle(node)}>
           {children}
         </td>
       );
@@ -390,6 +451,7 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     <div className="agents-message__markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeAssistantTableWidths]}
         components={components}
         urlTransform={transformUrl}
       >
