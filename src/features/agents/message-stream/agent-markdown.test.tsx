@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -412,3 +414,294 @@ describe("AgentMarkdown 围栏代码", () => {
     expect(container.querySelector("pre")).toBeNull();
   });
 });
+
+describe("AgentMarkdown 表格", () => {
+  it("表格列宽贴内容", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 环节 | 结果 |
+| --- | --- |
+| 索引 | 短 |`}</AgentMarkdown>,
+    );
+
+    const columns = container.querySelectorAll("col");
+
+    expect(columns).toHaveLength(2);
+    expect(columns[0]?.style.width).toBe("4ch");
+    expect(columns[0]?.style.minWidth).toBe("4ch");
+    expect(columns[1]?.style.width).toBe("4ch");
+    expect(columns[1]?.style.minWidth).toBe("4ch");
+  });
+
+  it("列宽贴单元格而不是更短的列名", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 项 |
+| --- |
+| 索引 |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["4ch"]);
+  });
+
+  it("长单元格封顶 72 个半角", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| x |
+| --- |
+| ${"a".repeat(80)} |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["72ch"]);
+  });
+
+  it("超长列名也封顶 72 个半角", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| ${"a".repeat(80)} |
+| --- |
+| b |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["72ch"]);
+  });
+
+  it("链接列宽只算标签", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 项 |
+| --- |
+| [ADR-072](https://example.com/very/long/path) |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["7ch"]);
+  });
+
+  it("加粗和斜体只算里面的字", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 名 |
+| --- |
+| **风险** |
+
+| 名 |
+| --- |
+| *ab* |`}</AgentMarkdown>,
+    );
+
+    const tables = container.querySelectorAll("table");
+    expect(columnWidthList(tables[0] as HTMLElement)).toEqual(["4ch"]);
+    expect(columnWidthList(tables[1] as HTMLElement)).toEqual(["2ch"]);
+  });
+
+  it("行内代码只算代码文字", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 名 |
+| --- |
+| \`rid\` |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["3ch"]);
+  });
+
+  it("链接标签和周围文字按可见顺序拼接", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 名 |
+| --- |
+| 见 [ADR-072](https://example.com/x) 完 |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["13ch"]);
+  });
+
+  it("单元格首尾空格不计入列宽", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 名 |
+| --- |
+|   索引   |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["4ch"]);
+  });
+
+  it("同一列多行取最宽的一行", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| x |
+| --- |
+| ab |
+| abcd |`}</AgentMarkdown>,
+    );
+
+    expect(columnWidthList(container)).toEqual(["4ch"]);
+  });
+
+  it("保留 GFM 的居中和右对齐，默认列不写对齐", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| n |
+| ---: |
+| 13 |
+
+| n |
+| :---: |
+| 13 |
+
+| n |
+| --- |
+| 13 |`}</AgentMarkdown>,
+    );
+
+    const cells = container.querySelectorAll("td");
+    expect(cells[0]?.style.textAlign).toBe("right");
+    expect(cells[1]?.style.textAlign).toBe("center");
+    expect(cells[2]?.style.textAlign).toBe("");
+  });
+
+  it("只滚动表格，前后段落留在外面", () => {
+    const { container } = render(
+      <AgentMarkdown>{`前面一段
+
+| 项 |
+| --- |
+| 值 |
+
+后面一段`}</AgentMarkdown>,
+    );
+
+    const scroll = container.querySelector(".agents-message__table-scroll");
+    expect(scroll?.querySelector("p")).toBeNull();
+    expect(
+      container.querySelectorAll(".agents-message__markdown > p"),
+    ).toHaveLength(2);
+  });
+
+  it("格子有表头类名，且不带无障碍标签", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| 项 |
+| --- |
+| 值 |`}</AgentMarkdown>,
+    );
+
+    const head = container.querySelector("th");
+    const cell = container.querySelector("td");
+    expect(head).toHaveClass(
+      "agents-message__table-cell",
+      "agents-message__table-head",
+    );
+    expect(cell).toHaveClass("agents-message__table-cell");
+    expect(cell).not.toHaveClass("agents-message__table-head");
+    expect(
+      container.querySelector(".agents-message__table-scroll"),
+    ).not.toHaveAttribute("aria-label");
+    expect(container.querySelector("table")).not.toHaveAttribute("aria-label");
+  });
+
+  it("同一条消息里的两张表各自定宽", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| x |
+| --- |
+| ${"a".repeat(80)} |
+
+| 环节 | 结果 |
+| --- | --- |
+| 索引 | 短 |`}</AgentMarkdown>,
+    );
+
+    const tables = container.querySelectorAll("table");
+    expect(columnWidthList(tables[0] as HTMLElement)).toEqual(["72ch"]);
+    expect(columnWidthList(tables[1] as HTMLElement)).toEqual(["4ch", "4ch"]);
+  });
+
+  it("单元格里的外链仍在新标签页打开", () => {
+    render(
+      <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>
+        {`| 项 |
+| --- |
+| [文档](https://example.com/docs) |`}
+      </AgentMarkdown>,
+    );
+
+    const link = screen.getByRole("link", { name: "文档" });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("单元格里的工作区文件链接仍是按钮", async () => {
+    const openFilePath = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AgentMarkdown sessionFileLinks={{ ...SESSION_FILE_LINKS, openFilePath }}>
+        {`| 项 |
+| --- |
+| [a.ts](./src/app/a.ts) |`}
+      </AgentMarkdown>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Open file src/app/a.ts" }),
+    );
+    expect(openFilePath).toHaveBeenCalledWith("src/app/a.ts");
+  });
+
+  it("没有表格时不渲染表格外壳", () => {
+    const { container } = render(
+      <AgentMarkdown>{"只有一段正文。"}</AgentMarkdown>,
+    );
+
+    expect(container.querySelector(".agents-message__table")).toBeNull();
+    expect(container.querySelector(".agents-message__table-scroll")).toBeNull();
+  });
+
+  it("全角括号按两个半角计，半角括号按一个半角计", () => {
+    const { container } = render(
+      <AgentMarkdown>{`| （ |
+| --- |
+| a |
+
+| ( |
+| --- |
+| a |`}</AgentMarkdown>,
+    );
+
+    const tables = container.querySelectorAll("table");
+    expect(columnWidthList(tables[0] as HTMLElement)).toEqual(["2ch"]);
+    expect(columnWidthList(tables[1] as HTMLElement)).toEqual(["1ch"]);
+  });
+
+  it("表格样式画出边框、表头底色，并只让表格横向滚动", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "src/shared/styles/message-stream.css"),
+      "utf8",
+    );
+    const cell = cssRule(css, ".agents-message__table-cell");
+    const head = cssRule(css, ".agents-message__table-head");
+    const table = cssRule(css, ".agents-message__table");
+    const scroll = cssRule(css, ".agents-message__table-scroll");
+    const markdown = cssRule(css, ".agents-message__markdown");
+
+    expect(cell).toMatch(/border:\s*1px solid var\(--color-border\)/);
+    expect(cell).toMatch(/box-sizing:\s*content-box/);
+    expect(cell).toMatch(/padding:\s*4px 8px/);
+    expect(cell).toMatch(/word-break:\s*normal/);
+    expect(cell).toMatch(/overflow-wrap:\s*break-word/);
+    expect(cell).not.toMatch(/word-break:\s*break-word/);
+    expect(head).toMatch(/background:\s*var\(--color-surface-muted\)/);
+    expect(table).toMatch(/width:\s*max-content/);
+    expect(table).not.toMatch(/width:\s*100%/);
+    expect(table).not.toMatch(/table-layout:\s*fixed/);
+    expect(scroll).toMatch(/overflow-x:\s*auto/);
+    expect(scroll).toMatch(/max-width:\s*100%/);
+    expect(markdown).not.toMatch(/overflow-x/);
+  });
+});
+
+function columnWidthList(container: ParentNode): string[] {
+  return [...container.querySelectorAll("col")].map((column) => {
+    const cell = column as HTMLElement;
+    expect(cell.style.minWidth).toBe(cell.style.width);
+    return cell.style.width;
+  });
+}
+
+function cssRule(css: string, selector: string): string {
+  const marker = `\n${selector} {`;
+  const start = css.indexOf(marker);
+  expect(start).toBeGreaterThan(-1);
+  const open = css.indexOf("{", start);
+  const close = css.indexOf("}", open);
+  return css.slice(open, close);
+}

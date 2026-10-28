@@ -66,6 +66,16 @@ const x = 1;
     expect(codeBlock?.textContent).toContain("const x = 1;");
   });
 
+  it("does not use assistant message table classes", () => {
+    const { container } = renderPreview(`| 环节 | 结果 |
+| --- | --- |
+| 索引 | 短 |`);
+
+    expect(container.querySelector(".agents-message__table")).toBeNull();
+    expect(container.querySelector(".agents-message__table-scroll")).toBeNull();
+    expect(container.querySelector("table")).not.toBeNull();
+  });
+
   it("renders ordered lists for numbered GFM content", () => {
     renderPreview(`1. first
 2. second`);

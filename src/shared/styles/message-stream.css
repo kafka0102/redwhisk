@@ -303,6 +303,30 @@
   text-decoration: underline;
 }
 
+/* 表格单独滚动。格子改回 normal，避免气泡的 break-word 把列压成一个字。
+   content-box 让 Nch 是内容宽，内边距和边框加在外面。类名只由 AgentMarkdown 输出。 */
+.agents-message__table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.agents-message__table {
+  width: max-content;
+  border-collapse: collapse;
+}
+
+.agents-message__table-cell {
+  box-sizing: content-box;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.agents-message__table-head {
+  background: var(--color-surface-muted);
+}
+
 /* 消息里的本地文件链接：外观同外链，点击交给右侧栏 SessionFileViewer 打开。 */
 .agents-message__file-link {
   padding: 0;
