@@ -420,3 +420,8 @@ fn save_json(path: &Path, doc: &Value) -> io::Result<()> {
     }
     fs::write(path, doc.to_string())
 }
+
+#[path = "tui_hook_file_state.rs"]
+mod file_state;
+
+pub use file_state::{codex_hook_file_state, grok_hook_file_state, TuiHookFileState};

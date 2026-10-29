@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 use super::tui_hook_install::{
-    enable_codex_hooks_feature, install_codex_hooks, install_grok_hooks, is_redwhisk_hook_command,
-    uninstall_codex_hooks, uninstall_grok_hooks,
+    codex_hook_file_state, enable_codex_hooks_feature, grok_hook_file_state, install_codex_hooks,
+    install_grok_hooks, uninstall_codex_hooks, uninstall_grok_hooks, TuiHookFileState,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,6 +26,9 @@ pub enum TuiHookAgentKind {
 pub struct TuiHookRegistrationStatus {
     pub codex_registered: bool,
     pub grok_registered: bool,
+    /// 文件里已有 RedWhisk command，但缺当前事件表里的条目。
+    pub codex_hooks_outdated: bool,
+    pub grok_hooks_outdated: bool,
     pub codex_hooks_feature_enabled: bool,
     pub channel_available: bool,
     pub registration_allowed: bool,
@@ -47,18 +50,38 @@ pub fn detect_tui_hook_registration_with_feature(
     registration_allowed: bool,
     codex_hooks_feature: Option<super::tui_hook_install::CodexHooksFeature>,
 ) -> io::Result<TuiHookRegistrationStatus> {
+    let codex = codex_hook_file_state(&codex_hooks_path(home), command_path)?;
+    let grok = grok_hook_file_state(&grok_hook_path(home), command_path)?;
     Ok(TuiHookRegistrationStatus {
-        codex_registered: file_contains_our_command(
-            &codex_hooks_path(home),
-            command_path,
-            "codex",
-        )?,
-        grok_registered: file_contains_our_command(&grok_hook_path(home), command_path, "grok")?,
+        codex_registered: codex == TuiHookFileState::Current,
+        grok_registered: grok == TuiHookFileState::Current,
+        codex_hooks_outdated: codex == TuiHookFileState::Outdated,
+        grok_hooks_outdated: grok == TuiHookFileState::Outdated,
         codex_hooks_feature_enabled: codex_hooks_feature
             .is_none_or(|feature| !feature.effective_value_is_false()),
         channel_available,
         registration_allowed,
     })
+}
+
+/// 只补写已经装过、但事件列表落后的 hook 文件。
+/// 没有 RedWhisk command 时不自动安装。不改 `config.toml`，不代用户信任。
+pub fn upgrade_stale_tui_hook_files(home: &Path, command_path: &str) -> io::Result<()> {
+    if command_path.is_empty() {
+        return Ok(());
+    }
+    if codex_hook_file_state(&codex_hooks_path(home), command_path)? == TuiHookFileState::Outdated {
+        install_codex_hooks(
+            &codex_hooks_path(home),
+            &codex_config_path(home),
+            command_path,
+            false,
+        )?;
+    }
+    if grok_hook_file_state(&grok_hook_path(home), command_path)? == TuiHookFileState::Outdated {
+        install_grok_hooks(&grok_hooks_dir(home), command_path)?;
+    }
+    Ok(())
 }
 
 /// 只写 hook 文件。不改 `config.toml`，即使 hooks feature 为 false。
@@ -128,16 +151,6 @@ pub fn grok_hooks_dir(home: &Path) -> PathBuf {
 
 pub fn grok_hook_path(home: &Path) -> PathBuf {
     grok_hooks_dir(home).join("redwhisk.json")
-}
-
-fn file_contains_our_command(path: &Path, command_path: &str, source: &str) -> io::Result<bool> {
-    if command_path.is_empty() || !path.exists() {
-        return Ok(false);
-    }
-    let text = std::fs::read_to_string(path)?;
-    Ok(text
-        .lines()
-        .any(|line| is_redwhisk_hook_command(line, command_path, source)))
 }
 
 fn hook_io_error(error: io::Error) -> CommandError {

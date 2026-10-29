@@ -25,6 +25,8 @@ function status(
   return {
     codexRegistered: true,
     grokRegistered: false,
+    codexHooksOutdated: false,
+    grokHooksOutdated: false,
     codexHooksFeatureEnabled: true,
     channelAvailable: true,
     registrationAllowed: true,
@@ -185,6 +187,24 @@ describe("TuiHookRegistrationCard", () => {
         /Codex \/ Grok TUI sessions launched by RedWhisk/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("offers update when the installed hook list is outdated", async () => {
+    const user = userEvent.setup();
+    detectMock.mockResolvedValue(
+      status({
+        codexRegistered: false,
+        codexHooksOutdated: true,
+      }),
+    );
+    renderCard();
+
+    expect(await screen.findByText("需更新")).toBeInTheDocument();
+    await user.hover(screen.getByText("需更新"));
+    expect(await screen.findByText(/执行 \/hooks/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "更新" }));
+    expect(installMock).toHaveBeenCalledWith({ agent: "codex" });
+    expect(screen.getByRole("button", { name: "卸载" })).toBeInTheDocument();
   });
 
   it("recheck only calls detect", async () => {

@@ -63,6 +63,8 @@ vi.mock("./settings-commands", async (importOriginal) => {
     detectTuiHookRegistration: vi.fn(async () => ({
       codexRegistered: false,
       grokRegistered: false,
+      codexHooksOutdated: false,
+      grokHooksOutdated: false,
       codexHooksFeatureEnabled: true,
       channelAvailable: true,
       registrationAllowed: false,

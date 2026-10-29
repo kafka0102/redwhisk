@@ -73,9 +73,25 @@ pub fn run() {
             features::agent_session::active_time_heartbeat::spawn_active_time_heartbeat(
                 app.handle().clone(),
             );
-            state.set_tui_hook_channel_available(features::agent_session::spawn_tui_hook_listener(
-                app.handle().clone(),
-            ));
+            let tui_hook_channel_available =
+                features::agent_session::spawn_tui_hook_listener(app.handle().clone());
+            state.set_tui_hook_channel_available(tui_hook_channel_available);
+            if tui_hook_channel_available {
+                if let (Ok(exe), Some(home)) = (
+                    std::env::current_exe(),
+                    std::env::var_os("HOME").filter(|value| !value.is_empty()),
+                ) {
+                    let command_path = exe.to_string_lossy().to_string();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        if let Err(error) = features::agent_session::upgrade_stale_tui_hook_files(
+                            std::path::Path::new(&home),
+                            &command_path,
+                        ) {
+                            eprintln!("[tui_hook] failed to upgrade stale hook files: {error}");
+                        }
+                    });
+                }
+            }
             // 异步播种内置 agent（ADR-0020）：开库 + 跑迁移 + 检测 codex/claude/opencode/grok
             // 命令是否安装，对已装且库中无任何记录者插入默认 global profile。不阻塞启动；
             // 失败仅记日志，不影响应用可用性。

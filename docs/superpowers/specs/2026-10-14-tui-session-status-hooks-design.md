@@ -154,7 +154,8 @@ card 展示两行，Codex 与 Grok 各一行：
 
 - 未注册 / 已注册 / 注册后 CLI 仍可能要求信任。
 - Codex 行若 `codex features list` 看到 `hooks` 为 false，说明绿点不会出现，并给出单独的「允许写入 `[features] hooks = true`」动作，不跟「安装 hook」合成一个无法撤销的点击。
-- 动作只有安装、卸载、重新检测。检测只读 `hooks.json` 或 `redwhisk.json`，不 spawn agent。
+- 动作只有安装、卸载、重新检测。事件列表落后于当前版本时，安装按钮显示为「更新」，仍调用安装。检测只读 `hooks.json` 或 `redwhisk.json`，不 spawn agent。
+- 应用启动且本机状态通道可用时，若文件里已经有 RedWhisk command 但缺当前事件，自动补写这些事件。没有 RedWhisk command 时不自动安装。自动补写不改 `config.toml`，不代用户完成 Codex `/hooks` 信任。
 
 安装与卸载是 Tauri command，后端执行文件修改。前端不直接写 `~/.codex` 或 `~/.grok`。SQLite 只记录用户偏好「允许为这个机器注册」，不把 hook 文件内容当业务状态复制一份。偏好是应用级的（CLI 配置在用户主目录，不在项目里），可以落在现有应用设置库；若现有库没有合适的键值表，再加一张单行表。不要放进 `agent_profiles`：display mode 仍是 profile 的事，hook 开关不是某个 profile 的字段。
 

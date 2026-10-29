@@ -74,6 +74,7 @@ export function TuiHookRegistrationCard() {
               agent="codex"
               label={t("settings.tuiHookCodex")}
               registered={status.codexRegistered}
+              outdated={status.codexHooksOutdated}
               installDisabled={installDisabled}
               showFeatureAction={!status.codexHooksFeatureEnabled}
               onChanged={setStatus}
@@ -84,6 +85,7 @@ export function TuiHookRegistrationCard() {
               agent="grok"
               label={t("settings.tuiHookGrok")}
               registered={status.grokRegistered}
+              outdated={status.grokHooksOutdated}
               installDisabled={installDisabled}
               showFeatureAction={false}
               onChanged={setStatus}
@@ -120,6 +122,7 @@ interface TuiHookAgentRowProps {
   agent: TuiHookAgentKind;
   label: string;
   registered: boolean;
+  outdated: boolean;
   installDisabled: boolean;
   showFeatureAction: boolean;
   onChanged: (status: TuiHookRegistrationStatus) => void;
@@ -131,6 +134,7 @@ function TuiHookAgentRow({
   agent,
   label,
   registered,
+  outdated,
   installDisabled,
   showFeatureAction,
   onChanged,
@@ -140,20 +144,26 @@ function TuiHookAgentRow({
   const { t } = useI18n();
   const statusLabel = showFeatureAction
     ? t("settings.tuiHookFeatureShort")
-    : registered
-      ? t("settings.tuiHookStatusRegistered")
-      : t("settings.tuiHookStatusUnregistered");
+    : outdated
+      ? t("settings.tuiHookStatusOutdated")
+      : registered
+        ? t("settings.tuiHookStatusRegistered")
+        : t("settings.tuiHookStatusUnregistered");
   const statusDetail = showFeatureAction
     ? t("settings.tuiHookFeatureDisabled")
-    : registered
-      ? t("settings.tuiHookStatusTrustMayBeRequired")
-      : null;
+    : outdated
+      ? t("settings.tuiHookOutdatedNotice")
+      : registered
+        ? t("settings.tuiHookStatusTrustMayBeRequired")
+        : null;
   const statusTone =
-    registered && !showFeatureAction
-      ? "bg-[var(--color-lane-review-marker)]"
-      : showFeatureAction
-        ? "bg-[var(--color-lane-running-marker)]"
-        : "bg-muted-foreground";
+    outdated && !showFeatureAction
+      ? "bg-[var(--color-lane-running-marker)]"
+      : registered && !showFeatureAction
+        ? "bg-[var(--color-lane-review-marker)]"
+        : showFeatureAction
+          ? "bg-[var(--color-lane-running-marker)]"
+          : "bg-muted-foreground";
 
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
@@ -205,7 +215,20 @@ function TuiHookAgentRow({
             </TooltipContent>
           </Tooltip>
         ) : null}
-        {registered ? (
+        {outdated ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={installDisabled}
+            onClick={() => {
+              void installTuiHook({ agent }).then(onChanged).catch(onFailed);
+            }}
+          >
+            {t("settings.tuiHookUpdate")}
+          </Button>
+        ) : null}
+        {registered || outdated ? (
           <Button
             type="button"
             size="sm"

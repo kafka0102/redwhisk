@@ -47,7 +47,8 @@ pub(crate) use tui_hook_install::{query_codex_hooks_feature, CodexHooksFeature};
 pub(crate) use tui_hook_settings::{
     apply_tui_hook_registration, channel_unavailable_error,
     detect_tui_hook_registration_with_feature, enable_codex_hooks_feature_file,
-    uninstall_tui_hook_registration, TuiHookAgentKind, TuiHookRegistrationStatus,
+    uninstall_tui_hook_registration, upgrade_stale_tui_hook_files, TuiHookAgentKind,
+    TuiHookRegistrationStatus,
 };
 pub(crate) use tui_hook_socket::tui_hook_socket_path;
 mod tui_hook_turn;

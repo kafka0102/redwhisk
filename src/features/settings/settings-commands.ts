@@ -354,6 +354,8 @@ export type TuiHookAgentKind = "codex" | "grok";
 export interface TuiHookRegistrationStatus {
   codexRegistered: boolean;
   grokRegistered: boolean;
+  codexHooksOutdated: boolean;
+  grokHooksOutdated: boolean;
   codexHooksFeatureEnabled: boolean;
   channelAvailable: boolean;
   registrationAllowed: boolean;
