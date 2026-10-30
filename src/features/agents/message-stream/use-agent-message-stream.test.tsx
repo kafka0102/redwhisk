@@ -682,6 +682,73 @@ describe("useAgentMessageStream", () => {
     });
   });
 
+  it("只缓存到用户消息时，切回按日志字节补上后续输出", async () => {
+    vi.useFakeTimers();
+    readAgentTimelineMock.mockReset();
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: { type: "user_message", text: "开始", messageId: "u1" },
+          logOffset: 100,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 100,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: historyItems([
+        { type: "user_message", text: "其它会话", messageId: "other" },
+      ]),
+      effort: null,
+      model: null,
+    });
+    readAgentTimelineMock.mockResolvedValueOnce({
+      items: [
+        {
+          item: {
+            type: "assistant_message",
+            text: "离开后完成的正文",
+            messageId: "m1",
+          },
+          logOffset: 480,
+        },
+      ],
+      effort: null,
+      model: null,
+      windowEndOffset: 480,
+      resetRequired: false,
+    });
+    mocks.listeners.length = 0;
+
+    const { getState, rerenderWith } = await renderProbe({
+      projectId: 1,
+      sessionId: 51,
+      onState: () => {},
+    });
+    expect(getState()!.entries[0]?.id).toBe("u1");
+
+    rerenderWith({ projectId: 1, sessionId: 52 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    rerenderWith({ projectId: 1, sessionId: 51 });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    dispatchFrame();
+
+    expect(readAgentTimelineMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 51,
+      sinceLogOffset: 100,
+    });
+    expect(getState()!.entries.map((entry) => entry.id)).toContain("m1");
+  });
+
   it("同一批增量再应用一次时正文不重复", async () => {
     vi.useFakeTimers();
     const finalItem = {

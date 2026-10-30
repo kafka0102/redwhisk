@@ -222,6 +222,20 @@ describe("messageStreamReducer", () => {
       expect(state.entries[1].id).toBe("a1");
     });
 
+    it("HYDRATE 保留 user_message 的日志字节，供切回时增量补读", () => {
+      const state = messageStreamReducer(createInitialState(), {
+        type: "HYDRATE",
+        items: [
+          {
+            item: { type: "user_message", text: "你好", messageId: "u1" },
+            logOffset: 123,
+          },
+        ],
+      });
+
+      expect(state.entries[0]?.logOffset).toBe(123);
+    });
+
     it("用历史 effort 初始化 Think 状态", () => {
       const state = messageStreamReducer(createInitialState(), {
         type: "HYDRATE",

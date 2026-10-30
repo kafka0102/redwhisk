@@ -28,6 +28,7 @@ import {
   stripToolCallBody,
 } from "./message-stream-fold";
 import { mergeToolCallDetail } from "./message-stream-tool-detail";
+import { isEmptyToolCall } from "./message-stream-tool-call-empty";
 import { closeEndedCollabLaunches, foldSubagentRoster } from "./output-source";
 import type {
   MessageStreamAction,
@@ -562,11 +563,19 @@ function applyTimelineItem(
           (entry) => entry.kind === "user_message" && entry.id === messageId,
         );
         if (index >= 0) {
-          return replaceAt(entries, index, {
-            id: messageId,
-            kind: item.type,
-            item,
-          });
+          return replaceAt(
+            entries,
+            index,
+            entryWithOffset(
+              {
+                id: messageId,
+                kind: item.type,
+                item,
+              },
+              logOffset,
+              entries[index]?.logOffset,
+            ),
+          );
         }
       }
 
@@ -580,11 +589,19 @@ function applyTimelineItem(
             normalizeMessageText(item.text),
       );
       if (optimisticIndex >= 0) {
-        return replaceAt(entries, optimisticIndex, {
-          id: messageId ?? entries[optimisticIndex].id,
-          kind: item.type,
-          item,
-        });
+        return replaceAt(
+          entries,
+          optimisticIndex,
+          entryWithOffset(
+            {
+              id: messageId ?? entries[optimisticIndex].id,
+              kind: item.type,
+              item,
+            },
+            logOffset,
+            entries[optimisticIndex].logOffset,
+          ),
+        );
       }
 
       // 无 messageId 时仅抑制「紧邻末条」的同文回显，避免双写。
@@ -602,7 +619,10 @@ function applyTimelineItem(
         return entries;
       }
 
-      return [...entries, toEntry(item, nextLocalId(entries))];
+      return [
+        ...entries,
+        entryWithOffset(toEntry(item, nextLocalId(entries)), logOffset),
+      ];
     }
 
     case "reasoning": {
@@ -775,42 +795,6 @@ function isEmptyTimelineItem(item: AgentTimelineItem): boolean {
       return item.items.length === 0;
     case "error":
       return item.message.trim().length === 0;
-    default:
-      return false;
-  }
-}
-
-function isEmptyToolCall(
-  item: Extract<AgentTimelineItem, { type: "tool_call" }>,
-): boolean {
-  const detail = item.detail;
-  switch (detail.type) {
-    case "shell":
-      // 回填场景：command 可能为空但 output/exit_code 有值，任一非空即非空。
-      return (
-        detail.command.trim().length === 0 &&
-        !(detail.output && detail.output.trim().length > 0) &&
-        detail.exitCode == null
-      );
-    case "read":
-      return (
-        detail.path.trim().length === 0 &&
-        !(detail.content && detail.content.trim().length > 0)
-      );
-    case "edit":
-      return (
-        detail.path.trim().length === 0 &&
-        !(detail.diff && detail.diff.trim().length > 0)
-      );
-    case "write":
-      return (
-        detail.path.trim().length === 0 &&
-        !(detail.content && detail.content.trim().length > 0)
-      );
-    case "search":
-      return detail.query.trim().length === 0;
-    case "plan":
-      return detail.text.trim().length === 0;
     default:
       return false;
   }
