@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · 远程 Issue 与 PR/MR 工作台</title>
+<style>
+  :root {
+    --color-app: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f1f2f4;
+    --color-surface-subtle: #f7f7f8;
+    --color-border: #e3e5e8;
+    --color-border-strong: #d1d5db;
+    --color-text: #17181a;
+    --color-text-muted: #5f6368;
+    --color-text-subtle: #8a8f98;
+    --color-accent: #111111;
+    --color-accent-muted: #e9eaee;
+    --color-danger: #b42318;
+    --color-danger-soft: #fef3f2;
+    --color-success: #16794b;
+    --color-success-soft: #eaf6ef;
+    --color-warning: #8a5a00;
+    --color-warning-soft: #fff8e6;
+    --color-info: #1f5fa8;
+    --color-info-soft: #eef4fb;
+    --radius-control: 3px;
+    --radius-card: 5px;
+    --radius-dialog: 7px;
+    --shadow-focus: 0 0 0 2px rgb(17 24 39 / 12%);
+    --shadow-dialog: 0 12px 32px rgb(17 24 39 / 16%);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    color: var(--color-text);
+    background: var(--color-app);
+    font-size: 13px;
+    line-height: 1.45;
+    letter-spacing: 0;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; letter-spacing: 0; }
+  button { cursor: pointer; }
+  code, .mono {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  a { color: inherit; }
+  .proto {
+    display: grid;
+    grid-template-columns: 256px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+  .proto-nav {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--color-surface-subtle);
+    border-right: 1px solid var(--color-border);
+  }
+  .proto-nav header { padding: 14px 14px 8px; }
+  .proto-nav h1 { margin: 0; font-size: 13px; font-weight: 650; }
+  .proto-kicker {
+    margin: 4px 0 0;
+    color: var(--color-text-subtle);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .scene-list { flex: 1; min-height: 0; padding: 4px 0 8px; overflow: auto; }
+  .scene-group {
+    margin: 10px 14px 4px;
+    color: var(--color-text-subtle);
+    font-size: 11px;
+  }
+  .scene-list button {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    color: var(--color-text-muted);
+  }
+  .scene-list button strong { margin-right: 6px; color: var(--color-text-subtle); font-weight: 600; }
+  .scene-list button[aria-current="true"] {
+    background: var(--color-accent-muted);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  .scene-list button[aria-current="true"] strong { color: var(--color-text); }
+  .gaps {
+    margin-top: auto;
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .gaps h2 { margin: 0 0 6px; color: var(--color-text); font-size: 11px; font-weight: 650; }
+  .gaps ol { margin: 0; padding-left: 16px; }
+  .gaps li + li { margin-top: 4px; }
+  .proto-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+  }
+  .caption {
+    margin: 0;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: #fafafa;
+  }
+  #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+  .state {
+    margin: 0;
+    max-height: 104px;
+    overflow: auto;
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-border);
+    background: #fafafa;
+    color: var(--color-text-muted);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+  .activity-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface-subtle);
+  }
+  .activity-btn {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+  .activity-btn:hover { background: var(--color-surface-muted); color: var(--color-text); }
+  .activity-btn[aria-pressed="true"] {
+    background: var(--color-accent-muted);
+    color: var(--color-text);
+  }
+  .activity-bar .grow { flex: 1; }
+  .workbench {
+    display: grid;
+    grid-template-rows: 40px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+  }
+  .workbench-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+  .workbench-header strong { color: var(--color-text); font-weight: 650; }
+  .workbench-header .sep { color: var(--color-text-subtle); }
+  .surface {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    background: var(--color-app);
+  }
+  .surface > .page,
+  .surface > .settings-layout,
+  .surface > .pr-list {
+    grid-row: 3;
+  }
+  .surface-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  .surface-tabs { display: inline-flex; align-items: stretch; gap: 2px; height: 100%; }
+  .surface-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-weight: 600;
+  }
+  .surface-tab[aria-selected="true"] { color: var(--color-text); }
+  .surface-tab[aria-selected="true"]::after {
+    position: absolute;
+    right: 8px;
+    bottom: -1px;
+    left: 8px;
+    height: 2px;
+    background: var(--color-accent);
+    content: "";
+  }
+  .surface-tab .count {
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--color-surface-muted);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .surface-actions { display: inline-flex; align-items: center; gap: 8px; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--color-surface-muted); }
+  .btn:focus-visible { outline: 0; box-shadow: var(--shadow-focus); }
+  .btn:disabled { cursor: not-allowed; opacity: 0.5; }
+  .btn-primary { border-color: var(--color-accent); background: var(--color-accent); color: #fff; }
+  .btn-primary:hover { background: #2a2a2a; }
+  .btn-danger { border-color: var(--color-danger); color: var(--color-danger); }
+  .btn-ghost { border-color: transparent; background: transparent; color: var(--color-text-muted); }
+  .btn-ghost:hover { background: var(--color-surface-muted); color: var(--color-text); }
+  .btn-sm { height: 24px; padding: 0 8px; font-size: 11px; }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+  .icon-btn:hover { background: var(--color-surface-muted); color: var(--color-text); }
+  .select, .input, .textarea {
+    width: 100%;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .select, .input { height: 28px; padding: 0 8px; }
+  .select { padding-right: 24px; }
+  .textarea { padding: 7px 8px; resize: vertical; }
+  .select:focus, .input:focus, .textarea:focus { outline: 0; box-shadow: var(--shadow-focus); }
+  .select-inline { width: auto; height: 26px; font-size: 12px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .chip strong { color: var(--color-text); font-weight: 650; }
+  .chip-success { border-color: #bfe3cf; background: var(--color-success-soft); color: var(--color-success); }
+  .chip-danger { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
+  .chip-warning { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
+  .chip-info { border-color: #c9dcf3; background: var(--color-info-soft); color: var(--color-info); }
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .source-badge svg { flex: 0 0 auto; }
+  .muted { color: var(--color-text-muted); }
+  .subtle { color: var(--color-text-subtle); }
+  .danger { color: var(--color-danger); }
+  .success { color: var(--color-success); }
+  .warning { color: var(--color-warning); }
+  .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; }
+  .linkish { border: 0; background: transparent; color: var(--color-info); text-decoration: underline; cursor: pointer; }
+  .linkish:hover { color: var(--color-text); }
+  .sync-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-info-soft);
+    color: var(--color-info);
+    font-size: 12px;
+  }
+  .sync-banner.is-warning { background: var(--color-warning-soft); color: var(--color-warning); }
+  .sync-banner.is-danger { background: var(--color-danger-soft); color: var(--color-danger); }
+  .sync-banner .spacer { flex: 1; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    min-height: 0;
+    padding: 12px;
+    overflow: hidden;
+  }
+  .lane {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    padding: 8px;
+    border-radius: var(--radius-card);
+    background: var(--color-surface-subtle);
+  }
+  .lane-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 2px 8px;
+  }
+  .lane-dot { width: 9px; height: 9px; border: 1.5px solid var(--color-text-subtle); border-radius: 50%; }
+  .lane--running .lane-dot { border-color: #c89000; }
+  .lane--review .lane-dot { border-color: #249447; }
+  .lane--completed .lane-dot { border-color: #1681d9; background: #1681d9; }
+  .lane-header h3 { margin: 0; font-size: 13px; font-weight: 650; }
+  .lane-count { color: var(--color-text-subtle); font-size: 11px; }
+  .lane-header .spacer { flex: 1; }
+  .lane-cards { display: grid; align-content: start; gap: 8px; min-height: 0; overflow: auto; padding: 1px; }
+  .card {
+    display: grid;
+    gap: 5px;
+    padding: 9px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    text-align: left;
+  }
+  .card:hover { border-color: var(--color-border-strong); background: #fcfcfd; }
+  .card.is-selected { border-color: var(--color-border-strong); box-shadow: var(--shadow-focus); }
+  .card-meta { display: flex; align-items: center; gap: 7px; color: var(--color-text-subtle); font-size: 11px; white-space: nowrap; }
+  .card-meta .spacer { flex: 1; }
+  .card-id { flex: 0 0 auto; color: var(--color-text-muted); font-weight: 600; }
+  .card-time { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .card-title { color: var(--color-text); font-size: 13px; font-weight: 650; line-height: 1.35; }
+  .card-desc { display: -webkit-box; overflow: hidden; color: var(--color-text-muted); font-size: 12px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .card-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+  .label-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--color-surface-muted);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .card-pr {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: fit-content;
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+  .card-pr.is-blocked { color: var(--color-danger); }
+  .card-pr.is-ok { color: var(--color-success); }
+
+  .page {
+    min-height: 0;
+    overflow: auto;
+    padding: 16px 20px 28px;
+  }
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .page-header h2 { margin: 0; font-size: 18px; font-weight: 650; line-height: 1.3; }
+  .page-header .sub { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 6px; color: var(--color-text-muted); font-size: 12px; }
+  .page-actions { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 20px; margin-top: 14px; }
+  .detail-main { min-width: 0; }
+  .detail-side { display: grid; align-content: start; gap: 10px; min-width: 0; }
+  .panel { border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; border-bottom: 1px solid var(--color-border); }
+  .panel-header h3 { margin: 0; font-size: 12px; font-weight: 650; }
+  .panel-body { padding: 10px 11px; }
+  .panel-body + .panel-body { border-top: 1px solid var(--color-border); }
+  .facts { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 10px; margin: 0; }
+  .facts dt { color: var(--color-text-subtle); font-size: 11px; }
+  .facts dd { min-width: 0; margin: 0; color: var(--color-text); font-size: 12px; overflow-wrap: anywhere; }
+  .source-banner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-subtle);
+    color: var(--color-text-muted);
+    font-size: 12px;
+  }
+  .source-banner .spacer { flex: 1; }
+  .markdown { color: var(--color-text); font-size: 13px; line-height: 1.6; }
+  .markdown h3 { margin: 16px 0 6px; font-size: 14px; font-weight: 650; }
+  .markdown h4 { margin: 12px 0 4px; font-size: 13px; font-weight: 650; }
+  .markdown p { margin: 7px 0; }
+  .markdown ul, .markdown ol { margin: 7px 0; padding-left: 20px; }
+  .markdown li + li { margin-top: 3px; }
+  .markdown pre { margin: 9px 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); font-size: 12px; }
+  .markdown code { padding: 1px 4px; border-radius: 3px; background: var(--color-surface-muted); font-size: 12px; }
+  .markdown pre code { padding: 0; background: transparent; }
+  .markdown blockquote { margin: 9px 0; padding: 2px 10px; border-left: 3px solid var(--color-border-strong); color: var(--color-text-muted); }
+  .markdown table { width: 100%; border-collapse: collapse; margin: 9px 0; font-size: 12px; }
+  .markdown th, .markdown td { padding: 5px 7px; border: 1px solid var(--color-border); text-align: left; }
+  .markdown th { background: var(--color-surface-subtle); font-weight: 650; }
+  .timeline { display: grid; gap: 0; margin: 14px 0 0; padding: 0; list-style: none; }
+  .timeline-item { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; padding: 0 0 14px; }
+  .timeline-item::before { position: absolute; top: 24px; bottom: 0; left: 12px; width: 1px; background: var(--color-border); content: ""; }
+  .timeline-item:last-child::before { display: none; }
+  .avatar { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--color-accent-muted); color: var(--color-text-muted); font-size: 10px; font-weight: 700; }
+  .avatar.is-agent { background: #e8f1ff; color: #1f5fa8; }
+  .avatar.is-remote { background: #eef4fb; color: #1f5fa8; }
+  .timeline-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-height: 24px; color: var(--color-text-subtle); font-size: 11px; }
+  .timeline-meta strong { color: var(--color-text); font-weight: 650; }
+  .timeline-body { min-width: 0; }
+  .comment { padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .system-line { padding: 2px 0; color: var(--color-text-muted); font-size: 12px; }
+  .linked-card { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .linked-card .grow { flex: 1; min-width: 0; }
+  .linked-card .title { overflow: hidden; color: var(--color-text); font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .linked-card .meta { color: var(--color-text-subtle); font-size: 11px; }
+  .check-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--color-border); font-size: 12px; }
+  .check-row:last-child { border-bottom: 0; }
+  .check-row .grow { flex: 1; min-width: 0; }
+  .check-icon { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 700; }
+  .check-icon.ok { background: var(--color-success-soft); color: var(--color-success); }
+  .check-icon.bad { background: var(--color-danger-soft); color: var(--color-danger); }
+  .check-icon.run { background: var(--color-warning-soft); color: var(--color-warning); }
+  .check-icon.skip { background: var(--color-surface-muted); color: var(--color-text-subtle); }
+  .empty-state { display: grid; place-items: center; gap: 8px; padding: 48px 20px; color: var(--color-text-muted); text-align: center; }
+  .empty-state h3 { margin: 0; color: var(--color-text); font-size: 14px; font-weight: 650; }
+
+  .pr-list { min-height: 0; overflow: auto; }
+  .pr-filters { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+  .pr-filter {
+    height: 26px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pr-filter[aria-pressed="true"] { border-color: var(--color-border); background: var(--color-surface-muted); color: var(--color-text); }
+  .pr-filter .count { margin-left: 5px; color: var(--color-text-subtle); font-size: 11px; }
+  .pr-head, .pr-row {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 170px 118px 92px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .pr-head { color: var(--color-text-subtle); font-size: 11px; font-weight: 600; background: var(--color-surface-subtle); }
+  .pr-row { background: var(--color-surface); }
+  .pr-row:hover { background: #fcfcfd; }
+  .pr-main { min-width: 0; }
+  .pr-title { overflow: hidden; color: var(--color-text); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .pr-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 2px; color: var(--color-text-subtle); font-size: 11px; }
+  .pr-state { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; }
+  .pr-state.open { background: var(--color-success-soft); color: var(--color-success); }
+  .pr-state.draft { background: var(--color-surface-muted); color: var(--color-text-subtle); }
+  .pr-state.merged { background: #f0e9fb; color: #6b3fa0; }
+  .pr-state.closed { background: var(--color-danger-soft); color: var(--color-danger); }
+  .pr-cell { color: var(--color-text-muted); font-size: 12px; }
+  .pr-cell .line { display: flex; align-items: center; gap: 4px; }
+  .pr-cell .line + .line { margin-top: 2px; }
+
+  .pr-tabs { display: flex; align-items: center; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+  .pr-tab { position: relative; height: 36px; padding: 0 9px; border: 0; background: transparent; color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
+  .pr-tab[aria-selected="true"] { color: var(--color-text); }
+  .pr-tab[aria-selected="true"]::after { position: absolute; right: 7px; bottom: -1px; left: 7px; height: 2px; background: var(--color-accent); content: ""; }
+  .pr-tab .count { margin-left: 5px; color: var(--color-text-subtle); font-size: 11px; }
+  .merge-box { display: grid; gap: 9px; }
+  .merge-status { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface-subtle); font-size: 12px; }
+  .merge-status.is-blocked { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
+  .merge-status.is-ready { border-color: #bfe3cf; background: var(--color-success-soft); color: var(--color-success); }
+  .merge-status ul { margin: 4px 0 0; padding-left: 16px; }
+  .merge-status li + li { margin-top: 2px; }
+
+  .settings-layout { display: grid; grid-template-columns: 180px 1px minmax(0, 1fr); height: 100%; min-height: 0; }
+  .settings-menu { display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; background: var(--color-surface-subtle); }
+  .settings-menu button { height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text-muted); text-align: left; font-size: 12px; font-weight: 600; }
+  .settings-menu button[aria-pressed="true"] { background: var(--color-surface-muted); color: var(--color-text); }
+  .settings-splitter { background: var(--color-border); }
+  .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: 18px 20px 30px; }
+  .settings-content > .inner { width: min(80%, 720px); margin: 0 auto; }
+  .settings-title { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
+  .settings-card { margin-bottom: 12px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .settings-card h3 { margin: 0 0 3px; font-size: 13px; font-weight: 650; }
+  .settings-card .card-desc { margin: 0 0 12px; color: var(--color-text-muted); font-size: 12px; }
+  .field { display: grid; gap: 4px; }
+  .field + .field { margin-top: 11px; }
+  .field > label, .field-label { color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hint { color: var(--color-text-subtle); font-size: 11px; line-height: 1.4; }
+  .radio-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .radio-card { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); cursor: pointer; }
+  .radio-card:hover { border-color: var(--color-border-strong); }
+  .radio-card.is-selected { border-color: var(--color-text); background: var(--color-surface-subtle); box-shadow: inset 0 0 0 1px var(--color-text); }
+  .radio-card input { margin: 0 5px 0 0; }
+  .radio-card .name { font-size: 12px; font-weight: 650; }
+  .radio-card .desc { color: var(--color-text-muted); font-size: 11px; line-height: 1.35; }
+  .checkline { display: flex; align-items: center; gap: 6px; color: var(--color-text); font-size: 12px; }
+  .checkline + .checkline { margin-top: 7px; }
+  .checkline input { margin: 0; }
+  .inline-status { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-muted); font-size: 11px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-subtle); }
+  .dot.ok { background: var(--color-success); }
+  .dot.warn { background: var(--color-warning); }
+  .dot.bad { background: var(--color-danger); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .section-divider { height: 1px; margin: 14px 0; background: var(--color-border); }
+  .note { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-text-muted); font-size: 11px; line-height: 1.45; }
+  .note.is-warning { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
+  .note.is-danger { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
+
+  .overlay { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: rgb(15 23 42 / 18%); }
+  .dialog { width: min(520px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-dialog); background: var(--color-surface); box-shadow: var(--shadow-dialog); }
+  .dialog h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+  .dialog .dialog-sub { margin: 0 0 12px; color: var(--color-text-muted); font-size: 12px; }
+  .dialog .facts { margin: 10px 0; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+  .dialog .actions { margin-top: 16px; }
+  .radio-line { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; font-size: 12px; }
+  .radio-line input { margin: 2px 0 0; }
+  .radio-line .desc { color: var(--color-text-subtle); font-size: 11px; }
+
+  .tab-panel { padding: 12px 0; }
+  .tab-panel > .panel + .panel { margin-top: 10px; }
+  .diff { border: 1px solid var(--color-border); border-radius: var(--radius-card); overflow: hidden; }
+  .diff-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--color-border); background: var(--color-surface-subtle); font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+  .diff-line { padding: 2px 10px; font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 11px; white-space: pre; }
+  .diff-line.add { background: #eef8f1; color: #145c38; }
+  .diff-line.del { background: #fdf0ef; color: #8d241c; }
+  .diff-line.ctx { color: var(--color-text-muted); }
+  .kbd { padding: 1px 5px; border: 1px solid var(--color-border-strong); border-radius: 3px; background: var(--color-surface-subtle); font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="proto">
+  <aside class="proto-nav">
+    <header>
+      <h1>静态稿 · 远程 Issue 与 PR/MR</h1>
+      <p class="proto-kicker">一套工作台，覆盖来源模式、同步、Issue 详情与 PR 处理。左右键切换场景。</p>
+    </header>
+    <nav class="scene-list" id="scene-list" aria-label="场景"></nav>
+    <div class="gaps">
+      <h2>这版刻意不做</h2>
+      <ol>
+        <li>不把 GitHub / GitLab 的完整设置、Wiki、Actions 搬进来。</li>
+        <li>远程 Issue 正文 v1 只读，编辑跳宿主。</li>
+        <li>PR 行内 review 与建议修改留到后续，不在 v1 冒充已完成。</li>
+        <li>不做 webhook；桌面端只轮询。</li>
+        <li>不做自动 merge，也不绕过保护分支。</li>
+      </ol>
+    </div>
+  </aside>
+  <div class="proto-main">
+    <p class="caption" id="caption"></p>
+    <div id="stage"></div>
+    <pre class="state" id="state"></pre>
+  </div>
+</div>
+<script>
+const SCENES = [
+  {
+    id: "s1",
+    group: "Issue",
+    title: "混合模式看板",
+    caption: "项目同时有本地与远程 Issue。卡片用来源徽标区分，顶部可按来源过滤；PR 与 Issue 在同一个工作台的两个 Tab 里。用户下一步可以打开远程 Issue、运行 Agent，或切到 Pull requests。",
+    kind: "board",
+    model: {
+      mode: "mixed",
+      sourceFilter: "all",
+      tab: "issues",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      issueCounts: { backlog: 6, running: 2, review: 1, completed: 15 },
+      prCount: 8,
+    },
+  },
+  {
+    id: "s2",
+    group: "Issue",
+    title: "仅远程 · 凭据失效",
+    caption: "项目只显示远程 Issue。gh 凭据过期，顶部出现可恢复的错误条，缓存数据仍可浏览；新建远程 Issue 被禁用。用户下一步去设置重新登录，或继续查看缓存。",
+    kind: "board",
+    model: {
+      mode: "remote",
+      sourceFilter: "github",
+      tab: "issues",
+      sync: "auth",
+      syncText: "凭据已过期 · 显示 12 分钟前的缓存",
+      issueCounts: { backlog: 4, running: 1, review: 1, completed: 9 },
+      prCount: 5,
+    },
+  },
+  {
+    id: "s3",
+    group: "Issue",
+    title: "远程 Issue 详情",
+    caption: "远程正文与评论按 Markdown 呈现，系统事件压成一行；本地 Agent 会话与关联 PR 仍在右侧。用户下一步可以运行 Agent、打开 GitHub 编辑，或进入关联 PR。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "github",
+      number: 128,
+      title: "支持从 GitHub / GitLab 同步 Issue",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasPr: true,
+      prState: "open",
+      prChecks: "3/4",
+      prNumber: 132,
+      deletedRemote: false,
+    },
+  },
+  {
+    id: "s4",
+    group: "Issue",
+    title: "混合模式新建 Issue",
+    caption: "新建时先选来源。选远程会在宿主创建后回填本地；选本地则完全离线。用户下一步填写标题、正文与标签，然后创建。",
+    kind: "issue-create",
+    model: {
+      mode: "mixed",
+      source: "github",
+      title: "同步失败时保留缓存并提示重试",
+      body: "当 GitHub API 限流或网络不可用时，看板应继续展示最近一次成功同步的数据，并在顶部提示下一次重试时间。",
+      labels: ["enhancement", "sync"],
+      sync: "ok",
+    },
+  },
+  {
+    id: "s5",
+    group: "设置",
+    title: "项目设置 · Issues",
+    caption: "项目设置新增 Issues 页：来源模式、连接、拉取范围、同步与写回、完成后动作都在这里。用户下一步选择模式并保存，或先「立即同步」验证连接。",
+    kind: "settings",
+    model: {
+      mode: "mixed",
+      host: "github",
+      repo: "acme/redwhisk",
+      login: "yujianjia",
+      scope: "assigned_to_me",
+      autoSync: true,
+      interval: "90",
+      closeOnComplete: true,
+      commentOnComplete: true,
+      closeOnPrMerge: true,
+      completionAction: "open_pull_request",
+      prTarget: "issue_base",
+      prDraft: true,
+      confirmCompletionAction: false,
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+    },
+  },
+  {
+    id: "s6",
+    group: "设置",
+    title: "切换来源模式",
+    caption: "从混合切到仅远程。确认框只陈述事实：本地 Issue 会隐藏但不删除，远程 Issue 会显示。用户下一步确认切换，或取消。",
+    kind: "mode-switch",
+    model: {
+      mode: "mixed",
+      nextMode: "remote",
+      host: "github",
+      repo: "acme/redwhisk",
+      localCount: 6,
+      remoteCount: 18,
+      sync: "ok",
+    },
+  },
+  {
+    id: "s7",
+    group: "PR",
+    title: "PR 列表 · 待我审阅",
+    caption: "Pull requests Tab 默认落在「需要我审阅」。每行给出检查、评审、关联 Issue 与更新时间；用户下一步打开一行查看详情，或直接去 GitHub。",
+    kind: "pr-list",
+    model: {
+      mode: "mixed",
+      tab: "prs",
+      prFilter: "review_requested",
+      sync: "ok",
+      syncText: "已同步 1 分钟前",
+      prCount: 8,
+    },
+  },
+  {
+    id: "s8",
+    group: "PR",
+    title: "PR 详情 · 概览",
+    caption: "PR 详情保留 GitHub 的评审语义：检查、评审、可合并状态都在。右侧合并框明确列出阻塞原因，不把「能点」当成「能合」。用户下一步查看检查或去 GitHub 处理。",
+    kind: "pr-detail",
+    model: {
+      mode: "mixed",
+      tab: "prs",
+      prTab: "overview",
+      prNumber: 132,
+      prTitle: "feat: 支持从 GitHub / GitLab 同步 Issue",
+      prState: "open",
+      checksOk: 3,
+      checksBad: 1,
+      checksRun: 0,
+      review: "review_required",
+      mergeable: "blocked",
+      linkedIssue: 128,
+      sync: "ok",
+    },
+  },
+  {
+    id: "s9",
+    group: "PR",
+    title: "PR 详情 · 检查",
+    caption: "检查页把失败项放在最前，并给出宿主链接。合并按钮仍禁用。用户下一步修复失败检查，或到 GitHub 查看日志。",
+    kind: "pr-detail",
+    model: {
+      mode: "mixed",
+      tab: "prs",
+      prTab: "checks",
+      prNumber: 132,
+      prTitle: "feat: 支持从 GitHub / GitLab 同步 Issue",
+      prState: "open",
+      checksOk: 3,
+      checksBad: 1,
+      checksRun: 0,
+      review: "review_required",
+      mergeable: "blocked",
+      linkedIssue: 128,
+      sync: "ok",
+    },
+  },
+  {
+    id: "s10",
+    group: "PR",
+    title: "合并弹窗 · 被检查阻塞",
+    caption: "合并方式与删除分支都在应用内，但主按钮因失败检查和缺少批准而禁用。用户下一步去 GitHub 处理，或修复后重新同步。",
+    kind: "pr-merge",
+    model: {
+      mode: "mixed",
+      tab: "prs",
+      prNumber: 132,
+      prTitle: "feat: 支持从 GitHub / GitLab 同步 Issue",
+      mergeMethod: "squash",
+      deleteBranch: true,
+      checksBad: 1,
+      review: "review_required",
+      mergeable: "blocked",
+      sync: "ok",
+    },
+  },
+  {
+    id: "s11",
+    group: "PR",
+    title: "创建 PR 时关联 Issue",
+    caption: "从变更页创建 PR 时可直接关联 Issue。远程 Issue 会在正文自动追加 Closes #128；本地 Issue 只建立应用内关联，不伪造远端关闭语义。",
+    kind: "pr-create",
+    model: {
+      mode: "mixed",
+      sourceBranch: "feat/remote-issue",
+      targetBranch: "main",
+      title: "feat: 支持从 GitHub / GitLab 同步 Issue",
+      body: "新增 Issue 来源模式、远程同步与 PR 列表。",
+      draft: true,
+      linkedIssue: "github:128",
+      sync: "ok",
+    },
+  },
+  {
+    id: "s12",
+    group: "边界",
+    title: "远端已删除",
+    caption: "远程 Issue 被删除或当前账号无权访问。应用保留本地副本与历史，但停止同步。用户下一步选择保留为本地、移除关联，或重试。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "github",
+      number: 117,
+      title: "旧版完成弹窗在窄窗口下溢出",
+      state: "unavailable",
+      sync: "deleted",
+      syncText: "远端已删除或无权访问",
+      hasPr: false,
+      prState: "none",
+      prChecks: "",
+      prNumber: 0,
+      deletedRemote: true,
+    },
+  },
+  {
+    id: "s13",
+    group: "Issue",
+    title: "仅本地模式",
+    caption: "仅本地模式不访问远程；已同步的远程 Issue 被隐藏但保留。顶部说明隐藏数量，切回混合即可恢复。用户下一步新建本地 Issue，或去设置切换模式。",
+    kind: "board",
+    model: {
+      mode: "local",
+      sourceFilter: "local",
+      tab: "issues",
+      sync: "off",
+      syncText: "仅本地 · 未连接远程",
+      issueCounts: { backlog: 2, running: 1, review: 0, completed: 4 },
+      prCount: 0,
+    },
+  },
+];
+
+let sceneId = "s1";
+let model = null;
+let actionNote = "";
+
+function esc(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function sceneById(id) {
+  return SCENES.find((scene) => scene.id === id) ?? SCENES[0];
+}
+
+function applyScene(id) {
+  const scene = sceneById(id);
+  sceneId = scene.id;
+  model = structuredClone(scene.model);
+  actionNote = "";
+  if (location.hash !== "#" + scene.id) {
+    history.replaceState(null, "", "#" + scene.id);
+  }
+  render();
+}
+
+function renderNav() {
+  const groups = [];
+  for (const scene of SCENES) {
+    const last = groups[groups.length - 1];
+    if (!last || last.name !== scene.group) groups.push({ name: scene.group, items: [scene] });
+    else last.items.push(scene);
+  }
+  document.getElementById("scene-list").innerHTML = groups.map((group) => {
+    const buttons = group.items.map((scene) => {
+      const index = SCENES.indexOf(scene) + 1;
+      const current = scene.id === sceneId ? "true" : "false";
+      return '<button type="button" data-scene="' + scene.id + '" aria-current="' + current + '"><strong>' + index + '</strong>' + esc(scene.title) + '</button>';
+    }).join("");
+    return '<div class="scene-group">' + esc(group.name) + '</div>' + buttons;
+  }).join("");
+}
+
+function icon(name, size) {
+  const s = size || 18;
+  const common = 'width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  if (name === "issues") return '<svg ' + common + '><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h4M7 13h7M7 17h5"/><path d="M17 8v5"/></svg>';
+  if (name === "pr") return '<svg ' + common + '><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 7h5a4 4 0 0 1 4 4"/></svg>';
+  if (name === "agents") return '<svg ' + common + '><rect x="5" y="8" width="14" height="10" rx="2"/><path d="M12 8V5M9 13h.01M15 13h.01"/></svg>';
+  if (name === "code") return '<svg ' + common + '><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 5l-2 14"/></svg>';
+  if (name === "changes") return '<svg ' + common + '><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 7h5a4 4 0 0 1 4 4"/></svg>';
+  if (name === "terminal") return '<svg ' + common + '><rect x="4" y="5" width="16" height="14" rx="2"/><path d="m8 10 3 2-3 2M13 14h4"/></svg>';
+  if (name === "settings") return '<svg ' + common + '><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+  if (name === "github") return '<svg ' + common + '><path d="M9 19c-4 1.5-4-2-6-2M15 21v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.3 1.2a11.4 11.4 0 0 0-6 0C7.1 2.8 6.1 3.1 6.1 3.1a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 4.7 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>';
+  if (name === "gitlab") return '<svg ' + common + '><path d="m12 21 9-6-3.5-9L15 12H9L6.5 6 3 15l9 6Z"/></svg>';
+  if (name === "check") return '<svg ' + common + '><path d="m5 12 4 4L19 6"/></svg>';
+  if (name === "x") return '<svg ' + common + '><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  if (name === "refresh") return '<svg ' + common + '><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+  if (name === "external") return '<svg ' + common + '><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>';
+  if (name === "play") return '<svg ' + common + '><path d="m8 5 11 7-11 7V5Z"/></svg>';
+  if (name === "plus") return '<svg ' + common + '><path d="M12 5v14M5 12h14"/></svg>';
+  if (name === "lock") return '<svg ' + common + '><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+  if (name === "alert") return '<svg ' + common + '><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg>';
+  if (name === "back") return '<svg ' + common + '><path d="m15 18-6-6 6-6"/></svg>';
+  return '<svg ' + common + '><circle cx="12" cy="12" r="8"/></svg>';
+}
+
+function activityBar(active) {
+  const items = [
+    ["issues", "Issues"],
+    ["agents", "智能体"],
+    ["code", "代码"],
+    ["changes", "变更"],
+    ["terminal", "终端"],
+  ];
+  const top = items.map(([key, label]) => {
+    return '<button class="activity-btn" type="button" aria-label="' + label + '" aria-pressed="' + (active === key) + '">' + icon(key) + '</button>';
+  }).join("");
+  return '<nav class="activity-bar" aria-label="活动栏">' + top
+    + '<div class="grow"></div>'
+    + '<button class="activity-btn" type="button" aria-label="项目设置" aria-pressed="' + (active === "settings") + '">' + icon("settings") + '</button></nav>';
+}
+
+function workbenchHeader() {
+  return '<header class="workbench-header"><strong>redwhisk</strong><span class="sep">/</span><span>acme/redwhisk</span><span class="sep">·</span><span>main</span></header>';
+}
+
+function appShell(active, surface) {
+  return '<div class="app">' + activityBar(active) + '<div class="workbench">' + workbenchHeader() + surface + '</div></div>';
+}
+
+function button(label, variant, action, disabled, extra) {
+  return '<button class="btn ' + variant + '" type="button" data-action="' + action + '"' + (disabled ? " disabled" : "") + (extra || "") + '>' + label + '</button>';
+}
+
+function iconButton(name, label, action) {
+  return '<button class="icon-btn" type="button" aria-label="' + esc(label) + '" title="' + esc(label) + '" data-action="' + action + '">' + icon(name, 16) + '</button>';
+}
+
+function sourceBadge(source) {
+  if (source === "github") return '<span class="source-badge">' + icon("github", 12) + 'GitHub</span>';
+  if (source === "gitlab") return '<span class="source-badge">' + icon("gitlab", 12) + 'GitLab</span>';
+  return '<span class="source-badge">' + icon("issues", 12) + '本地</span>';
+}
+
+function sourceNumber(source, number) {
+  if (source === "github") return 'GH #' + number;
+  if (source === "gitlab") return 'GL #' + number;
+  return '#' + number;
+}
+
+function syncBanner() {
+  if (model.sync === "ok") {
+    return '<div class="sync-banner"><span class="dot ok"></span><span>' + esc(model.syncText) + '</span><span class="spacer"></span><span class="subtle">下次自动同步约 90 秒后</span><button class="btn btn-ghost btn-sm" type="button" data-action="sync">' + icon("refresh", 13) + '立即同步</button></div>';
+  }
+  if (model.sync === "auth") {
+    return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>GitHub 凭据已过期。</strong> 当前显示 12 分钟前的缓存；写入与新建已暂停。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="relogin">重新登录</button><button class="btn btn-ghost btn-sm" type="button" data-action="sync">重试</button></div>';
+  }
+  if (model.sync === "off") {
+    return '<div class="sync-banner"><span class="dot"></span><span>仅本地模式：不访问 GitHub / GitLab。已同步的远程 Issue 被隐藏但保留。</span><span class="spacer"></span><button class="btn btn-ghost btn-sm" type="button" data-go="s5">去设置切换</button></div>';
+  }
+  if (model.sync === "deleted") {
+    return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>远端 Issue 已删除或当前账号无权访问。</strong> 本地副本与历史仍保留，同步已停止。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="keep-local">保留为本地</button><button class="btn btn-ghost btn-sm" type="button" data-action="unlink">移除关联</button></div>';
+  }
+  return "";
+}
+
+function surfaceTabs() {
+  const issuesActive = model.tab !== "prs";
+  return '<div class="surface-tabs" role="tablist">'
+    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + issuesActive + '" data-go="s1">Issues <span class="count">' + (model.issueCounts ? totalIssues() : 24) + '</span></button>'
+    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + (!issuesActive) + '" data-go="s7">Pull requests <span class="count">' + (model.prCount != null ? model.prCount : 8) + '</span></button>'
+    + '</div>';
+}
+
+function totalIssues() {
+  if (!model.issueCounts) return 24;
+  return Object.values(model.issueCounts).reduce((sum, value) => sum + value, 0);
+}
+
+function sourceFilter() {
+  const options = [
+    ["all", "全部来源"],
+    ["local", "仅本地"],
+    ["github", "GitHub"],
+    ["gitlab", "GitLab"],
+  ];
+  return '<select class="select select-inline" data-field="sourceFilter" aria-label="来源筛选">'
+    + options.map(([value, label]) => '<option value="' + value + '"' + (model.sourceFilter === value ? " selected" : "") + '>' + label + '</option>').join("")
+    + '</select>';
+}
+
+function issuesSurface() {
+  const canCreate = model.mode !== "remote" || model.sync === "ok";
+  const createLabel = model.mode === "local" ? "新建本地 Issue" : model.mode === "remote" ? "新建远程 Issue" : "新建 Issue";
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions">' + sourceFilter()
+    + '<span class="inline-status"><span class="dot ' + (model.sync === "ok" ? "ok" : model.sync === "auth" ? "bad" : "") + '"></span>' + esc(model.syncText) + '</span>'
+    + iconButton("refresh", "立即同步", "sync")
+    + button(icon("plus", 14) + ' ' + createLabel, "btn-primary", "create-issue", !canCreate)
+    + '</div></header>';
+  return '<section class="surface" aria-label="Issues 工作台">' + header + syncBanner() + board() + '</section>';
+}
+
+const LANES = [
+  { key: "backlog", label: "待办" },
+  { key: "running", label: "进行中" },
+  { key: "review", label: "待审核" },
+  { key: "completed", label: "已完成" },
+];
+
+const CARDS = {
+  backlog: [
+    { id: "a", source: "github", number: 128, title: "支持从 GitHub / GitLab 同步 Issue", desc: "项目设置选择来源模式；远程 Issue 进入看板，保留本地工作流状态。", labels: ["enhancement", "sync"], pr: { number: 132, state: "blocked", text: "PR #132 · 1 个检查失败" } },
+    { id: "b", source: "local", number: 12, title: "完成流程支持关联已有 PR", desc: "已有打开的 PR 时不再创建，改为关联并完成。", labels: ["local"], pr: null },
+    { id: "c", source: "gitlab", number: 7, title: "MR 检查失败时阻止合并", desc: "合并弹窗展示失败检查，主按钮禁用。", labels: ["bug", "gitlab"], pr: { number: 41, state: "ok", text: "MR !41 · 4/4 通过" } },
+    { id: "d", source: "github", number: 131, title: "PR 详情展示 review 状态", desc: "Approve / Request changes / Review required 三态。", labels: ["enhancement"], pr: null },
+  ],
+  running: [
+    { id: "e", source: "github", number: 130, title: "同步游标与 ETag 缓存", desc: "减少重复请求，限流时退避并保留缓存。", labels: ["performance"], pr: null },
+    { id: "f", source: "local", number: 14, title: "Issue 来源筛选与计数", desc: "看板顶部按本地 / GitHub / GitLab 过滤。", labels: ["local", "ui"], pr: null },
+  ],
+  review: [
+    { id: "g", source: "github", number: 126, title: "远程评论合并进时间轴", desc: "GitHub 评论、系统事件与本地 Agent 交付按时间交错。", labels: ["sync"], pr: { number: 129, state: "ok", text: "PR #129 · 已批准" } },
+  ],
+  completed: [
+    { id: "h", source: "github", number: 121, title: "Issue 来源模式设置", desc: "仅本地 / 仅远程 / 混合三种模式。", labels: ["settings"], pr: { number: 124, state: "merged", text: "PR #124 · 已合并" } },
+    { id: "i", source: "local", number: 9, title: "设置页拆分 Issues 模块", desc: "把来源、同步与完成动作集中到一个页面。", labels: ["local"], pr: null },
+    { id: "j", source: "gitlab", number: 3, title: "GitLab 自建实例 host 识别", desc: "从 git remote 解析 host，不要求 gitlab.com。", labels: ["gitlab"], pr: null },
+  ],
+};
+
+function visibleCards(lane) {
+  let cards = CARDS[lane] || [];
+  if (model.mode === "local") cards = cards.filter((card) => card.source === "local");
+  if (model.mode === "remote") cards = cards.filter((card) => card.source !== "local");
+  if (model.sourceFilter === "local") cards = cards.filter((card) => card.source === "local");
+  if (model.sourceFilter === "github" || model.sourceFilter === "gitlab") cards = cards.filter((card) => card.source === model.sourceFilter);
+  return cards;
+}
+
+function board() {
+  return '<div class="board">' + LANES.map((lane) => {
+    const cards = visibleCards(lane.key);
+    const total = model.issueCounts ? model.issueCounts[lane.key] : cards.length;
+    return '<section class="lane lane--' + lane.key + '" aria-label="' + lane.label + '">'
+      + '<div class="lane-header"><span class="lane-dot"></span><h3>' + lane.label + '</h3><span class="lane-count">' + total + '</span><span class="spacer"></span>'
+      + (lane.key === "backlog" ? '<button class="icon-btn" type="button" aria-label="新建 Issue" data-action="create-issue">' + icon("plus", 14) + '</button>' : "")
+      + '</div><div class="lane-cards">'
+      + cards.map(issueCard).join("")
+      + (cards.length === 0 ? '<div class="empty-state" style="padding:24px 8px"><span class="subtle">这个来源下暂无 Issue</span></div>' : "")
+      + '</div></section>';
+  }).join("") + '</div>';
+}
+
+function issueCard(card) {
+  const selected = sceneById(sceneId).kind === "issue-detail" && model.number === card.number ? " is-selected" : "";
+  const prClass = card.pr ? (card.pr.state === "blocked" ? " is-blocked" : card.pr.state === "ok" ? " is-ok" : "") : "";
+  return '<button class="card' + selected + '" type="button" data-action="open-issue" data-issue="' + card.number + '">'
+    + '<span class="card-meta"><span class="card-id">' + sourceNumber(card.source, card.number) + '</span><span>·</span><span class="card-time">2 小时前</span><span class="spacer"></span>' + sourceBadge(card.source) + '</span>'
+    + '<span class="card-title">' + esc(card.title) + '</span>'
+    + '<span class="card-desc">' + esc(card.desc) + '</span>'
+    + (card.labels.length ? '<span class="card-labels">' + card.labels.map((label) => '<span class="label-chip">' + esc(label) + '</span>').join("") + '</span>' : "")
+    + (card.pr ? '<span class="card-pr' + prClass + '">' + icon("pr", 12) + esc(card.pr.text) + '</span>' : "")
+    + '</button>';
+}
+
+function issueDetailSurface() {
+  const source = model.source;
+  const sourceName = source === "github" ? "GitHub" : source === "gitlab" ? "GitLab" : "本地";
+  const numberText = sourceNumber(source, model.number);
+  const stateChip = model.state === "open" ? '<span class="chip chip-success">open</span>'
+    : model.state === "closed" ? '<span class="chip">closed</span>'
+    : '<span class="chip chip-danger">不可用</span>';
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions">' + iconButton("back", "返回看板", "back")
+    + button(icon("external", 13) + ' 打开 ' + sourceName, "btn-secondary", "open-external")
+    + button(icon("play", 13) + ' 运行', "btn-primary", "run")
+    + iconButton("settings", "更多", "more")
+    + '</div></header>';
+  const banner = model.deletedRemote
+    ? syncBanner()
+    : '<div class="source-banner">' + sourceBadge(source) + '<span class="mono">' + esc(source === "github" ? "acme/redwhisk" : source === "gitlab" ? "acme/redwhisk" : "本地") + ' #' + model.number + '</span>' + stateChip
+      + '<span>作者 <strong>lin</strong></span><span>指派给 <strong>yujianjia</strong></span>'
+      + '<span class="chip">enhancement</span><span class="chip">sync</span><span class="chip">v0.9</span>'
+      + '<span class="spacer"></span><span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
+      + '<span class="subtle">' + icon("lock", 11) + ' 远程正文只读</span></div>';
+  const body = '<div class="page">'
+    + '<div class="page-header"><div><h2>' + numberText + ' · ' + esc(model.title) + '</h2>'
+    + '<div class="sub"><span class="chip">' + (model.state === "open" ? "待办" : model.state === "closed" ? "已完成" : "不可用") + '</span><span>本地工作流状态与远端 open/closed 分开</span></div></div>'
+    + '<div class="page-actions">' + button("状态", "btn-secondary", "status") + button("编辑远程", "btn-secondary", "edit-remote", model.deletedRemote) + button("删除本地副本", "btn-danger", "delete") + '</div></div>'
+    + '<div class="detail-grid"><div class="detail-main">'
+    + (model.deletedRemote ? '<div class="note is-danger" style="margin-top:12px">远端对象已不存在。保留本地副本后，它会变成普通本地 Issue；移除关联则只删除同步关系。</div>' : '')
+    + issueBody()
+    + timeline()
+    + '</div><aside class="detail-side">'
+    + linkedPrPanel()
+    + sessionPanel()
+    + localPanel()
+    + '</aside></div></div>';
+  return '<section class="surface" aria-label="Issue 详情">' + header + banner + body + '</section>';
+}
+
+function timeline() {
+  if (model.deletedRemote) {
+    return '<ol class="timeline">'
+      + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>系统</strong><span>远端对象已不可用，同步已停止</span><span>·</span><span>刚刚</span><span class="chip">本地</span></div><div class="comment"><div class="markdown"><p>本地副本、评论与会话历史仍保留。选择「保留为本地」后，这条 Issue 会变成普通本地 Issue。</p></div></div></div></li>'
+      + '</ol>';
+  }
+  return '<ol class="timeline">'
+    + '<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>在 GitHub 创建了 Issue</span><span>·</span><span>3 天前</span><span class="chip">GitHub</span></div></div></li>'
+    + '<li class="timeline-item"><span class="avatar is-remote">M</span><div class="timeline-body"><div class="timeline-meta"><strong>maya</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">GitHub</span></div><div class="comment"><div class="markdown"><p>混合模式下，本地 Issue 的编号会不会和远程 <code>#128</code> 冲突？</p></div></div></div></li>'
+    + '<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">GitHub</span></div><div class="comment"><div class="markdown"><p>不会。项目内 <code>number</code> 继续作为本地主键用于 worktree 命名；界面显示远程编号，并在详情里标明仓库。</p></div></div></div></li>'
+    + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>启动了 Agent 会话</span><span>·</span><span>2 小时前</span><span class="chip">本地</span></div></div></li>'
+    + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>交付摘要</span><span>·</span><span>1 小时前</span><span class="chip">本地</span></div><div class="comment"><div class="markdown"><p>已补上来源徽标与同步状态条；下一步接 <code>gh issue list</code> 的 JSON 适配层。</p></div></div></div></li>'
+    + '</ol>';
+}
+
+function issueBody() {
+  if (model.deletedRemote) {
+    return '<div class="markdown" style="margin-top:14px">'
+      + '<p>这个 Issue 的远端对象已被删除，或当前账号已无权访问。RedWhisk 保留了本地副本、评论与会话历史；同步已停止。</p>'
+      + '<h3>你可以做什么</h3><ul><li>保留为本地 Issue，继续在 RedWhisk 里推进。</li><li>移除远程关联，只留下本地副本。</li><li>重试一次；如果只是权限问题，恢复后可以继续同步。</li></ul>'
+      + '<blockquote>应用不会因为一次 404 就自动删除本地数据。</blockquote>'
+      + '</div>';
+  }
+  return '<div class="markdown" style="margin-top:14px">'
+    + '<p>当前 Issue 只能手动录入，团队已经在 GitHub 里维护同一批任务。希望 RedWhisk 能直接拉取远程 Issue，同时不破坏现有的本地工作流。</p>'
+    + '<h3>目标</h3><ul><li>项目级选择「仅本地 / 仅远程 / 混合」。</li><li>远程 Issue 进入看板后仍可用 Agent 执行与完成流程。</li><li>PR/MR 不再只支持创建，还能查看检查、评审与合并状态。</li></ul>'
+    + '<h3>边界</h3><blockquote>远程正文 v1 只读；状态写回是显式动作，不做双向字段同步。</blockquote>'
+    + '<pre><code>issue_source_mode = local | remote | mixed</code></pre>'
+    + '</div>';
+}
+
+function linkedPrPanel() {
+  if (!model.hasPr) {
+    return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">还没有关联的 PR/MR。完成时可以创建，或手动关联已有请求。</div><div style="margin-top:8px">' + button("关联已有 PR", "btn-secondary", "link-pr") + '</div></div></section>';
+  }
+  const state = model.prState === "open" ? "open" : model.prState === "merged" ? "merged" : "closed";
+  return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3><span class="chip">' + state + '</span></div><div class="panel-body">'
+    + '<div class="linked-card"><span class="pr-state ' + state + '">' + icon("pr", 12) + '</span><div class="grow"><div class="title">PR #' + model.prNumber + ' · 支持远程 Issue 同步</div><div class="meta">feat/remote-issue → main · 检查 ' + esc(model.prChecks) + '</div></div></div>'
+    + '<div style="display:flex;gap:6px;margin-top:9px">' + button("查看 PR", "btn-secondary", "open-pr") + button("在 GitHub 打开", "btn-ghost", "open-external") + '</div>'
+    + '</div></section>';
+}
+
+function sessionPanel() {
+  const worktree = 'issue-' + model.number + '-redwhisk';
+  return '<section class="panel"><div class="panel-header"><h3>本地 Agent 会话</h3><span class="chip chip-success">running</span></div><div class="panel-body"><dl class="facts">'
+    + '<dt>Agent</dt><dd>Codex · gpt-5</dd><dt>工作树</dt><dd class="mono">' + esc(worktree) + '</dd><dt>分支</dt><dd class="mono">feat/remote-issue</dd><dt>Token</dt><dd>128k / 32k</dd>'
+    + '</dl><div style="margin-top:9px">' + button("打开会话", "btn-secondary", "open-session") + '</div></div></section>';
+}
+
+function localPanel() {
+  return '<section class="panel"><div class="panel-header"><h3>本地字段</h3></div><div class="panel-body"><dl class="facts">'
+    + '<dt>本地编号</dt><dd class="mono">#42</dd><dt>本地标签</dt><dd><span class="chip">本地</span></dd><dt>附件</dt><dd class="subtle">远程 Issue 不接收本地附件</dd>'
+    + '</dl></div></section>';
+}
+
+function settingsSurface() {
+  const mode = model.mode;
+  const isRemote = mode !== "local";
+  const sourceCards = [
+    ["local", "仅本地", "完全不访问远程。适合纯本地项目。"],
+    ["remote", "仅远程", "看板只显示远程 Issue；本地 Issue 隐藏但保留。"],
+    ["mixed", "混合", "本地与远程 Issue 同时出现，新建时再选来源。"],
+  ];
+  return '<section class="surface" aria-label="项目设置"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">项目设置</span></div><div class="surface-actions"><span class="subtle">acme/redwhisk</span></div></header>'
+    + '<div class="settings-layout"><nav class="settings-menu" aria-label="设置菜单">'
+    + '<button type="button" aria-pressed="false">通用</button><button type="button" aria-pressed="true">Issues</button><button type="button" aria-pressed="false">智能体</button><button type="button" aria-pressed="false">技能</button><button type="button" aria-pressed="false">标签</button>'
+    + '</nav><div class="settings-splitter"></div><div class="settings-content"><div class="inner">'
+    + '<h2 class="settings-title">Issues</h2>'
+    + '<section class="settings-card"><h3>来源模式</h3><p class="card-desc">决定看板显示哪些 Issue，以及新建时默认去哪里。切换不会删除数据。</p>'
+    + '<div class="radio-cards">' + sourceCards.map(([value, name, desc]) => {
+        return '<label class="radio-card' + (mode === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="issue-mode" value="' + value + '" data-field="mode"' + (mode === value ? " checked" : "") + ' />' + name + '</div><div class="desc">' + desc + '</div></label>';
+      }).join("") + '</div>'
+    + (mode === "local" ? '<div class="note" style="margin-top:10px">当前项目有 18 个已同步的远程 Issue，切到仅本地后会隐藏；切回混合即可恢复。</div>' : '')
+    + '</section>'
+    + (isRemote ? '<section class="settings-card"><h3>远程连接</h3><p class="card-desc">从 git remote 自动识别；不支持时手动填写企业 host。</p>'
+      + '<div class="field-row"><div class="field"><label>宿主</label><select class="select" data-field="host"><option value="github"' + (model.host === "github" ? " selected" : "") + '>GitHub</option><option value="gitlab"' + (model.host === "gitlab" ? " selected" : "") + '>GitLab</option></select></div>'
+      + '<div class="field"><label>仓库</label><input class="input" readonly value="' + esc(model.repo) + '" /></div></div>'
+      + '<div class="field"><label>账号</label><div style="display:flex;gap:8px;align-items:center"><input class="input" readonly value="' + esc(model.login) + '" /><span class="chip chip-success">已登录</span><button class="btn btn-secondary" type="button" data-action="relogin">重新登录</button></div><div class="hint">通过本机 gh / glab 的登录态读取；应用不保存 token。</div></div>'
+      + '<div class="section-divider"></div>'
+      + '<div class="field"><label>拉取范围</label><select class="select" data-field="scope">'
+      + '<option value="assigned_to_me"' + (model.scope === "assigned_to_me" ? " selected" : "") + '>分配给我（推荐）</option>'
+      + '<option value="all_open"' + (model.scope === "all_open" ? " selected" : "") + '>全部未关闭</option>'
+      + '<option value="label"' + (model.scope === "label" ? " selected" : "") + '>指定标签</option>'
+      + '<option value="all"' + (model.scope === "all" ? " selected" : "") + '>全部（含已关闭）</option>'
+      + '</select><div class="hint">范围越窄，首次同步越快，也越不容易被无关 Issue 淹没。</div></div>'
+      + '<div class="field-row" style="margin-top:11px"><div class="field"><label>自动同步</label><div class="checkline"><input type="checkbox" data-field="autoSync"' + (model.autoSync ? " checked" : "") + ' />页面可见时自动同步</div></div>'
+      + '<div class="field"><label>间隔</label><select class="select" data-field="interval"><option value="60"' + (model.interval === "60" ? " selected" : "") + '>60 秒</option><option value="90"' + (model.interval === "90" ? " selected" : "") + '>90 秒</option><option value="300"' + (model.interval === "300" ? " selected" : "") + '>5 分钟</option></select></div></div>'
+      + '<div class="field"><label>写回</label><div class="checkline"><input type="checkbox" data-field="closeOnComplete"' + (model.closeOnComplete ? " checked" : "") + ' />本地完成且合并到 base 时，关闭远程 Issue</div>'
+      + '<div class="checkline"><input type="checkbox" data-field="closeOnPrMerge"' + (model.closeOnPrMerge ? " checked" : "") + ' />PR 合并后关闭关联的远程 Issue</div>'
+      + '<div class="checkline"><input type="checkbox" data-field="commentOnComplete"' + (model.commentOnComplete ? " checked" : "") + ' />完成后把交付摘要评论回写远程</div>'
+      + '<div class="hint">创建 PR 时不立即关闭 Issue；默认等 PR 合并，避免「PR 还没审，Issue 已关闭」。</div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:11px"><span class="inline-status"><span class="dot ok"></span>已同步 2 分钟前</span><span class="spacer" style="flex:1"></span><button class="btn btn-secondary" type="button" data-action="sync">立即同步</button></div>'
+      + '</section>' : '')
+    + '<section class="settings-card"><h3>完成后</h3><p class="card-desc">与 Issue 完成流程共用；远程项目仍可覆盖单次选择。</p>'
+    + '<div class="field"><label>完成后动作</label><select class="select" data-field="completionAction"><option value="merge_to_base"' + (model.completionAction === "merge_to_base" ? " selected" : "") + '>合并到 base 分支</option><option value="open_pull_request"' + (model.completionAction === "open_pull_request" ? " selected" : "") + '>提交 Pull Request</option></select></div>'
+    + (model.completionAction === "open_pull_request" ? '<div class="field"><label>PR 目标</label><select class="select"><option>Issue 的 base 分支（main）</option><option>仓库默认分支（main）</option></select></div><div class="checkline" style="margin-top:9px"><input type="checkbox" checked />创建为草稿</div>' : '')
+    + '<div class="checkline" style="margin-top:9px"><input type="checkbox" data-field="confirmCompletionAction"' + (model.confirmCompletionAction ? " checked" : "") + ' />完成时再次确认动作</div>'
+    + '</section>'
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel") + button("保存", "btn-primary", "save") + '</div>'
+    + '</div></div></div></section>';
+}
+
+function modeSwitchDialog() {
+  const next = model.nextMode === "remote" ? "仅远程" : model.nextMode === "local" ? "仅本地" : "混合";
+  return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="mode-title">'
+    + '<h3 id="mode-title">切换到「' + next + '」？</h3>'
+    + '<p class="dialog-sub">模式只影响看板显示与同步，不会删除任何数据。</p>'
+    + '<div class="facts"><dt>本地 Issue</dt><dd>' + model.localCount + ' 个，切换后隐藏（保留）</dd><dt>远程 Issue</dt><dd>' + model.remoteCount + ' 个，切换后显示</dd><dt>同步</dt><dd>仅远程与混合模式会访问 ' + esc(model.repo) + '</dd></div>'
+    + '<div class="note">隐藏的 Issue 仍保留本地会话、评论与附件；切回原模式即可恢复。</div>'
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel") + button("切换模式", "btn-primary", "confirm-mode") + '</div>'
+    + '</div></div>';
+}
+
+const PR_ROWS = [
+  { number: 132, title: "feat: 支持从 GitHub / GitLab 同步 Issue", branch: "feat/remote-issue", base: "main", state: "open", author: "yujianjia", checksOk: 3, checksBad: 1, checksRun: 0, review: "待审阅", reviewTone: "warning", linked: "GH #128", updated: "2 分钟前" },
+  { number: 129, title: "fix: 合并弹窗在检查失败时仍可点击", branch: "fix/merge-gate", base: "main", state: "open", author: "maya", checksOk: 4, checksBad: 0, checksRun: 0, review: "已批准", reviewTone: "success", linked: "GH #126", updated: "18 分钟前" },
+  { number: 127, title: "refactor: 把远程评论合并进时间轴", branch: "refactor/timeline", base: "main", state: "draft", author: "yujianjia", checksOk: 2, checksBad: 0, checksRun: 1, review: "等待检查", reviewTone: "muted", linked: "GL #7", updated: "1 小时前" },
+  { number: 125, title: "chore: 补充 Issue 来源模式迁移", branch: "chore/source-mode", base: "release/1.4", state: "merged", author: "lin", checksOk: 4, checksBad: 0, checksRun: 0, review: "已批准", reviewTone: "success", linked: "GH #121", updated: "昨天" },
+];
+
+function prListSurface() {
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions">' + sourceFilter()
+    + '<span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
+    + iconButton("refresh", "立即同步", "sync")
+    + button(icon("pr", 14) + ' 在 GitHub 打开', "btn-secondary", "open-external")
+    + '</div></header>';
+  const filters = [
+    ["review_requested", "需要我审阅", 3],
+    ["authored", "我创建的", 5],
+    ["all_open", "全部打开", 12],
+    ["recently_merged", "最近合并", 9],
+  ];
+  const filterBar = '<div class="pr-filters">' + filters.map(([value, label, count]) => {
+    return '<button class="pr-filter" type="button" aria-pressed="' + (model.prFilter === value) + '" data-field="prFilter" data-value="' + value + '">' + label + '<span class="count">' + count + '</span></button>';
+  }).join("") + '<span style="flex:1"></span><span class="subtle">检查与评审状态来自宿主，不本地推断</span></div>';
+  const rows = PR_ROWS.filter((row) => model.prFilter !== "recently_merged" || row.state === "merged").map((row) => {
+    const checkText = row.checksBad ? row.checksOk + '/' + (row.checksOk + row.checksBad) + ' 通过' : row.checksRun ? row.checksOk + ' 通过 · ' + row.checksRun + ' 运行中' : row.checksOk + '/' + row.checksOk + ' 通过';
+    const checkClass = row.checksBad ? "danger" : row.checksRun ? "warning" : "success";
+    return '<div class="pr-row" data-action="open-pr">'
+      + '<span class="pr-state ' + row.state + '">' + icon(row.state === "merged" ? "check" : row.state === "draft" ? "pr" : "pr", 12) + '</span>'
+      + '<div class="pr-main"><div class="pr-title">' + esc(row.title) + '</div><div class="pr-sub"><span class="mono">#' + row.number + '</span><span>·</span><span class="mono">' + row.branch + '</span><span>→</span><span class="mono">' + row.base + '</span><span>·</span><span>' + row.author + '</span><span>·</span><span>' + row.updated + '</span></div></div>'
+      + '<div class="pr-cell"><div class="line ' + checkClass + '">' + (row.checksBad ? icon("x", 12) : row.checksRun ? icon("refresh", 12) : icon("check", 12)) + checkText + '</div><div class="line"><span class="chip ' + (row.reviewTone === "success" ? "chip-success" : row.reviewTone === "warning" ? "chip-warning" : "") + '">' + row.review + '</span></div></div>'
+      + '<div class="pr-cell"><span class="chip">' + row.linked + '</span></div>'
+      + '<div class="pr-cell"><button class="btn btn-ghost btn-sm" type="button" data-action="open-external">打开</button></div>'
+      + '</div>';
+  }).join("");
+  return '<section class="surface" aria-label="Pull requests">' + header + filterBar
+    + '<div class="pr-list"><div class="pr-head"><span></span><span>标题</span><span>检查 / 评审</span><span>关联 Issue</span><span></span></div>' + rows + '</div></section>';
+}
+
+function prDetailSurface() {
+  const prTab = model.prTab || "overview";
+  const prState = model.prState || "open";
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions">' + iconButton("back", "返回 PR 列表", "back-pr")
+    + button(icon("external", 13) + ' 在 GitHub 打开', "btn-secondary", "open-external")
+    + button("标记就绪", "btn-secondary", "ready")
+    + button("合并", "btn-primary", "merge", model.mergeable !== "clean")
+    + '</div></header>';
+  const stateChip = prState === "open" ? '<span class="chip chip-success">open</span>' : '<span class="chip">' + prState + '</span>';
+  const tabs = [["overview", "概览", ""], ["files", "变更", "12"], ["checks", "检查", "4"], ["discussion", "讨论", "6"]];
+  return '<section class="surface" aria-label="Pull request 详情">' + header
+    + '<div class="page" style="padding-bottom:0">'
+    + '<div class="page-header"><div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>yujianjia 想合并 2 个提交</span><span>·</span><span>+412 −87</span></div></div>'
+    + '<div class="page-actions">' + button("请求审阅", "btn-secondary", "request-review") + button("关闭", "btn-ghost", "close-pr") + '</div></div>'
+    + '<div class="pr-tabs">' + tabs.map(([value, label, count]) => '<button class="pr-tab" type="button" aria-selected="' + (prTab === value) + '" data-field="prTab" data-value="' + value + '">' + label + (count ? '<span class="count">' + count + '</span>' : '') + '</button>').join("") + '</div>'
+    + '<div class="detail-grid"><div class="detail-main">' + prTabContent(prTab) + '</div><aside class="detail-side">' + mergeBox() + prMetaPanel() + '</aside></div></div></section>';
+}
+
+function prTabContent(tab) {
+  if (tab === "checks") {
+    return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>检查</h3><span class="chip chip-danger">1 个失败</span></div>'
+      + checkRow("bad", "test (ubuntu-latest)", "失败 · 2m 14s", "pnpm test -- --run")
+      + checkRow("ok", "lint", "通过 · 38s", "pnpm lint")
+      + checkRow("ok", "typecheck", "通过 · 51s", "pnpm typecheck")
+      + checkRow("ok", "build", "通过 · 1m 02s", "pnpm build")
+      + '</section><div class="note is-warning" style="margin-top:10px">失败检查的日志仍在 GitHub；应用只展示状态与链接，不在本地重跑 CI。</div></div>';
+  }
+  if (tab === "files") {
+    return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>变更文件</h3><span class="subtle">12 个文件 · +412 −87</span></div><div class="panel-body" style="padding:0">'
+      + fileRow("M", "src/features/issues/issues-activity.tsx", "+48 −12")
+      + fileRow("A", "src/features/issues/issue-sync-bar.tsx", "+96 −0")
+      + fileRow("A", "src-tauri/src/forge/github.rs", "+184 −0")
+      + fileRow("M", "src-tauri/migrations/0058_remote_issue.sql", "+62 −0")
+      + '</div></section>'
+      + '<section class="panel" style="margin-top:10px"><div class="diff"><div class="diff-head">src/features/issues/issue-sync-bar.tsx</div><div class="diff-line ctx"> export function IssueSyncBar() {</div><div class="diff-line add">+  const { status, retryAt } = useIssueSync(projectId);</div><div class="diff-line add">+  if (status === "syncing") return &lt;span&gt;同步中…&lt;/span&gt;;</div><div class="diff-line ctx">   return &lt;span&gt;{lastSyncedLabel}&lt;/span&gt;;</div><div class="diff-line ctx"> }</div></div></section></div>';
+  }
+  if (tab === "discussion") {
+    return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>讨论</h3><span class="chip">只读</span></div><div class="panel-body">'
+      + '<div class="comment"><div class="timeline-meta"><span class="avatar is-remote" style="width:20px;height:20px">M</span><strong>maya</strong><span>reviewed</span><span>·</span><span>1 小时前</span></div><div class="markdown" style="margin-top:5px"><p>同步范围默认「分配给我」很好，但希望支持按 label 过滤。</p></div></div>'
+      + '<div class="comment" style="margin-top:8px"><div class="timeline-meta"><span class="avatar is-remote" style="width:20px;height:20px">L</span><strong>lin</strong><span>commented</span><span>·</span><span>40 分钟前</span></div><div class="markdown" style="margin-top:5px"><p>v1 先做单 label，后面再加多条件组合。</p></div></div>'
+      + '<div class="note" style="margin-top:10px">v1 只读展示评论与 review；回复、行内评论与建议修改在后续版本接入。</div>'
+      + '</div></section></div>';
+  }
+  return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>描述</h3></div><div class="panel-body"><div class="markdown"><p>把 Issue 从「只能手动录入」升级为可同步 GitHub / GitLab 的工作台，并补齐 PR/MR 的查看与合并能力。</p><ul><li>项目级来源模式。</li><li>远程 Issue 镜像 + 显式写回。</li><li>PR 列表、检查、评审与合并。</li></ul></div></div></section>'
+    + '<section class="panel" style="margin-top:10px"><div class="panel-header"><h3>关联 Issue</h3></div><div class="panel-body"><div class="linked-card"><span class="avatar is-remote">L</span><div class="grow"><div class="title">GH #' + (model.linkedIssue || 128) + ' · 支持从 GitHub / GitLab 同步 Issue</div><div class="meta">open · enhancement · sync</div></div><button class="btn btn-ghost btn-sm" type="button" data-go="s3">查看</button></div></div></section>'
+    + '<section class="panel" style="margin-top:10px"><div class="panel-header"><h3>审阅者</h3></div><div class="panel-body"><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">maya · 已批准</span><span class="chip chip-warning">lin · 待审阅</span></div></div></section></div>';
+}
+
+function checkRow(tone, name, status, command) {
+  return '<div class="check-row"><span class="check-icon ' + tone + '">' + (tone === "bad" ? "!" : tone === "ok" ? "✓" : "·") + '</span><div class="grow"><div>' + esc(name) + '</div><div class="subtle mono" style="font-size:11px">' + esc(command) + '</div></div><span class="' + (tone === "bad" ? "danger" : tone === "ok" ? "success" : "warning") + '">' + esc(status) + '</span><button class="btn btn-ghost btn-sm" type="button" data-action="open-external">日志</button></div>';
+}
+
+function fileRow(kind, path, stat) {
+  return '<div class="check-row"><span class="chip" style="width:20px;justify-content:center">' + kind + '</span><span class="grow mono">' + esc(path) + '</span><span class="subtle mono">' + esc(stat) + '</span></div>';
+}
+
+function mergeBox() {
+  const blocked = model.mergeable !== "clean";
+  return '<section class="panel"><div class="panel-header"><h3>合并</h3><span class="chip ' + (blocked ? "chip-danger" : "chip-success") + '">' + (blocked ? "被阻塞" : "可合并") + '</span></div><div class="panel-body"><div class="merge-box">'
+    + '<div class="merge-status ' + (blocked ? "is-blocked" : "is-ready") + '">' + icon(blocked ? "alert" : "check", 14) + '<div>' + (blocked ? '<strong>还不能合并</strong><ul><li>1 个检查失败：test (ubuntu-latest)</li><li>需要 1 个批准，当前 0 个</li></ul>' : '<strong>所有检查通过，已获得 1 个批准。</strong>') + '</div></div>'
+    + '<div class="field"><label>合并方式</label><select class="select"><option>Squash and merge</option><option>Create a merge commit</option><option>Rebase and merge</option></select></div>'
+    + '<div class="checkline"><input type="checkbox" checked />合并后删除源分支</div>'
+    + '<div style="display:grid;gap:6px">' + button("合并 Pull Request", "btn-primary", "merge", blocked) + button("在 GitHub 中处理", "btn-secondary", "open-external") + '</div>'
+    + '<div class="hint">应用不绕过保护分支，也不默认开启 auto-merge。</div>'
+    + '</div></div></section>';
+}
+
+function prMetaPanel() {
+  return '<section class="panel"><div class="panel-header"><h3>信息</h3></div><div class="panel-body"><dl class="facts">'
+    + '<dt>作者</dt><dd>yujianjia</dd><dt>源分支</dt><dd class="mono">feat/remote-issue</dd><dt>目标分支</dt><dd class="mono">main</dd><dt>提交</dt><dd>2</dd><dt>变更</dt><dd>+412 −87</dd><dt>最后同步</dt><dd>1 分钟前</dd>'
+    + '</dl></div></section>';
+}
+
+function prMergeDialog() {
+  const blocked = model.mergeable !== "clean";
+  return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="merge-title">'
+    + '<h3 id="merge-title">合并 PR #' + model.prNumber + '</h3>'
+    + '<p class="dialog-sub">' + esc(model.prTitle) + '</p>'
+    + '<div class="merge-status ' + (blocked ? "is-blocked" : "is-ready") + '">' + icon(blocked ? "alert" : "check", 14) + '<div>' + (blocked ? '<strong>宿主当前不允许合并</strong><ul><li>test (ubuntu-latest) 失败</li><li>需要 1 个批准</li></ul>' : '<strong>可以合并</strong>') + '</div></div>'
+    + '<div class="field" style="margin-top:12px"><label>合并方式</label>'
+    + '<label class="radio-line"><input type="radio" name="merge-method" data-field="mergeMethod" value="squash"' + (model.mergeMethod === "squash" ? " checked" : "") + ' /><span><strong>Squash and merge</strong><div class="desc">把 2 个提交压成 1 个，历史更干净。</div></span></label>'
+    + '<label class="radio-line"><input type="radio" name="merge-method" data-field="mergeMethod" value="merge"' + (model.mergeMethod === "merge" ? " checked" : "") + ' /><span><strong>Create a merge commit</strong><div class="desc">保留分支拓扑。</div></span></label>'
+    + '<label class="radio-line"><input type="radio" name="merge-method" data-field="mergeMethod" value="rebase"' + (model.mergeMethod === "rebase" ? " checked" : "") + ' /><span><strong>Rebase and merge</strong><div class="desc">线性历史，不产生 merge commit。</div></span></label>'
+    + '</div>'
+    + '<div class="checkline" style="margin-top:10px"><input type="checkbox" data-field="deleteBranch"' + (model.deleteBranch ? " checked" : "") + ' />合并后删除源分支</div>'
+    + '<div class="actions">' + button("取消", "btn-secondary", "cancel") + button("在 GitHub 中处理", "btn-secondary", "open-external") + button("合并", "btn-primary", "confirm-merge", blocked) + '</div>'
+    + '</div></div>';
+}
+
+function prCreateSurface() {
+  return '<section class="surface" aria-label="创建 Pull Request"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">变更</span></div><div class="surface-actions"><span class="subtle">feat/remote-issue</span></div></header>'
+    + '<div class="page"><div class="page-header"><div><h2>创建 Pull Request</h2><div class="sub"><span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>2 个提交</span></div></div><div class="page-actions">' + button("取消", "btn-secondary", "cancel") + button("创建 Pull Request", "btn-primary", "confirm-create-pr") + '</div></div>'
+    + '<div class="detail-grid"><div class="detail-main"><section class="panel"><div class="panel-body">'
+    + '<div class="field"><label>标题</label><input class="input" data-field="title" value="' + esc(model.title) + '" /></div>'
+    + '<div class="field"><label>正文</label><textarea class="textarea" rows="5" data-field="body">' + esc(model.body) + '</textarea><div class="hint">远程 Issue 会在正文自动追加 <code>Closes #128</code>；本地 Issue 只建立应用内关联。</div></div>'
+    + '<div class="field"><label>关联 Issue</label><select class="select" data-field="linkedIssue"><option value="">不关联</option><option value="github:128"' + (model.linkedIssue === "github:128" ? " selected" : "") + '>GH #128 · 支持从 GitHub / GitLab 同步 Issue</option><option value="local:12"' + (model.linkedIssue === "local:12" ? " selected" : "") + '>本地 #12 · 完成流程支持关联已有 PR</option></select></div>'
+    + '<div class="checkline" style="margin-top:10px"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</div>'
+    + '</div></section></div><aside class="detail-side"><section class="panel"><div class="panel-header"><h3>将发生什么</h3></div><div class="panel-body"><div class="markdown" style="font-size:12px"><ul><li>推送 <code>feat/remote-issue</code> 到 origin。</li><li>在 GitHub 创建草稿 PR。</li><li>写入关联；不改变 Issue 的本地状态。</li><li>PR 合并后，按设置关闭 GH #128。</li></ul></div></div></section></aside></div></div></section>';
+}
+
+function renderStage() {
+  const scene = sceneById(sceneId);
+  let html = "";
+  if (scene.kind === "board") html = appShell("issues", issuesSurface());
+  else if (scene.kind === "issue-detail") html = appShell("issues", issueDetailSurface());
+  else if (scene.kind === "issue-create") html = appShell("issues", issueCreateSurface());
+  else if (scene.kind === "settings") html = appShell("settings", settingsSurface());
+  else if (scene.kind === "mode-switch") html = appShell("settings", settingsSurface()) + modeSwitchDialog();
+  else if (scene.kind === "pr-list") html = appShell("issues", prListSurface());
+  else if (scene.kind === "pr-detail") html = appShell("issues", prDetailSurface());
+  else if (scene.kind === "pr-merge") html = appShell("issues", prDetailSurface()) + prMergeDialog();
+  else if (scene.kind === "pr-create") html = appShell("changes", prCreateSurface());
+  document.getElementById("stage").innerHTML = html;
+  document.getElementById("caption").textContent = scene.caption;
+}
+
+function issueCreateSurface() {
+  const sourceCards = [
+    ["local", "本地", "只存在本机，不访问远程。"],
+    ["github", "GitHub", "创建到 acme/redwhisk，再回填本地。"],
+    ["gitlab", "GitLab", "创建到 acme/redwhisk，再回填本地。"],
+  ];
+  return '<section class="surface" aria-label="新建 Issue"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">新建 Issue</span></div><div class="surface-actions">' + button("取消", "btn-secondary", "cancel") + button("创建", "btn-primary", "confirm-create-issue") + '</div></header>'
+    + '<div class="page"><div class="page-header"><div><h2>新建 Issue</h2><div class="sub"><span>项目 acme/redwhisk</span><span>·</span><span>混合模式</span></div></div></div>'
+    + '<div class="detail-grid"><div class="detail-main"><section class="panel"><div class="panel-body">'
+    + '<div class="field"><label>来源</label><div class="radio-cards">' + sourceCards.map(([value, name, desc]) => '<label class="radio-card' + (model.source === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="create-source" value="' + value + '" data-field="source"' + (model.source === value ? " checked" : "") + ' />' + name + '</div><div class="desc">' + desc + '</div></label>').join("") + '</div></div>'
+    + '<div class="field"><label>标题</label><input class="input" data-field="title" value="' + esc(model.title) + '" /></div>'
+    + '<div class="field"><label>正文</label><textarea class="textarea" rows="7" data-field="body">' + esc(model.body) + '</textarea></div>'
+    + '<div class="field"><label>标签</label><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">enhancement</span><span class="chip">sync</span><button class="btn btn-ghost btn-sm" type="button">+ 选择标签</button></div></div>'
+    + '</div></section></div><aside class="detail-side"><section class="panel"><div class="panel-header"><h3>创建位置</h3></div><div class="panel-body"><dl class="facts">'
+    + '<dt>来源</dt><dd>' + (model.source === "github" ? "GitHub · acme/redwhisk" : model.source === "gitlab" ? "GitLab · acme/redwhisk" : "仅本地") + '</dd>'
+    + '<dt>账号</dt><dd>' + (model.source === "local" ? "—" : "yujianjia（已登录）") + '</dd>'
+    + '<dt>完成后</dt><dd>' + (model.source === "local" ? "进入本地待办" : "远程创建成功后回填为待办") + '</dd>'
+    + '</dl>' + (model.source === "local" ? '<div class="note" style="margin-top:10px">本地 Issue 不参与远程同步，也不会被远端关闭。</div>' : '<div class="note" style="margin-top:10px">远程创建需要 Issues 写权限；失败时不会留下本地半成品。</div>') + '</div></section></aside></div></div></section>';
+}
+
+function renderState() {
+  const scene = sceneById(sceneId);
+  const index = SCENES.indexOf(scene) + 1;
+  const lines = [
+    "场景: " + index + " " + scene.title,
+    "来源模式: " + (model.mode || "—"),
+    "当前 Tab: " + (model.tab || "—"),
+    "来源筛选: " + (model.sourceFilter || "—"),
+    "同步: " + (model.sync || "—") + (model.syncText ? " · " + model.syncText : ""),
+    "操作: " + (actionNote || "—"),
+  ];
+  if (model.prFilter) lines.push("PR 筛选: " + model.prFilter);
+  if (model.prTab) lines.push("PR 详情 Tab: " + model.prTab);
+  if (model.mergeMethod) lines.push("合并方式: " + model.mergeMethod);
+  if (model.linkedIssue) lines.push("关联 Issue: " + model.linkedIssue);
+  document.getElementById("state").textContent = lines.join("\n");
+}
+
+function render() {
+  renderNav();
+  renderStage();
+  renderState();
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-scene],[data-go],[data-action]");
+  const fieldButton = event.target.closest("button[data-field]");
+  if (!target && !fieldButton) return;
+  if (fieldButton) {
+    const field = fieldButton.dataset.field;
+    const value = fieldButton.dataset.value || fieldButton.value;
+    if (field === "prFilter") model.prFilter = value;
+    else if (field === "prTab") model.prTab = value;
+    render();
+    return;
+  }
+  if (target.dataset.scene) {
+    applyScene(target.dataset.scene);
+    return;
+  }
+  if (target.dataset.go) {
+    applyScene(target.dataset.go);
+    return;
+  }
+  const action = target.dataset.action;
+  if (action === "open-issue") {
+    const number = Number(target.dataset.issue || 128);
+    const card = Object.values(CARDS).flat().find((item) => item.number === number);
+    applyScene("s3");
+    if (card) {
+      model.source = card.source;
+      model.number = card.number;
+      model.title = card.title;
+      model.hasPr = Boolean(card.pr);
+      model.prNumber = card.pr ? card.pr.number : 0;
+      model.prState = card.pr ? (card.pr.state === "blocked" ? "open" : card.pr.state === "merged" ? "merged" : "open") : "none";
+      model.prChecks = card.pr ? card.pr.text.replace(/^[^·]+·\s*/, "") : "";
+    }
+    render();
+    return;
+  }
+  if (action === "open-pr") {
+    applyScene("s8");
+    return;
+  }
+  if (action === "back") {
+    applyScene("s1");
+    return;
+  }
+  if (action === "back-pr") {
+    applyScene("s7");
+    return;
+  }
+  if (action === "sync") {
+    actionNote = "触发一次同步；场景是静态稿，不真正访问远程";
+  } else if (action === "relogin") {
+    actionNote = "打开 gh auth login / glab auth login 引导";
+  } else if (action === "confirm-mode") {
+    const next = model.nextMode || "mixed";
+    applyScene("s5");
+    model.mode = next;
+    actionNote = "已切换到 " + next;
+    render();
+    return;
+  } else if (action === "merge" || action === "confirm-merge") {
+    if (action === "merge") {
+      applyScene("s10");
+      return;
+    }
+    actionNote = "合并按钮当前" + (model.mergeable === "clean" ? "可用" : "禁用：检查或评审未满足");
+  } else if (action === "save") {
+    actionNote = "保存设置；模式切换会先弹出影响确认";
+  } else if (action === "create-issue") {
+    applyScene("s4");
+    return;
+  } else if (action === "open-external") {
+    actionNote = "打开宿主页面";
+  } else if (action === "run") {
+    actionNote = "打开 Run Dialog；远程来源不影响 Agent 启动";
+  } else if (action === "open-pr") {
+    applyScene("s8");
+    return;
+  } else if (action === "keep-local") {
+    actionNote = "保留为本地 Issue，并停止远程同步";
+  } else if (action === "unlink") {
+    actionNote = "移除远程关联，本地副本仍保留";
+  } else {
+    actionNote = "静态稿：" + (target.textContent || "").trim().slice(0, 24);
+  }
+  renderState();
+});
+
+document.addEventListener("change", (event) => {
+  const field = event.target.dataset.field;
+  if (!field) return;
+  if (field === "mode") {
+    const next = event.target.value;
+    if (model.mode === "mixed" && next !== "mixed") {
+      model.nextMode = next;
+      sceneId = "s6";
+      model.localCount = 6;
+      model.remoteCount = 18;
+      render();
+      return;
+    }
+    model.mode = next;
+  } else if (field === "sourceFilter") {
+    model.sourceFilter = event.target.value;
+  } else if (field === "prFilter") {
+    model.prFilter = event.target.dataset.value || event.target.value;
+  } else if (field === "prTab") {
+    model.prTab = event.target.dataset.value || event.target.value;
+  } else if (field === "mergeMethod") {
+    model.mergeMethod = event.target.value;
+  } else if (field === "source") {
+    model.source = event.target.value;
+  } else if (field === "linkedIssue") {
+    model.linkedIssue = event.target.value;
+  } else if (field === "autoSync" || field === "closeOnComplete" || field === "commentOnComplete" || field === "closeOnPrMerge" || field === "confirmCompletionAction" || field === "draft" || field === "deleteBranch") {
+    model[field] = event.target.checked;
+  } else if (field === "title" || field === "body" || field === "scope" || field === "interval" || field === "completionAction" || field === "host") {
+    model[field] = event.target.value;
+  }
+  render();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  const index = SCENES.findIndex((scene) => scene.id === sceneId);
+  const nextIndex = event.key === "ArrowLeft" ? Math.max(0, index - 1) : Math.min(SCENES.length - 1, index + 1);
+  if (nextIndex !== index) applyScene(SCENES[nextIndex].id);
+});
+
+applyScene(SCENES.some((scene) => scene.id === location.hash.replace("#", "")) ? location.hash.replace("#", "") : "s1");
+</script>
+</body>
+</html>
