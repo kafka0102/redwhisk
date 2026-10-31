@@ -61,6 +61,22 @@ RedWhisk 的设计理念是**安静、紧凑、可靠**。界面应该像一个�
 | `--color-lane-review-marker`    | `#249447` | 待审核     |
 | `--color-lane-completed-marker` | `#1681d9` | 已完成     |
 
+### 代码与 diff 语法色
+
+代码块（highlight.js）与消息流 diff 共用同一套语法 token；浅色、深色分别取值，深色降低饱和度并提高明度，避免在深色面板上过曝。
+
+| Token                     | Light     | Dark      | 用途                 |
+| ------------------------- | --------- | --------- | -------------------- |
+| `--color-syntax-comment`  | `#8a8f98` | `#8b93a1` | 注释                 |
+| `--color-syntax-keyword`  | `#7c4dff` | `#bfa7f5` | 关键字、装饰器、标签 |
+| `--color-syntax-function` | `#0b6fcb` | `#8ab8f0` | 函数、内置类型       |
+| `--color-syntax-literal`  | `#9a5b00` | `#d6a06a` | 字面量、数字         |
+| `--color-syntax-property` | `#9950b8` | `#c9a3d9` | 属性、类型、变量     |
+| `--color-syntax-string`   | `#237a3b` | `#8fce9b` | 字符串、正则、新增行 |
+| `--color-syntax-deleted`  | `#b42318` | `#e89292` | diff 删除行文字      |
+
+diff 行底色使用 `--color-diff-line-added` / `--color-diff-line-removed`，同样按主题分别定义。
+
 ### 项目标识色
 
 - `#2563eb` - Blue

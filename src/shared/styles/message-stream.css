@@ -447,41 +447,41 @@
   outline-offset: 2px;
 }
 
-/* highlight.js token 配色：沿用既有 diff 高亮的一组颜色，黑白灰之外只做必要点缀。 */
+/* highlight.js token 配色：与 diff 共用同一套语法 token，浅色/深色各自适配。 */
 .agents-message__code-block .hljs-comment,
 .agents-message__code-block .hljs-quote {
-  color: var(--color-text-subtle);
+  color: var(--color-syntax-comment);
 }
 
 .agents-message__code-block .hljs-keyword,
 .agents-message__code-block .hljs-meta,
 .agents-message__code-block .hljs-selector-tag {
-  color: #7c4dff;
+  color: var(--color-syntax-keyword);
 }
 
 .agents-message__code-block .hljs-built_in,
 .agents-message__code-block .hljs-title {
-  color: #0b6fcb;
+  color: var(--color-syntax-function);
 }
 
 .agents-message__code-block .hljs-attr,
 .agents-message__code-block .hljs-attribute,
 .agents-message__code-block .hljs-literal,
 .agents-message__code-block .hljs-number {
-  color: #9a5b00;
+  color: var(--color-syntax-literal);
 }
 
 .agents-message__code-block .hljs-property,
 .agents-message__code-block .hljs-tag,
 .agents-message__code-block .hljs-type,
 .agents-message__code-block .hljs-variable {
-  color: #9950b8;
+  color: var(--color-syntax-property);
 }
 
 .agents-message__code-block .hljs-addition,
 .agents-message__code-block .hljs-regexp,
 .agents-message__code-block .hljs-string {
-  color: #237a3b;
+  color: var(--color-syntax-string);
 }
 
 .agents-message__code-block .hljs-operator,
@@ -491,7 +491,7 @@
 }
 
 .agents-message__code-block .hljs-deletion {
-  color: var(--color-danger);
+  color: var(--color-syntax-deleted);
 }
 
 /* 推理折叠 */
@@ -815,11 +815,11 @@ details[open] > summary .agents-message__summary-chevron {
 }
 
 .agents-message__diff-line--add {
-  background: rgba(36, 148, 71, 0.12);
+  background: var(--color-diff-line-added);
 }
 
 .agents-message__diff-line--delete {
-  background: rgba(180, 35, 24, 0.1);
+  background: var(--color-diff-line-removed);
 }
 
 .agents-message__diff-line--hunk {
@@ -837,11 +837,11 @@ details[open] > summary .agents-message__summary-chevron {
 }
 
 .agents-message__diff-line--add .agents-message__diff-prefix {
-  color: var(--color-lane-review-marker);
+  color: var(--color-syntax-string);
 }
 
 .agents-message__diff-line--delete .agents-message__diff-prefix {
-  color: var(--color-danger);
+  color: var(--color-syntax-deleted);
 }
 
 .agents-message__diff-content {
@@ -851,31 +851,31 @@ details[open] > summary .agents-message__summary-chevron {
 }
 
 .agents-message__syntax--comment {
-  color: var(--color-text-subtle);
+  color: var(--color-syntax-comment);
 }
 
 .agents-message__syntax--decorator,
 .agents-message__syntax--keyword {
-  color: #7c4dff;
+  color: var(--color-syntax-keyword);
 }
 
 .agents-message__syntax--function {
-  color: #0b6fcb;
+  color: var(--color-syntax-function);
 }
 
 .agents-message__syntax--literal,
 .agents-message__syntax--number {
-  color: #9a5b00;
+  color: var(--color-syntax-literal);
 }
 
 .agents-message__syntax--property,
 .agents-message__syntax--type,
 .agents-message__syntax--variable {
-  color: #9950b8;
+  color: var(--color-syntax-property);
 }
 
 .agents-message__syntax--string {
-  color: #237a3b;
+  color: var(--color-syntax-string);
 }
 
 .agents-message__syntax--operator {
