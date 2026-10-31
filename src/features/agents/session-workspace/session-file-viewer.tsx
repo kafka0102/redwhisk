@@ -14,6 +14,10 @@ import {
 } from "../../../shared/workspace/open-html-in-browser";
 import { useEditorReadingPosition } from "../../../shared/workspace/use-editor-reading-position";
 import {
+  useMarkdownPreviewMode,
+  useMarkdownPreviewReadingPosition,
+} from "../../../shared/workspace/use-markdown-preview-state";
+import {
   isSvgTextSwitchable,
   shouldRenderVisualPreview,
   visualPreviewMimeType,
@@ -47,10 +51,6 @@ export function SessionFileViewer({
     filePath: string;
     mode: SvgPreviewView;
   } | null>(null);
-  const [markdownView, setMarkdownView] = useState<{
-    filePath: string;
-    mode: "source" | "preview";
-  } | null>(null);
   const openInBrowserRoot = hasWorkspaceRoot(workspacePath)
     ? workspacePath
     : null;
@@ -59,20 +59,24 @@ export function SessionFileViewer({
   if (svgView?.filePath !== tab.filePath) {
     setSvgView({ filePath: tab.filePath, mode: "image" });
   }
-  if (markdownView?.filePath !== tab.filePath) {
-    setMarkdownView({ filePath: tab.filePath, mode: "source" });
-  }
   const svgViewMode =
     svgView?.filePath === tab.filePath ? svgView.mode : "image";
-  const markdownMode =
-    markdownView?.filePath === tab.filePath ? markdownView.mode : "source";
   const isMonacoReady = useMonacoEditorReady();
+  const readingKey = sessionFileReadingPositionKey(
+    projectId,
+    sessionId,
+    tab.filePath,
+  );
+  const [markdownMode, setMarkdownMode] = useMarkdownPreviewMode(readingKey);
+  const {
+    containerRef: markdownPreviewRef,
+    handleScroll: handleMarkdownPreviewScroll,
+  } = useMarkdownPreviewReadingPosition({
+    readingKey,
+    enabled: markdownMode === "preview",
+  });
   const { handleEditorMount } = useEditorReadingPosition({
-    readingKey: sessionFileReadingPositionKey(
-      projectId,
-      sessionId,
-      tab.filePath,
-    ),
+    readingKey,
     loadKey: createEditorReadingLoadKey({
       filePath: tab.filePath,
       isLoading: tab.isLoading,
@@ -149,6 +153,8 @@ export function SessionFileViewer({
     body = (
       <div
         className="code-workspace__markdown-preview"
+        ref={markdownPreviewRef}
+        onScroll={handleMarkdownPreviewScroll}
         style={{ fontSize: contentFontSize }}
       >
         <CodeMarkdownPreview content={tab.content.content} theme={theme} />
@@ -238,10 +244,7 @@ export function SessionFileViewer({
             aria-pressed={markdownMode === "preview"}
             title={t("agentsFeature.toggleMarkdownPreview")}
             onClick={() =>
-              setMarkdownView({
-                filePath: tab.filePath,
-                mode: markdownMode === "preview" ? "source" : "preview",
-              })
+              setMarkdownMode(markdownMode === "preview" ? "source" : "preview")
             }
           >
             {markdownMode === "preview" ? (

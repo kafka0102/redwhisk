@@ -12,6 +12,7 @@ import { isCodeLanguageFile } from "./is-code-language-file";
 import { useMonacoEditorReady } from "../../shared/use-monaco-editor-ready";
 import { createEditorReadingLoadKey } from "../../shared/workspace/editor-reading-position";
 import { useEditorReadingPosition } from "../../shared/workspace/use-editor-reading-position";
+import { useMarkdownPreviewReadingPosition } from "../../shared/workspace/use-markdown-preview-state";
 import {
   shouldRenderVisualPreview,
   visualPreviewMimeType,
@@ -70,10 +71,11 @@ export function CodeContent({
 
   const isRevealTarget =
     revealRequest != null && revealRequest.filePath === tab.filePath;
+  const readingKey = codeEditorReadingPositionKey(projectId, tab.filePath);
 
   const { editorRef, handleEditorMount, persistReadingPosition } =
     useEditorReadingPosition({
-      readingKey: codeEditorReadingPositionKey(projectId, tab.filePath),
+      readingKey,
       loadKey: createEditorReadingLoadKey({
         filePath: tab.filePath,
         isLoading: tab.isLoading,
@@ -81,6 +83,13 @@ export function CodeContent({
       }),
       shouldDeferRestore: isRevealTarget,
     });
+  const {
+    containerRef: markdownPreviewRef,
+    handleScroll: handleMarkdownPreviewScroll,
+  } = useMarkdownPreviewReadingPosition({
+    readingKey,
+    enabled: viewMode === "preview",
+  });
 
   const applyReveal = useCallback(
     (lineNumber: number) => {
@@ -190,6 +199,8 @@ export function CodeContent({
     return (
       <div
         className="code-workspace__markdown-preview"
+        ref={markdownPreviewRef}
+        onScroll={handleMarkdownPreviewScroll}
         style={{ fontSize: contentFontSize }}
       >
         <CodeMarkdownPreview content={tab.content.content} theme={theme} />

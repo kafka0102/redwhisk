@@ -8,6 +8,13 @@ import {
   type EditorReadingPosition,
 } from "../../../shared/workspace/editor-reading-position";
 import {
+  readMarkdownPreviewMode,
+  readMarkdownPreviewScrollOffset,
+  resetMarkdownPreviewStateForTests,
+  writeMarkdownPreviewMode,
+  writeMarkdownPreviewScrollOffset,
+} from "../../../shared/workspace/markdown-preview-state";
+import {
   clearSessionFileReadingPosition,
   clearSessionFileReadingPositions,
   sessionFileReadingPositionKey,
@@ -29,9 +36,22 @@ function seed(
   return key;
 }
 
+function seedMarkdownPreview(
+  projectId: number,
+  sessionId: number,
+  filePath: string,
+  scrollTop: number,
+): string {
+  const key = sessionFileReadingPositionKey(projectId, sessionId, filePath);
+  writeMarkdownPreviewMode(key, "preview");
+  writeMarkdownPreviewScrollOffset(key, scrollTop);
+  return key;
+}
+
 describe("session-file-reading-position", () => {
   beforeEach(() => {
     resetEditorReadingPositionsForTests();
+    resetMarkdownPreviewStateForTests();
   });
 
   it("keeps the same file isolated per session and per project", () => {
@@ -46,29 +66,45 @@ describe("session-file-reading-position", () => {
   it("clears a single file without touching the session's other files", () => {
     const fileA = seed(1, 7, "src/a.ts", 100);
     const fileB = seed(1, 7, "src/b.ts", 200);
+    seedMarkdownPreview(1, 7, "src/a.ts", 300);
+    seedMarkdownPreview(1, 7, "src/b.ts", 400);
 
     clearSessionFileReadingPosition(1, 7, "src/a.ts");
 
     expect(readEditorReadingPosition(fileA)).toBeNull();
     expect(readEditorReadingPosition(fileB)).toEqual(buildPosition(200));
+    expect(readMarkdownPreviewMode(fileA)).toBe("source");
+    expect(readMarkdownPreviewScrollOffset(fileA)).toBeNull();
+    expect(readMarkdownPreviewMode(fileB)).toBe("preview");
+    expect(readMarkdownPreviewScrollOffset(fileB)).toBe(400);
   });
 
   it("clears every file of one session without touching other sessions", () => {
     const sessionA = seed(1, 7, "src/a.ts", 100);
     const sessionAOtherFile = seed(1, 7, "src/b.ts", 200);
     const sessionB = seed(1, 8, "src/a.ts", 300);
+    seedMarkdownPreview(1, 7, "src/a.ts", 400);
+    seedMarkdownPreview(1, 7, "src/b.ts", 500);
+    seedMarkdownPreview(1, 8, "src/a.ts", 600);
 
     clearSessionFileReadingPositions(7);
 
     expect(readEditorReadingPosition(sessionA)).toBeNull();
     expect(readEditorReadingPosition(sessionAOtherFile)).toBeNull();
     expect(readEditorReadingPosition(sessionB)).toEqual(buildPosition(300));
+    expect(readMarkdownPreviewMode(sessionA)).toBe("source");
+    expect(readMarkdownPreviewScrollOffset(sessionA)).toBeNull();
+    expect(readMarkdownPreviewMode(sessionAOtherFile)).toBe("source");
+    expect(readMarkdownPreviewScrollOffset(sessionAOtherFile)).toBeNull();
+    expect(readMarkdownPreviewMode(sessionB)).toBe("preview");
+    expect(readMarkdownPreviewScrollOffset(sessionB)).toBe(600);
   });
 });
 
 describe("useSessionFileReadingPositionCleanup", () => {
   beforeEach(() => {
     resetEditorReadingPositionsForTests();
+    resetMarkdownPreviewStateForTests();
   });
 
   it("clears the previous file when its tab is closed or replaced", () => {

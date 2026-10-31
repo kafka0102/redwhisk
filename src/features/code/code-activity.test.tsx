@@ -28,6 +28,7 @@ import {
   writeEditorReadingPosition,
   type EditorReadingPosition,
 } from "../../shared/workspace/editor-reading-position";
+import { resetMarkdownPreviewStateForTests } from "../../shared/workspace/markdown-preview-state";
 import {
   codeEditorReadingPositionKey,
   codeWorkspaceCache,
@@ -501,6 +502,7 @@ describe("CodeActivity", () => {
     setDocumentVisibility(true);
     resetCodeWorkspaceCacheForTests();
     resetEditorReadingPositionsForTests();
+    resetMarkdownPreviewStateForTests();
     editorThemeProp.current = undefined;
     monacoEditorApi.reset();
     window.localStorage.clear();
@@ -659,6 +661,51 @@ describe("CodeActivity", () => {
         filePath: "src/file.ts",
       });
     });
+  });
+
+  it("restores markdown preview mode and its scroll position after remounting", async () => {
+    const user = userEvent.setup();
+    vi.mocked(readProjectWorktreeFile).mockImplementation(
+      async ({ filePath }) => {
+        if (filePath === "docs/readme.md") return markdownContent;
+        return fileContent;
+      },
+    );
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open markdown" }));
+    const toggle = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    await user.click(toggle);
+
+    const preview = document.querySelector<HTMLElement>(
+      ".code-workspace__markdown-preview",
+    );
+    expect(preview).not.toBeNull();
+    preview!.scrollTop = 240;
+    fireEvent.scroll(preview!);
+
+    view.unmount();
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    const restoredToggle = await screen.findByRole("button", {
+      name: "Markdown preview",
+    });
+    expect(restoredToggle).toHaveAttribute("aria-pressed", "true");
+    const restoredPreview = document.querySelector<HTMLElement>(
+      ".code-workspace__markdown-preview",
+    );
+    expect(restoredPreview).not.toBeNull();
+    expect(restoredPreview!.scrollTop).toBe(240);
   });
 
   it("restores the Monaco editor scroll position after remounting", async () => {

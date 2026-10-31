@@ -19,7 +19,13 @@ vi.mock("mermaid", () => ({
   default: mermaidMock,
 }));
 
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +37,11 @@ import {
   writeEditorReadingPosition,
   type EditorReadingPosition,
 } from "../../../shared/workspace/editor-reading-position";
-import { sessionFileReadingPositionKey } from "./session-file-reading-position";
+import { resetMarkdownPreviewStateForTests } from "../../../shared/workspace/markdown-preview-state";
+import {
+  clearSessionFileReadingPosition,
+  sessionFileReadingPositionKey,
+} from "./session-file-reading-position";
 import type { SessionWorkspaceFileTab } from "./session-workspace-types";
 import { SessionFileViewer } from "./session-file-viewer";
 
@@ -190,6 +200,7 @@ describe("SessionFileViewer", () => {
     editorThemeProp.current = undefined;
     window.localStorage.clear();
     resetEditorReadingPositionsForTests();
+    resetMarkdownPreviewStateForTests();
     monacoEditorApi.reset();
     openPath.mockReset();
     mermaidMock.initialize.mockClear();
@@ -825,13 +836,14 @@ describe("SessionFileViewer", () => {
     expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
   });
 
-  it("returns to source after the markdown viewer is closed and opened again", async () => {
+  it("returns to source after the markdown tab is closed and opened again", async () => {
     const user = userEvent.setup();
     const view = render(markdownViewerElement());
     await user.click(screen.getByRole("button", { name: "Markdown preview" }));
     expect(screen.getByRole("heading", { name: "Hello" })).toBeInTheDocument();
 
     view.unmount();
+    clearSessionFileReadingPosition(projectId, sessionId, "docs/readme.md");
     render(markdownViewerElement());
 
     expect(
@@ -841,6 +853,30 @@ describe("SessionFileViewer", () => {
       screen.queryByRole("heading", { name: "Hello" }),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+  });
+
+  it("restores markdown preview mode and its scroll position after remounting", async () => {
+    const user = userEvent.setup();
+    const view = render(markdownViewerElement());
+    await user.click(screen.getByRole("button", { name: "Markdown preview" }));
+
+    const preview = document.querySelector<HTMLElement>(
+      ".code-workspace__markdown-preview",
+    );
+    expect(preview).not.toBeNull();
+    preview!.scrollTop = 180;
+    fireEvent.scroll(preview!);
+
+    view.unmount();
+    render(markdownViewerElement());
+
+    const toggle = screen.getByRole("button", { name: "Markdown preview" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const restoredPreview = document.querySelector<HTMLElement>(
+      ".code-workspace__markdown-preview",
+    );
+    expect(restoredPreview).not.toBeNull();
+    expect(restoredPreview!.scrollTop).toBe(180);
   });
 
   it("renders a mermaid fence with the code workspace preview", async () => {

@@ -33,7 +33,9 @@ import { isContentSearchShortcut } from "./is-content-search-shortcut";
 import { isFileSaveShortcut } from "./is-file-save-shortcut";
 import {
   type CodeFileTab,
+  clearCodeMarkdownPreviewState,
   clearCodeEditorReadingPositions,
+  codeEditorReadingPositionKey,
   codeWorkspaceCache,
 } from "./code-workspace-cache";
 import {
@@ -55,6 +57,7 @@ import { useCodeLanguageIntelligence } from "./use-code-language-intelligence";
 import { useCodeFileTreePathActions } from "./use-code-file-tree-path-actions";
 import { useCodeWorkspaceFileTree } from "./use-code-workspace-file-tree";
 import { useCodeReadingPositionCleanup } from "./use-code-reading-position-cleanup";
+import { useMarkdownPreviewMode } from "../../shared/workspace/use-markdown-preview-state";
 
 interface CodeActivityProps {
   projectId: number;
@@ -97,9 +100,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
   const [revealRequest, setRevealRequest] = useState<CodeRevealRequest | null>(
     null,
   );
-  const [markdownViewMode, setMarkdownViewMode] = useState<
-    "source" | "preview"
-  >("source");
   const [svgViewMode, setSvgViewMode] = useState<SvgPreviewView>("image");
   const activePathRef = useRef<string | null>(cached?.activePath ?? null);
   const tabsRef = useRef<CodeFileTab[]>(
@@ -109,6 +109,15 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     new Set((cached?.tabs ?? []).map((tab) => tab.filePath)),
   );
   const fileNotFoundMessage = messages.agentsFeature.fileNotFound;
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.filePath === activePath) ?? null,
+    [activePath, tabs],
+  );
+  const [markdownViewMode, setMarkdownViewMode] = useMarkdownPreviewMode(
+    activeTab
+      ? codeEditorReadingPositionKey(projectId, activeTab.filePath)
+      : null,
+  );
 
   const clearCodeState = useCallback(() => {
     openFilePathsRef.current.clear();
@@ -119,7 +128,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     setContentSearch(DEFAULT_CODE_CONTENT_SEARCH_STATE);
     clearCodeEditorReadingPositions(projectId);
     setRevealRequest(null);
-    setMarkdownViewMode("source");
     setSvgViewMode("image");
   }, [projectId]);
 
@@ -169,10 +177,6 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     refreshDirectory,
   } = useCodeWorkspaceFileTree(projectId, selectedRootWorkspacePath, true);
 
-  const activeTab = useMemo(
-    () => tabs.find((tab) => tab.filePath === activePath) ?? null,
-    [activePath, tabs],
-  );
   const { unavailableReason } = useCodeLanguageIntelligence({
     activeTab,
     projectId,
@@ -266,13 +270,19 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount/root revalidation
   }, [fileNotFoundMessage, projectId, selectedRoot?.path, t]);
 
-  const activateFilePath = useCallback((filePath: string | null) => {
-    activePathRef.current = filePath;
-    setActivePath(filePath);
-    // 换文件/关 tab 后回到默认源码与 SVG 图片（不跨文件记忆）。
-    setMarkdownViewMode("source");
-    setSvgViewMode("image");
-  }, []);
+  const activateFilePath = useCallback(
+    (filePath: string | null) => {
+      if (filePath != null && filePath !== activePathRef.current) {
+        clearCodeMarkdownPreviewState(projectId, filePath);
+      }
+      activePathRef.current = filePath;
+      setActivePath(filePath);
+      // 换文件 / 关 tab 后回到默认源码与 SVG 图片（不跨文件记忆）；
+      // Activity 重建不会走这里，因此重建后仍恢复原阅读模式。
+      setSvgViewMode("image");
+    },
+    [projectId],
+  );
 
   const saveTabByPath = useCallback(
     async (filePath: string): Promise<boolean> => {
@@ -451,7 +461,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
         return { ...item, isEditable: false };
       }),
     );
-  }, [confirmSingleUnsaved, saveTabByPath]);
+  }, [confirmSingleUnsaved, saveTabByPath, setMarkdownViewMode]);
 
   const saveActiveTab = useCallback(async () => {
     const path = activePathRef.current;
@@ -674,8 +684,10 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
                       ? {
                           label: messages.agentsFeature.toggleMarkdownPreview,
                           onToggle: () =>
-                            setMarkdownViewMode((current) =>
-                              current === "preview" ? "source" : "preview",
+                            setMarkdownViewMode(
+                              markdownViewMode === "preview"
+                                ? "source"
+                                : "preview",
                             ),
                           pressed: markdownViewMode === "preview",
                         }

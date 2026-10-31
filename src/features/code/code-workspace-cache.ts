@@ -3,6 +3,10 @@ import {
   clearEditorReadingPositionsByProject,
   createEditorReadingPositionKey,
 } from "../../shared/workspace/editor-reading-position";
+import {
+  clearMarkdownPreviewState,
+  clearMarkdownPreviewStatesByProject,
+} from "../../shared/workspace/markdown-preview-state";
 import type { WorkspaceFileContent } from "../../shared/workspace/workspace-commands";
 import type {
   CodeContentSearchState,
@@ -46,17 +50,28 @@ export function codeEditorReadingPositionKey(
   return createEditorReadingPositionKey({ projectId, filePath });
 }
 
+/** 换文件 / 重新打开该文件时清掉 Markdown 预览模式与滚动位置。 */
+export function clearCodeMarkdownPreviewState(
+  projectId: number,
+  filePath: string,
+): void {
+  clearMarkdownPreviewState(codeEditorReadingPositionKey(projectId, filePath));
+}
+
 /** 关闭文件 Tab / 淘汰 LRU Tab 时清理该文件的阅读位置。 */
 export function clearCodeEditorReadingPosition(
   projectId: number,
   filePath: string,
 ): void {
-  clearEditorReadingPosition(codeEditorReadingPositionKey(projectId, filePath));
+  const readingKey = codeEditorReadingPositionKey(projectId, filePath);
+  clearEditorReadingPosition(readingKey);
+  clearMarkdownPreviewState(readingKey);
 }
 
 /** 切换代码根时清理该项目下全部文件的阅读位置。 */
 export function clearCodeEditorReadingPositions(projectId: number): void {
   clearEditorReadingPositionsByProject(projectId);
+  clearMarkdownPreviewStatesByProject(projectId);
 }
 
 export function resetCodeWorkspaceCacheForTests(): void {
