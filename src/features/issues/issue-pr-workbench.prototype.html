@@ -1195,11 +1195,7 @@ function issueDetailSurface() {
     : model.state === "closed" ? '<span class="chip">closed</span>'
     : '<span class="chip chip-danger">不可用</span>';
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + iconButton("back", "返回看板", "back")
-    + button(icon("external", 13) + ' 打开 ' + sourceName, "btn-secondary", "open-external")
-    + button(icon("play", 13) + ' 运行', "btn-primary", "run")
-    + iconButton("settings", "更多", "more")
-    + '</div></header>';
+    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
   const banner = model.deletedRemote
     ? syncBanner()
     : '<div class="source-banner">' + sourceBadge(source) + '<span class="mono">' + esc(source === "github" ? "acme/redwhisk" : source === "gitlab" ? "acme/redwhisk" : "本地") + ' #' + model.number + '</span>' + stateChip
@@ -1208,9 +1204,10 @@ function issueDetailSurface() {
       + '<span class="spacer"></span><span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
       + '<span class="subtle" title="远程正文只读">' + icon("lock", 11) + '</span></div>';
   const body = '<div class="page">'
-    + '<div class="page-header"><div><h2>' + numberText + ' · ' + esc(model.title) + '</h2>'
+    + '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回看板", "back")
+    + '<div><h2>' + numberText + ' · ' + esc(model.title) + '</h2>'
     + '<div class="sub"><span class="chip">' + (model.state === "open" ? "待办" : model.state === "closed" ? "已完成" : "不可用") + '</span></div></div>'
-    + '<div class="page-actions">' + button("状态", "btn-secondary", "status") + button("编辑远程", "btn-secondary", "edit-remote", model.deletedRemote) + button("删除本地副本", "btn-danger", "delete") + '</div></div>'
+    + '</div><div class="page-actions">' + button("状态", "btn-secondary", "status") + button(icon("external", 13) + ' 打开 ' + sourceName, "btn-secondary", "open-external") + button(icon("play", 13) + ' 运行', "btn-secondary", "run") + button("编辑远程", "btn-secondary", "edit-remote", model.deletedRemote) + button("删除本地副本", "btn-danger", "delete") + '</div></div>'
     + '<div class="detail-grid"><div class="detail-main">'
     + issueBody()
     + timeline()
@@ -1388,12 +1385,7 @@ function prDetailSurface() {
   const merged = prState === "merged";
   const hostLabel = model.host === "gitlab" ? "GitLab" : "GitHub";
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + iconButton("back", "返回 PR 列表", "back-pr")
-    + button(icon("external", 13) + ' 在 ' + hostLabel + ' 打开', "btn-secondary", "open-external")
-    + (merged
-      ? button("已合并", "btn-secondary", "noop", true)
-      : button("标记就绪", "btn-secondary", "ready") + button("合并", "btn-primary", "merge", model.mergeable !== "clean"))
-    + '</div></header>';
+    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
   const stateChip = prState === "open"
     ? '<span class="chip chip-success">open</span>'
     : prState === "merged"
@@ -1402,10 +1394,12 @@ function prDetailSurface() {
   const tabs = [["overview", "概览", ""], ["files", "变更", "12"], ["checks", "检查", "4"], ["discussion", "讨论", "6"]];
   return '<section class="surface" aria-label="Pull request 详情">' + header
     + '<div class="page" style="padding-bottom:0">'
-    + '<div class="page-header"><div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>' + (merged ? 'yujianjia 合并了 2 个提交 · 合并于 2 小时前' : 'yujianjia 想合并 2 个提交') + '</span><span>·</span><span>+412 −87</span></div></div>'
-    + '<div class="page-actions">' + (merged
+    + '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回 PR 列表", "back-pr")
+    + '<div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>' + (merged ? 'yujianjia 合并了 2 个提交 · 合并于 2 小时前' : 'yujianjia 想合并 2 个提交') + '</span><span>·</span><span>+412 −87</span></div></div>'
+    + '</div><div class="page-actions">' + button(icon("external", 13) + ' 在 ' + hostLabel + ' 打开', "btn-secondary", "open-external")
+    + (merged
       ? button("查看合并提交", "btn-secondary", "open-external")
-      : button("请求审阅", "btn-secondary", "request-review") + button("关闭", "btn-ghost", "close-pr")) + '</div></div>'
+      : button("标记就绪", "btn-secondary", "ready") + button("请求审阅", "btn-secondary", "request-review") + button("关闭", "btn-ghost", "close-pr")) + '</div></div>'
     + '<div class="pr-tabs">' + tabs.map(([value, label, count]) => '<button class="pr-tab" type="button" aria-selected="' + (prTab === value) + '" data-field="prTab" data-value="' + value + '">' + label + (count ? '<span class="count">' + count + '</span>' : '') + '</button>').join("") + '</div>'
     + '<div class="detail-grid"><div class="detail-main">' + prTabContent(prTab) + '</div><aside class="detail-side">' + mergeBox() + prMetaPanel() + '</aside></div></div></section>';
 }
