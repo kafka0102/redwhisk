@@ -295,6 +295,7 @@
   .chip-danger { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
   .chip-warning { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
   .chip-info { border-color: #c9dcf3; background: var(--color-info-soft); color: var(--color-info); }
+  .chip-merged { border-color: #e2d4f5; background: #f3ecfc; color: #6b3fa0; }
   .source-badge {
     display: inline-flex;
     align-items: center;
@@ -525,6 +526,7 @@
   .merge-status { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface-subtle); font-size: 12px; }
   .merge-status.is-blocked { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
   .merge-status.is-ready { border-color: #bfe3cf; background: var(--color-success-soft); color: var(--color-success); }
+  .merge-status.is-merged { border-color: #e2d4f5; background: #f3ecfc; color: #6b3fa0; }
   .merge-status ul { margin: 4px 0 0; padding-left: 16px; }
   .merge-status li + li { margin-top: 2px; }
 
@@ -723,6 +725,31 @@ const SCENES = [
     },
   },
   {
+    id: "s16",
+    group: "设置",
+    title: "GitLab 项目设置",
+    caption: "换成 GitLab 后，连接走 glab，完成后动作与目标文案切换为 Merge Request；Issue 来源模式、同步与写回语义不变。",
+    kind: "settings",
+    model: {
+      mode: "mixed",
+      host: "gitlab",
+      repo: "acme/redwhisk",
+      login: "yujianjia",
+      scope: "assigned_to_me",
+      autoSync: true,
+      interval: "90",
+      closeOnComplete: true,
+      commentOnComplete: true,
+      closeOnPrMerge: true,
+      completionAction: "open_pull_request",
+      prTarget: "issue_base",
+      prDraft: true,
+      confirmCompletionAction: false,
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+    },
+  },
+  {
     id: "s7",
     group: "PR",
     title: "PR 列表 · 待我审阅",
@@ -815,6 +842,45 @@ const SCENES = [
       draft: true,
       linkedIssue: "github:128",
       sync: "ok",
+    },
+  },
+  {
+    id: "s14",
+    group: "PR",
+    title: "PR 合并后",
+    caption: "PR 已合并，检查全部通过，关联的远程 Issue 已关闭。合并框只保留结果与合并提交；用户下一步回看 Issue 或继续处理下一个 PR。",
+    kind: "pr-detail",
+    model: {
+      mode: "mixed",
+      tab: "prs",
+      host: "github",
+      prTab: "overview",
+      prNumber: 132,
+      prTitle: "feat: 支持从 GitHub / GitLab 同步 Issue",
+      prState: "merged",
+      checksOk: 4,
+      checksBad: 0,
+      checksRun: 0,
+      review: "approved",
+      mergeable: "clean",
+      linkedIssue: 128,
+      linkedIssueState: "closed",
+      sync: "ok",
+    },
+  },
+  {
+    id: "s15",
+    group: "PR",
+    title: "仅本地 · PR 空态",
+    caption: "仅本地模式不访问远程，Pull requests Tab 保留但显示空态。用户下一步去设置切换模式，或继续新建本地 Issue。",
+    kind: "pr-empty",
+    model: {
+      mode: "local",
+      tab: "prs",
+      sync: "off",
+      syncText: "仅本地 · 未连接远程",
+      issueCounts: { backlog: 2, running: 1, review: 0, completed: 4 },
+      prCount: 0,
     },
   },
   {
@@ -986,9 +1052,11 @@ function syncBanner() {
 
 function surfaceTabs() {
   const issuesActive = model.tab !== "prs";
+  const issueTarget = model.mode === "local" ? "s13" : "s1";
+  const prTarget = model.mode === "local" ? "s15" : "s7";
   return '<div class="surface-tabs" role="tablist">'
-    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + issuesActive + '" data-go="s1">Issues <span class="count">' + (model.issueCounts ? totalIssues() : 24) + '</span></button>'
-    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + (!issuesActive) + '" data-go="s7">Pull requests <span class="count">' + (model.prCount != null ? model.prCount : 8) + '</span></button>'
+    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + issuesActive + '" data-go="' + issueTarget + '">Issues <span class="count">' + (model.issueCounts ? totalIssues() : 24) + '</span></button>'
+    + '<button class="surface-tab" type="button" role="tab" aria-selected="' + (!issuesActive) + '" data-go="' + prTarget + '">Pull requests <span class="count">' + (model.prCount != null ? model.prCount : 8) + '</span></button>'
     + '</div>';
 }
 
@@ -1178,12 +1246,16 @@ function localPanel() {
 function settingsSurface() {
   const mode = model.mode;
   const isRemote = mode !== "local";
+  const isGitLab = model.host === "gitlab";
+  const requestNoun = isGitLab ? "Merge Request" : "Pull Request";
+  const requestShort = isGitLab ? "MR" : "PR";
+  const cli = isGitLab ? "glab" : "gh";
   const sourceCards = [
     ["local", "仅本地", "完全不访问远程。适合纯本地项目。"],
     ["remote", "仅远程", "看板只显示远程 Issue；本地 Issue 隐藏但保留。"],
     ["mixed", "混合", "本地与远程 Issue 同时出现，新建时再选来源。"],
   ];
-  return '<section class="surface" aria-label="项目设置"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">项目设置</span></div><div class="surface-actions"><span class="subtle">acme/redwhisk</span></div></header>'
+  return '<section class="surface" aria-label="项目设置"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">项目设置</span></div><div class="surface-actions"><span class="chip">' + (isGitLab ? "GitLab · Merge Request" : "GitHub · Pull Request") + '</span><span class="subtle">acme/redwhisk</span></div></header>'
     + '<div class="settings-layout"><nav class="settings-menu" aria-label="设置菜单">'
     + '<button type="button" aria-pressed="false">通用</button><button type="button" aria-pressed="true">Issues</button><button type="button" aria-pressed="false">智能体</button><button type="button" aria-pressed="false">技能</button><button type="button" aria-pressed="false">标签</button>'
     + '</nav><div class="settings-splitter"></div><div class="settings-content"><div class="inner">'
@@ -1197,7 +1269,7 @@ function settingsSurface() {
     + (isRemote ? '<section class="settings-card"><h3>远程连接</h3><p class="card-desc">从 git remote 自动识别；不支持时手动填写企业 host。</p>'
       + '<div class="field-row"><div class="field"><label>宿主</label><select class="select" data-field="host"><option value="github"' + (model.host === "github" ? " selected" : "") + '>GitHub</option><option value="gitlab"' + (model.host === "gitlab" ? " selected" : "") + '>GitLab</option></select></div>'
       + '<div class="field"><label>仓库</label><input class="input" readonly value="' + esc(model.repo) + '" /></div></div>'
-      + '<div class="field"><label>账号</label><div style="display:flex;gap:8px;align-items:center"><input class="input" readonly value="' + esc(model.login) + '" /><span class="chip chip-success">已登录</span><button class="btn btn-secondary" type="button" data-action="relogin">重新登录</button></div><div class="hint">通过本机 gh / glab 的登录态读取；应用不保存 token。</div></div>'
+      + '<div class="field"><label>账号</label><div style="display:flex;gap:8px;align-items:center"><input class="input" readonly value="' + esc(model.login) + '" /><span class="chip chip-success">已登录</span><button class="btn btn-secondary" type="button" data-action="relogin">重新登录</button></div><div class="hint">通过本机 ' + cli + ' 的登录态读取；应用不保存 token。</div></div>'
       + '<div class="section-divider"></div>'
       + '<div class="field"><label>拉取范围</label><select class="select" data-field="scope">'
       + '<option value="assigned_to_me"' + (model.scope === "assigned_to_me" ? " selected" : "") + '>分配给我（推荐）</option>'
@@ -1208,14 +1280,14 @@ function settingsSurface() {
       + '<div class="field-row" style="margin-top:11px"><div class="field"><label>自动同步</label><div class="checkline"><input type="checkbox" data-field="autoSync"' + (model.autoSync ? " checked" : "") + ' />页面可见时自动同步</div></div>'
       + '<div class="field"><label>间隔</label><select class="select" data-field="interval"><option value="60"' + (model.interval === "60" ? " selected" : "") + '>60 秒</option><option value="90"' + (model.interval === "90" ? " selected" : "") + '>90 秒</option><option value="300"' + (model.interval === "300" ? " selected" : "") + '>5 分钟</option></select></div></div>'
       + '<div class="field"><label>写回</label><div class="checkline"><input type="checkbox" data-field="closeOnComplete"' + (model.closeOnComplete ? " checked" : "") + ' />本地完成且合并到 base 时，关闭远程 Issue</div>'
-      + '<div class="checkline"><input type="checkbox" data-field="closeOnPrMerge"' + (model.closeOnPrMerge ? " checked" : "") + ' />PR 合并后关闭关联的远程 Issue</div>'
+      + '<div class="checkline"><input type="checkbox" data-field="closeOnPrMerge"' + (model.closeOnPrMerge ? " checked" : "") + ' />' + requestShort + ' 合并后关闭关联的远程 Issue</div>'
       + '<div class="checkline"><input type="checkbox" data-field="commentOnComplete"' + (model.commentOnComplete ? " checked" : "") + ' />完成后把交付摘要评论回写远程</div>'
-      + '<div class="hint">创建 PR 时不立即关闭 Issue；默认等 PR 合并，避免「PR 还没审，Issue 已关闭」。</div></div>'
+      + '<div class="hint">创建 ' + requestShort + ' 时不立即关闭 Issue；默认等 ' + requestShort + ' 合并，避免「' + requestShort + ' 还没审，Issue 已关闭」。</div></div>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-top:11px"><span class="inline-status"><span class="dot ok"></span>已同步 2 分钟前</span><span class="spacer" style="flex:1"></span><button class="btn btn-secondary" type="button" data-action="sync">立即同步</button></div>'
       + '</section>' : '')
     + '<section class="settings-card"><h3>完成后</h3><p class="card-desc">与 Issue 完成流程共用；远程项目仍可覆盖单次选择。</p>'
-    + '<div class="field"><label>完成后动作</label><select class="select" data-field="completionAction"><option value="merge_to_base"' + (model.completionAction === "merge_to_base" ? " selected" : "") + '>合并到 base 分支</option><option value="open_pull_request"' + (model.completionAction === "open_pull_request" ? " selected" : "") + '>提交 Pull Request</option></select></div>'
-    + (model.completionAction === "open_pull_request" ? '<div class="field"><label>PR 目标</label><select class="select"><option>Issue 的 base 分支（main）</option><option>仓库默认分支（main）</option></select></div><div class="checkline" style="margin-top:9px"><input type="checkbox" checked />创建为草稿</div>' : '')
+    + '<div class="field"><label>完成后动作</label><select class="select" data-field="completionAction"><option value="merge_to_base"' + (model.completionAction === "merge_to_base" ? " selected" : "") + '>合并到 base 分支</option><option value="open_pull_request"' + (model.completionAction === "open_pull_request" ? " selected" : "") + '>提交 ' + requestNoun + '</option></select></div>'
+    + (model.completionAction === "open_pull_request" ? '<div class="field"><label>' + requestShort + ' 目标</label><select class="select"><option>Issue 的 base 分支（main）</option><option>仓库默认分支（main）</option></select></div><div class="checkline" style="margin-top:9px"><input type="checkbox" checked />创建为草稿</div>' : '')
     + '<div class="checkline" style="margin-top:9px"><input type="checkbox" data-field="confirmCompletionAction"' + (model.confirmCompletionAction ? " checked" : "") + ' />完成时再次确认动作</div>'
     + '</section>'
     + '<div class="actions">' + button("取消", "btn-secondary", "cancel") + button("保存", "btn-primary", "save") + '</div>'
@@ -1271,32 +1343,70 @@ function prListSurface() {
     + '<div class="pr-list"><div class="pr-head"><span></span><span>标题</span><span>检查 / 评审</span><span>关联 Issue</span><span></span></div>' + rows + '</div></section>';
 }
 
+function prEmptySurface() {
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions"><span class="inline-status"><span class="dot"></span>仅本地 · 未连接远程</span>'
+    + button("去设置连接", "btn-secondary", "go-settings")
+    + '</div></header>';
+  return '<section class="surface" aria-label="Pull requests">' + header
+    + '<div class="page" style="display:grid;place-items:center;padding:40px 20px">'
+    + '<div class="empty-state" style="max-width:440px">'
+    + icon("pr", 28)
+    + '<h3>Pull requests 还没有连接</h3>'
+    + '<p>当前项目是「仅本地」模式，不会访问 GitHub / GitLab。切换到混合或仅远程后，这里会出现需要你审阅的 PR/MR。</p>'
+    + '<div>' + button("去设置连接", "btn-primary", "go-settings") + '</div>'
+    + '</div></div></section>';
+}
+
 function prDetailSurface() {
   const prTab = model.prTab || "overview";
   const prState = model.prState || "open";
+  const merged = prState === "merged";
+  const hostLabel = model.host === "gitlab" ? "GitLab" : "GitHub";
   const header = '<header class="surface-header">' + surfaceTabs()
     + '<div class="surface-actions">' + iconButton("back", "返回 PR 列表", "back-pr")
-    + button(icon("external", 13) + ' 在 GitHub 打开', "btn-secondary", "open-external")
-    + button("标记就绪", "btn-secondary", "ready")
-    + button("合并", "btn-primary", "merge", model.mergeable !== "clean")
+    + button(icon("external", 13) + ' 在 ' + hostLabel + ' 打开', "btn-secondary", "open-external")
+    + (merged
+      ? button("已合并", "btn-secondary", "noop", true)
+      : button("标记就绪", "btn-secondary", "ready") + button("合并", "btn-primary", "merge", model.mergeable !== "clean"))
     + '</div></header>';
-  const stateChip = prState === "open" ? '<span class="chip chip-success">open</span>' : '<span class="chip">' + prState + '</span>';
+  const stateChip = prState === "open"
+    ? '<span class="chip chip-success">open</span>'
+    : prState === "merged"
+      ? '<span class="chip chip-merged">merged</span>'
+      : '<span class="chip">' + prState + '</span>';
   const tabs = [["overview", "概览", ""], ["files", "变更", "12"], ["checks", "检查", "4"], ["discussion", "讨论", "6"]];
   return '<section class="surface" aria-label="Pull request 详情">' + header
     + '<div class="page" style="padding-bottom:0">'
-    + '<div class="page-header"><div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>yujianjia 想合并 2 个提交</span><span>·</span><span>+412 −87</span></div></div>'
-    + '<div class="page-actions">' + button("请求审阅", "btn-secondary", "request-review") + button("关闭", "btn-ghost", "close-pr") + '</div></div>'
+    + '<div class="page-header"><div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>' + (merged ? 'yujianjia 合并了 2 个提交 · 合并于 2 小时前' : 'yujianjia 想合并 2 个提交') + '</span><span>·</span><span>+412 −87</span></div></div>'
+    + '<div class="page-actions">' + (merged
+      ? button("查看合并提交", "btn-secondary", "open-external")
+      : button("请求审阅", "btn-secondary", "request-review") + button("关闭", "btn-ghost", "close-pr")) + '</div></div>'
     + '<div class="pr-tabs">' + tabs.map(([value, label, count]) => '<button class="pr-tab" type="button" aria-selected="' + (prTab === value) + '" data-field="prTab" data-value="' + value + '">' + label + (count ? '<span class="count">' + count + '</span>' : '') + '</button>').join("") + '</div>'
     + '<div class="detail-grid"><div class="detail-main">' + prTabContent(prTab) + '</div><aside class="detail-side">' + mergeBox() + prMetaPanel() + '</aside></div></div></section>';
 }
 
 function prTabContent(tab) {
   if (tab === "checks") {
-    return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>检查</h3><span class="chip chip-danger">1 个失败</span></div>'
-      + checkRow("bad", "test (ubuntu-latest)", "失败 · 2m 14s", "pnpm test -- --run")
-      + checkRow("ok", "lint", "通过 · 38s", "pnpm lint")
-      + checkRow("ok", "typecheck", "通过 · 51s", "pnpm typecheck")
-      + checkRow("ok", "build", "通过 · 1m 02s", "pnpm build")
+    const bad = model.checksBad != null ? model.checksBad : 1;
+    const ok = model.checksOk != null ? model.checksOk : 3;
+    const pending = model.checksRun != null ? model.checksRun : 0;
+    const headerChip = bad > 0
+      ? '<span class="chip chip-danger">' + bad + ' 个失败</span>'
+      : pending > 0
+        ? '<span class="chip chip-warning">' + pending + ' 个运行中</span>'
+        : '<span class="chip chip-success">全部通过</span>';
+    let rows = "";
+    if (bad > 0) rows += checkRow("bad", "test (ubuntu-latest)", "失败 · 2m 14s", "pnpm test -- --run");
+    else rows += checkRow("ok", "test (ubuntu-latest)", "通过 · 2m 14s", "pnpm test -- --run");
+    if (ok >= 3) {
+      rows += checkRow("ok", "lint", "通过 · 38s", "pnpm lint")
+        + checkRow("ok", "typecheck", "通过 · 51s", "pnpm typecheck")
+        + checkRow("ok", "build", "通过 · 1m 02s", "pnpm build");
+    }
+    if (pending > 0) rows += checkRow("run", "e2e (playwright)", "运行中 · 1m 20s", "pnpm test:e2e");
+    return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>检查</h3>' + headerChip + '</div>'
+      + rows
       + '</section><div class="note is-warning" style="margin-top:10px">失败检查的日志仍在 GitHub；应用只展示状态与链接，不在本地重跑 CI。</div></div>';
   }
   if (tab === "files") {
@@ -1316,7 +1426,7 @@ function prTabContent(tab) {
       + '</div></section></div>';
   }
   return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>描述</h3></div><div class="panel-body"><div class="markdown"><p>把 Issue 从「只能手动录入」升级为可同步 GitHub / GitLab 的工作台，并补齐 PR/MR 的查看与合并能力。</p><ul><li>项目级来源模式。</li><li>远程 Issue 镜像 + 显式写回。</li><li>PR 列表、检查、评审与合并。</li></ul></div></div></section>'
-    + '<section class="panel" style="margin-top:10px"><div class="panel-header"><h3>关联 Issue</h3></div><div class="panel-body"><div class="linked-card"><span class="avatar is-remote">L</span><div class="grow"><div class="title">GH #' + (model.linkedIssue || 128) + ' · 支持从 GitHub / GitLab 同步 Issue</div><div class="meta">open · enhancement · sync</div></div><button class="btn btn-ghost btn-sm" type="button" data-go="s3">查看</button></div></div></section>'
+    + '<section class="panel" style="margin-top:10px"><div class="panel-header"><h3>关联 Issue</h3></div><div class="panel-body"><div class="linked-card"><span class="avatar is-remote">L</span><div class="grow"><div class="title">GH #' + (model.linkedIssue || 128) + ' · 支持从 GitHub / GitLab 同步 Issue</div><div class="meta">' + (model.linkedIssueState || "open") + ' · enhancement · sync</div></div><button class="btn btn-ghost btn-sm" type="button" data-go="s3">查看</button></div></div></section>'
     + '<section class="panel" style="margin-top:10px"><div class="panel-header"><h3>审阅者</h3></div><div class="panel-body"><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip">maya · 已批准</span><span class="chip chip-warning">lin · 待审阅</span></div></div></section></div>';
 }
 
@@ -1329,12 +1439,22 @@ function fileRow(kind, path, stat) {
 }
 
 function mergeBox() {
+  const merged = model.prState === "merged";
+  const hostLabel = model.host === "gitlab" ? "GitLab" : "GitHub";
+  const requestNoun = model.host === "gitlab" ? "Merge Request" : "Pull Request";
+  if (merged) {
+    return '<section class="panel"><div class="panel-header"><h3>合并</h3><span class="chip chip-merged">已合并</span></div><div class="panel-body"><div class="merge-box">'
+      + '<div class="merge-status is-merged">' + icon("check", 14) + '<div><strong>已合并到 main</strong><div class="subtle" style="margin-top:3px">2 小时前由 yujianjia 合并 · 源分支已删除</div></div></div>'
+      + '<dl class="facts"><dt>合并方式</dt><dd>Squash and merge</dd><dt>合并提交</dt><dd class="mono">9f3c2a1</dd></dl>'
+      + '<div style="display:grid;gap:6px">' + button("在 " + hostLabel + " 中查看", "btn-secondary", "open-external") + '</div>'
+      + '</div></div></section>';
+  }
   const blocked = model.mergeable !== "clean";
   return '<section class="panel"><div class="panel-header"><h3>合并</h3><span class="chip ' + (blocked ? "chip-danger" : "chip-success") + '">' + (blocked ? "被阻塞" : "可合并") + '</span></div><div class="panel-body"><div class="merge-box">'
     + '<div class="merge-status ' + (blocked ? "is-blocked" : "is-ready") + '">' + icon(blocked ? "alert" : "check", 14) + '<div>' + (blocked ? '<strong>还不能合并</strong><ul><li>1 个检查失败：test (ubuntu-latest)</li><li>需要 1 个批准，当前 0 个</li></ul>' : '<strong>所有检查通过，已获得 1 个批准。</strong>') + '</div></div>'
     + '<div class="field"><label>合并方式</label><select class="select"><option>Squash and merge</option><option>Create a merge commit</option><option>Rebase and merge</option></select></div>'
     + '<div class="checkline"><input type="checkbox" checked />合并后删除源分支</div>'
-    + '<div style="display:grid;gap:6px">' + button("合并 Pull Request", "btn-primary", "merge", blocked) + button("在 GitHub 中处理", "btn-secondary", "open-external") + '</div>'
+    + '<div style="display:grid;gap:6px">' + button("合并 " + requestNoun, "btn-primary", "merge", blocked) + button("在 " + hostLabel + " 中处理", "btn-secondary", "open-external") + '</div>'
     + '<div class="hint">应用不绕过保护分支，也不默认开启 auto-merge。</div>'
     + '</div></div></section>';
 }
@@ -1381,6 +1501,7 @@ function renderStage() {
   else if (scene.kind === "settings") html = appShell("settings", settingsSurface());
   else if (scene.kind === "mode-switch") html = appShell("settings", settingsSurface()) + modeSwitchDialog();
   else if (scene.kind === "pr-list") html = appShell("issues", prListSurface());
+  else if (scene.kind === "pr-empty") html = appShell("issues", prEmptySurface());
   else if (scene.kind === "pr-detail") html = appShell("issues", prDetailSurface());
   else if (scene.kind === "pr-merge") html = appShell("issues", prDetailSurface()) + prMergeDialog();
   else if (scene.kind === "pr-create") html = appShell("changes", prCreateSurface());
@@ -1453,7 +1574,13 @@ document.addEventListener("click", (event) => {
     return;
   }
   const action = target.dataset.action;
-  if (action === "open-issue") {
+  if (action === "go-settings") {
+    applyScene("s5");
+    return;
+  }
+  if (action === "noop") {
+    actionNote = "该操作在当前状态不可用";
+  } else if (action === "open-issue") {
     const number = Number(target.dataset.issue || 128);
     const card = Object.values(CARDS).flat().find((item) => item.number === number);
     applyScene("s3");
