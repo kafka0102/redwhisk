@@ -298,6 +298,9 @@
   .chip-warning { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
   .chip-info { border-color: #c9dcf3; background: var(--color-info-soft); color: var(--color-info); }
   .chip-merged { border-color: #e2d4f5; background: #f3ecfc; color: #6b3fa0; }
+  .chip-running { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
+  .chip-review { border-color: #bfe3cf; background: var(--color-success-soft); color: var(--color-success); }
+  .chip-completed { border-color: #c9dcf3; background: var(--color-info-soft); color: var(--color-info); }
   .source-badge {
     display: inline-flex;
     align-items: center;
@@ -659,21 +662,23 @@ const SCENES = [
   {
     id: "s3",
     group: "Issue",
-    title: "远程 Issue 详情",
-    caption: "远程正文与评论按 Markdown 呈现，系统事件压成一行；本地 Agent 会话与关联 PR 仍在右侧。用户下一步可以运行 Agent、打开 GitHub 编辑，或进入关联 PR。",
+    title: "进行中 · 远程",
+    caption: "远程 Issue 正在执行：正文与评论只读，右侧显示运行中的本地 Agent 会话与运行参数。顶部提供状态、打开 GitHub、打开会话与更多操作。",
     kind: "issue-detail",
     model: {
       mode: "mixed",
       source: "github",
       number: 128,
       title: "支持从 GitHub / GitLab 同步 Issue",
+      status: "running",
       state: "open",
       sync: "ok",
       syncText: "已同步 2 分钟前",
-      hasPr: true,
-      prState: "open",
-      prChecks: "3/4",
-      prNumber: 132,
+      hasSession: true,
+      sessionStatus: "running",
+      branch: "feat/remote-issue",
+      localNumber: 42,
+      hasPr: false,
       deletedRemote: false,
     },
   },
@@ -903,9 +908,13 @@ const SCENES = [
       source: "github",
       number: 117,
       title: "旧版完成弹窗在窄窗口下溢出",
+      status: "running",
       state: "unavailable",
       sync: "deleted",
       syncText: "远端已删除或无权访问",
+      hasSession: true,
+      sessionStatus: "running",
+      localNumber: 42,
       hasPr: false,
       prState: "none",
       prChecks: "",
@@ -927,6 +936,173 @@ const SCENES = [
       syncText: "仅本地",
       issueCounts: { backlog: 2, running: 1, review: 0, completed: 4 },
       prCount: 0,
+    },
+  },
+  {
+    id: "s17",
+    group: "详情",
+    title: "待办 · 本地（直接编辑）",
+    caption: "待办且本地：点击卡片直接进入编辑表单，不显示会话与运行参数。顶部是运行 / 保存 / 删除，没有状态菜单，也没有远端入口。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "local",
+      number: 12,
+      localNumber: 12,
+      title: "完成流程支持关联已有 PR",
+      body: "已有打开的 PR 时不再重复创建，改为关联并完成。",
+      status: "backlog",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      editable: true,
+      hasSession: false,
+      hasPr: false,
+    },
+  },
+  {
+    id: "s18",
+    group: "详情",
+    title: "待办 · 远程",
+    caption: "待办且远程：正文只读，没有会话与运行参数；顶部是状态 / 打开 GitHub / 运行 / 更多。编辑内容需去宿主。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "github",
+      number: 131,
+      localNumber: 43,
+      title: "PR 详情展示 review 状态",
+      body: "在 PR 详情中展示 Approve / Request changes / Review required 三态。",
+      status: "backlog",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      editable: false,
+      hasSession: false,
+      hasPr: false,
+    },
+  },
+  {
+    id: "s19",
+    group: "详情",
+    title: "进行中 · 本地",
+    caption: "进行中本地：只读详情 + 运行中的会话；顶部提供状态、打开会话与更多，不显示打开宿主。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "local",
+      number: 14,
+      localNumber: 14,
+      title: "Issue 来源筛选与计数",
+      body: "看板顶部按本地 / GitHub / GitLab 过滤，并显示各甬道数量。",
+      status: "running",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasSession: true,
+      sessionStatus: "running",
+      branch: "feat/issue-filter",
+      hasPr: false,
+    },
+  },
+  {
+    id: "s20",
+    group: "详情",
+    title: "待审核 · 远程",
+    caption: "待审核远程：只读详情 + 已结束会话 + 关联 PR；顶部提供打开 GitHub、完成、打开会话。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "github",
+      number: 126,
+      localNumber: 44,
+      title: "远程评论合并进时间轴",
+      body: "把 GitHub 评论、系统事件与本地 Agent 交付按时间交错展示。",
+      status: "review",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasSession: true,
+      sessionStatus: "closed",
+      branch: "feat/timeline",
+      hasPr: true,
+      prState: "open",
+      prNumber: 129,
+      prChecks: "4/4",
+    },
+  },
+  {
+    id: "s21",
+    group: "详情",
+    title: "已完成 · 远程",
+    caption: "已完成远程：只读详情 + 关闭的会话 + 已合并 PR；顶部提供打开 GitHub、查看回看，状态菜单可重新打开。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "github",
+      number: 121,
+      localNumber: 45,
+      title: "Issue 来源模式设置",
+      body: "项目级选择仅本地 / 仅远程 / 混合，切换不删除数据。",
+      status: "completed",
+      state: "closed",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasSession: true,
+      sessionStatus: "closed",
+      branch: "feat/source-mode",
+      hasPr: true,
+      prState: "merged",
+      prNumber: 124,
+      prChecks: "4/4",
+      canReopen: true,
+    },
+  },
+  {
+    id: "s22",
+    group: "详情",
+    title: "已完成 · 本地",
+    caption: "已完成本地：只读详情 + 关闭的会话，无远端入口；顶部提供查看回看与状态菜单。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "local",
+      number: 9,
+      localNumber: 9,
+      title: "设置页拆分 Issues 模块",
+      body: "把来源、同步与完成动作集中到项目设置的 Issues 页。",
+      status: "completed",
+      state: "closed",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasSession: true,
+      sessionStatus: "closed",
+      branch: "feat/settings-issues",
+      hasPr: false,
+      canReopen: true,
+    },
+  },
+  {
+    id: "s23",
+    group: "详情",
+    title: "待审核 · 本地",
+    caption: "待审核本地：只读详情 + 已结束会话；顶部提供状态、完成、打开会话，没有远端入口。",
+    kind: "issue-detail",
+    model: {
+      mode: "mixed",
+      source: "local",
+      number: 15,
+      localNumber: 15,
+      title: "完成流程 dirty 三选",
+      body: "未提交改动时提供自动提交 / 不提交 / 取消三个选项。",
+      status: "review",
+      state: "open",
+      sync: "ok",
+      syncText: "已同步 2 分钟前",
+      hasSession: true,
+      sessionStatus: "closed",
+      branch: "feat/closeout",
+      hasPr: false,
     },
   },
 ];
@@ -1175,34 +1351,116 @@ function issueCard(card) {
     + '</button>';
 }
 
+function issueStatusLabel(status) {
+  if (status === "backlog") return "待办";
+  if (status === "running") return "进行中";
+  if (status === "review") return "待审核";
+  return "已完成";
+}
+
+function issueStatusChip(status) {
+  const cls = status === "running" ? " chip-running" : status === "review" ? " chip-review" : status === "completed" ? " chip-completed" : "";
+  return '<span class="chip' + cls + '">' + issueStatusLabel(status) + '</span>';
+}
+
+function issueSourceName(source) {
+  return source === "github" ? "GitHub" : source === "gitlab" ? "GitLab" : "本地";
+}
+
+function issueSourceBanner(source, status) {
+  const local = source === "local";
+  const stateChip = model.state === "open"
+    ? '<span class="chip chip-success">open</span>'
+    : model.state === "closed"
+      ? '<span class="chip">closed</span>'
+      : '<span class="chip chip-danger">不可用</span>';
+  const labels = local
+    ? '<span class="chip">enhancement</span>'
+    : '<span class="chip">enhancement</span><span class="chip">sync</span><span class="chip">v0.9</span>';
+  return '<div class="source-banner">' + sourceBadge(source)
+    + '<span class="mono">' + (local ? "#" : "acme/redwhisk #") + model.number + '</span>'
+    + (local ? '' : stateChip)
+    + (local ? '' : '<span>作者 <strong>lin</strong></span><span>指派给 <strong>yujianjia</strong></span>')
+    + labels
+    + '<span class="spacer"></span>'
+    + (local ? '' : '<span class="subtle" title="远程正文只读">' + icon("lock", 11) + '</span>')
+    + '</div>';
+}
+
+function issueActions(status, source, editable) {
+  if (editable) {
+    return button(icon("play", 13) + ' 运行', "btn-secondary", "run")
+      + button("保存", "btn-primary", "save")
+      + button("删除", "btn-danger", "delete");
+  }
+  const parts = [button("状态", "btn-secondary", "status")];
+  if (source !== "local") {
+    parts.push(button(icon("external", 13) + ' 打开 ' + issueSourceName(source), "btn-secondary", "open-external"));
+  }
+  if (status === "backlog") {
+    parts.push(button(icon("play", 13) + ' 运行', "btn-primary", "run"));
+  }
+  if (status === "review") {
+    parts.push(button("完成", "btn-primary", "complete"));
+  }
+  if (status === "running" || status === "review") {
+    parts.push(button("打开会话", "btn-secondary", "open-session"));
+  }
+  if (status === "completed") {
+    parts.push(button("查看回看", "btn-secondary", "review"));
+  }
+  parts.push(iconButton("settings", "更多", "more"));
+  return parts.join("");
+}
+
+function issuePageHeader(source, status, editable) {
+  return '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回看板", "back")
+    + '<div><h2>' + sourceNumber(source, model.number) + ' · ' + esc(model.title) + '</h2>'
+    + '<div class="sub">' + issueStatusChip(status) + '</div></div></div>'
+    + '<div class="page-actions">' + issueActions(status, source, editable) + '</div></div>';
+}
+
+function notStartedPanel() {
+  return '<section class="panel"><div class="panel-header"><h3>会话</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">尚未运行</div></div></section>'
+    + '<section class="panel"><div class="panel-header"><h3>运行参数</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">—</div></div></section>';
+}
+
+function issueSidebar(status, source) {
+  if (status === "backlog") {
+    return notStartedPanel() + localPanel();
+  }
+  let parts = "";
+  if (model.hasSession) parts += sessionPanel(status);
+  if (model.hasPr) parts += linkedPrPanel();
+  parts += localPanel();
+  return parts;
+}
+
+function editableIssueForm() {
+  return '<section class="panel"><div class="panel-body">'
+    + '<div class="field"><label>标题</label><input class="input" value="' + esc(model.title) + '" /></div>'
+    + '<div class="field"><label>描述</label><textarea class="textarea" rows="8">' + esc(model.body || "") + '</textarea></div>'
+    + '<div class="field"><label>标签</label><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">enhancement</span><span class="chip">本地</span><button class="btn btn-ghost btn-sm" type="button">+ 选择标签</button></div></div>'
+    + '<div class="field"><label>附件</label><button class="btn btn-secondary" type="button">添加附件</button></div>'
+    + '</div></section>';
+}
+
 function issueDetailSurface() {
-  const source = model.source;
-  const sourceName = source === "github" ? "GitHub" : source === "gitlab" ? "GitLab" : "本地";
-  const numberText = sourceNumber(source, model.number);
-  const stateChip = model.state === "open" ? '<span class="chip chip-success">open</span>'
-    : model.state === "closed" ? '<span class="chip">closed</span>'
-    : '<span class="chip chip-danger">不可用</span>';
+  const source = model.source || "local";
+  const status = model.status || "running";
+  const editable = model.editable === true;
   const header = '<header class="surface-header">' + surfaceTabs() + tabActions(false) + '</header>';
-  const banner = model.deletedRemote
-    ? syncBanner()
-    : '<div class="source-banner">' + sourceBadge(source) + '<span class="mono">' + esc(source === "github" ? "acme/redwhisk" : source === "gitlab" ? "acme/redwhisk" : "本地") + ' #' + model.number + '</span>' + stateChip
-      + '<span>作者 <strong>lin</strong></span><span>指派给 <strong>yujianjia</strong></span>'
-      + '<span class="chip">enhancement</span><span class="chip">sync</span><span class="chip">v0.9</span>'
-      + '<span class="spacer"></span>'
-      + '<span class="subtle" title="远程正文只读">' + icon("lock", 11) + '</span></div>';
-  const body = '<div class="page">'
-    + '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回看板", "back")
-    + '<div><h2>' + numberText + ' · ' + esc(model.title) + '</h2>'
-    + '<div class="sub"><span class="chip">' + (model.state === "open" ? "待办" : model.state === "closed" ? "已完成" : "不可用") + '</span></div></div>'
-    + '</div><div class="page-actions">' + button("状态", "btn-secondary", "status") + button(icon("external", 13) + ' 打开 ' + sourceName, "btn-secondary", "open-external") + button(icon("play", 13) + ' 运行', "btn-secondary", "run") + button("编辑远程", "btn-secondary", "edit-remote", model.deletedRemote) + button("删除本地副本", "btn-danger", "delete") + '</div></div>'
-    + '<div class="detail-grid"><div class="detail-main">'
-    + issueBody()
-    + timeline()
-    + '</div><aside class="detail-side">'
-    + linkedPrPanel()
-    + sessionPanel()
-    + localPanel()
-    + '</aside></div></div>';
+  if (editable) {
+    const banner = issueSourceBanner(source, status);
+    const body = '<div class="page">' + issuePageHeader(source, status, true)
+      + '<div class="detail-grid"><div class="detail-main">' + editableIssueForm()
+      + '</div><aside class="detail-side">' + issueSidebar(status, source) + '</aside></div></div>';
+    return '<section class="surface" aria-label="Issue 详情">' + header + banner + body + '</section>';
+  }
+  const banner = model.deletedRemote ? syncBanner() : issueSourceBanner(source, status);
+  const body = '<div class="page">' + issuePageHeader(source, status, false)
+    + '<div class="detail-grid"><div class="detail-main">' + issueBody() + timeline()
+    + '</div><aside class="detail-side">' + issueSidebar(status, source) + '</aside></div></div>';
   return '<section class="surface" aria-label="Issue 详情">' + header + banner + body + '</section>';
 }
 
@@ -1212,13 +1470,25 @@ function timeline() {
       + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>系统</strong><span>远端对象已不可用，同步已停止</span><span>·</span><span>刚刚</span><span class="chip">本地</span></div><div class="comment"><div class="markdown"><p>本地副本、评论与会话历史仍保留。选择「保留为本地」后，这条 Issue 会变成普通本地 Issue。</p></div></div></div></li>'
       + '</ol>';
   }
-  return '<ol class="timeline">'
-    + '<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>在 GitHub 创建了 Issue</span><span>·</span><span>3 天前</span><span class="chip">GitHub</span></div></div></li>'
-    + '<li class="timeline-item"><span class="avatar is-remote">M</span><div class="timeline-body"><div class="timeline-meta"><strong>maya</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">GitHub</span></div><div class="comment"><div class="markdown"><p>混合模式下，本地 Issue 的编号会不会和远程 <code>#128</code> 冲突？</p></div></div></div></li>'
-    + '<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">GitHub</span></div><div class="comment"><div class="markdown"><p>不会。项目内 <code>number</code> 继续作为本地主键用于 worktree 命名；界面显示远程编号，并在详情里标明仓库。</p></div></div></div></li>'
-    + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>启动了 Agent 会话</span><span>·</span><span>2 小时前</span><span class="chip">本地</span></div></div></li>'
-    + '<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>交付摘要</span><span>·</span><span>1 小时前</span><span class="chip">本地</span></div><div class="comment"><div class="markdown"><p>已补上来源徽标与同步状态条；下一步接 <code>gh issue list</code> 的 JSON 适配层。</p></div></div></div></li>'
-    + '</ol>';
+  const items = [];
+  if (model.source === "local") {
+    items.push('<li class="timeline-item"><span class="avatar is-agent">L</span><div class="timeline-body"><div class="timeline-meta"><strong>你</strong><span>创建了 Issue</span><span>·</span><span>3 天前</span><span class="chip">本地</span></div></div></li>');
+  } else {
+    items.push('<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>在 ' + issueSourceName(model.source) + ' 创建了 Issue</span><span>·</span><span>3 天前</span><span class="chip">' + issueSourceName(model.source) + '</span></div></div></li>');
+    items.push('<li class="timeline-item"><span class="avatar is-remote">M</span><div class="timeline-body"><div class="timeline-meta"><strong>maya</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">' + issueSourceName(model.source) + '</span></div><div class="comment"><div class="markdown"><p>混合模式下，本地 Issue 的编号会不会和远程 <code>#' + model.number + '</code> 冲突？</p></div></div></div></li>');
+    items.push('<li class="timeline-item"><span class="avatar is-remote">L</span><div class="timeline-body"><div class="timeline-meta"><strong>lin</strong><span>评论</span><span>·</span><span>2 天前</span><span class="chip">' + issueSourceName(model.source) + '</span></div><div class="comment"><div class="markdown"><p>不会。项目内 <code>number</code> 继续作为本地主键用于 worktree 命名；界面显示远程编号，并在详情里标明仓库。</p></div></div></div></li>');
+  }
+  if (model.hasSession) {
+    items.push('<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>' + (model.status === "running" ? "启动了 Agent 会话" : "Agent 会话已结束") + '</span><span>·</span><span>2 小时前</span><span class="chip">本地</span></div></div></li>');
+    if (model.status !== "running") {
+      items.push('<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>Codex</strong><span>交付摘要</span><span>·</span><span>1 小时前</span><span class="chip">本地</span></div><div class="comment"><div class="markdown"><p>已补上来源徽标与同步状态条；下一步接 <code>gh issue list</code> 的 JSON 适配层。</p></div></div></div></li>');
+    }
+  }
+  if (model.status === "completed") {
+    items.push('<li class="timeline-item"><span class="avatar is-agent">A</span><div class="timeline-body"><div class="timeline-meta"><strong>系统</strong><span>标记为已完成</span><span>·</span><span>今天</span><span class="chip chip-completed">已完成</span></div></div></li>');
+  }
+  if (items.length === 0) return "";
+  return '<ol class="timeline">' + items.join("") + '</ol>';
 }
 
 function issueBody() {
@@ -1229,6 +1499,9 @@ function issueBody() {
       + '<blockquote>应用不会因为一次 404 就自动删除本地数据。</blockquote>'
       + '</div>';
   }
+  if (model.source === "local") {
+    return '<div class="markdown" style="margin-top:14px"><p>' + esc(model.body || "本地 Issue 的详情正文。") + '</p></div>';
+  }
   return '<div class="markdown" style="margin-top:14px">'
     + '<p>当前 Issue 只能手动录入，团队已经在 GitHub 里维护同一批任务。希望 RedWhisk 能直接拉取远程 Issue，同时不破坏现有的本地工作流。</p>'
     + '<h3>目标</h3><ul><li>项目级选择「仅本地 / 仅远程 / 混合」。</li><li>远程 Issue 进入看板后仍可用 Agent 执行与完成流程。</li><li>PR/MR 不再只支持创建，还能查看检查、评审与合并状态。</li></ul>'
@@ -1238,26 +1511,30 @@ function issueBody() {
 }
 
 function linkedPrPanel() {
-  if (!model.hasPr) {
-    return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">暂无关联 PR/MR</div><div style="margin-top:8px">' + button("关联已有 PR", "btn-secondary", "link-pr") + '</div></div></section>';
-  }
+  if (!model.hasPr) return "";
   const state = model.prState === "open" ? "open" : model.prState === "merged" ? "merged" : "closed";
-  return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3><span class="chip">' + state + '</span></div><div class="panel-body">'
+  const stateChipClass = state === "merged" ? "chip-merged" : state === "open" ? "chip-success" : "";
+  return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3><span class="chip ' + stateChipClass + '">' + state + '</span></div><div class="panel-body">'
     + '<div class="linked-card"><span class="pr-state ' + state + '">' + icon("pr", 12) + '</span><div class="grow"><div class="title">PR #' + model.prNumber + ' · 支持远程 Issue 同步</div><div class="meta">feat/remote-issue → main · 检查 ' + esc(model.prChecks) + '</div></div></div>'
     + '<div style="display:flex;gap:6px;margin-top:9px">' + button("查看 PR", "btn-secondary", "open-pr") + button("在 GitHub 打开", "btn-ghost", "open-external") + '</div>'
     + '</div></section>';
 }
 
-function sessionPanel() {
+function sessionPanel(status) {
+  const sessionStatus = model.sessionStatus || (status === "running" ? "running" : "closed");
+  const badge = sessionStatus === "running"
+    ? '<span class="chip chip-success">running</span>'
+    : '<span class="chip">closed</span>';
   const worktree = 'issue-' + model.number + '-redwhisk';
-  return '<section class="panel"><div class="panel-header"><h3>本地 Agent 会话</h3><span class="chip chip-success">running</span></div><div class="panel-body"><dl class="facts">'
-    + '<dt>Agent</dt><dd>Codex · gpt-5</dd><dt>工作树</dt><dd class="mono">' + esc(worktree) + '</dd><dt>分支</dt><dd class="mono">feat/remote-issue</dd><dt>Token</dt><dd>128k / 32k</dd>'
+  return '<section class="panel"><div class="panel-header"><h3>本地 Agent 会话</h3>' + badge + '</div><div class="panel-body"><dl class="facts">'
+    + '<dt>Agent</dt><dd>Codex · gpt-5</dd><dt>工作树</dt><dd class="mono">' + esc(worktree) + '</dd><dt>分支</dt><dd class="mono">' + esc(model.branch || "feat/remote-issue") + '</dd><dt>Token</dt><dd>128k / 32k</dd>'
     + '</dl><div style="margin-top:9px">' + button("打开会话", "btn-secondary", "open-session") + '</div></div></section>';
 }
 
 function localPanel() {
+  const localNumber = model.localNumber != null ? model.localNumber : model.source === "local" ? model.number : 42;
   return '<section class="panel"><div class="panel-header"><h3>本地字段</h3></div><div class="panel-body"><dl class="facts">'
-    + '<dt>本地编号</dt><dd class="mono">#42</dd><dt>本地标签</dt><dd><span class="chip">本地</span></dd>'
+    + '<dt>本地编号</dt><dd class="mono">#' + localNumber + '</dd><dt>本地标签</dt><dd><span class="chip">本地</span></dd>'
     + '</dl></div></section>';
 }
 
