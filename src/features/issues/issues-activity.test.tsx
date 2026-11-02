@@ -2114,7 +2114,7 @@ describe("IssuesActivity", () => {
       within(dialog).getByRole("heading", { name: "Run Issue #1" }),
     ).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
-      "Project Codex (Project)",
+      "Global Codex (Global)",
     );
     expect(within(dialog).getByLabelText("Workflow skill")).toHaveTextContent(
       "bmad-dev-story",
@@ -2397,7 +2397,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 20,
-      agentProfileId: 100,
+      agentProfileId: 200,
       promptSnapshot: existingIssueRunPrompt,
       workflowSkillName: "bmad-dev-story",
       workspaceMode: "worktree",
@@ -2449,7 +2449,7 @@ describe("IssuesActivity", () => {
     expect(startAgentSessionMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: 20,
-      agentProfileId: 100,
+      agentProfileId: 200,
       promptSnapshot: existingIssueRunPrompt,
       workflowSkillName: "bmad-dev-story",
       workspaceMode: "worktree",
@@ -3257,23 +3257,28 @@ describe("IssuesActivity", () => {
     expect(onOpenAgentsActivity).toHaveBeenCalledWith(301);
   });
 
-  it("uses the latest available project profile before global fallback", async () => {
+  it("defaults a first run to the first configured agent in display order", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {
         return {
           profiles: [
-            projectProfile,
-            { ...projectProfile, id: 101, name: "Project Claude" },
+            { ...projectProfile, displayOrder: 3 },
+            {
+              ...projectProfile,
+              id: 101,
+              name: "Project Claude",
+              displayOrder: 4,
+            },
           ],
         };
       }
 
       return {
         profiles: [
-          globalProfile,
-          { ...globalProfile, id: 201, name: "Global Claude" },
+          { ...globalProfile, displayOrder: 1 },
+          { ...globalProfile, id: 201, name: "Global Claude", displayOrder: 2 },
         ],
       };
     });
@@ -3282,7 +3287,7 @@ describe("IssuesActivity", () => {
 
     const { dialog } = await openExistingIssueRunDialog(user);
     expect(within(dialog).getByLabelText("Agent profile")).toHaveTextContent(
-      "Project Claude (Project)",
+      "Global Codex (Global)",
     );
   });
 
@@ -5649,17 +5654,17 @@ describe("Run Dialog 启动期模型选择", () => {
       user,
       within(dialog),
       "Agent profile",
-      "Global Codex (Global)",
+      "Project Codex (Project)",
     );
 
     expect(listAgentProfileModelsMock).toHaveBeenCalledTimes(2);
     expect(listAgentProfileModelsMock).toHaveBeenNthCalledWith(1, {
       projectId: 1,
-      agentProfileId: 100,
+      agentProfileId: 200,
     });
     expect(listAgentProfileModelsMock).toHaveBeenNthCalledWith(2, {
       projectId: 1,
-      agentProfileId: 200,
+      agentProfileId: 100,
     });
     await waitFor(() =>
       expect(

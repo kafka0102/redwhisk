@@ -21,7 +21,7 @@ import {
 } from "../issue-commands";
 import {
   filterLaunchVisibleAgentProfiles,
-  resolveAgentProfileLaunchEligibility,
+  pickDefaultLaunchSelectableProfile,
 } from "../../agents/agent-launch-eligibility";
 import {
   listAgentProfiles,
@@ -155,31 +155,17 @@ export function IssueRunDialog({
           ...projectSavedSkillsResponse.skills,
           ...globalSavedSkillsResponse.skills,
         ];
-        // enabled=false 隐藏；默认选中需从「可选（enabled）」子集中挑，
-        // 避免 initial profile 落到 disabled 项。resolveInitialProfile 的入参也用 selectable 子集。
-        const selectableProjectProfiles =
-          projectProfilesResponse.profiles.filter(
-            (profile) =>
-              resolveAgentProfileLaunchEligibility(profile).selectable,
-          );
-        const selectableGlobalProfiles = globalProfilesResponse.profiles.filter(
-          (profile) => resolveAgentProfileLaunchEligibility(profile).selectable,
-        );
         const lockedProfile =
           issue.status === "completed"
             ? mergedProfiles.find(
                 (profile) => profile.id === issue.linkedSessionAgentProfileId,
               )
             : null;
+        // 无历史会话时选下拉同一顺序的第一项，不再取项目级或全局级的末项。
         const initialProfile =
           lockedProfile ??
           resolveInitialProfile({
-            profiles: [
-              ...selectableProjectProfiles,
-              ...selectableGlobalProfiles,
-            ],
-            projectProfiles: selectableProjectProfiles,
-            globalProfiles: selectableGlobalProfiles,
+            profiles: mergedProfiles,
             sessions: sessionsResponse.sessions,
           });
         const initialWorkspaceMode = resolveInitialWorkspaceMode({
@@ -761,13 +747,9 @@ function getExistingSessionId(
 
 function resolveInitialProfile({
   profiles,
-  projectProfiles,
-  globalProfiles,
   sessions,
 }: {
   profiles: AgentProfileRecord[];
-  projectProfiles: AgentProfileRecord[];
-  globalProfiles: AgentProfileRecord[];
   sessions: AgentSessionListItem[];
 }): AgentProfileRecord | null {
   const latestIssueSession = sessions
@@ -782,12 +764,7 @@ function resolveInitialProfile({
       )
     : null;
 
-  return (
-    historicalProfile ??
-    projectProfiles[projectProfiles.length - 1] ??
-    globalProfiles[globalProfiles.length - 1] ??
-    null
-  );
+  return historicalProfile ?? pickDefaultLaunchSelectableProfile(profiles);
 }
 
 function compareSessionsByMostRecent(
