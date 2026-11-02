@@ -108,7 +108,7 @@ GitLab CLI `glab` 是 GitLab 官方命令行工具（https://docs.gitlab.com/cli
 | `--fill` / `-f` | 用 commit info 填 |
 | `--fill-commit-body` | fill 时带上 commit body |
 | `--yes` / `-y` | 跳过确认 |
-| `--push` / `--no-push` | 创建前是否 push |
+| `--push` | 创建前是否 push；跳过 push 用 `--push=false`（新版 glab 已移除 `--no-push`） |
 | `--web` / `-w` | 在浏览器打开 |
 | `--create-source-branch` | 目标分支不存在时创建 |
 | `--remove-source-branch` | 接受后删源分支 |
@@ -152,7 +152,7 @@ gh pr create --base <base> --head <branch> --fill --draft
 ### 3.2 GitLab 非交互
 
 ```text
-glab mr create --yes --no-push --source-branch <src> --target-branch <base> \
+glab mr create --yes --push=false --source-branch <src> --target-branch <base> \
   --title "..." --description "..." [--draft]
 ```
 

@@ -169,7 +169,7 @@ linked worktree 的「更多」仍只有删除，不加创建 PR。用户要开 
 ```text
 git push -u origin HEAD
 gh pr create --base <base> --head <branch> --title "..." --body-file <file> --draft
-glab mr create --yes --no-push --source-branch <src> --target-branch <base> --title "..." --draft
+glab mr create --yes --push=false --source-branch <src> --target-branch <base> --title "..." --draft
 ```
 
 ## 9. 与现有完成 flow 的衔接

@@ -162,7 +162,8 @@ fn glab_create(input: ChangeRequestInput<'_>) -> Result<String, String> {
         .arg("mr")
         .arg("create")
         .arg("--yes")
-        .arg("--no-push")
+        // glab 1.124 起移除了 --no-push，只保留布尔 flag --push（--push=false）。
+        .arg("--push=false")
         .arg("--source-branch")
         .arg(input.head)
         .arg("--target-branch")
@@ -175,6 +176,23 @@ fn glab_create(input: ChangeRequestInput<'_>) -> Result<String, String> {
         command.arg("--draft");
     }
     command_url(command)
+}
+
+/// gh / glab 未登录或凭据失效时，stderr 会提示对应 CLI 的 `auth login`；
+/// 401 / token 失效的提示不一定带这条命令，单独兜底。
+pub fn is_forge_auth_failure(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    [
+        "auth login",
+        "not logged in",
+        "not logged into any",
+        "http 401",
+        "401 unauthorized",
+        "bad credentials",
+        "invalid token",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
 }
 
 fn write_body(body: &str) -> Result<std::path::PathBuf, String> {
@@ -403,34 +421,5 @@ fn gitlab_reference(reference: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{first_http_url, parse_github_pr_view, parse_gitlab_mr_view};
-
-    #[test]
-    fn extracts_the_first_http_url() {
-        assert_eq!(
-            first_http_url("[{\"url\":\"https://github.com/acme/redwhisk/pull/128\"}]"),
-            Some("https://github.com/acme/redwhisk/pull/128".to_string())
-        );
-        assert!(first_http_url("no request").is_none());
-    }
-
-    #[test]
-    fn parses_github_and_gitlab_request_status() {
-        let github = parse_github_pr_view(
-            r#"{"title":"Fix closeout","state":"OPEN","isDraft":true,"statusCheckRollup":[{"name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}"#,
-        )
-        .expect("github view");
-        assert_eq!(github.title, "Fix closeout");
-        assert_eq!(github.state, "DRAFT");
-        assert_eq!(github.checks[0].name, "ci");
-        assert_eq!(github.checks[0].status, "SUCCESS");
-
-        let gitlab = parse_gitlab_mr_view(
-            r#"{"title":"Fix closeout","state":"opened","head_pipeline":{"status":"success"}}"#,
-        )
-        .expect("gitlab view");
-        assert_eq!(gitlab.state, "OPEN");
-        assert_eq!(gitlab.checks[0].status, "success");
-    }
-}
+#[path = "change_request_tests.rs"]
+mod tests;

@@ -1017,6 +1017,7 @@
       "forgeCliMissing": "未找到 gh / glab 命令，请先安装并登录后再创建 Pull Request / Merge Request。",
       "branchMissing": "当前分支不存在。",
       "workspaceNotInProject": "工作区不属于当前项目。",
+      "forgeNotAuthenticated": "glab / gh 未登录：请先在终端执行 glab auth login（自建 GitLab 需加 --hostname <主机>；GitHub 用 gh auth login），完成授权后重试。",
       "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。"
     },
     "PROJECT_PERSISTENCE_FAILED": {

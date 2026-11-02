@@ -1017,6 +1017,7 @@
       "forgeCliMissing": "gh / glab was not found. Install and sign in before creating a pull request or merge request.",
       "branchMissing": "The current branch does not exist.",
       "workspaceNotInProject": "The workspace does not belong to this project.",
+      "forgeNotAuthenticated": "glab / gh is not signed in. Run glab auth login in a terminal first (add --hostname <host> for self-hosted GitLab; use gh auth login for GitHub), then try again.",
       "changeRequestFailed": "Failed to create or read the pull request or merge request."
     },
     "PROJECT_PERSISTENCE_FAILED": {

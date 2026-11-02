@@ -10,8 +10,8 @@ use super::service::ProjectService;
 use crate::app_state::AppState;
 use crate::git::change_request::view_change_request;
 use crate::git::change_request::{
-    current_branch_name, local_branch_names, publish_change_request, suggested_change_request_text,
-    workspace_belongs_to_repo, ChangeRequestInput,
+    current_branch_name, is_forge_auth_failure, local_branch_names, publish_change_request,
+    suggested_change_request_text, workspace_belongs_to_repo, ChangeRequestInput,
 };
 use crate::git::forge::{cli_is_installed, detect_forge_host, inspect_forge_remote, ForgeHost};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
@@ -136,7 +136,7 @@ fn create_change_request_blocking(
         body: &input.body,
         draft: input.draft,
     })
-    .map_err(command_failed)?;
+    .map_err(forge_error)?;
     Ok(CreateChangeRequestResponse { url })
 }
 
@@ -166,7 +166,7 @@ fn view_change_request_blocking(
     let project = ProjectService::project_summary_in_data_dir(&data_dir, input.project_id)?;
     let repo = PathBuf::from(&project.repo_path);
     let host = detect_forge_host(&repo);
-    view_change_request(&repo, host, &input.reference).map_err(command_failed)
+    view_change_request(&repo, host, &input.reference).map_err(forge_error)
 }
 
 fn ensure_workspace(repo_path: &str, workspace_path: &str) -> Result<PathBuf, CommandError> {
@@ -194,6 +194,18 @@ fn command_failed(detail: String) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", detail))
 }
 
+fn forge_error(detail: String) -> CommandError {
+    if is_forge_auth_failure(&detail) {
+        return CommandError::new(
+            CommandErrorCode::ProjectValidationFailed,
+            "The forge CLI is not signed in.",
+        )
+        .with_reason("forgeNotAuthenticated")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", detail));
+    }
+    command_failed(detail)
+}
+
 fn join_error(error: impl std::fmt::Display) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectPersistenceFailed,
@@ -201,4 +213,21 @@ fn join_error(error: impl std::fmt::Display) -> CommandError {
     )
     .with_reason("joinFailed")
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::forge_error;
+
+    #[test]
+    fn maps_forge_login_failures_to_a_coded_reason() {
+        let error = forge_error(
+            "None of the git remotes configured for this repository point to a known GitLab host. Please use `glab auth login`."
+                .to_string(),
+        );
+        assert_eq!(error.reason.as_deref(), Some("forgeNotAuthenticated"));
+
+        let error = forge_error("network unreachable".to_string());
+        assert_eq!(error.reason.as_deref(), Some("changeRequestFailed"));
+    }
 }
