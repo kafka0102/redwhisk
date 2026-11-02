@@ -186,7 +186,8 @@
   }
   .surface > .page,
   .surface > .settings-layout,
-  .surface > .pr-list {
+  .surface > .pr-list,
+  .surface > .board {
     grid-row: 3;
   }
   .surface-header {
@@ -535,14 +536,14 @@
   .settings-menu button { height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-text-muted); text-align: left; font-size: 12px; font-weight: 600; }
   .settings-menu button[aria-pressed="true"] { background: var(--color-surface-muted); color: var(--color-text); }
   .settings-splitter { background: var(--color-border); }
-  .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: 18px 20px 30px; }
+  .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: 14px 20px 24px; }
   .settings-content > .inner { width: min(80%, 720px); margin: 0 auto; }
   .settings-title { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
-  .settings-card { margin-bottom: 12px; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
-  .settings-card h3 { margin: 0 0 3px; font-size: 13px; font-weight: 650; }
+  .settings-card { margin-bottom: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+  .settings-card h3 { margin: 0 0 10px; font-size: 13px; font-weight: 650; }
   .settings-card .card-desc { margin: 0 0 12px; color: var(--color-text-muted); font-size: 12px; }
   .field { display: grid; gap: 4px; }
-  .field + .field { margin-top: 11px; }
+  .field + .field { margin-top: 9px; }
   .field > label, .field-label { color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
   .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .hint { color: var(--color-text-subtle); font-size: 11px; line-height: 1.4; }
@@ -562,7 +563,7 @@
   .dot.warn { background: var(--color-warning); }
   .dot.bad { background: var(--color-danger); }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  .section-divider { height: 1px; margin: 14px 0; background: var(--color-border); }
+  .section-divider { height: 1px; margin: 12px 0; background: var(--color-border); }
   .note { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-text-muted); font-size: 11px; line-height: 1.45; }
   .note.is-warning { border-color: #f0dfb0; background: var(--color-warning-soft); color: var(--color-warning); }
   .note.is-danger { border-color: #f4c7c3; background: var(--color-danger-soft); color: var(--color-danger); }
@@ -872,13 +873,13 @@ const SCENES = [
     id: "s15",
     group: "PR",
     title: "仅本地 · PR 空态",
-    caption: "仅本地模式不访问远程，Pull requests Tab 保留但显示空态。用户下一步去设置切换模式，或继续新建本地 Issue。",
+    caption: "仅本地模式不访问远程，Pull requests Tab 保留但显示空态。用户下一步去设置切换模式，或继续新建 Issue。",
     kind: "pr-empty",
     model: {
       mode: "local",
       tab: "prs",
       sync: "off",
-      syncText: "仅本地 · 未连接远程",
+      syncText: "仅本地",
       issueCounts: { backlog: 2, running: 1, review: 0, completed: 4 },
       prCount: 0,
     },
@@ -908,14 +909,14 @@ const SCENES = [
     id: "s13",
     group: "Issue",
     title: "仅本地模式",
-    caption: "仅本地模式不访问远程；已同步的远程 Issue 被隐藏但保留。顶部说明隐藏数量，切回混合即可恢复。用户下一步新建本地 Issue，或去设置切换模式。",
+    caption: "仅本地模式不访问远程；Issues 页只保留本地内容，来源筛选与同步状态不展示。用户下一步新建 Issue，或去设置切换模式。",
     kind: "board",
     model: {
       mode: "local",
       sourceFilter: "local",
       tab: "issues",
       sync: "off",
-      syncText: "仅本地 · 未连接远程",
+      syncText: "仅本地",
       issueCounts: { backlog: 2, running: 1, review: 0, completed: 4 },
       prCount: 0,
     },
@@ -1036,13 +1037,10 @@ function sourceNumber(source, number) {
 
 function syncBanner() {
   if (model.sync === "ok") {
-    return '<div class="sync-banner"><span class="dot ok"></span><span>' + esc(model.syncText) + '</span><span class="spacer"></span><span class="subtle">下次自动同步约 90 秒后</span><button class="btn btn-ghost btn-sm" type="button" data-action="sync">' + icon("refresh", 13) + '立即同步</button></div>';
+    return '<div class="sync-banner"><span class="dot ok"></span><span>' + esc(model.syncText) + '</span><span class="spacer"></span><button class="btn btn-ghost btn-sm" type="button" data-action="sync">' + icon("refresh", 13) + '立即同步</button></div>';
   }
   if (model.sync === "auth") {
     return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>GitHub 凭据已过期。</strong> 当前显示 12 分钟前的缓存；写入与新建已暂停。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="relogin">重新登录</button><button class="btn btn-ghost btn-sm" type="button" data-action="sync">重试</button></div>';
-  }
-  if (model.sync === "off") {
-    return '<div class="sync-banner"><span class="dot"></span><span>仅本地模式：不访问 GitHub / GitLab。已同步的远程 Issue 被隐藏但保留。</span><span class="spacer"></span><button class="btn btn-ghost btn-sm" type="button" data-go="s5">去设置切换</button></div>';
   }
   if (model.sync === "deleted") {
     return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>远端 Issue 已删除或当前账号无权访问。</strong> 本地副本与历史仍保留，同步已停止。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="keep-local">保留为本地</button><button class="btn btn-ghost btn-sm" type="button" data-action="unlink">移除关联</button></div>';
@@ -1079,11 +1077,12 @@ function sourceFilter() {
 
 function issuesSurface() {
   const canCreate = model.mode !== "remote" || model.sync === "ok";
-  const createLabel = model.mode === "local" ? "新建本地 Issue" : model.mode === "remote" ? "新建远程 Issue" : "新建 Issue";
+  const showRemoteChrome = model.mode !== "local";
+  const createLabel = "新建 Issue";
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + sourceFilter()
-    + '<span class="inline-status"><span class="dot ' + (model.sync === "ok" ? "ok" : model.sync === "auth" ? "bad" : "") + '"></span>' + esc(model.syncText) + '</span>'
-    + iconButton("refresh", "立即同步", "sync")
+    + '<div class="surface-actions">' + (showRemoteChrome ? sourceFilter() : "")
+    + (showRemoteChrome ? '<span class="inline-status"><span class="dot ' + (model.sync === "ok" ? "ok" : model.sync === "auth" ? "bad" : "") + '"></span>' + esc(model.syncText) + '</span>' : "")
+    + (showRemoteChrome ? iconButton("refresh", "立即同步", "sync") : "")
     + button(icon("plus", 14) + ' ' + createLabel, "btn-primary", "create-issue", !canCreate)
     + '</div></header>';
   return '<section class="surface" aria-label="Issues 工作台">' + header + syncBanner() + board() + '</section>';
@@ -1171,13 +1170,12 @@ function issueDetailSurface() {
       + '<span>作者 <strong>lin</strong></span><span>指派给 <strong>yujianjia</strong></span>'
       + '<span class="chip">enhancement</span><span class="chip">sync</span><span class="chip">v0.9</span>'
       + '<span class="spacer"></span><span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
-      + '<span class="subtle">' + icon("lock", 11) + ' 远程正文只读</span></div>';
+      + '<span class="subtle" title="远程正文只读">' + icon("lock", 11) + '</span></div>';
   const body = '<div class="page">'
     + '<div class="page-header"><div><h2>' + numberText + ' · ' + esc(model.title) + '</h2>'
-    + '<div class="sub"><span class="chip">' + (model.state === "open" ? "待办" : model.state === "closed" ? "已完成" : "不可用") + '</span><span>本地工作流状态与远端 open/closed 分开</span></div></div>'
+    + '<div class="sub"><span class="chip">' + (model.state === "open" ? "待办" : model.state === "closed" ? "已完成" : "不可用") + '</span></div></div>'
     + '<div class="page-actions">' + button("状态", "btn-secondary", "status") + button("编辑远程", "btn-secondary", "edit-remote", model.deletedRemote) + button("删除本地副本", "btn-danger", "delete") + '</div></div>'
     + '<div class="detail-grid"><div class="detail-main">'
-    + (model.deletedRemote ? '<div class="note is-danger" style="margin-top:12px">远端对象已不存在。保留本地副本后，它会变成普通本地 Issue；移除关联则只删除同步关系。</div>' : '')
     + issueBody()
     + timeline()
     + '</div><aside class="detail-side">'
@@ -1221,7 +1219,7 @@ function issueBody() {
 
 function linkedPrPanel() {
   if (!model.hasPr) {
-    return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">还没有关联的 PR/MR。完成时可以创建，或手动关联已有请求。</div><div style="margin-top:8px">' + button("关联已有 PR", "btn-secondary", "link-pr") + '</div></div></section>';
+    return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3></div><div class="panel-body"><div class="subtle" style="font-size:12px">暂无关联 PR/MR</div><div style="margin-top:8px">' + button("关联已有 PR", "btn-secondary", "link-pr") + '</div></div></section>';
   }
   const state = model.prState === "open" ? "open" : model.prState === "merged" ? "merged" : "closed";
   return '<section class="panel"><div class="panel-header"><h3>关联 PR/MR</h3><span class="chip">' + state + '</span></div><div class="panel-body">'
@@ -1239,7 +1237,7 @@ function sessionPanel() {
 
 function localPanel() {
   return '<section class="panel"><div class="panel-header"><h3>本地字段</h3></div><div class="panel-body"><dl class="facts">'
-    + '<dt>本地编号</dt><dd class="mono">#42</dd><dt>本地标签</dt><dd><span class="chip">本地</span></dd><dt>附件</dt><dd class="subtle">远程 Issue 不接收本地附件</dd>'
+    + '<dt>本地编号</dt><dd class="mono">#42</dd><dt>本地标签</dt><dd><span class="chip">本地</span></dd>'
     + '</dl></div></section>';
 }
 
@@ -1249,43 +1247,40 @@ function settingsSurface() {
   const isGitLab = model.host === "gitlab";
   const requestNoun = isGitLab ? "Merge Request" : "Pull Request";
   const requestShort = isGitLab ? "MR" : "PR";
-  const cli = isGitLab ? "glab" : "gh";
   const sourceCards = [
-    ["local", "仅本地", "完全不访问远程。适合纯本地项目。"],
-    ["remote", "仅远程", "看板只显示远程 Issue；本地 Issue 隐藏但保留。"],
-    ["mixed", "混合", "本地与远程 Issue 同时出现，新建时再选来源。"],
+    ["local", "仅本地"],
+    ["remote", "仅远程"],
+    ["mixed", "混合"],
   ];
-  return '<section class="surface" aria-label="项目设置"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">项目设置</span></div><div class="surface-actions"><span class="chip">' + (isGitLab ? "GitLab · Merge Request" : "GitHub · Pull Request") + '</span><span class="subtle">acme/redwhisk</span></div></header>'
+  return '<section class="surface" aria-label="项目设置"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">项目设置</span></div><div class="surface-actions"><span class="subtle">acme/redwhisk</span></div></header>'
     + '<div class="settings-layout"><nav class="settings-menu" aria-label="设置菜单">'
     + '<button type="button" aria-pressed="false">通用</button><button type="button" aria-pressed="true">Issues</button><button type="button" aria-pressed="false">智能体</button><button type="button" aria-pressed="false">技能</button><button type="button" aria-pressed="false">标签</button>'
     + '</nav><div class="settings-splitter"></div><div class="settings-content"><div class="inner">'
     + '<h2 class="settings-title">Issues</h2>'
-    + '<section class="settings-card"><h3>来源模式</h3><p class="card-desc">决定看板显示哪些 Issue，以及新建时默认去哪里。切换不会删除数据。</p>'
-    + '<div class="radio-cards">' + sourceCards.map(([value, name, desc]) => {
-        return '<label class="radio-card' + (mode === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="issue-mode" value="' + value + '" data-field="mode"' + (mode === value ? " checked" : "") + ' />' + name + '</div><div class="desc">' + desc + '</div></label>';
+    + '<section class="settings-card"><h3>来源模式</h3>'
+    + '<div class="radio-cards">' + sourceCards.map(([value, name]) => {
+        return '<label class="radio-card' + (mode === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="issue-mode" value="' + value + '" data-field="mode"' + (mode === value ? " checked" : "") + ' />' + name + '</div></label>';
       }).join("") + '</div>'
-    + (mode === "local" ? '<div class="note" style="margin-top:10px">当前项目有 18 个已同步的远程 Issue，切到仅本地后会隐藏；切回混合即可恢复。</div>' : '')
     + '</section>'
-    + (isRemote ? '<section class="settings-card"><h3>远程连接</h3><p class="card-desc">从 git remote 自动识别；不支持时手动填写企业 host。</p>'
+    + (isRemote ? '<section class="settings-card"><h3>远程连接</h3>'
       + '<div class="field-row"><div class="field"><label>宿主</label><select class="select" data-field="host"><option value="github"' + (model.host === "github" ? " selected" : "") + '>GitHub</option><option value="gitlab"' + (model.host === "gitlab" ? " selected" : "") + '>GitLab</option></select></div>'
       + '<div class="field"><label>仓库</label><input class="input" readonly value="' + esc(model.repo) + '" /></div></div>'
-      + '<div class="field"><label>账号</label><div style="display:flex;gap:8px;align-items:center"><input class="input" readonly value="' + esc(model.login) + '" /><span class="chip chip-success">已登录</span><button class="btn btn-secondary" type="button" data-action="relogin">重新登录</button></div><div class="hint">通过本机 ' + cli + ' 的登录态读取；应用不保存 token。</div></div>'
+      + '<div class="field"><label>账号</label><div style="display:flex;gap:8px;align-items:center"><input class="input" readonly value="' + esc(model.login) + '" /><span class="chip chip-success">已登录</span><button class="btn btn-secondary" type="button" data-action="relogin">重新登录</button></div></div>'
       + '<div class="section-divider"></div>'
       + '<div class="field"><label>拉取范围</label><select class="select" data-field="scope">'
-      + '<option value="assigned_to_me"' + (model.scope === "assigned_to_me" ? " selected" : "") + '>分配给我（推荐）</option>'
+      + '<option value="assigned_to_me"' + (model.scope === "assigned_to_me" ? " selected" : "") + '>分配给我</option>'
       + '<option value="all_open"' + (model.scope === "all_open" ? " selected" : "") + '>全部未关闭</option>'
       + '<option value="label"' + (model.scope === "label" ? " selected" : "") + '>指定标签</option>'
       + '<option value="all"' + (model.scope === "all" ? " selected" : "") + '>全部（含已关闭）</option>'
-      + '</select><div class="hint">范围越窄，首次同步越快，也越不容易被无关 Issue 淹没。</div></div>'
+      + '</select></div>'
       + '<div class="field-row" style="margin-top:11px"><div class="field"><label>自动同步</label><div class="checkline"><input type="checkbox" data-field="autoSync"' + (model.autoSync ? " checked" : "") + ' />页面可见时自动同步</div></div>'
       + '<div class="field"><label>间隔</label><select class="select" data-field="interval"><option value="60"' + (model.interval === "60" ? " selected" : "") + '>60 秒</option><option value="90"' + (model.interval === "90" ? " selected" : "") + '>90 秒</option><option value="300"' + (model.interval === "300" ? " selected" : "") + '>5 分钟</option></select></div></div>'
       + '<div class="field"><label>写回</label><div class="checkline"><input type="checkbox" data-field="closeOnComplete"' + (model.closeOnComplete ? " checked" : "") + ' />本地完成且合并到 base 时，关闭远程 Issue</div>'
       + '<div class="checkline"><input type="checkbox" data-field="closeOnPrMerge"' + (model.closeOnPrMerge ? " checked" : "") + ' />' + requestShort + ' 合并后关闭关联的远程 Issue</div>'
-      + '<div class="checkline"><input type="checkbox" data-field="commentOnComplete"' + (model.commentOnComplete ? " checked" : "") + ' />完成后把交付摘要评论回写远程</div>'
-      + '<div class="hint">创建 ' + requestShort + ' 时不立即关闭 Issue；默认等 ' + requestShort + ' 合并，避免「' + requestShort + ' 还没审，Issue 已关闭」。</div></div>'
+      + '<div class="checkline"><input type="checkbox" data-field="commentOnComplete"' + (model.commentOnComplete ? " checked" : "") + ' />完成后把交付摘要评论回写远程</div></div>'
       + '<div style="display:flex;align-items:center;gap:8px;margin-top:11px"><span class="inline-status"><span class="dot ok"></span>已同步 2 分钟前</span><span class="spacer" style="flex:1"></span><button class="btn btn-secondary" type="button" data-action="sync">立即同步</button></div>'
       + '</section>' : '')
-    + '<section class="settings-card"><h3>完成后</h3><p class="card-desc">与 Issue 完成流程共用；远程项目仍可覆盖单次选择。</p>'
+    + '<section class="settings-card"><h3>完成后</h3>'
     + '<div class="field"><label>完成后动作</label><select class="select" data-field="completionAction"><option value="merge_to_base"' + (model.completionAction === "merge_to_base" ? " selected" : "") + '>合并到 base 分支</option><option value="open_pull_request"' + (model.completionAction === "open_pull_request" ? " selected" : "") + '>提交 ' + requestNoun + '</option></select></div>'
     + (model.completionAction === "open_pull_request" ? '<div class="field"><label>' + requestShort + ' 目标</label><select class="select"><option>Issue 的 base 分支（main）</option><option>仓库默认分支（main）</option></select></div><div class="checkline" style="margin-top:9px"><input type="checkbox" checked />创建为草稿</div>' : '')
     + '<div class="checkline" style="margin-top:9px"><input type="checkbox" data-field="confirmCompletionAction"' + (model.confirmCompletionAction ? " checked" : "") + ' />完成时再次确认动作</div>'
@@ -1298,9 +1293,7 @@ function modeSwitchDialog() {
   const next = model.nextMode === "remote" ? "仅远程" : model.nextMode === "local" ? "仅本地" : "混合";
   return '<div class="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="mode-title">'
     + '<h3 id="mode-title">切换到「' + next + '」？</h3>'
-    + '<p class="dialog-sub">模式只影响看板显示与同步，不会删除任何数据。</p>'
     + '<div class="facts"><dt>本地 Issue</dt><dd>' + model.localCount + ' 个，切换后隐藏（保留）</dd><dt>远程 Issue</dt><dd>' + model.remoteCount + ' 个，切换后显示</dd><dt>同步</dt><dd>仅远程与混合模式会访问 ' + esc(model.repo) + '</dd></div>'
-    + '<div class="note">隐藏的 Issue 仍保留本地会话、评论与附件；切回原模式即可恢复。</div>'
     + '<div class="actions">' + button("取消", "btn-secondary", "cancel") + button("切换模式", "btn-primary", "confirm-mode") + '</div>'
     + '</div></div>';
 }
@@ -1327,7 +1320,7 @@ function prListSurface() {
   ];
   const filterBar = '<div class="pr-filters">' + filters.map(([value, label, count]) => {
     return '<button class="pr-filter" type="button" aria-pressed="' + (model.prFilter === value) + '" data-field="prFilter" data-value="' + value + '">' + label + '<span class="count">' + count + '</span></button>';
-  }).join("") + '<span style="flex:1"></span><span class="subtle">检查与评审状态来自宿主，不本地推断</span></div>';
+  }).join("") + '<span style="flex:1"></span></div>';
   const rows = PR_ROWS.filter((row) => model.prFilter !== "recently_merged" || row.state === "merged").map((row) => {
     const checkText = row.checksBad ? row.checksOk + '/' + (row.checksOk + row.checksBad) + ' 通过' : row.checksRun ? row.checksOk + ' 通过 · ' + row.checksRun + ' 运行中' : row.checksOk + '/' + row.checksOk + ' 通过';
     const checkClass = row.checksBad ? "danger" : row.checksRun ? "warning" : "success";
@@ -1344,16 +1337,12 @@ function prListSurface() {
 }
 
 function prEmptySurface() {
-  const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions"><span class="inline-status"><span class="dot"></span>仅本地 · 未连接远程</span>'
-    + button("去设置连接", "btn-secondary", "go-settings")
-    + '</div></header>';
+  const header = '<header class="surface-header">' + surfaceTabs() + '</header>';
   return '<section class="surface" aria-label="Pull requests">' + header
     + '<div class="page" style="display:grid;place-items:center;padding:40px 20px">'
     + '<div class="empty-state" style="max-width:440px">'
     + icon("pr", 28)
     + '<h3>Pull requests 还没有连接</h3>'
-    + '<p>当前项目是「仅本地」模式，不会访问 GitHub / GitLab。切换到混合或仅远程后，这里会出现需要你审阅的 PR/MR。</p>'
     + '<div>' + button("去设置连接", "btn-primary", "go-settings") + '</div>'
     + '</div></div></section>';
 }
@@ -1407,7 +1396,7 @@ function prTabContent(tab) {
     if (pending > 0) rows += checkRow("run", "e2e (playwright)", "运行中 · 1m 20s", "pnpm test:e2e");
     return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>检查</h3>' + headerChip + '</div>'
       + rows
-      + '</section><div class="note is-warning" style="margin-top:10px">失败检查的日志仍在 GitHub；应用只展示状态与链接，不在本地重跑 CI。</div></div>';
+      + '</section></div>';
   }
   if (tab === "files") {
     return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>变更文件</h3><span class="subtle">12 个文件 · +412 −87</span></div><div class="panel-body" style="padding:0">'
@@ -1422,7 +1411,6 @@ function prTabContent(tab) {
     return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>讨论</h3><span class="chip">只读</span></div><div class="panel-body">'
       + '<div class="comment"><div class="timeline-meta"><span class="avatar is-remote" style="width:20px;height:20px">M</span><strong>maya</strong><span>reviewed</span><span>·</span><span>1 小时前</span></div><div class="markdown" style="margin-top:5px"><p>同步范围默认「分配给我」很好，但希望支持按 label 过滤。</p></div></div>'
       + '<div class="comment" style="margin-top:8px"><div class="timeline-meta"><span class="avatar is-remote" style="width:20px;height:20px">L</span><strong>lin</strong><span>commented</span><span>·</span><span>40 分钟前</span></div><div class="markdown" style="margin-top:5px"><p>v1 先做单 label，后面再加多条件组合。</p></div></div>'
-      + '<div class="note" style="margin-top:10px">v1 只读展示评论与 review；回复、行内评论与建议修改在后续版本接入。</div>'
       + '</div></section></div>';
   }
   return '<div class="tab-panel"><section class="panel"><div class="panel-header"><h3>描述</h3></div><div class="panel-body"><div class="markdown"><p>把 Issue 从「只能手动录入」升级为可同步 GitHub / GitLab 的工作台，并补齐 PR/MR 的查看与合并能力。</p><ul><li>项目级来源模式。</li><li>远程 Issue 镜像 + 显式写回。</li><li>PR 列表、检查、评审与合并。</li></ul></div></div></section>'
@@ -1455,7 +1443,6 @@ function mergeBox() {
     + '<div class="field"><label>合并方式</label><select class="select"><option>Squash and merge</option><option>Create a merge commit</option><option>Rebase and merge</option></select></div>'
     + '<div class="checkline"><input type="checkbox" checked />合并后删除源分支</div>'
     + '<div style="display:grid;gap:6px">' + button("合并 " + requestNoun, "btn-primary", "merge", blocked) + button("在 " + hostLabel + " 中处理", "btn-secondary", "open-external") + '</div>'
-    + '<div class="hint">应用不绕过保护分支，也不默认开启 auto-merge。</div>'
     + '</div></div></section>';
 }
 
@@ -1484,12 +1471,12 @@ function prMergeDialog() {
 function prCreateSurface() {
   return '<section class="surface" aria-label="创建 Pull Request"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">变更</span></div><div class="surface-actions"><span class="subtle">feat/remote-issue</span></div></header>'
     + '<div class="page"><div class="page-header"><div><h2>创建 Pull Request</h2><div class="sub"><span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>2 个提交</span></div></div><div class="page-actions">' + button("取消", "btn-secondary", "cancel") + button("创建 Pull Request", "btn-primary", "confirm-create-pr") + '</div></div>'
-    + '<div class="detail-grid"><div class="detail-main"><section class="panel"><div class="panel-body">'
+    + '<section class="panel"><div class="panel-body">'
     + '<div class="field"><label>标题</label><input class="input" data-field="title" value="' + esc(model.title) + '" /></div>'
-    + '<div class="field"><label>正文</label><textarea class="textarea" rows="5" data-field="body">' + esc(model.body) + '</textarea><div class="hint">远程 Issue 会在正文自动追加 <code>Closes #128</code>；本地 Issue 只建立应用内关联。</div></div>'
+    + '<div class="field"><label>正文</label><textarea class="textarea" rows="5" data-field="body">' + esc(model.body) + '</textarea></div>'
     + '<div class="field"><label>关联 Issue</label><select class="select" data-field="linkedIssue"><option value="">不关联</option><option value="github:128"' + (model.linkedIssue === "github:128" ? " selected" : "") + '>GH #128 · 支持从 GitHub / GitLab 同步 Issue</option><option value="local:12"' + (model.linkedIssue === "local:12" ? " selected" : "") + '>本地 #12 · 完成流程支持关联已有 PR</option></select></div>'
     + '<div class="checkline" style="margin-top:10px"><input type="checkbox" data-field="draft"' + (model.draft ? " checked" : "") + ' />创建为草稿</div>'
-    + '</div></section></div><aside class="detail-side"><section class="panel"><div class="panel-header"><h3>将发生什么</h3></div><div class="panel-body"><div class="markdown" style="font-size:12px"><ul><li>推送 <code>feat/remote-issue</code> 到 origin。</li><li>在 GitHub 创建草稿 PR。</li><li>写入关联；不改变 Issue 的本地状态。</li><li>PR 合并后，按设置关闭 GH #128。</li></ul></div></div></section></aside></div></div></section>';
+    + '</div></section></div></section>';
 }
 
 function renderStage() {
@@ -1511,22 +1498,20 @@ function renderStage() {
 
 function issueCreateSurface() {
   const sourceCards = [
-    ["local", "本地", "只存在本机，不访问远程。"],
-    ["github", "GitHub", "创建到 acme/redwhisk，再回填本地。"],
-    ["gitlab", "GitLab", "创建到 acme/redwhisk，再回填本地。"],
+    ["local", "本地"],
+    ["github", "GitHub"],
+    ["gitlab", "GitLab"],
   ];
   return '<section class="surface" aria-label="新建 Issue"><header class="surface-header"><div class="surface-tabs"><span class="surface-tab" aria-selected="true">新建 Issue</span></div><div class="surface-actions">' + button("取消", "btn-secondary", "cancel") + button("创建", "btn-primary", "confirm-create-issue") + '</div></header>'
-    + '<div class="page"><div class="page-header"><div><h2>新建 Issue</h2><div class="sub"><span>项目 acme/redwhisk</span><span>·</span><span>混合模式</span></div></div></div>'
-    + '<div class="detail-grid"><div class="detail-main"><section class="panel"><div class="panel-body">'
-    + '<div class="field"><label>来源</label><div class="radio-cards">' + sourceCards.map(([value, name, desc]) => '<label class="radio-card' + (model.source === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="create-source" value="' + value + '" data-field="source"' + (model.source === value ? " checked" : "") + ' />' + name + '</div><div class="desc">' + desc + '</div></label>').join("") + '</div></div>'
+    + '<div class="page"><div class="detail-grid"><div class="detail-main"><section class="panel"><div class="panel-body">'
+    + '<div class="field"><label>来源</label><div class="radio-cards">' + sourceCards.map(([value, name]) => '<label class="radio-card' + (model.source === value ? " is-selected" : "") + '"><div class="name"><input type="radio" name="create-source" value="' + value + '" data-field="source"' + (model.source === value ? " checked" : "") + ' />' + name + '</div></label>').join("") + '</div></div>'
     + '<div class="field"><label>标题</label><input class="input" data-field="title" value="' + esc(model.title) + '" /></div>'
     + '<div class="field"><label>正文</label><textarea class="textarea" rows="7" data-field="body">' + esc(model.body) + '</textarea></div>'
     + '<div class="field"><label>标签</label><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">enhancement</span><span class="chip">sync</span><button class="btn btn-ghost btn-sm" type="button">+ 选择标签</button></div></div>'
     + '</div></section></div><aside class="detail-side"><section class="panel"><div class="panel-header"><h3>创建位置</h3></div><div class="panel-body"><dl class="facts">'
     + '<dt>来源</dt><dd>' + (model.source === "github" ? "GitHub · acme/redwhisk" : model.source === "gitlab" ? "GitLab · acme/redwhisk" : "仅本地") + '</dd>'
     + '<dt>账号</dt><dd>' + (model.source === "local" ? "—" : "yujianjia（已登录）") + '</dd>'
-    + '<dt>完成后</dt><dd>' + (model.source === "local" ? "进入本地待办" : "远程创建成功后回填为待办") + '</dd>'
-    + '</dl>' + (model.source === "local" ? '<div class="note" style="margin-top:10px">本地 Issue 不参与远程同步，也不会被远端关闭。</div>' : '<div class="note" style="margin-top:10px">远程创建需要 Issues 写权限；失败时不会留下本地半成品。</div>') + '</div></section></aside></div></div></section>';
+    + '</dl></div></section></aside></div></div></section>';
 }
 
 function renderState() {
