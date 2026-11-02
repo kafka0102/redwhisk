@@ -187,7 +187,8 @@
   .surface > .page,
   .surface > .settings-layout,
   .surface > .pr-list,
-  .surface > .board {
+  .surface > .board,
+  .surface > .pr-body {
     grid-row: 3;
   }
   .surface-header {
@@ -328,17 +329,7 @@
   .sync-banner.is-warning { background: var(--color-warning-soft); color: var(--color-warning); }
   .sync-banner.is-danger { background: var(--color-danger-soft); color: var(--color-danger); }
   .sync-banner .spacer { flex: 1; }
-  .sync-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-    padding: 6px 14px;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
-  }
-  .sync-toolbar .spacer { flex: 1; }
-  .sync-toolbar .inline-status.is-error { color: var(--color-danger); }
+  .inline-status.is-error { color: var(--color-danger); }
   .pr-body { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 
   .board {
@@ -653,7 +644,7 @@ const SCENES = [
     id: "s2",
     group: "Issue",
     title: "仅远程 · 凭据失效",
-    caption: "项目只显示远程 Issue。gh 凭据过期，底部右侧显示错误与重试，缓存数据仍可浏览；新建 Issue 被禁用。用户下一步去设置重新登录，或继续查看缓存。",
+    caption: "项目只显示远程 Issue。gh 凭据过期，顶部右侧显示错误与刷新，缓存数据仍可浏览；新建入口不可用。用户下一步去设置重新登录，或继续查看缓存。",
     kind: "board",
     model: {
       mode: "remote",
@@ -705,7 +696,7 @@ const SCENES = [
     id: "s5",
     group: "设置",
     title: "项目设置 · Issues",
-    caption: "项目设置新增 Issues 页：来源模式、连接、拉取范围、同步与写回、完成后动作都在这里。用户下一步选择模式并保存，或先「立即同步」验证连接。",
+    caption: "项目设置新增 Issues 页：来源模式、连接、拉取范围、同步与写回、完成后动作都在这里。用户下一步选择模式并保存，或先点刷新验证连接。",
     kind: "settings",
     model: {
       mode: "mixed",
@@ -1053,38 +1044,35 @@ function sourceNumber(source, number) {
 }
 
 function syncBanner() {
-  if (model.sync === "ok") {
-    return '<div class="sync-banner"><span class="dot ok"></span><span>' + esc(model.syncText) + '</span><span class="spacer"></span><button class="btn btn-ghost btn-sm" type="button" data-action="sync">' + icon("refresh", 13) + '立即同步</button></div>';
-  }
-  if (model.sync === "auth") {
-    return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>GitHub 凭据已过期。</strong> 当前显示 12 分钟前的缓存；写入与新建已暂停。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="relogin">重新登录</button><button class="btn btn-ghost btn-sm" type="button" data-action="sync">重试</button></div>';
-  }
   if (model.sync === "deleted") {
     return '<div class="sync-banner is-danger">' + icon("alert", 14) + '<span><strong>远端 Issue 已删除或当前账号无权访问。</strong> 本地副本与历史仍保留，同步已停止。</span><span class="spacer"></span><button class="btn btn-sm" type="button" data-action="keep-local">保留为本地</button><button class="btn btn-ghost btn-sm" type="button" data-action="unlink">移除关联</button></div>';
   }
   return "";
 }
 
-function createIssueButton(disabled) {
-  return button(icon("plus", 14) + ' 新建 Issue', "btn-primary", "create-issue", disabled);
+function syncStatusText() {
+  if (model.sync === "auth") {
+    return (model.host === "gitlab" ? "GitLab" : "GitHub") + " 凭据已过期";
+  }
+  if (model.sync === "deleted") return "远端对象不可用";
+  return model.syncText || "已同步";
 }
 
-function syncToolbar() {
-  if (model.mode === "local") return "";
-  const showFilter = model.mode === "mixed" && model.tab !== "prs";
-  const isError = model.sync === "auth" || model.sync === "deleted";
-  const host = model.host === "gitlab" ? "GitLab" : "GitHub";
-  const text = model.sync === "auth"
-    ? host + " 凭据已过期"
-    : model.sync === "deleted"
-      ? "远端对象不可用"
-      : model.syncText;
-  return '<div class="sync-toolbar">'
-    + (showFilter ? sourceFilter() : "")
-    + '<span class="spacer"></span>'
-    + '<span class="inline-status' + (isError ? " is-error" : "") + '"><span class="dot ' + (isError ? "bad" : "ok") + '"></span>' + esc(text) + '</span>'
-    + button(icon("refresh", 13) + ' 立即同步', "btn-ghost btn-sm", "sync")
-    + '</div>';
+function syncIsError() {
+  return model.sync === "auth" || model.sync === "deleted";
+}
+
+function tabActions(showFilter) {
+  const showSync = model.mode !== "local";
+  if (!showFilter && !showSync) return "";
+  const parts = [];
+  if (showFilter && model.mode === "mixed") parts.push(sourceFilter());
+  if (showSync) {
+    const isError = syncIsError();
+    parts.push('<span class="inline-status' + (isError ? " is-error" : "") + '"><span class="dot ' + (isError ? "bad" : "ok") + '"></span>' + esc(syncStatusText()) + '</span>');
+    parts.push(iconButton("refresh", "刷新", "sync"));
+  }
+  return '<div class="surface-actions">' + parts.join("") + '</div>';
 }
 
 function surfaceTabs() {
@@ -1114,11 +1102,10 @@ function sourceFilter() {
 }
 
 function issuesSurface() {
-  const canCreate = model.mode !== "remote" || model.sync === "ok";
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + createIssueButton(!canCreate)
-    + '</div></header>';
-  return '<section class="surface" aria-label="Issues 工作台">' + header + syncToolbar() + board() + '</section>';
+    + tabActions(model.mode === "mixed" && model.tab !== "prs")
+    + '</header>';
+  return '<section class="surface" aria-label="Issues 工作台">' + header + board() + '</section>';
 }
 
 const LANES = [
@@ -1162,9 +1149,10 @@ function board() {
   return '<div class="board">' + LANES.map((lane) => {
     const cards = visibleCards(lane.key);
     const total = model.issueCounts ? model.issueCounts[lane.key] : cards.length;
+    const canCreate = model.mode !== "remote" || model.sync === "ok";
     return '<section class="lane lane--' + lane.key + '" aria-label="' + lane.label + '">'
       + '<div class="lane-header"><span class="lane-dot"></span><h3>' + lane.label + '</h3><span class="lane-count">' + total + '</span><span class="spacer"></span>'
-      + (lane.key === "backlog" ? '<button class="icon-btn" type="button" aria-label="新建 Issue" data-action="create-issue">' + icon("plus", 14) + '</button>' : "")
+      + (lane.key === "backlog" && canCreate ? '<button class="icon-btn" type="button" aria-label="新建 Issue" data-action="create-issue">' + icon("plus", 14) + '</button>' : "")
       + '</div><div class="lane-cards">'
       + cards.map(issueCard).join("")
       + (cards.length === 0 ? '<div class="empty-state" style="padding:24px 8px"><span class="subtle">这个来源下暂无 Issue</span></div>' : "")
@@ -1194,14 +1182,13 @@ function issueDetailSurface() {
   const stateChip = model.state === "open" ? '<span class="chip chip-success">open</span>'
     : model.state === "closed" ? '<span class="chip">closed</span>'
     : '<span class="chip chip-danger">不可用</span>';
-  const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
+  const header = '<header class="surface-header">' + surfaceTabs() + tabActions(false) + '</header>';
   const banner = model.deletedRemote
     ? syncBanner()
     : '<div class="source-banner">' + sourceBadge(source) + '<span class="mono">' + esc(source === "github" ? "acme/redwhisk" : source === "gitlab" ? "acme/redwhisk" : "本地") + ' #' + model.number + '</span>' + stateChip
       + '<span>作者 <strong>lin</strong></span><span>指派给 <strong>yujianjia</strong></span>'
       + '<span class="chip">enhancement</span><span class="chip">sync</span><span class="chip">v0.9</span>'
-      + '<span class="spacer"></span><span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
+      + '<span class="spacer"></span>'
       + '<span class="subtle" title="远程正文只读">' + icon("lock", 11) + '</span></div>';
   const body = '<div class="page">'
     + '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回看板", "back")
@@ -1311,7 +1298,7 @@ function settingsSurface() {
       + '<div class="field"><label>写回</label><div class="checkline"><input type="checkbox" data-field="closeOnComplete"' + (model.closeOnComplete ? " checked" : "") + ' />本地完成且合并到 base 时，关闭远程 Issue</div>'
       + '<div class="checkline"><input type="checkbox" data-field="closeOnPrMerge"' + (model.closeOnPrMerge ? " checked" : "") + ' />' + requestShort + ' 合并后关闭关联的远程 Issue</div>'
       + '<div class="checkline"><input type="checkbox" data-field="commentOnComplete"' + (model.commentOnComplete ? " checked" : "") + ' />完成后把交付摘要评论回写远程</div></div>'
-      + '<div style="display:flex;align-items:center;gap:8px;margin-top:11px"><span class="inline-status"><span class="dot ok"></span>已同步 2 分钟前</span><span class="spacer" style="flex:1"></span><button class="btn btn-secondary" type="button" data-action="sync">立即同步</button></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:11px"><span class="inline-status"><span class="dot ok"></span>已同步 2 分钟前</span><span class="spacer" style="flex:1"></span>' + iconButton("refresh", "刷新", "sync") + '</div>'
       + '</section>' : '')
     + '<section class="settings-card"><h3>完成后</h3>'
     + '<div class="field"><label>完成后动作</label><select class="select" data-field="completionAction"><option value="merge_to_base"' + (model.completionAction === "merge_to_base" ? " selected" : "") + '>合并到 base 分支</option><option value="open_pull_request"' + (model.completionAction === "open_pull_request" ? " selected" : "") + '>提交 ' + requestNoun + '</option></select></div>'
@@ -1340,8 +1327,8 @@ const PR_ROWS = [
 
 function prListSurface() {
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + createIssueButton(model.mode === "remote" && model.sync !== "ok")
-    + '</div></header>';
+    + tabActions(false)
+    + '</header>';
   const filters = [
     ["review_requested", "需要我审阅", 3],
     ["authored", "我创建的", 5],
@@ -1362,14 +1349,15 @@ function prListSurface() {
       + '<div class="pr-cell"><button class="btn btn-ghost btn-sm" type="button" data-action="open-external">打开</button></div>'
       + '</div>';
   }).join("");
-  return '<section class="surface" aria-label="Pull requests">' + header + syncToolbar()
+  return '<section class="surface" aria-label="Pull requests">' + header
     + '<div class="pr-body">' + filterBar
     + '<div class="pr-list"><div class="pr-head"><span></span><span>标题</span><span>检查 / 评审</span><span>关联 Issue</span><span></span></div>' + rows + '</div></div></section>';
 }
 
 function prEmptySurface() {
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
+    + tabActions(false)
+    + '</header>';
   return '<section class="surface" aria-label="Pull requests">' + header
     + '<div class="page" style="display:grid;place-items:center;padding:40px 20px">'
     + '<div class="empty-state" style="max-width:440px">'
@@ -1385,7 +1373,8 @@ function prDetailSurface() {
   const merged = prState === "merged";
   const hostLabel = model.host === "gitlab" ? "GitLab" : "GitHub";
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
+    + tabActions(false)
+    + '</header>';
   const stateChip = prState === "open"
     ? '<span class="chip chip-success">open</span>'
     : prState === "merged"
