@@ -328,6 +328,18 @@
   .sync-banner.is-warning { background: var(--color-warning-soft); color: var(--color-warning); }
   .sync-banner.is-danger { background: var(--color-danger-soft); color: var(--color-danger); }
   .sync-banner .spacer { flex: 1; }
+  .sync-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  .sync-toolbar .spacer { flex: 1; }
+  .sync-toolbar .inline-status.is-error { color: var(--color-danger); }
+  .pr-body { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 
   .board {
     display: grid;
@@ -371,6 +383,10 @@
   }
   .card:hover { border-color: var(--color-border-strong); background: #fcfcfd; }
   .card.is-selected { border-color: var(--color-border-strong); box-shadow: var(--shadow-focus); }
+  .card.is-info { border-color: #c9dcf3; background: var(--color-info-soft); }
+  .card.is-info:hover { border-color: #9fc1e8; background: #e7f0fb; }
+  .card.is-error { border-color: #f4c7c3; background: var(--color-danger-soft); }
+  .card.is-error:hover { border-color: #e7a9a3; background: #fde8e6; }
   .card-meta { display: flex; align-items: center; gap: 7px; color: var(--color-text-subtle); font-size: 11px; white-space: nowrap; }
   .card-meta .spacer { flex: 1; }
   .card-id { flex: 0 0 auto; color: var(--color-text-muted); font-weight: 600; }
@@ -399,6 +415,7 @@
   }
   .card-pr.is-blocked { color: var(--color-danger); }
   .card-pr.is-ok { color: var(--color-success); }
+  .card-error { color: var(--color-danger); font-size: 11px; font-weight: 600; }
 
   .page {
     min-height: 0;
@@ -636,14 +653,14 @@ const SCENES = [
     id: "s2",
     group: "Issue",
     title: "仅远程 · 凭据失效",
-    caption: "项目只显示远程 Issue。gh 凭据过期，顶部出现可恢复的错误条，缓存数据仍可浏览；新建远程 Issue 被禁用。用户下一步去设置重新登录，或继续查看缓存。",
+    caption: "项目只显示远程 Issue。gh 凭据过期，底部右侧显示错误与重试，缓存数据仍可浏览；新建 Issue 被禁用。用户下一步去设置重新登录，或继续查看缓存。",
     kind: "board",
     model: {
       mode: "remote",
-      sourceFilter: "github",
+      sourceFilter: null,
       tab: "issues",
       sync: "auth",
-      syncText: "凭据已过期 · 显示 12 分钟前的缓存",
+      syncText: "GitHub 凭据已过期",
       issueCounts: { backlog: 4, running: 1, review: 1, completed: 9 },
       prCount: 5,
     },
@@ -913,7 +930,7 @@ const SCENES = [
     kind: "board",
     model: {
       mode: "local",
-      sourceFilter: "local",
+      sourceFilter: null,
       tab: "issues",
       sync: "off",
       syncText: "仅本地",
@@ -1048,6 +1065,28 @@ function syncBanner() {
   return "";
 }
 
+function createIssueButton(disabled) {
+  return button(icon("plus", 14) + ' 新建 Issue', "btn-primary", "create-issue", disabled);
+}
+
+function syncToolbar() {
+  if (model.mode === "local") return "";
+  const showFilter = model.mode === "mixed" && model.tab !== "prs";
+  const isError = model.sync === "auth" || model.sync === "deleted";
+  const host = model.host === "gitlab" ? "GitLab" : "GitHub";
+  const text = model.sync === "auth"
+    ? host + " 凭据已过期"
+    : model.sync === "deleted"
+      ? "远端对象不可用"
+      : model.syncText;
+  return '<div class="sync-toolbar">'
+    + (showFilter ? sourceFilter() : "")
+    + '<span class="spacer"></span>'
+    + '<span class="inline-status' + (isError ? " is-error" : "") + '"><span class="dot ' + (isError ? "bad" : "ok") + '"></span>' + esc(text) + '</span>'
+    + button(icon("refresh", 13) + ' 立即同步', "btn-ghost btn-sm", "sync")
+    + '</div>';
+}
+
 function surfaceTabs() {
   const issuesActive = model.tab !== "prs";
   const issueTarget = model.mode === "local" ? "s13" : "s1";
@@ -1065,10 +1104,9 @@ function totalIssues() {
 
 function sourceFilter() {
   const options = [
-    ["all", "全部来源"],
+    ["all", "全部"],
     ["local", "仅本地"],
-    ["github", "GitHub"],
-    ["gitlab", "GitLab"],
+    ["remote", "GitHub 或 GitLab"],
   ];
   return '<select class="select select-inline" data-field="sourceFilter" aria-label="来源筛选">'
     + options.map(([value, label]) => '<option value="' + value + '"' + (model.sourceFilter === value ? " selected" : "") + '>' + label + '</option>').join("")
@@ -1077,15 +1115,10 @@ function sourceFilter() {
 
 function issuesSurface() {
   const canCreate = model.mode !== "remote" || model.sync === "ok";
-  const showRemoteChrome = model.mode !== "local";
-  const createLabel = "新建 Issue";
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + (showRemoteChrome ? sourceFilter() : "")
-    + (showRemoteChrome ? '<span class="inline-status"><span class="dot ' + (model.sync === "ok" ? "ok" : model.sync === "auth" ? "bad" : "") + '"></span>' + esc(model.syncText) + '</span>' : "")
-    + (showRemoteChrome ? iconButton("refresh", "立即同步", "sync") : "")
-    + button(icon("plus", 14) + ' ' + createLabel, "btn-primary", "create-issue", !canCreate)
+    + '<div class="surface-actions">' + createIssueButton(!canCreate)
     + '</div></header>';
-  return '<section class="surface" aria-label="Issues 工作台">' + header + syncBanner() + board() + '</section>';
+  return '<section class="surface" aria-label="Issues 工作台">' + header + syncToolbar() + board() + '</section>';
 }
 
 const LANES = [
@@ -1100,7 +1133,7 @@ const CARDS = {
     { id: "a", source: "github", number: 128, title: "支持从 GitHub / GitLab 同步 Issue", desc: "项目设置选择来源模式；远程 Issue 进入看板，保留本地工作流状态。", labels: ["enhancement", "sync"], pr: { number: 132, state: "blocked", text: "PR #132 · 1 个检查失败" } },
     { id: "b", source: "local", number: 12, title: "完成流程支持关联已有 PR", desc: "已有打开的 PR 时不再创建，改为关联并完成。", labels: ["local"], pr: null },
     { id: "c", source: "gitlab", number: 7, title: "MR 检查失败时阻止合并", desc: "合并弹窗展示失败检查，主按钮禁用。", labels: ["bug", "gitlab"], pr: { number: 41, state: "ok", text: "MR !41 · 4/4 通过" } },
-    { id: "d", source: "github", number: 131, title: "PR 详情展示 review 状态", desc: "Approve / Request changes / Review required 三态。", labels: ["enhancement"], pr: null },
+    { id: "d", source: "github", number: 131, title: "PR 详情展示 review 状态", desc: "Approve / Request changes / Review required 三态。", labels: ["enhancement"], pr: null, error: "同步失败" },
   ],
   running: [
     { id: "e", source: "github", number: 130, title: "同步游标与 ETag 缓存", desc: "减少重复请求，限流时退避并保留缓存。", labels: ["performance"], pr: null },
@@ -1121,7 +1154,7 @@ function visibleCards(lane) {
   if (model.mode === "local") cards = cards.filter((card) => card.source === "local");
   if (model.mode === "remote") cards = cards.filter((card) => card.source !== "local");
   if (model.sourceFilter === "local") cards = cards.filter((card) => card.source === "local");
-  if (model.sourceFilter === "github" || model.sourceFilter === "gitlab") cards = cards.filter((card) => card.source === model.sourceFilter);
+  if (model.sourceFilter === "remote") cards = cards.filter((card) => card.source !== "local");
   return cards;
 }
 
@@ -1141,13 +1174,16 @@ function board() {
 
 function issueCard(card) {
   const selected = sceneById(sceneId).kind === "issue-detail" && model.number === card.number ? " is-selected" : "";
+  const info = model.mode === "mixed" ? " is-info" : "";
+  const error = card.error ? " is-error" : "";
   const prClass = card.pr ? (card.pr.state === "blocked" ? " is-blocked" : card.pr.state === "ok" ? " is-ok" : "") : "";
-  return '<button class="card' + selected + '" type="button" data-action="open-issue" data-issue="' + card.number + '">'
+  return '<button class="card' + selected + info + error + '" type="button" data-action="open-issue" data-issue="' + card.number + '">'
     + '<span class="card-meta"><span class="card-id">' + sourceNumber(card.source, card.number) + '</span><span>·</span><span class="card-time">2 小时前</span><span class="spacer"></span>' + sourceBadge(card.source) + '</span>'
     + '<span class="card-title">' + esc(card.title) + '</span>'
     + '<span class="card-desc">' + esc(card.desc) + '</span>'
     + (card.labels.length ? '<span class="card-labels">' + card.labels.map((label) => '<span class="label-chip">' + esc(label) + '</span>').join("") + '</span>' : "")
     + (card.pr ? '<span class="card-pr' + prClass + '">' + icon("pr", 12) + esc(card.pr.text) + '</span>' : "")
+    + (card.error ? '<span class="card-error">' + esc(card.error) + '</span>' : "")
     + '</button>';
 }
 
@@ -1307,10 +1343,7 @@ const PR_ROWS = [
 
 function prListSurface() {
   const header = '<header class="surface-header">' + surfaceTabs()
-    + '<div class="surface-actions">' + sourceFilter()
-    + '<span class="inline-status"><span class="dot ok"></span>' + esc(model.syncText) + '</span>'
-    + iconButton("refresh", "立即同步", "sync")
-    + button(icon("pr", 14) + ' 在 GitHub 打开', "btn-secondary", "open-external")
+    + '<div class="surface-actions">' + createIssueButton(model.mode === "remote" && model.sync !== "ok")
     + '</div></header>';
   const filters = [
     ["review_requested", "需要我审阅", 3],
@@ -1332,12 +1365,14 @@ function prListSurface() {
       + '<div class="pr-cell"><button class="btn btn-ghost btn-sm" type="button" data-action="open-external">打开</button></div>'
       + '</div>';
   }).join("");
-  return '<section class="surface" aria-label="Pull requests">' + header + filterBar
-    + '<div class="pr-list"><div class="pr-head"><span></span><span>标题</span><span>检查 / 评审</span><span>关联 Issue</span><span></span></div>' + rows + '</div></section>';
+  return '<section class="surface" aria-label="Pull requests">' + header + syncToolbar()
+    + '<div class="pr-body">' + filterBar
+    + '<div class="pr-list"><div class="pr-head"><span></span><span>标题</span><span>检查 / 评审</span><span>关联 Issue</span><span></span></div>' + rows + '</div></div></section>';
 }
 
 function prEmptySurface() {
-  const header = '<header class="surface-header">' + surfaceTabs() + '</header>';
+  const header = '<header class="surface-header">' + surfaceTabs()
+    + '<div class="surface-actions">' + createIssueButton(false) + '</div></header>';
   return '<section class="surface" aria-label="Pull requests">' + header
     + '<div class="page" style="display:grid;place-items:center;padding:40px 20px">'
     + '<div class="empty-state" style="max-width:440px">'
