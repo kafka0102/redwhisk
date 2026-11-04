@@ -1012,6 +1012,33 @@
         "localBranches": "required"
       }
     },
+    "ProjectIssueConnection": {
+      "fields": {
+        "authStatus": "required",
+        "checkedAt": "required",
+        "cliAuthenticated": "required",
+        "cliInstalled": "required",
+        "hostUrl": "required",
+        "login": "required",
+        "provider": "required",
+        "repoPath": "required"
+      }
+    },
+    "ProjectIssueSourceSettings": {
+      "fields": {
+        "connection": "required",
+        "issueCreateSource": "required",
+        "issueSourceMode": "required",
+        "issueSyncEnabled": "required",
+        "issueSyncIntervalSeconds": "required",
+        "issueSyncLabel": "required",
+        "issueSyncScope": "required",
+        "issueWritebackCloseOnComplete": "required",
+        "issueWritebackCloseOnPrMerge": "required",
+        "issueWritebackComment": "required",
+        "projectId": "required"
+      }
+    },
     "ProjectLabelListResponse": {
       "fields": {
         "labels": "required"
@@ -1566,6 +1593,20 @@
         "title": "required"
       }
     },
+    "UpdateProjectIssueSourceSettingsInput": {
+      "fields": {
+        "issueCreateSource": "optional",
+        "issueSourceMode": "optional",
+        "issueSyncEnabled": "optional",
+        "issueSyncIntervalSeconds": "optional",
+        "issueSyncLabel": "optional",
+        "issueSyncScope": "optional",
+        "issueWritebackCloseOnComplete": "optional",
+        "issueWritebackCloseOnPrMerge": "optional",
+        "issueWritebackComment": "optional",
+        "projectId": "required"
+      }
+    },
     "UpdateProjectSettingsInput": {
       "fields": {
         "completionAction": "optional",
@@ -1926,6 +1967,7 @@
         "PROJECT_REPO_PATH_UNAVAILABLE",
         "PROJECT_NOT_FOUND",
         "PROJECT_VALIDATION_FAILED",
+        "FORGE_UNAVAILABLE",
         "ISSUE_PERSISTENCE_FAILED",
         "ISSUE_NOT_FOUND",
         "ISSUE_VALIDATION_FAILED",
@@ -2015,6 +2057,24 @@
         "ignoreVersion"
       ]
     },
+    "ForgeAuthStatus": {
+      "rename": "snake_case",
+      "variants": [
+        "unknown",
+        "ready",
+        "expired",
+        "unauthenticated",
+        "cli_missing",
+        "not_forge"
+      ]
+    },
+    "ForgeProvider": {
+      "rename": "snake_case",
+      "variants": [
+        "github",
+        "gitlab"
+      ]
+    },
     "GithubCommitProbeStatus": {
       "rename": "snake_case",
       "variants": [
@@ -2060,12 +2120,27 @@
         "blocked"
       ]
     },
+    "IssueCreateSource": {
+      "rename": "snake_case",
+      "variants": [
+        "local",
+        "remote"
+      ]
+    },
     "IssueSessionStartProgressPhase": {
       "rename": "snake_case",
       "variants": [
         "creating_worktree",
         "running_setup_command",
         "starting_session"
+      ]
+    },
+    "IssueSourceMode": {
+      "rename": "snake_case",
+      "variants": [
+        "local",
+        "remote",
+        "mixed"
       ]
     },
     "IssueStatus": {
@@ -2075,6 +2150,15 @@
         "running",
         "review",
         "completed"
+      ]
+    },
+    "IssueSyncScope": {
+      "rename": "snake_case",
+      "variants": [
+        "assigned_to_me",
+        "all_open",
+        "label",
+        "all"
       ]
     },
     "IssueTimelineActionType": {

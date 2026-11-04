@@ -13,6 +13,7 @@ pub enum CommandErrorCode {
     ProjectRepoPathUnavailable,
     ProjectNotFound,
     ProjectValidationFailed,
+    ForgeUnavailable,
     IssuePersistenceFailed,
     IssueNotFound,
     IssueValidationFailed,

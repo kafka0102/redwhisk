@@ -16,6 +16,7 @@ pub mod issue_action;
 pub mod issue_completion;
 pub mod local_data;
 pub mod project;
+pub mod project_issue_source;
 pub mod project_label;
 pub mod project_terminal;
 pub mod project_terminal_config;

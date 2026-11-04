@@ -9,6 +9,7 @@ projects
  ├─ issues ── issue_actions
  │     ├─ issue_attachments
  │     └─ issue_completion_flows
+ ├─ project_forge_connections
  ├─ agent_profiles（project / global scope）
  ├─ agent_sessions ── session_events
  ├─ project_terminal_configs
@@ -23,8 +24,9 @@ completion_attempts 保留历史完成尝试审计。
 
 | 表                                      | 责任                     | 关键约束/事实                                                                                |
 | --------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `projects`                              | 项目仓库与 worktree 配置 | `repo_path` 唯一；worktree root 策略与 setup command 属于项目                                |
-| `issues`                                | 项目内任务               | `project_id` 外键；状态受 CHECK；`number` 在项目内唯一；`del` 为软删除                       |
+| `projects`                              | 项目仓库与 worktree 配置 | `repo_path` 唯一；worktree root 策略与 setup command 属于项目。Issue 来源另有 `issue_source_mode`（`local` / `remote` / `mixed`，默认 `local`）、`issue_sync_scope`、`issue_sync_label`、`issue_sync_enabled`、`issue_sync_interval_seconds`（≥ 60，默认 90）、三个写回开关和 `issue_create_source` |
+| `issues`                                | 项目内任务               | `project_id` 外键；状态受 CHECK；`number` 在项目内唯一；`del` 为软删除；`source` 为 `local` 或 `remote`，默认 `local`，迁移不改写已有标题、状态和删除标记 |
+| `project_forge_connections`             | 项目 Forge 连接快照      | `project_id` 主键并级联删除；`provider` 仅 `github` / `gitlab` 或空；`auth_status` 为 `unknown` / `ready` / `expired` / `unauthenticated` / `cli_missing` / `not_forge`；未探测则没有行。不存 token |
 | `agent_sessions`                        | Agent 业务会话快照       | 可关联 Issue；活动关联有 partial unique index；记录 workspace、provider、turn、处理时长（json 由后台心跳按活跃时长累加、含进行中的 Turn；Codex 的 tui 取 session log 各 turn 处理耗时之和）与 Session Token 消耗三项累计（`token_input` / `token_output` / `token_cache`，json 来自结构化用量事件、Codex 的 tui 来自 session log 线程累计快照，尚未收到用量为 NULL） |
 | `issue_actions` / `session_events`      | 审计                     | payload 为 JSON 字符串，按实体与时间索引                                                     |
 | `issue_completion_flows`                | 完成流程状态             | 每 Issue 最多一条；phase 见状态机                                                            |
@@ -48,5 +50,6 @@ completion_attempts 保留历史完成尝试审计。
 3. 设计历史数据回填、`NOT NULL` 默认值、CHECK/索引与失败回滚；需要表重建时保留全部仍有效字段和索引。
 4. 同步 repository、Rust DTO、前端类型、状态机文档和必要测试。
 5. 用新库与已迁移库验证升级；迁移执行后检查唯一索引和外键行为。
+6. `0060_project_issue_source_settings` 给已有项目和 Issue 补默认来源，并新建 `project_forge_connections`。不修改已发布 migration。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

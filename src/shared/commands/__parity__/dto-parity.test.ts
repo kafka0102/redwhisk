@@ -35,6 +35,7 @@ const tsFiles = [
   ),
   path.join(srcDir, "features/terminals/project-terminal-commands.ts"),
   path.join(srcDir, "features/settings/settings-commands.ts"),
+  path.join(srcDir, "features/settings/issue-source-commands.ts"),
   path.join(srcDir, "shared/commands/app-commands.ts"),
   path.join(srcDir, "shared/commands/app-update-commands.ts"),
   path.join(srcDir, "shared/workspace/workspace-commands.ts"),

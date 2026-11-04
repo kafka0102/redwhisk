@@ -6,7 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Bot, Info, Tag, Wrench } from "lucide-react";
+import { Bot, Info, Kanban, Tag, Wrench } from "lucide-react";
 
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
@@ -38,13 +38,27 @@ import { GeneralSettingsPanel } from "./settings-general-panel";
 import { AgentsSettingsPanel } from "./settings-agents-panel";
 import { LabelsSettingsPanel } from "./settings-labels-panel";
 import { SkillsSettingsPanel } from "./settings-skills-panel";
+import { IssuesSettingsPanel } from "./settings-issues-panel";
+import {
+  compareLabelsByScopeAndRecency,
+  mergeLabel,
+  mergeSkill,
+  removeLabel,
+  removeProfile,
+  removeSkill,
+} from "./project-settings-list-helpers";
 import {
   persistAgentDisplayOrder,
   placeSavedAgentProfile,
 } from "./agent-profile-order";
 import { mergeAgentProfilesByDisplayOrder } from "./merge-agent-profiles-by-display-order";
 
-export type SettingsMenu = "general" | "agents" | "labels" | "skills";
+export type SettingsMenu =
+  | "general"
+  | "issues"
+  | "agents"
+  | "labels"
+  | "skills";
 
 interface AddFormState {
   projectId: number;
@@ -86,6 +100,11 @@ const SETTINGS_MENU_ITEMS: {
     iconTestId: "settings-menu-icon-general",
     key: "general",
     MenuIcon: Info,
+  },
+  {
+    iconTestId: "settings-menu-icon-issues",
+    key: "issues",
+    MenuIcon: Kanban,
   },
   {
     iconTestId: "settings-menu-icon-agents",
@@ -195,7 +214,11 @@ export function ProjectSettingsActivity({
   const activeMenuItem =
     SETTINGS_MENU_ITEMS.find((item) => item.key === activeMenu) ??
     SETTINGS_MENU_ITEMS[0];
-  const activeMenuLabel = getSettingsMenuLabel(activeMenuItem.key, messages);
+  const activeMenuLabel = getSettingsMenuLabel(
+    activeMenuItem.key,
+    messages,
+    t("settings.issues"),
+  );
   const isProfilesCurrent = profilesProjectId === projectId;
   const currentProfiles = useMemo(
     () =>
@@ -621,7 +644,11 @@ export function ProjectSettingsActivity({
         <nav className="settings-menu" aria-label={messages.settings.menuLabel}>
           {SETTINGS_MENU_ITEMS.map((item) => {
             const Icon = item.MenuIcon;
-            const itemLabel = getSettingsMenuLabel(item.key, messages);
+            const itemLabel = getSettingsMenuLabel(
+              item.key,
+              messages,
+              t("settings.issues"),
+            );
             return (
               <button
                 key={item.key}
@@ -764,6 +791,10 @@ export function ProjectSettingsActivity({
               />
             ) : null}
 
+            {activeMenu === "issues" ? (
+              <IssuesSettingsPanel key={projectId} projectId={projectId} />
+            ) : null}
+
             {activeMenu === "agents" ? (
               <AgentsSettingsPanel
                 addForm={currentAddForm}
@@ -851,13 +882,6 @@ function SettingsContentFrame({
   );
 }
 
-function removeProfile(
-  currentProfiles: AgentProfileRecord[],
-  profileId: number,
-): AgentProfileRecord[] {
-  return currentProfiles.filter((profile) => profile.id !== profileId);
-}
-
 function clampSettingsMenuWidth(width: number) {
   return Math.min(
     SETTINGS_MENU_MAX_WIDTH,
@@ -868,51 +892,11 @@ function clampSettingsMenuWidth(width: number) {
 function getSettingsMenuLabel(
   key: SettingsMenu,
   messages: I18nMessages,
+  issuesLabel: string,
 ): string {
   if (key === "general") return messages.settings.general;
+  if (key === "issues") return issuesLabel;
   if (key === "agents") return messages.settings.agents;
   if (key === "labels") return messages.settings.labels;
   return messages.settings.skills;
-}
-
-function mergeLabel(
-  currentLabels: ProjectLabelRecord[],
-  savedLabel: ProjectLabelRecord,
-): ProjectLabelRecord[] {
-  const remaining = removeLabel(currentLabels, savedLabel.id);
-  return [...remaining, savedLabel].sort(compareLabelsByScopeAndRecency);
-}
-
-// 标签排序：项目级在前、全局级在后；同范围内新建（id 更大）的排在前面。
-function compareLabelsByScopeAndRecency(
-  left: ProjectLabelRecord,
-  right: ProjectLabelRecord,
-): number {
-  if (left.scope !== right.scope) {
-    return left.scope === "project" ? -1 : 1;
-  }
-
-  return right.id - left.id;
-}
-
-function removeLabel(
-  currentLabels: ProjectLabelRecord[],
-  labelId: number,
-): ProjectLabelRecord[] {
-  return currentLabels.filter((label) => label.id !== labelId);
-}
-
-function mergeSkill(
-  currentSkills: SavedAgentSkillRecord[],
-  savedSkill: SavedAgentSkillRecord,
-): SavedAgentSkillRecord[] {
-  const remaining = removeSkill(currentSkills, savedSkill.id);
-  return [...remaining, savedSkill].sort((left, right) => left.id - right.id);
-}
-
-function removeSkill(
-  currentSkills: SavedAgentSkillRecord[],
-  skillId: number,
-): SavedAgentSkillRecord[] {
-  return currentSkills.filter((skill) => skill.id !== skillId);
 }

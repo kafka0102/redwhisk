@@ -10,6 +10,7 @@ pub mod issue_completion_flow_repository;
 pub mod issue_repository;
 pub mod migrations;
 pub mod project_label_repository;
+pub mod project_issue_source_repository;
 pub mod project_repository;
 pub mod project_terminal_shortcut_command_repository;
 pub mod saved_agent_skill_repository;

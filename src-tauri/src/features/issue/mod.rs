@@ -4,6 +4,7 @@ pub mod commands;
 pub mod completion;
 mod completion_comment;
 mod service;
+mod source_gate;
 mod time;
 mod validation;
 

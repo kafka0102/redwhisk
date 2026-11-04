@@ -82,6 +82,7 @@ const ISSUE_SELECT_COLUMNS: &str = "SELECT
     issues.number,
     issues.status_changed_at
  FROM issues";
+const ISSUE_SOURCE_VISIBILITY: &str = " AND (SELECT issue_source_mode FROM projects WHERE id = issues.project_id) IN ('mixed', issues.source)";
 
 pub struct IssueRepository<'connection> {
     connection: &'connection Connection,
@@ -100,7 +101,7 @@ impl<'connection> IssueRepository<'connection> {
         let mut statement = self.connection.prepare(&format!(
             "{ISSUE_SELECT_COLUMNS}
              WHERE issues.project_id = ?1
-               AND issues.del = 0
+               AND issues.del = 0{ISSUE_SOURCE_VISIBILITY}
              ORDER BY issues.status_changed_at DESC, issues.created_at DESC, issues.id DESC"
         ))?;
 
@@ -123,7 +124,7 @@ impl<'connection> IssueRepository<'connection> {
         let mut sql = format!(
             "{ISSUE_SELECT_COLUMNS}
              WHERE issues.project_id = ?1
-               AND issues.del = 0"
+               AND issues.del = 0{ISSUE_SOURCE_VISIBILITY}"
         );
         let mut bindings: Vec<Value> = vec![Value::Integer(project_id)];
 
@@ -187,12 +188,12 @@ impl<'connection> IssueRepository<'connection> {
     /// 按状态分组统计项目下未删除 Issue 数量，用于看板甬道总数。
     /// 未出现的状态保持为 0，保证四个甬道都有确定计数。
     pub fn count_grouped_by_status(&self, project_id: i64) -> rusqlite::Result<IssueStatusTotals> {
-        let mut statement = self.connection.prepare(
+        let mut statement = self.connection.prepare(&format!(
             "SELECT issues.status, COUNT(*) AS count
              FROM issues
-             WHERE issues.project_id = ?1 AND issues.del = 0
+             WHERE issues.project_id = ?1 AND issues.del = 0{ISSUE_SOURCE_VISIBILITY}
              GROUP BY issues.status",
-        )?;
+        ))?;
         let counts = statement.query_map(params![project_id], |row| {
             let status: String = row.get(0)?;
             let count: i64 = row.get(1)?;

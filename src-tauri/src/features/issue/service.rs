@@ -363,7 +363,7 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
-        self.require_project(input.project_id)?;
+        super::source_gate::require_local_issue_create(self, input.project_id)?;
         let title = validate_title(&input.title)?;
         let description = input.description.trim().to_string();
         let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;

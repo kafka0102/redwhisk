@@ -75,6 +75,54 @@ vi.mock("./settings-commands", async (importOriginal) => {
   };
 });
 
+vi.mock("./issue-source-commands", () => ({
+  getProjectIssueSourceSettings: vi.fn(async () => ({
+    projectId: 1,
+    issueSourceMode: "local",
+    issueSyncScope: "assigned_to_me",
+    issueSyncLabel: null,
+    issueSyncEnabled: true,
+    issueSyncIntervalSeconds: 90,
+    issueWritebackCloseOnComplete: true,
+    issueWritebackCloseOnPrMerge: true,
+    issueWritebackComment: true,
+    issueCreateSource: "local",
+    connection: {
+      provider: "github",
+      hostUrl: "https://github.com",
+      repoPath: "acme/redwhisk",
+      login: "yujianjia",
+      cliInstalled: true,
+      cliAuthenticated: true,
+      authStatus: "ready",
+      checkedAt: 1,
+    },
+  })),
+  inspectProjectIssueConnection: vi.fn(async () => ({
+    projectId: 1,
+    issueSourceMode: "local",
+    issueSyncScope: "assigned_to_me",
+    issueSyncLabel: null,
+    issueSyncEnabled: true,
+    issueSyncIntervalSeconds: 90,
+    issueWritebackCloseOnComplete: true,
+    issueWritebackCloseOnPrMerge: true,
+    issueWritebackComment: true,
+    issueCreateSource: "local",
+    connection: {
+      provider: "github",
+      hostUrl: "https://github.com",
+      repoPath: "acme/redwhisk",
+      login: "yujianjia",
+      cliInstalled: true,
+      cliAuthenticated: true,
+      authStatus: "ready",
+      checkedAt: 1,
+    },
+  })),
+  updateProjectIssueSourceSettings: vi.fn(),
+}));
+
 const settingsEventMocks = vi.hoisted(() => {
   const listeners: Array<{
     eventName: string;
@@ -353,11 +401,36 @@ describe("ProjectSettingsActivity", () => {
       within(screen.getByRole("navigation", { name: "Settings menu" }))
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["General", "Agents", "Skills", "Labels"]);
+    ).toEqual(["General", "Issues", "Agents", "Skills", "Labels"]);
     expect(
       screen.getByRole("heading", { name: "General" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Project Name")).toHaveValue("RedWhisk");
+  });
+
+  it("shows Issues without a project-settings title, sync time, or refresh", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+        projectPath="/tmp/redwhisk"
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Issues" }));
+    expect(
+      await screen.findByRole("heading", { name: "Issues" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("项目设置")).not.toBeInTheDocument();
+    expect(screen.queryByText(/last sync/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Refresh$/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Local" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "General" }));
+    expect(await screen.findByLabelText("Project Name")).toBeInTheDocument();
   });
 
   it("exposes and updates the settings menu splitter width", async () => {

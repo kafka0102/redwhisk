@@ -14,8 +14,8 @@ src-tauri/src/agent/command_detector.rs # 991 lines, baseline 2026-10-28
 src-tauri/src/agent/provider_factory.rs # 726 lines, baseline 2026-10-28
 src-tauri/src/agent/pty_session_manager.rs # 2257 lines, baseline 2026-10-28
 src-tauri/src/db/agent_session_repository.rs # 2030 lines, baseline 2026-10-28
-src-tauri/src/db/issue_repository.rs # 1293 lines, baseline 2026-10-28
-src-tauri/src/db/migrations.rs # 784 lines, baseline 2026-10-28
+src-tauri/src/db/issue_repository.rs # 1294 lines, baseline 2026-10-28
+src-tauri/src/db/migrations.rs # 791 lines, baseline 2026-10-28
 src-tauri/src/features/agent_session/commands.rs # 1026 lines, baseline 2026-10-28
 src-tauri/src/features/agent_session/service.rs # 7095 lines, baseline 2026-10-28
 src-tauri/src/features/agent_session/workspace.rs # 2315 lines, baseline 2026-10-28
