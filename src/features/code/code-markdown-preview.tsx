@@ -2,14 +2,18 @@
 //
 // 使用 react-markdown + remark-gfm 渲染 GFM 内容（标题、列表、代码块、外链等）。
 // language 为 mermaid 的围栏块走专用静态 SVG 渲染；其它代码块保持普通 pre/code。
-// 样式复用 agents-message 的 Markdown 类名，保持与既有预览视觉一致。
-// 不改 AgentMarkdown / Issue 只读路径。
+// 样式复用 agents-message 的 Markdown 类名。表格列宽与助手消息共用同一份规则。
+// 不改 Issue 只读路径。
 
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import { memo, useMemo } from "react";
 
+import {
+  markdownTableComponents,
+  rehypeMarkdownTableWidths,
+} from "../../shared/markdown/markdown-table-layout";
 import { CodeMarkdownMermaidBlock } from "./code-markdown-mermaid-block";
 import {
   codeChildrenToText,
@@ -41,6 +45,7 @@ function createMarkdownComponents(theme: CodeMarkdownTheme): Components {
     ul({ children }) {
       return <ul className="agents-message__unordered-list">{children}</ul>;
     },
+    ...markdownTableComponents,
     // code 组件自行输出 block 级 pre；避免 mermaid 容器再被外层 pre 包裹。
     pre({ children }) {
       return <>{children}</>;
@@ -77,7 +82,11 @@ export const CodeMarkdownPreview = memo(function CodeMarkdownPreview({
 
   return (
     <div className="agents-message__markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeMarkdownTableWidths]}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>
