@@ -406,6 +406,8 @@
   background: transparent;
   color: var(--color-text);
   text-align: left;
+  /* 与代码树、变更文件行一致：右键打开菜单时不在提交消息上留下文本选区。 */
+  user-select: none;
 }
 
 .session-commit-row:hover,

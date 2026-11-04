@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../i18n/i18n";
+import "../styles/session-side-panel.css";
 import { toast } from "../toast";
 import { openCommitOnGithub } from "./open-commit-on-github";
 import {
@@ -464,6 +465,20 @@ describe("CommittedChangesTimeline commit context menu", () => {
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith("Could not reach GitHub");
     });
+  });
+
+  it("does not leave the commit message text selectable when the context menu opens", () => {
+    renderTimeline();
+    const message = screen.getByText("fix: timeline menu");
+    const row = message.closest("button");
+    expect(row).toHaveClass("session-commit-row");
+    fireEvent.contextMenu(row!, { clientX: 40, clientY: 80 });
+
+    // 右键选词发生在浏览器选区层。文件行已用 user-select: none 挡住；
+    // 提交消息行必须同样不可选，否则菜单打开后消息会留下蓝色选区。
+    // user-select 不继承：消息节点 computed 值保持 auto，used value 跟随父行 none。
+    expect(window.getComputedStyle(row!).userSelect).toBe("none");
+    expect(window.getComputedStyle(message).userSelect).not.toBe("text");
   });
 });
 
