@@ -125,20 +125,23 @@
     "general": "General",
     "issues": "Issues",
     "issueSource": {
-      "mode": "Issue source",
+      "mode": "Source mode",
+      "connectionTitle": "Remote connection",
       "modeValue": {
         "local": "Local",
         "remote": "Remote",
         "mixed": "Mixed"
       },
-      "localOnlyHint": "Local-only mode does not sync remote issues.",
       "host": "Host",
+      "providerValue": {
+        "github": "GitHub",
+        "gitlab": "GitLab"
+      },
       "repository": "Repository",
       "account": "Account",
       "relogin": "Sign in again",
       "cliMissing": "Not installed",
-      "unauthenticatedGithub": "Not signed in. Run gh auth login.",
-      "unauthenticatedGitlab": "Not signed in. Run glab auth login.",
+      "signedOut": "Not signed in",
       "expired": "Sign-in expired.",
       "notForge": "This repository is not on GitHub or GitLab.",
       "unknown": "Not checked",
@@ -151,16 +154,18 @@
         "all": "All, including closed"
       },
       "label": "Label",
+      "autoSyncTitle": "Auto sync",
       "autoSync": "Sync automatically while this page is visible",
       "interval": "Interval",
       "interval60": "60 seconds",
       "interval90": "90 seconds",
       "interval300": "5 minutes",
       "intervalSeconds": "{{seconds}} seconds",
-      "writebackClose": "Close the remote issue when work is complete",
-      "writebackPr": "Close the remote issue when the pull request merges",
-      "writebackMr": "Close the remote issue when the merge request merges",
-      "writebackComment": "Write the delivery summary back to the remote issue"
+      "writebackTitle": "Write-back",
+      "writebackClose": "Close the remote issue when local work is complete and merged into base",
+      "writebackPr": "Close the linked remote issue after the pull request merges",
+      "writebackMr": "Close the linked remote issue after the merge request merges",
+      "writebackComment": "Comment the delivery summary back to the remote issue after completion"
     },
     "globalScope": "Global",
     "labelNameRequired": "Label name is required.",
@@ -1060,8 +1065,8 @@
       "branchMissing": "The current branch does not exist.",
       "workspaceNotInProject": "The workspace does not belong to this project.",
       "forgeNotAuthenticated": "glab / gh is not signed in. Run glab auth login in a terminal first (add --hostname <host> for self-hosted GitLab; use gh auth login for GitHub), then try again.",
-      "changeRequestFailed": "Failed to create or read the pull request or merge request."
-      ,"issueSourceModeInvalid": "Issue source mode is invalid.",
+      "changeRequestFailed": "Failed to create or read the pull request or merge request.",
+      "issueSourceModeInvalid": "Issue source mode is invalid.",
       "issueSyncScopeInvalid": "Issue sync scope is invalid.",
       "issueSyncIntervalInvalid": "Issue sync interval must be an integer of at least 60 seconds.",
       "issueSyncLabelRequired": "Issue sync label is required.",

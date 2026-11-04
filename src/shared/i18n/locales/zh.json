@@ -125,20 +125,23 @@
     "general": "通用",
     "issues": "Issues",
     "issueSource": {
-      "mode": "Issue 来源",
+      "mode": "来源模式",
+      "connectionTitle": "远程连接",
       "modeValue": {
         "local": "仅本地",
         "remote": "仅远程",
         "mixed": "混合"
       },
-      "localOnlyHint": "仅本地模式不会同步远程 Issue。",
       "host": "宿主",
+      "providerValue": {
+        "github": "GitHub",
+        "gitlab": "GitLab"
+      },
       "repository": "仓库",
       "account": "账号",
       "relogin": "重新登录",
       "cliMissing": "未安装",
-      "unauthenticatedGithub": "未登录。请执行 gh auth login。",
-      "unauthenticatedGitlab": "未登录。请执行 glab auth login。",
+      "signedOut": "未登录",
       "expired": "登录已过期。",
       "notForge": "这个仓库不是 GitHub 或 GitLab。",
       "unknown": "尚未检查",
@@ -151,16 +154,18 @@
         "all": "全部含已关闭"
       },
       "label": "标签",
+      "autoSyncTitle": "自动同步",
       "autoSync": "页面可见时自动同步",
       "interval": "间隔",
       "interval60": "60 秒",
       "interval90": "90 秒",
       "interval300": "5 分钟",
       "intervalSeconds": "{{seconds}} 秒",
-      "writebackClose": "完成时关闭远程 Issue",
-      "writebackPr": "合并 PR 时关闭远程 Issue",
-      "writebackMr": "合并 MR 时关闭远程 Issue",
-      "writebackComment": "把交付摘要回写到远程 Issue"
+      "writebackTitle": "写回",
+      "writebackClose": "本地完成且合并到 base 时，关闭远程 Issue",
+      "writebackPr": "PR 合并后关闭关联的远程 Issue",
+      "writebackMr": "MR 合并后关闭关联的远程 Issue",
+      "writebackComment": "完成后把交付摘要评论回写远程"
     },
     "globalScope": "全局",
     "labelNameRequired": "标签名不能为空。",
@@ -1060,8 +1065,8 @@
       "branchMissing": "当前分支不存在。",
       "workspaceNotInProject": "工作区不属于当前项目。",
       "forgeNotAuthenticated": "glab / gh 未登录：请先在终端执行 glab auth login（自建 GitLab 需加 --hostname <主机>；GitHub 用 gh auth login），完成授权后重试。",
-      "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。"
-      ,"issueSourceModeInvalid": "Issue 来源模式不合法。",
+      "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。",
+      "issueSourceModeInvalid": "Issue 来源模式不合法。",
       "issueSyncScopeInvalid": "Issue 同步范围不合法。",
       "issueSyncIntervalInvalid": "同步间隔必须是不小于 60 秒的整数。",
       "issueSyncLabelRequired": "指定标签时必须填写标签。",
