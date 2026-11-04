@@ -467,6 +467,190 @@
   .menu-pop button.is-current:disabled { color: var(--color-text); }
   .menu-pop button.is-danger { color: var(--color-danger); }
   .status-trigger svg { flex: 0 0 auto; }
+  .panel-header .btn-sm { flex: 0 0 auto; }
+  .issue-editor { display: grid; gap: 10px; }
+  .issue-editor__title {
+    height: 44px;
+    padding: 0 14px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .rich-editor {
+    display: grid;
+    min-width: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+  }
+  .rich-editor__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 36px;
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+  }
+  .rich-editor__block {
+    width: 76px;
+    height: 28px;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .rich-editor__tool {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+  .rich-editor__tool:hover { background: var(--color-surface-muted); color: var(--color-text); }
+  .rich-editor__surface {
+    min-height: 340px;
+    padding: 10px;
+    outline: 0;
+    color: var(--color-text);
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .rich-editor__surface:empty::before {
+    color: var(--color-text-muted);
+    content: "描述任务内容";
+    pointer-events: none;
+  }
+  .rich-editor__surface blockquote {
+    margin: 8px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--color-border-strong);
+    color: var(--color-text-muted);
+  }
+  .rich-editor__surface pre {
+    padding: 8px;
+    border-radius: var(--radius-control);
+    background: var(--color-surface-subtle);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  .rich-editor__attachments {
+    display: grid;
+    gap: 6px;
+    max-height: 128px;
+    padding: 8px;
+    border-top: 1px solid var(--color-border);
+    overflow: auto;
+  }
+  .rich-editor__attachment {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-muted);
+  }
+  .rich-editor__attachment-main,
+  .rich-editor__attachment-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .rich-editor__attachment-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 32px;
+    height: 22px;
+    padding: 0 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 650;
+  }
+  .rich-editor__attachment-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rich-editor__attachment-action {
+    min-width: 32px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+  .rich-editor__attachment-action:hover {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .issue-label-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    min-height: 28px;
+  }
+  .issue-label-toolbar__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-muted);
+  }
+  .issue-label-toolbar__icon:hover { color: var(--color-text); background: var(--color-surface-muted); }
+  .issue-label-toolbar__chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .issue-label-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .label-menu .menu-pop {
+    left: 0;
+    right: auto;
+    top: auto;
+    bottom: calc(100% + 6px);
+    width: min(320px, calc(100vw - 96px));
+    min-width: 220px;
+    gap: 8px;
+    padding: 8px;
+  }
+  .label-menu__option { justify-content: flex-start !important; padding: 8px 10px !important; }
+  .label-menu__option .label-menu__check { margin-left: auto; }
+  .label-menu__dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; }
+  .label-menu__divider { height: 1px; margin: 0 2px; background: var(--color-border); }
+  .label-menu__action { color: var(--color-info) !important; }
   .page.is-solo { padding-inline: max(20px, 8%); }
   .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 20px; margin-top: 14px; }
   .detail-solo { margin-top: 14px; }
@@ -706,7 +890,7 @@ const SCENES = [
     id: "s3",
     group: "Issue",
     title: "进行中 · 远程",
-    caption: "远程 Issue 正在执行。正文只读；右侧是 GitHub 字段、会话信息和运行参数。顶部是状态下拉、打开 GitHub、更多。查看会话在会话信息卡片上。",
+    caption: "远程 Issue 正在执行。正文只读；右侧是 GitHub、关联 PR、会话和运行参数。顶部只有状态下拉和更多，打开 GitHub 在 GitHub 卡片上。",
     kind: "issue-detail",
     model: {
       mode: "mixed",
@@ -722,6 +906,7 @@ const SCENES = [
       branch: "feat/remote-issue",
       localNumber: 42,
       hasPr: false,
+      attachments: ["说明-1.md"],
       deletedRemote: false,
     },
   },
@@ -825,7 +1010,7 @@ const SCENES = [
     id: "s8",
     group: "PR",
     title: "PR 详情 · 概览",
-    caption: "PR 详情保留 GitHub 的评审语义：检查、评审、可合并状态都在。右侧合并框明确列出阻塞原因，不把「能点」当成「能合」。用户下一步查看检查或去 GitHub 处理。",
+    caption: "PR 详情直接进入内容，不显示 Issues / Pull requests Tab，也没有同步和刷新。评审语义保留：检查、评审、可合并状态都在。右侧合并框明确列出阻塞原因。",
     kind: "pr-detail",
     model: {
       mode: "mixed",
@@ -1007,7 +1192,7 @@ const SCENES = [
     id: "s18",
     group: "详情",
     title: "待办 · 远程",
-    caption: "待办且远程：正文只读。右侧只有仓库、远端状态、作者和指派。顶部是状态下拉、打开 GitHub、运行、更多。",
+    caption: "待办且远程：正文只读。右侧 GitHub 卡片只有仓库、远端状态、作者和指派，打开 GitHub 在该卡片里。顶部是状态下拉、运行、更多。",
     kind: "issue-detail",
     model: {
       mode: "mixed",
@@ -1052,7 +1237,7 @@ const SCENES = [
     id: "s20",
     group: "详情",
     title: "待审核 · 远程",
-    caption: "待审核远程：只读。右侧是 GitHub 字段、关联 PR、会话信息和运行参数。顶部是状态下拉、打开 GitHub、完成、更多。查看会话在会话信息卡片上。",
+    caption: "待审核远程：只读。右侧是 GitHub、关联 PR、会话和运行参数。打开 GitHub 在 GitHub 卡片里，查看会话在会话信息卡片里。",
     kind: "issue-detail",
     model: {
       mode: "mixed",
@@ -1078,7 +1263,7 @@ const SCENES = [
     id: "s21",
     group: "详情",
     title: "已完成 · 远程",
-    caption: "已完成远程：只读。右侧是 GitHub 字段、已合并 PR、会话信息和运行参数。顶部是状态下拉、打开 GitHub、查看回看、更多。",
+    caption: "已完成远程：只读。右侧是 GitHub、已合并 PR、会话和运行参数。打开 GitHub 在 GitHub 卡片里。",
     kind: "issue-detail",
     model: {
       mode: "mixed",
@@ -1217,6 +1402,15 @@ function icon(name, size) {
   if (name === "back") return '<svg ' + common + '><path d="m15 18-6-6 6-6"/></svg>';
   if (name === "chevron") return '<svg ' + common + '><path d="m6 9 6 6 6-6"/></svg>';
   if (name === "more") return '<svg ' + common + '><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></svg>';
+  if (name === "bold") return '<svg ' + common + '><path d="M7 5h6a4 4 0 0 1 0 8H7V5Zm0 8h7a3 3 0 0 1 0 6H7v-6Z"/></svg>';
+  if (name === "quote") return '<svg ' + common + '><path d="M7 9H4v6h6V8a4 4 0 0 0-4-4M18 9h-3v6h6V8a4 4 0 0 0-4-4"/></svg>';
+  if (name === "code") return '<svg ' + common + '><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 5l-2 14"/></svg>';
+  if (name === "list") return '<svg ' + common + '><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r=".7"/><circle cx="4.5" cy="12" r=".7"/><circle cx="4.5" cy="18" r=".7"/></svg>';
+  if (name === "ordered") return '<svg ' + common + '><path d="M10 6h10M10 12h10M10 18h10M4 5h1v3M4 11h2l-2 3h2M4 17h2l-2 3h2"/></svg>';
+  if (name === "image") return '<svg ' + common + '><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m5 17 5-5 3 3 2-2 4 4"/></svg>';
+  if (name === "paperclip") return '<svg ' + common + '><path d="m20 11-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/></svg>';
+  if (name === "tag") return '<svg ' + common + '><path d="M20 13 13 20l-9-9V4h7l9 9Z"/><circle cx="8.5" cy="8.5" r="1"/></svg>';
+  if (name === "brush") return '<svg ' + common + '><path d="m15 4 5 5-9 9-5-5 9-9ZM6 13l5 5-3 3H4v-4l2-4Z"/></svg>';
   return '<svg ' + common + '><circle cx="12" cy="12" r="8"/></svg>';
 }
 
@@ -1422,9 +1616,6 @@ function issueActions(status, source, editable) {
     return button("保存", "btn-primary", "save");
   }
   const parts = [statusMenu(status)];
-  if (source !== "local") {
-    parts.push(button(icon("external", 13) + ' 打开 ' + issueSourceName(source), "btn-secondary", "open-external"));
-  }
   if (status === "backlog") {
     parts.push(button(icon("play", 13) + ' 运行', "btn-primary", "run"));
   }
@@ -1564,32 +1755,67 @@ function ensureLabels(source) {
   return model.labels;
 }
 
+function labelColor(name) {
+  if (name === "enhancement") return "#2f80ed";
+  if (name === "sync") return "#5f6b7a";
+  if (name === "bug") return "#d64545";
+  if (name === "v0.9") return "#7c5cbf";
+  if (name === "本地") return "#1681d9";
+  return "#68758a";
+}
+
 function labelEditor(source) {
   const selected = ensureLabels(source);
   const open = model.menu === "labels";
-  const chips = selected.map((name) => '<span class="chip">' + esc(name) + '</span>').join("");
+  const chips = selected.map((name) => '<span class="issue-label-chip" style="background:' + labelColor(name) + '">' + esc(name) + '</span>').join("");
   const options = ["enhancement", "sync", "bug", "本地", "v0.9"].map((name) => {
     const on = selected.includes(name);
-    return '<button type="button" data-action="toggle-label" data-label="' + esc(name) + '"><span>' + esc(name) + '</span>' + (on ? icon("check", 14) : "") + '</button>';
+    return '<button class="label-menu__option" type="button" data-action="toggle-label" data-label="' + esc(name) + '"><span class="label-menu__dot" style="background:' + labelColor(name) + '"></span><span>' + esc(name) + '</span>' + (on ? '<span class="label-menu__check">' + icon("check", 14) + '</span>' : "") + '</button>';
   }).join("");
-  return '<div class="field"><label>标签</label><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' + chips
-    + '<div class="menu" data-menu-root><button class="btn btn-ghost btn-sm" type="button" data-action="toggle-labels">+ 选择标签</button>'
-    + (open ? '<div class="menu-pop">' + options + '</div>' : "")
-    + '</div></div></div>';
+  return '<div class="issue-label-toolbar"><div class="menu label-menu" data-menu-root><button class="issue-label-toolbar__icon" type="button" data-action="toggle-labels" aria-label="添加标签" aria-haspopup="listbox">'
+    + icon("tag", 15) + '</button>'
+    + (open ? '<div class="menu-pop" role="listbox">' + options + '<div class="label-menu__divider"></div><button class="label-menu__action" type="button" data-action="edit-labels">编辑标签</button></div>' : "")
+    + '</div><div class="issue-label-toolbar__chips">' + chips + '</div></div>';
 }
 
-function attachmentField() {
+function editorToolbar() {
+  return '<div class="rich-editor__toolbar" aria-label="正文工具栏">'
+    + '<select class="rich-editor__block" data-editor-block aria-label="文本样式"><option value="p">正文</option><option value="h1">标题 1</option><option value="h2">标题 2</option></select>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="bold" aria-label="加粗">' + icon("bold", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="quote" aria-label="引用">' + icon("quote", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="code" aria-label="代码块">' + icon("code", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="ul" aria-label="无序列表">' + icon("list", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="ol" aria-label="有序列表">' + icon("ordered", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="add-image" aria-label="添加图片">' + icon("image", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="add-attachment" aria-label="添加附件">' + icon("paperclip", 15) + '</button>'
+    + '<button class="rich-editor__tool" type="button" data-action="editor-format" data-format="clean" aria-label="清除格式">' + icon("brush", 15) + '</button>'
+    + '</div>';
+}
+
+function attachmentPanel() {
   const files = model.attachments || [];
-  const rows = files.map((name) => '<div class="subtle" style="margin-bottom:6px">' + esc(name) + '</div>').join("");
-  return '<div class="field"><label>附件</label>' + rows + '<button class="btn btn-secondary" type="button" data-action="add-attachment">添加附件</button></div>';
+  if (files.length === 0) return "";
+  const rows = files.map((name, index) => {
+    const ext = name.includes(".") ? name.split(".").pop().toUpperCase() : "FILE";
+    const badge = ext === "PNG" || ext === "JPG" ? "IMG" : ext;
+    return '<div class="rich-editor__attachment"><div class="rich-editor__attachment-main"><span class="rich-editor__attachment-badge">' + esc(badge) + '</span><span class="rich-editor__attachment-name">' + esc(name) + '</span></div><div class="rich-editor__attachment-actions">'
+      + '<button class="rich-editor__attachment-action" type="button" data-action="preview-attachment" data-index="' + index + '">View</button>'
+      + '<button class="rich-editor__attachment-action" type="button" data-action="download-attachment" data-index="' + index + '">Down</button>'
+      + '<button class="rich-editor__attachment-action" type="button" data-action="remove-attachment" data-index="' + index + '">Del</button>'
+      + '</div></div>';
+  }).join("");
+  return '<div class="rich-editor__attachments">' + rows + '</div>';
 }
 
 function editableIssueForm() {
-  return '<section class="panel"><div class="panel-body">'
-    + '<div class="field"><label>标题</label><input class="input" data-field="title" value="' + esc(model.title) + '" /></div>'
-    + '<div class="field"><label>描述</label><textarea class="textarea" rows="8" data-field="body">' + esc(model.body || "") + '</textarea></div>'
+  const bodyHtml = model.bodyHtml || esc(model.body || "").replaceAll("\n", "<br>");
+  return '<section class="panel"><div class="panel-body issue-editor">'
+    + '<input class="input issue-editor__title" data-field="title" value="' + esc(model.title) + '" aria-label="标题" />'
+    + '<div class="rich-editor">' + editorToolbar()
+    + '<div class="rich-editor__surface" contenteditable="true" data-field="body" role="textbox" aria-label="描述">' + bodyHtml + '</div>'
+    + attachmentPanel()
+    + '</div>'
     + labelEditor(model.source || "local")
-    + attachmentField()
     + '</div></section>';
 }
 
@@ -1635,7 +1861,9 @@ function remoteStateLabel() {
 }
 
 function remoteMetaPanel(source) {
-  return '<section class="panel"><div class="panel-header"><h3>' + esc(issueSourceName(source)) + '</h3></div><div class="panel-body"><dl class="facts">'
+  const host = issueSourceName(source);
+  return '<section class="panel"><div class="panel-header"><h3>' + esc(host) + '</h3>'
+    + button(icon("external", 12) + ' 打开 ' + esc(host), "btn-ghost btn-sm", "open-external") + '</div><div class="panel-body"><dl class="facts">'
     + fact("仓库", "acme/redwhisk", true)
     + fact("远端状态", remoteStateLabel())
     + fact("作者", "lin")
@@ -1839,16 +2067,13 @@ function prDetailSurface() {
   const prState = model.prState || "open";
   const merged = prState === "merged";
   const hostLabel = model.host === "gitlab" ? "GitLab" : "GitHub";
-  const header = '<header class="surface-header">' + surfaceTabs()
-    + tabActions(false)
-    + '</header>';
   const stateChip = prState === "open"
     ? '<span class="chip chip-success">open</span>'
     : prState === "merged"
       ? '<span class="chip chip-merged">merged</span>'
       : '<span class="chip">' + prState + '</span>';
   const tabs = [["overview", "概览", ""], ["files", "变更", "12"], ["checks", "检查", "4"], ["discussion", "讨论", "6"]];
-  return '<section class="surface" aria-label="Pull request 详情">' + header
+  return '<section class="surface surface--detail" aria-label="Pull request 详情">'
     + '<div class="page" style="padding-bottom:0">'
     + '<div class="page-header"><div style="display:flex;align-items:flex-start;gap:8px">' + iconButton("back", "返回 PR 列表", "back-pr")
     + '<div><h2>PR #' + model.prNumber + ' · ' + esc(model.prTitle) + '</h2><div class="sub">' + stateChip + '<span class="mono">feat/remote-issue</span><span>→</span><span class="mono">main</span><span>·</span><span>' + (merged ? 'yujianjia 合并了 2 个提交 · 合并于 2 小时前' : 'yujianjia 想合并 2 个提交') + '</span><span>·</span><span>+412 −87</span></div></div>'
@@ -2024,7 +2249,38 @@ function render() {
   renderState();
 }
 
+function captureEditorDraft() {
+  const editor = document.querySelector('.rich-editor__surface[data-field="body"]');
+  if (!editor) return;
+  model.body = editor.innerText;
+  model.bodyHtml = editor.innerHTML;
+}
+
+function formatEditor(format) {
+  const editor = document.querySelector('.rich-editor__surface[data-field="body"]');
+  if (!editor) return;
+  editor.focus();
+  if (format === "bold") document.execCommand("bold");
+  else if (format === "ul") document.execCommand("insertUnorderedList");
+  else if (format === "ol") document.execCommand("insertOrderedList");
+  else if (format === "quote") document.execCommand("formatBlock", false, "blockquote");
+  else if (format === "code") document.execCommand("formatBlock", false, "pre");
+  else if (format === "heading1") document.execCommand("formatBlock", false, "h1");
+  else if (format === "heading2") document.execCommand("formatBlock", false, "h2");
+  else if (format === "clean") {
+    document.execCommand("removeFormat");
+    document.execCommand("formatBlock", false, "p");
+  }
+  captureEditorDraft();
+  actionNote = "已应用正文格式";
+}
+
+document.addEventListener("mousedown", (event) => {
+  if (event.target.closest(".rich-editor__toolbar button")) event.preventDefault();
+});
+
 document.addEventListener("click", (event) => {
+  captureEditorDraft();
   const menuRoot = event.target.closest("[data-menu-root]");
   const closedMenu = Boolean(model && model.menu) && !menuRoot;
   if (closedMenu) model.menu = null;
@@ -2151,6 +2407,11 @@ document.addEventListener("click", (event) => {
     model.menu = model.menu === "labels" ? null : "labels";
     render();
     return;
+  } else if (action === "edit-labels") {
+    model.menu = null;
+    model.dialog = { kind: "note", title: "标签设置", message: "将打开项目设置中的标签管理" };
+    render();
+    return;
   } else if (action === "set-status") {
     requestStatus(target.dataset.status);
     render();
@@ -2236,6 +2497,34 @@ document.addEventListener("click", (event) => {
     actionNote = "已添加附件 " + name;
     render();
     return;
+  } else if (action === "add-image") {
+    model.attachments = model.attachments || [];
+    const name = "截图-" + (model.attachments.length + 1) + ".png";
+    model.attachments.push(name);
+    actionNote = "已添加图片附件 " + name;
+    render();
+    return;
+  } else if (action === "preview-attachment") {
+    const name = (model.attachments || [])[Number(target.dataset.index)];
+    model.dialog = { kind: "note", title: "预览附件", message: name || "附件不可用" };
+    render();
+    return;
+  } else if (action === "download-attachment") {
+    const name = (model.attachments || [])[Number(target.dataset.index)];
+    model.dialog = { kind: "note", title: "下载附件", message: name || "附件不可用" };
+    render();
+    return;
+  } else if (action === "remove-attachment") {
+    const index = Number(target.dataset.index);
+    const removed = (model.attachments || [])[index];
+    model.attachments = (model.attachments || []).filter((_, itemIndex) => itemIndex !== index);
+    actionNote = "已移除附件 " + (removed || "");
+    render();
+    return;
+  } else if (action === "editor-format") {
+    formatEditor(target.dataset.format);
+    renderState();
+    return;
   } else if (action === "open-pr") {
     applyScene("s8");
     return;
@@ -2261,7 +2550,20 @@ document.addEventListener("click", (event) => {
   renderState();
 });
 
+document.addEventListener("input", (event) => {
+  if (event.target.matches('.rich-editor__surface[data-field="body"]')) {
+    model.body = event.target.innerText;
+    model.bodyHtml = event.target.innerHTML;
+  }
+});
+
 document.addEventListener("change", (event) => {
+  captureEditorDraft();
+  if (event.target.matches("[data-editor-block]")) {
+    formatEditor(event.target.value === "p" ? "clean" : event.target.value === "h1" ? "heading1" : "heading2");
+    renderState();
+    return;
+  }
   const field = event.target.dataset.field;
   if (!field) return;
   if (field === "mode") {
