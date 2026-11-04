@@ -80,7 +80,7 @@ interface AgentMessageStreamViewProps {
    * 由 false 变 true 表示用户切换到了本 session。 */
   isActive?: boolean;
   /** 切换到本 session（isActive 由 false 变 true）时是否自动定位到底部。
-   * 完成态 session 传 false 以保持原样。 */
+   * 仅运行中的 Turn 传 true；其它状态保持原滚动位置。 */
   autoScrollOnActivate?: boolean;
   /** 当前 session id：用于按 session 记录并恢复滚动位置。缺省（未提供）时不恢复。 */
   sessionId?: number;
@@ -120,10 +120,10 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     measureNav,
     handleScroll: trackScrollDirection,
   } = useScrollNav(scrollRef);
-  // 只读（Issue 已完成）session 重挂载时的滚动位置恢复目标。
+  // 非运行中 Turn 的 session 重挂载时的滚动位置恢复目标。
   // Agents Activity 切菜单会整体卸载，切回时消息流 DOM 重建、位置归零；不做恢复会
   // 触发贴底跟随跳到底部，破坏用户来回切窗口复制文本的位置。
-  // 运行中 session（autoScrollOnActivate=true）不读取缓存，保持原本的贴底行为。
+  // 运行中的 Turn（autoScrollOnActivate=true）不读取缓存，保持原本的贴底行为。
   const [restoreTarget] = useState<number | null>(() =>
     sessionId !== undefined && !autoScrollOnActivate
       ? readMessageStreamScrollOffset(sessionId)
@@ -176,9 +176,9 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     turnInterrupted,
     subagentInterrupted,
   ]);
-  // 切换到本 session（isActive 由 false 变 true）时，若非完成态且消息流可见，
+  // 切换到本 session（isActive 由 false 变 true）时，若 Turn 正在运行且消息流可见，
   // 定位到底部，便于查看正在执行的输出或待确认项。
-  // - 完成态（autoScrollOnActivate=false）保持原样，不强行改写滚动位置；
+  // - 非运行态（autoScrollOnActivate=false）保持原样，不强行改写滚动位置；
   // - 消息流被其他子 tab 遮蔽（clientHeight 为 0，等价 display:none）时跳过，
   //   避免在隐藏状态下因 scrollHeight 为 0 把 scrollTop 置 0 反而破坏位置。
   // 用 useLayoutEffect 在 paint 前定位，避免切回时先闪现旧位置再跳底。
@@ -196,7 +196,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     node.scrollTop = node.scrollHeight;
     isPinnedRef.current = true;
   }, [isActive, autoScrollOnActivate]);
-  // 只读 session 重挂载后恢复记录的滚动位置。
+  // 非运行态 session 重挂载后恢复记录的滚动位置。
   // 内容（缓存预览 / 历史 timeline）异步分帧填充，因此每次内容提交后的 layout 阶段
   // 尝试定位：layout 阶段在 paint 前执行，避免先闪到顶部再跳；位置尚不可达
   // （内容未撑开）时保持待定，等下一次提交再试。
@@ -204,7 +204,7 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     if (!isRestorePendingRef.current) {
       return;
     }
-    // 会话变为可交互（Issue 不再完成）时放弃恢复，交回原本的贴底跟随逻辑。
+    // Turn 开始运行后放弃恢复，交回原本的贴底跟随逻辑。
     if (autoScrollOnActivate) {
       isRestorePendingRef.current = false;
       return;

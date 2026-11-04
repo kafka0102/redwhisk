@@ -5,7 +5,7 @@
 // 「贴底跟随」自动跳到底部，破坏用户来回切窗口复制文本时的阅读位置。
 //
 // 因此按 sessionId 记录最近一次滚动位置：组件卸载时写入，重挂载时由消息流按需恢复。
-// 仅只读（Issue 已完成）session 恢复；运行中 session 仍按原行为跟随到底部。
+// 仅非运行中 Turn 的 session 恢复；运行中的 Turn 仍按原行为跟随到底部。
 //
 // 键与 `sessionStateCache` 一致用 sessionId（单库内唯一）；session 删除时必须调用
 // `clearMessageStreamScrollOffset`，避免 agent_sessions.id 复用后旧位置串入新 session。

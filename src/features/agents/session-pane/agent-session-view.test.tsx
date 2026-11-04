@@ -110,6 +110,31 @@ function emitEvent(payload: AgentStreamEventEnvelope) {
   });
 }
 
+function mockScrollBox(
+  element: HTMLElement,
+  metrics: { clientHeight: number; scrollHeight: number },
+) {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  let current = element.scrollTop;
+  Object.defineProperty(element, "scrollTop", {
+    configurable: true,
+    get: () => current,
+    set: (value: number) => {
+      current = Math.min(
+        Math.max(value, 0),
+        Math.max(0, metrics.scrollHeight - metrics.clientHeight),
+      );
+    },
+  });
+}
+
 beforeEach(() => {
   clearAgentMessageStreamCacheForTest();
 });
@@ -465,20 +490,100 @@ describe("AgentSessionView", () => {
     const scroll = container.querySelector(
       ".agents-message-stream__scroll",
     ) as HTMLElement;
-    Object.defineProperty(scroll, "clientHeight", {
-      configurable: true,
-      get: () => 100,
-    });
-    Object.defineProperty(scroll, "scrollHeight", {
-      configurable: true,
-      get: () => 500,
-    });
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
 
     await waitFor(() => {
       expect(screen.getByText("最终结论")).toBeInTheDocument();
     });
 
     expect(scroll.scrollTop).toBe(200);
+  });
+
+  it("非运行态 session 切回时恢复记录位置，不定位到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "已结束的结论",
+        messageId: "a1",
+      } as never,
+    ]);
+    writeMessageStreamScrollOffset(10, 200);
+
+    const { container, rerender } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="review"
+        isActive={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    await waitFor(() => {
+      expect(screen.getByText("已结束的结论")).toBeInTheDocument();
+    });
+
+    rerender(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="closed"
+        issueStatus="review"
+        isActive
+      />,
+    );
+
+    expect(scroll.scrollTop).toBe(200);
+  });
+
+  it("运行态 session 切回时仍定位到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "运行中的输出",
+        messageId: "a1",
+      } as never,
+    ]);
+    writeMessageStreamScrollOffset(10, 200);
+
+    const { container, rerender } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning
+        isActive={false}
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+
+    rerender(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning
+      />,
+    );
+
+    expect(scroll.scrollTop).toBe(400);
   });
 
   it("切换 session 后不沿用上一个 session 的输入错误", async () => {

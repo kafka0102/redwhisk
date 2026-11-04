@@ -174,7 +174,7 @@ export const AgentSessionView = memo(function AgentSessionView({
         isTurnRunning={canUseExternalTurnRunning && isTurnRunning}
         agentType={agentType}
         isActive={isActive}
-        autoScrollOnActivate={!isReadOnly}
+        autoScrollOnActivate={effectiveTurnStatus === "running"}
         sessionId={sessionId}
         onEntryExpandedChange={onEntryExpandedChange}
         sessionFileLinks={sessionFileLinks}
