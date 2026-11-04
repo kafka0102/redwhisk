@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -18,6 +18,7 @@ const SHORT_TABLE = `| 环节 | 结果 |
 | 索引 | 短 |`;
 
 const LONG_TOKEN = "a".repeat(80);
+const CHROME_MEASUREMENT_TIMEOUT_MS = 20_000;
 
 function chromeBinary(): string {
   const fromEnv = process.env.CHROME_PATH;
@@ -102,7 +103,7 @@ document.getElementById("out").textContent = JSON.stringify({
   const filePath = join(directory, "table.html");
   try {
     writeFileSync(filePath, html);
-    const stdout = execFileSync(
+    const result = spawnSync(
       chromeBinary(),
       [
         "--headless",
@@ -111,11 +112,30 @@ document.getElementById("out").textContent = JSON.stringify({
         "--dump-dom",
         filePath,
       ],
-      { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"] },
+      {
+        encoding: "utf8",
+        timeout: CHROME_MEASUREMENT_TIMEOUT_MS,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
-    const match = stdout.match(/<pre id="out">([\s\S]*?)<\/pre>/);
+    const stderr = result.stderr ?? "";
+    if (result.error) {
+      throw chromeMeasurementError(
+        `Chrome measurement failed: ${result.error.message}`,
+        stderr,
+      );
+    }
+    if (result.status !== 0) {
+      throw chromeMeasurementError(`Chrome exited ${result.status}`, stderr);
+    }
+    const match = (result.stdout ?? "").match(
+      /<pre id="out">([\s\S]*?)<\/pre>/,
+    );
     if (match?.[1] === undefined) {
-      throw new Error("Chrome did not return table measurements");
+      throw chromeMeasurementError(
+        "Chrome did not return table measurements",
+        stderr,
+      );
     }
     return JSON.parse(match[1]) as {
       short: { lines: number; contentCh: number }[];
@@ -126,18 +146,27 @@ document.getElementById("out").textContent = JSON.stringify({
   }
 }
 
-describe("助手消息表格的真实列宽", () => {
-  it("短列保持一行，超长标识符在封顶宽度内换行", () => {
-    const measured = measureTables();
+function chromeMeasurementError(message: string, stderr: string): Error {
+  const detail = stderr.trim();
+  return new Error(detail === "" ? message : `${message}\n${detail}`);
+}
 
-    expect(measured.short).toHaveLength(4);
-    for (const cell of measured.short) {
-      expect(cell.lines).toBe(1);
-      expect(cell.contentCh).toBeGreaterThan(3);
-      expect(cell.contentCh).toBeLessThan(8);
-    }
-    expect(measured.long.lines).toBeGreaterThan(1);
-    expect(measured.long.contentCh).toBeGreaterThan(68);
-    expect(measured.long.contentCh).toBeLessThan(76);
-  });
+describe("助手消息表格的真实列宽", () => {
+  it(
+    "短列保持一行，超长标识符在封顶宽度内换行",
+    () => {
+      const measured = measureTables();
+
+      expect(measured.short).toHaveLength(4);
+      for (const cell of measured.short) {
+        expect(cell.lines).toBe(1);
+        expect(cell.contentCh).toBeGreaterThan(3);
+        expect(cell.contentCh).toBeLessThan(8);
+      }
+      expect(measured.long.lines).toBeGreaterThan(1);
+      expect(measured.long.contentCh).toBeGreaterThan(68);
+      expect(measured.long.contentCh).toBeLessThan(76);
+    },
+    CHROME_MEASUREMENT_TIMEOUT_MS,
+  );
 });
