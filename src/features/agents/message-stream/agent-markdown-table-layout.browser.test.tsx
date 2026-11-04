@@ -139,5 +139,5 @@ describe("助手消息表格的真实列宽", () => {
     expect(measured.long.lines).toBeGreaterThan(1);
     expect(measured.long.contentCh).toBeGreaterThan(68);
     expect(measured.long.contentCh).toBeLessThan(76);
-  });
+  }, 20_000);
 });

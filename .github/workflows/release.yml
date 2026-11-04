@@ -75,6 +75,9 @@ jobs:
       - name: Rust 新增字符串
         run: bash scripts/check-rust-user-strings.sh --from "${{ github.event.pull_request.base.sha }}"
 
+      - name: 新增 command 失败路径
+        run: bash scripts/check-rust-command-failure-tests.sh --from "${{ github.event.pull_request.base.sha }}"
+
       - name: Rust 测试
         run: cargo test --lib
         working-directory: src-tauri

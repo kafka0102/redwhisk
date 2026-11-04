@@ -25,7 +25,7 @@
 
 ## 验收重点
 
-- 每个新 command 至少覆盖一个成功和一个失败路径。
+- 每个新 command 至少覆盖一个成功和一个失败路径。失败路径用 `scripts/check-rust-command-failure-tests.sh` 检查：新增命令要有一个 `#[test]`，函数体里同时出现命令名和 `expect_err`。
 - 每个新状态或分支至少覆盖合法迁移、非法迁移和持久化回读。
 - event 测试覆盖乱序/重复、`epoch` 变化或 provider 不支持语义的安全降级。
 - migration 测试不能只验证空库；涉及变更/回填时必须验证历史数据。

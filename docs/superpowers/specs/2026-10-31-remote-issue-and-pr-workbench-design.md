@@ -565,6 +565,8 @@ PR 的 files / checks / reviews / comments 是宿主快照，形状差异大、�
 
 ### 7.1 新模块
 
+连接探测复用 `src-tauri/src/git/forge.rs` 的 `inspect_forge`、`parse_forge_url`、`cli_is_installed`。下面的 `forge/` 目录要等同步落地再建。
+
 ```text
 src-tauri/src/forge/
   mod.rs              // ForgeProvider / ForgeRepo / SyncScope / domain DTO
