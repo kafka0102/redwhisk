@@ -1,5 +1,10 @@
 import type { Terminal } from "@xterm/xterm";
 
+import {
+  releaseLeakedMouseTracking,
+  shouldDropLeakedMouseReport,
+} from "./terminal-mouse-tracking";
+
 interface TerminalInputWriter {
   push: (data: string) => void;
 }
@@ -18,6 +23,10 @@ export function installTerminalSurfaceDataHandler(input: {
 }): { dispose: () => void } {
   return input.terminal.onData((data) => {
     if (input.disableInput || input.isSuppressed()) {
+      return;
+    }
+    if (shouldDropLeakedMouseReport(input.terminal, data)) {
+      releaseLeakedMouseTracking(input.terminal);
       return;
     }
     if (input.imeInputGuard) {
