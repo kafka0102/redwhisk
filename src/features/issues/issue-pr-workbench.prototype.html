@@ -161,22 +161,10 @@
   .activity-bar .grow { flex: 1; }
   .workbench {
     display: grid;
-    grid-template-rows: 40px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     min-width: 0;
     min-height: 0;
   }
-  .workbench-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 14px;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    font-size: 12px;
-  }
-  .workbench-header strong { color: var(--color-text); font-weight: 650; }
-  .workbench-header .sep { color: var(--color-text-subtle); }
   .surface {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -1430,12 +1418,8 @@ function activityBar(active) {
     + '<button class="activity-btn" type="button" aria-label="项目设置" aria-pressed="' + (active === "settings") + '">' + icon("settings") + '</button></nav>';
 }
 
-function workbenchHeader() {
-  return '<header class="workbench-header"><strong>redwhisk</strong><span class="sep">/</span><span>acme/redwhisk</span><span class="sep">·</span><span>main</span></header>';
-}
-
 function appShell(active, surface) {
-  return '<div class="app">' + activityBar(active) + '<div class="workbench">' + workbenchHeader() + surface + '</div></div>';
+  return '<div class="app">' + activityBar(active) + '<div class="workbench">' + surface + '</div></div>';
 }
 
 function button(label, variant, action, disabled, extra) {
