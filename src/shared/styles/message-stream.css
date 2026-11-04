@@ -305,7 +305,7 @@
 
 /* 表格单独滚动。格子改回 normal，避免气泡的 break-word 把列压成一个字。
    列内容宽写在格子的 width/min/max 上，content-box 让 Nch 不含内边距。
-   类名只由 AgentMarkdown 输出。 */
+   类名由助手消息和代码 Markdown 预览共用。 */
 .agents-message__table-scroll {
   max-width: 100%;
   overflow-x: auto;
