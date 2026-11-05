@@ -752,3 +752,73 @@
   font-size: 12px;
   line-height: 1.4;
 }
+
+.issue-sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.issue-sync-status__text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.issue-sync-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+}
+
+.issue-sync-status__dot[data-tone="success"] {
+  background: var(--color-lane-review-marker);
+}
+
+.issue-sync-status__dot[data-tone="error"] {
+  background: var(--color-danger);
+}
+
+.issue-sync-status__refresh {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.issue-card__shell[data-tone="info"] {
+  background: color-mix(
+    in srgb,
+    var(--color-text-muted) 10%,
+    var(--color-surface)
+  );
+}
+
+.issue-card__shell[data-tone="error"] {
+  background: var(--color-danger-muted);
+}
+
+.issue-card__forge {
+  margin-right: 6px;
+  color: var(--color-text-muted);
+  font-weight: 650;
+}
+
+.issue-card__label-chip--remote {
+  background: #d4d4d8;
+  color: #3f3f46;
+}
+
+.issue-card__remote-note {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}

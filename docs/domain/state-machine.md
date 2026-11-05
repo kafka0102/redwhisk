@@ -16,6 +16,22 @@
 
 Issue 状态变化由 Rust 后端 编排；前端不得直接写 SQLite 或伪造状态。新增状态变更必须同时写入 `issue_actions`、`session_events` 或完成记录中的适当审计事实。
 
+GitHub Issue 镜像另有一条远端开/关轴，不替代本地工作流状态。同步规则：
+
+| 远端事实 | 本地状态 | 结果 |
+| --- | --- | --- |
+| 首次 open | 无 | 新建 `source=remote`，状态 `backlog` |
+| 首次 closed | 无 | 新建 `source=remote`，状态 `completed`，不创建 Session |
+| 远端关闭 | `backlog` / `review` | 改为 `completed`，新增一条 `actor_kind=remote` 的 `issue_status_changed` |
+| 远端关闭 | `running` | 状态不变，不写完成动作，列表标记远端已关闭 |
+| 远端关闭 | `completed` | 不新增状态动作 |
+| 远端重开 | `completed` 且无关联 Session | 改为 `backlog`，新增一条状态动作 |
+| 远端重开 | `completed` 且有关联 Session | 保持 `completed`，列表标记远端已重开 |
+| 远端仍 open 或变为 open | `backlog` / `running` / `review` | 本地状态不变 |
+| `del=1` | 任意 | 不清除删除标记，不更新可见内容，看板不显示 |
+
+pull request 不导入。仅本地模式跳过同步。凭据过期、命令失败或无法解析时保留已有 Issue。
+
 ## Turn 与权限
 
 | 事实                   | 写入方                        | 前端职责                                                           |

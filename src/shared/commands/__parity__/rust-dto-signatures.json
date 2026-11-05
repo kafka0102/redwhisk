@@ -778,6 +778,23 @@
         "sessionStartedAt": "required"
       }
     },
+    "IssueSyncChangedEvent": {
+      "fields": {
+        "outcome": "required",
+        "projectId": "required"
+      }
+    },
+    "IssueSyncResult": {
+      "fields": {
+        "outcome": "required"
+      }
+    },
+    "IssueSyncStatus": {
+      "fields": {
+        "lastSyncedAt": "required",
+        "syncError": "required"
+      }
+    },
     "IssueTimelineActor": {
       "fields": {
         "actorKind": "required",
@@ -2159,6 +2176,15 @@
         "running",
         "review",
         "completed"
+      ]
+    },
+    "IssueSyncOutcome": {
+      "rename": "snake_case",
+      "variants": [
+        "synced",
+        "skipped",
+        "credential_expired",
+        "cache_failed"
       ]
     },
     "IssueSyncScope": {

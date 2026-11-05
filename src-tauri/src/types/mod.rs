@@ -14,6 +14,7 @@ pub mod errors;
 pub mod issue;
 pub mod issue_action;
 pub mod issue_completion;
+pub mod issue_mirror;
 pub mod local_data;
 pub mod project;
 pub mod project_issue_source;

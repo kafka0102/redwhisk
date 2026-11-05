@@ -1,6 +1,8 @@
 import { LoaderCircle, Play, Plus } from "lucide-react";
+import { useState } from "react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
+import { formatIssueAge, readIssueMirror } from "./issue-mirror-fields";
 import type { RunDialogIssue } from "./use-issue-run-dialog";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -34,9 +36,9 @@ interface IssuesKanbanProps {
   canRunIssue: (
     issue: Pick<IssueRecord, "status" | "linkedSessionId">,
   ) => boolean;
-  formatTimestamp: (epochMilliseconds: number) => string;
   toDescriptionExcerpt: (markdown: string) => string;
   onLoadMore: (status: IssueStatus) => void;
+  sourceMode?: "local" | "remote" | "mixed" | null;
 }
 
 export function IssuesKanban({
@@ -50,9 +52,9 @@ export function IssuesKanban({
   onOpenIssue,
   onRunIssue,
   canRunIssue,
-  formatTimestamp,
   toDescriptionExcerpt,
   onLoadMore,
+  sourceMode = null,
 }: IssuesKanbanProps) {
   const { messages } = useI18n();
   return (
@@ -121,8 +123,8 @@ export function IssuesKanban({
                   isSelected={issue.id === selectedIssueId}
                   cardRefs={cardRefs}
                   canRunIssue={canRunIssue}
-                  formatTimestamp={formatTimestamp}
                   toDescriptionExcerpt={toDescriptionExcerpt}
+                  sourceMode={sourceMode}
                   onOpenIssue={onOpenIssue}
                   onRunIssue={onRunIssue}
                 />
@@ -154,8 +156,8 @@ function IssueCard({
   isSelected,
   cardRefs,
   canRunIssue,
-  formatTimestamp,
   toDescriptionExcerpt,
+  sourceMode,
   onOpenIssue,
   onRunIssue,
 }: {
@@ -165,19 +167,32 @@ function IssueCard({
   canRunIssue: (
     issue: Pick<IssueRecord, "status" | "linkedSessionId">,
   ) => boolean;
-  formatTimestamp: (epochMilliseconds: number) => string;
   toDescriptionExcerpt: (markdown: string) => string;
+  sourceMode: "local" | "remote" | "mixed" | null;
   onOpenIssue: (issue: IssueRecord, trigger: HTMLElement | null) => void;
   onRunIssue: (issue: RunDialogIssue, trigger: HTMLElement | null) => void;
 }) {
-  const { messages } = useI18n();
+  const { messages, t } = useI18n();
+  const [now] = useState(() => Date.now());
+  const mirror = readIssueMirror(issue);
+  const remoteLabels = mirror.source === "remote" ? mirror.remoteLabels : [];
   const metaId = `issue-card-meta-${issue.id}`;
   const attentionId = `issue-card-attention-${issue.id}`;
   const descriptionId = `issue-card-description-${issue.id}`;
   const labelsId = `issue-card-labels-${issue.id}`;
-  const labels = issue.labels ?? [];
-  const hasLabels = labels.length > 0;
+  const labels = mirror.source === "remote" ? [] : (issue.labels ?? []);
+  const hasLabels = labels.length > 0 || remoteLabels.length > 0;
   const isRunnable = canRunIssue(issue);
+  const tone =
+    mirror.syncStatus === "error"
+      ? "error"
+      : sourceMode === "mixed" && mirror.source === "remote"
+        ? "info"
+        : undefined;
+  const issueNumber =
+    mirror.source === "remote" && mirror.externalNumber != null
+      ? `GH #${mirror.externalNumber}`
+      : `#${issue.number}`;
   const describedBy = [
     metaId,
     issue.linkedSessionAttention === "requested" ? attentionId : null,
@@ -189,7 +204,7 @@ function IssueCard({
 
   return (
     <div role="listitem">
-      <div className="issue-card__shell">
+      <div className="issue-card__shell" data-tone={tone}>
         <div className="issue-card__content-row">
           <button
             ref={(element) => {
@@ -207,12 +222,40 @@ function IssueCard({
             onClick={(event) => onOpenIssue(issue, event.currentTarget)}
           >
             <span id={metaId} className="issue-card__meta-row">
-              <span className="issue-card__id">#{issue.number}</span>
+              <span className="issue-card__id">
+                {mirror.source === "remote" ? (
+                  <span className="issue-card__forge">
+                    {t("issues.githubBadge")}
+                  </span>
+                ) : null}
+                {issueNumber}
+              </span>
               <span className="issue-card__updated">
-                {formatTimestamp(issue.createdAt)}
+                {formatIssueAge(issue.updatedAt, now, {
+                  justNow: t("issues.timelineJustNow"),
+                  minutesAgo: (minutes) =>
+                    t("issues.timelineMinutesAgo", { minutes }),
+                  hoursAgo: (hours) => t("issues.timelineHoursAgo", { hours }),
+                  daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
+                })}
               </span>
             </span>
             <span className="issue-card__title">{issue.title}</span>
+            {mirror.remoteClosedWhileRunning ? (
+              <span className="issue-card__remote-note">
+                {t("issues.remoteClosed")}
+              </span>
+            ) : null}
+            {mirror.remoteReopened ? (
+              <span className="issue-card__remote-note">
+                {t("issues.remoteReopened")}
+              </span>
+            ) : null}
+            {mirror.syncStatus === "error" ? (
+              <span className="issue-card__remote-note">
+                {t("issues.syncFailed")}
+              </span>
+            ) : null}
             {issue.linkedSessionAttention === "requested" ? (
               <span
                 id={attentionId}
@@ -248,6 +291,7 @@ function IssueCard({
             <span className="sr-only">
               {`${messages.issues.labels}: ${labels
                 .map((label) => label.name)
+                .concat(remoteLabels)
                 .join(", ")}`}
             </span>
             {labels.map((label) => (
@@ -258,6 +302,15 @@ function IssueCard({
                 style={{ backgroundColor: label.color }}
               >
                 {label.name}
+              </span>
+            ))}
+            {remoteLabels.map((label) => (
+              <span
+                key={label}
+                aria-hidden="true"
+                className="issue-card__label-chip issue-card__label-chip--remote"
+              >
+                {label}
               </span>
             ))}
           </span>

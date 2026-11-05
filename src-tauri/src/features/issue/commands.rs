@@ -2,8 +2,12 @@ use std::path::Path;
 
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
+use tauri::Emitter;
 use tauri::State;
 
+use super::github_issue_mirror::{
+    enrich_issue_list, sync_github_issues, GithubCliForge, IssueBoardListResponse,
+};
 use super::service::IssueService;
 use crate::app_state::AppState;
 use crate::features::agent_session::AgentSessionService;
@@ -14,13 +18,16 @@ use crate::types::issue::{
     CompleteIssueManualInput, CreateIssueInput, DeleteIssueInput, DeleteIssueResult,
     DeleteIssueWorktreeInput, DeleteIssueWorktreeResult, DetectAgentCommitCompletionInput,
     DetectAgentCommitCompletionResult, ExportIssueAttachmentInput, GetIssueSummaryInput,
-    GetIssueTimelineInput, GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueListResponse,
-    IssueRecord, IssueStatus, IssueSummaryRecord, IssueTimelineResponse, IssueWorktreeStatusResult,
+    GetIssueTimelineInput, GetIssueWorktreeStatusInput, IssueAttachmentPreview, IssueRecord,
+    IssueStatus, IssueSummaryRecord, IssueTimelineResponse, IssueWorktreeStatusResult,
     MarkIssueReviewInput, PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput,
     SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
+use crate::types::issue_mirror::{
+    IssueSyncChangedEvent, IssueSyncResult, IssueSyncStatus, ISSUE_SYNC_CHANGED_EVENT,
+};
 
 #[tauri::command]
 pub async fn list_issues(
@@ -31,11 +38,12 @@ pub async fn list_issues(
     offset: Option<i64>,
     status: Option<IssueStatus>,
     per_status_limit: Option<i64>,
-) -> Result<IssueListResponse, CommandError> {
+) -> Result<IssueBoardListResponse, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let enrich_dir = data_dir.clone();
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let response = tauri::async_runtime::spawn_blocking(move || {
         AgentSessionService::reconcile_unrecoverable_running_sessions_in_data_dir(
             &data_dir,
             project_id,
@@ -63,7 +71,136 @@ pub async fn list_issues(
         CommandError::new(CommandErrorCode::IssuePersistenceFailed, "Issue 查询失败。")
             .with_reason("queryFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })??;
+    enrich_issue_list(&enrich_dir, response)
+}
+
+#[tauri::command]
+pub async fn sync_project_issues(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+) -> Result<IssueSyncResult, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = sync_project_issues_in_data_dir(&data_dir, project_id)?;
+        emit_issue_sync_changed(
+            &app,
+            &IssueSyncChangedEvent {
+                project_id,
+                outcome: result.outcome,
+            },
+        );
+        Ok(result)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to sync GitHub issues.",
+        )
+        .with_reason("syncFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+}
+
+#[tauri::command]
+pub async fn get_issue_sync_status(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+) -> Result<IssueSyncStatus, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        get_issue_sync_status_in_data_dir(&data_dir, project_id)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to read GitHub issue sync status.",
+        )
+        .with_reason("queryFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+}
+
+pub fn sync_project_issues_in_data_dir(
+    data_dir: &Path,
+    project_id: i64,
+) -> Result<IssueSyncResult, CommandError> {
+    let database = super::archive::open_issue_database(data_dir)?;
+    let repo_dir = crate::db::project_repository::ProjectRepository::new(&database.connection)
+        .find_by_id(project_id)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "Failed to sync GitHub issues.",
+            )
+            .with_reason("syncFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?
+        .map(|project| std::path::PathBuf::from(project.repo_path))
+        .unwrap_or_default();
+    sync_github_issues(
+        &database.connection,
+        project_id,
+        &GithubCliForge { repo_dir },
+        now_millis(),
+    )
+}
+
+pub fn get_issue_sync_status_in_data_dir(
+    data_dir: &Path,
+    project_id: i64,
+) -> Result<IssueSyncStatus, CommandError> {
+    let database = super::archive::open_issue_database(data_dir)?;
+    let settings = crate::db::project_issue_source_repository::ProjectIssueSourceRepository::new(
+        &database.connection,
+    )
+    .get(project_id)
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to read GitHub issue sync status.",
+        )
+        .with_reason("queryFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?;
+    if settings.is_none() {
+        return Err(
+            CommandError::new(CommandErrorCode::ProjectNotFound, "Project not found.")
+                .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id)),
+        );
+    }
+    let (last_synced_at, sync_error) =
+        crate::db::issue_external_ref_repository::IssueExternalRefRepository::new(
+            &database.connection,
+        )
+        .sync_clock(project_id)
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "Failed to read GitHub issue sync status.",
+            )
+            .with_reason("queryFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?;
+    Ok(IssueSyncStatus {
+        last_synced_at,
+        sync_error,
+    })
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn emit_issue_sync_changed(app: &tauri::AppHandle, event: &IssueSyncChangedEvent) {
+    let _ = app.emit(ISSUE_SYNC_CHANGED_EVENT, event);
 }
 
 #[tauri::command]

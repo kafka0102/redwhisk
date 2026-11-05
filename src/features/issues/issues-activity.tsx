@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   listIssues,
@@ -20,6 +28,7 @@ import {
   type LaneTotalsMap,
   INITIAL_LANE_LOAD_STATE,
   INITIAL_LANE_TOTALS,
+  deriveLaneTotals,
   mergeIssues,
 } from "./issue-lane-helpers";
 import {
@@ -29,7 +38,6 @@ import {
 import {
   buildIssueDescription,
   canRunIssueFor,
-  formatLocalTimestamp,
   issueToForm,
   markdownToExcerpt,
   serializeAttachments,
@@ -44,6 +52,9 @@ import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { IssueSurfaceHeader } from "./issue-surface-header";
 import { IssuesKanban } from "./issues-kanban";
+import { readIssueMirror } from "./issue-mirror-fields";
+import { useIssueSyncChrome } from "./use-issue-sync-chrome";
+import { useIssueLabelCatalog } from "./use-issue-label-catalog";
 import { IssueRunDialog } from "./issue-run/issue-run-dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import { useAlertDialog } from "@/components/ui/use-alert-dialog";
@@ -53,11 +64,6 @@ import {
   markIssueOpenRequestApplied,
   shouldApplyIssueOpenRequest,
 } from "./issues-activity-cache";
-import {
-  isGlobalLabelOverridden,
-  listProjectLabels,
-  type ProjectLabelRecord,
-} from "../settings/settings-commands";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { type IssueOpenRequest } from "./issue-open-request";
@@ -137,17 +143,25 @@ export function IssuesActivity({
   ] = useState(false);
   const [dirtyWorkspaceDialog, setDirtyWorkspaceDialog] =
     useState<DirtyWorkspaceDialogState | null>(null);
-  const [availableLabels, setAvailableLabels] = useState<ProjectLabelRecord[]>(
-    [],
-  );
-  const [labelsProjectId, setLabelsProjectId] = useState(projectId);
-  const [labelsLoadState, setLabelsLoadState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
-  const [labelsErrorMessage, setLabelsErrorMessage] = useState<string | null>(
-    null,
-  );
   const activeProjectIdRef = useRef(projectId);
+  const {
+    availableLabels: currentAvailableLabels,
+    labelsErrorMessage: currentLabelsErrorMessage,
+    isLoadingLabels,
+  } = useIssueLabelCatalog(projectId, activeProjectIdRef, t);
+  const reloadMirroredIssues = useCallback(() => {
+    void listIssues({
+      projectId,
+      perStatusLimit: ISSUE_PAGE_SIZE,
+    }).then((response) => {
+      setIssues(response.issues);
+      setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
+    });
+  }, [projectId]);
+  const { sourceMode, toolbar: issueSyncToolbar } = useIssueSyncChrome(
+    projectId,
+    reloadMirroredIssues,
+  );
   const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
     initialPageState.previousSelectedIssueId,
@@ -283,59 +297,6 @@ export function IssuesActivity({
       isMounted = false;
     };
   }, [hasRequestedIssue, openRequestToken, projectId, requestedIssueId, t]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    void Promise.all([
-      listProjectLabels({ scope: "project", projectId }),
-      listProjectLabels({ scope: "global", projectId: null }),
-    ])
-      .then(([projectResponse, globalResponse]) => {
-        if (!isMounted || activeProjectIdRef.current !== projectId) {
-          return;
-        }
-
-        const projectLabels = projectResponse.labels;
-        const visibleLabels = [
-          ...projectLabels,
-          ...globalResponse.labels.filter(
-            (label) => !isGlobalLabelOverridden(label, projectLabels),
-          ),
-        ].sort((left, right) => {
-          if (left.scope !== right.scope) {
-            return left.scope === "project" ? -1 : 1;
-          }
-
-          return left.name.localeCompare(right.name);
-        });
-        setAvailableLabels(visibleLabels);
-        setLabelsProjectId(projectId);
-        setLabelsErrorMessage(null);
-        setLabelsLoadState("ready");
-      })
-      .catch((error: unknown) => {
-        if (!isMounted || activeProjectIdRef.current !== projectId) {
-          return;
-        }
-
-        setAvailableLabels([]);
-        setLabelsProjectId(projectId);
-        setLabelsErrorMessage(getCommandErrorMessage(error, t));
-        setLabelsLoadState("error");
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId, t]);
-
-  const currentAvailableLabels =
-    labelsProjectId === projectId ? availableLabels : [];
-  const currentLabelsErrorMessage =
-    labelsProjectId === projectId ? labelsErrorMessage : null;
-  const isLoadingLabels =
-    labelsProjectId !== projectId || labelsLoadState === "loading";
 
   const selectedIssue = useMemo(
     () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
@@ -526,12 +487,23 @@ export function IssuesActivity({
   });
 
   const isBacklogDialog =
-    dialogMode === "create" || selectedIssue?.status === "backlog";
+    dialogMode === "create" ||
+    (selectedIssue?.status === "backlog" &&
+      !(
+        selectedIssue != null &&
+        readIssueMirror(selectedIssue).source === "remote"
+      ));
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
   const isEditablePageOpen = Boolean(
-    dialogMode && (isBacklogDialog || isReadOnlyEditRequested),
+    dialogMode &&
+    (isBacklogDialog ||
+      (isReadOnlyEditRequested &&
+        !(
+          selectedIssue != null &&
+          readIssueMirror(selectedIssue).source === "remote"
+        ))),
   );
 
   function isFormDirty(): boolean {
@@ -629,6 +601,7 @@ export function IssuesActivity({
             title={messages.issues.title}
             titleLevel={2}
             variant="activity"
+            actions={issueSyncToolbar}
           />
           {errorMessage ? (
             <p
@@ -647,8 +620,8 @@ export function IssuesActivity({
             createButtonRef={createButtonRef}
             laneLoadState={laneLoadState}
             canRunIssue={canRunIssueFor}
-            formatTimestamp={formatLocalTimestamp}
             toDescriptionExcerpt={markdownToExcerpt}
+            sourceMode={sourceMode}
             onCreateIssue={openCreateDialog}
             onOpenIssue={openIssueDialog}
             onRunIssue={openRunDialog}

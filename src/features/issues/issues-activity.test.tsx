@@ -921,7 +921,7 @@ describe("IssuesActivity", () => {
     );
   });
 
-  it("shows issue project number (not global id), created time, full title, and a single-line description excerpt", async () => {
+  it("shows issue project number (not global id), relative update time, full title, and a single-line description excerpt", async () => {
     // existingIssue.id = 20 但 number = 1；卡片展示必须用 number。
     expect(existingIssue.id).not.toBe(existingIssue.number);
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -935,9 +935,12 @@ describe("IssuesActivity", () => {
     expect(card).toHaveTextContent("Existing issue");
     expect(card).toHaveTextContent("#1");
     expect(card).not.toHaveTextContent("#20");
-    expect(card).toHaveTextContent(
-      formatTestTimestamp(existingIssue.createdAt),
+    const ageSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - existingIssue.updatedAt) / 1000),
     );
+    const ageDays = Math.floor(ageSeconds / 86_400);
+    expect(card).toHaveTextContent(`${ageDays}d ago`);
     expect(card).toHaveTextContent("Existing description");
     expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
   });
