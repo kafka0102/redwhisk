@@ -50,8 +50,14 @@ import {
 import { useIssueDialogLifecycle } from "./use-issue-dialog-lifecycle";
 import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
-import { IssueSurfaceHeader } from "./issue-surface-header";
+import { issueBoardListInput } from "./issue-board-query";
+import {
+  IssueBoardHeader,
+  IssuePullRequestsEmpty,
+  type IssueBoardPane,
+} from "./issue-board-header";
 import { IssuesKanban } from "./issues-kanban";
+import type { IssueSourceFilter } from "./issue-source-filter";
 import { readIssueMirror } from "./issue-mirror-fields";
 import { useIssueSyncChrome } from "./use-issue-sync-chrome";
 import { useIssueLabelCatalog } from "./use-issue-label-catalog";
@@ -149,19 +155,25 @@ export function IssuesActivity({
     labelsErrorMessage: currentLabelsErrorMessage,
     isLoadingLabels,
   } = useIssueLabelCatalog(projectId, activeProjectIdRef, t);
-  const reloadMirroredIssues = useCallback(() => {
-    void listIssues({
-      projectId,
-      perStatusLimit: ISSUE_PAGE_SIZE,
-    }).then((response) => {
-      setIssues(response.issues);
-      setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
-    });
-  }, [projectId]);
-  const { sourceMode, toolbar: issueSyncToolbar } = useIssueSyncChrome(
-    projectId,
-    reloadMirroredIssues,
+  const reloadMirroredIssues = useCallback(
+    (sourceFilter: IssueSourceFilter) => {
+      void listIssues(
+        issueBoardListInput(projectId, sourceFilter, {
+          perStatusLimit: ISSUE_PAGE_SIZE,
+        }),
+      ).then((response) => {
+        setIssues(response.issues);
+        setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
+      });
+    },
+    [projectId],
   );
+  const {
+    sourceMode,
+    sourceFilter,
+    toolbar: issueSyncToolbar,
+  } = useIssueSyncChrome(projectId, reloadMirroredIssues);
+  const [boardPane, setBoardPane] = useState<IssueBoardPane>("issues");
   const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
     initialPageState.previousSelectedIssueId,
@@ -249,10 +261,11 @@ export function IssuesActivity({
       }
 
       try {
-        const response = await listIssues({
-          projectId,
-          perStatusLimit: ISSUE_PAGE_SIZE,
-        });
+        const response = await listIssues(
+          issueBoardListInput(projectId, sourceFilter, {
+            perStatusLimit: ISSUE_PAGE_SIZE,
+          }),
+        );
         if (!isMounted || activeProjectIdRef.current !== projectId) {
           return;
         }
@@ -296,7 +309,14 @@ export function IssuesActivity({
     return () => {
       isMounted = false;
     };
-  }, [hasRequestedIssue, openRequestToken, projectId, requestedIssueId, t]);
+  }, [
+    hasRequestedIssue,
+    openRequestToken,
+    projectId,
+    requestedIssueId,
+    sourceFilter,
+    t,
+  ]);
 
   const selectedIssue = useMemo(
     () => issues.find((issue) => issue.id === selectedIssueId) ?? null,
@@ -363,10 +383,11 @@ export function IssuesActivity({
     const requestProjectId = projectId;
     try {
       const response = await listIssues({
-        projectId: requestProjectId,
-        status,
-        limit: ISSUE_PAGE_SIZE,
-        offset: state.loadedCount,
+        ...issueBoardListInput(requestProjectId, sourceFilter, {
+          status,
+          limit: ISSUE_PAGE_SIZE,
+          offset: state.loadedCount,
+        }),
       });
       if (activeProjectIdRef.current !== requestProjectId) {
         return;
@@ -439,6 +460,7 @@ export function IssuesActivity({
     messages,
     onOpenAgentsActivity,
     startingIssueId: runDialogIssue?.id ?? null,
+    sourceFilter,
   });
   const {
     handleSubmit,
@@ -597,11 +619,16 @@ export function IssuesActivity({
     >
       {!isEditablePageOpen ? (
         <>
-          <IssueSurfaceHeader
-            title={messages.issues.title}
-            titleLevel={2}
-            variant="activity"
+          <IssueBoardHeader
             actions={issueSyncToolbar}
+            issueCount={
+              laneTotals.backlog +
+              laneTotals.running +
+              laneTotals.review +
+              laneTotals.completed
+            }
+            pane={boardPane}
+            onPaneChange={setBoardPane}
           />
           {errorMessage ? (
             <p
@@ -612,21 +639,26 @@ export function IssuesActivity({
               {errorMessage}
             </p>
           ) : null}
-          <IssuesKanban
-            isLoading={isLoading}
-            lanes={lanes}
-            selectedIssueId={selectedIssueId}
-            cardRefs={cardRefs}
-            createButtonRef={createButtonRef}
-            laneLoadState={laneLoadState}
-            canRunIssue={canRunIssueFor}
-            toDescriptionExcerpt={markdownToExcerpt}
-            sourceMode={sourceMode}
-            onCreateIssue={openCreateDialog}
-            onOpenIssue={openIssueDialog}
-            onRunIssue={openRunDialog}
-            onLoadMore={loadMoreIssues}
-          />
+          {boardPane === "pullRequests" ? (
+            <IssuePullRequestsEmpty />
+          ) : (
+            <IssuesKanban
+              isLoading={isLoading}
+              lanes={lanes}
+              selectedIssueId={selectedIssueId}
+              cardRefs={cardRefs}
+              createButtonRef={createButtonRef}
+              laneLoadState={laneLoadState}
+              canRunIssue={canRunIssueFor}
+              toDescriptionExcerpt={markdownToExcerpt}
+              sourceMode={sourceMode}
+              showCreate={sourceMode === "local" || sourceMode === "mixed"}
+              onCreateIssue={openCreateDialog}
+              onOpenIssue={openIssueDialog}
+              onRunIssue={openRunDialog}
+              onLoadMore={loadMoreIssues}
+            />
+          )}
         </>
       ) : null}
 

@@ -1,76 +1,23 @@
+import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import { formatIssueAge } from "./issue-mirror-fields";
-import {
-  getIssueSyncStatus,
-  ISSUE_SYNC_CHANGED_EVENT,
-  syncProjectIssues,
-  type IssueSyncChangedEvent,
-  type IssueSyncStatus,
-} from "./issue-mirror-commands";
+import type { IssueSyncStatus } from "./issue-mirror-commands";
 
 export function IssueSyncToolbar({
-  projectId,
-  onReload,
+  status,
+  syncing,
+  onRefresh,
 }: {
-  projectId: number;
-  onReload: () => void;
-}) {
+  status: IssueSyncStatus | null;
+  syncing: boolean;
+  onRefresh: () => void;
+}): JSX.Element {
   const { t } = useI18n();
   const [now] = useState(() => Date.now());
-  const [status, setStatus] = useState<IssueSyncStatus | null>(null);
-  const [syncing, setSyncing] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getIssueSyncStatus(projectId)
-      .then((next) => {
-        if (!cancelled) {
-          setStatus(next);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStatus(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
-
-  useEffect(() => {
-    return subscribeTauriEvent<IssueSyncChangedEvent>(
-      ISSUE_SYNC_CHANGED_EVENT,
-      (payload) => {
-        if (payload.projectId !== projectId) {
-          return;
-        }
-        onReload();
-        void getIssueSyncStatus(projectId)
-          .then(setStatus)
-          .catch(() => undefined);
-      },
-    );
-  }, [onReload, projectId]);
-
-  async function refresh(): Promise<void> {
-    setSyncing(true);
-    try {
-      await syncProjectIssues(projectId);
-      setStatus(await getIssueSyncStatus(projectId));
-      onReload();
-    } catch {
-      setStatus((current) => current);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   const text = syncStatusText(status, syncing, t, now);
   const tone = syncing
     ? undefined
@@ -99,7 +46,7 @@ export function IssueSyncToolbar({
         className="issue-sync-status__refresh"
         type="button"
         onClick={() => {
-          void refresh();
+          onRefresh();
         }}
       >
         <RefreshCw aria-hidden="true" size={14} strokeWidth={2} />

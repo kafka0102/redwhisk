@@ -39,6 +39,7 @@ interface IssuesKanbanProps {
   toDescriptionExcerpt: (markdown: string) => string;
   onLoadMore: (status: IssueStatus) => void;
   sourceMode?: "local" | "remote" | "mixed" | null;
+  showCreate?: boolean;
 }
 
 export function IssuesKanban({
@@ -55,6 +56,7 @@ export function IssuesKanban({
   toDescriptionExcerpt,
   onLoadMore,
   sourceMode = null,
+  showCreate = true,
 }: IssuesKanbanProps) {
   const { messages } = useI18n();
   return (
@@ -80,7 +82,7 @@ export function IssuesKanban({
                 <span className="issue-lane__status-dot" aria-hidden="true" />
                 <h3>{lane.label}</h3>
                 <span className="issue-lane__count">{lane.total}</span>
-                {lane.status === "backlog" ? (
+                {lane.status === "backlog" && showCreate ? (
                   <button
                     ref={createButtonRef}
                     aria-label={messages.issues.newIssue}

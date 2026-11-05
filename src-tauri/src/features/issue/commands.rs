@@ -6,7 +6,7 @@ use tauri::Emitter;
 use tauri::State;
 
 use super::github_issue_mirror::{
-    enrich_issue_list, sync_github_issues, GithubCliForge, IssueBoardListResponse,
+    load_issue_board, sync_github_issues, GithubCliForge, IssueBoardListResponse,
 };
 use super::service::IssueService;
 use crate::app_state::AppState;
@@ -38,9 +38,9 @@ pub async fn list_issues(
     offset: Option<i64>,
     status: Option<IssueStatus>,
     per_status_limit: Option<i64>,
+    source_filter: Option<String>,
 ) -> Result<IssueBoardListResponse, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
-    let enrich_dir = data_dir.clone();
     let pty_sessions = state.pty_sessions.clone();
     let agent_sessions = state.agent_sessions.clone();
     let response = tauri::async_runtime::spawn_blocking(move || {
@@ -50,21 +50,15 @@ pub async fn list_issues(
             &pty_sessions,
             &agent_sessions,
         )?;
-        // 首屏：四个状态各取前 N 条，单次返回扁平列表。
-        if let Some(per_status_limit) = per_status_limit {
-            return IssueService::list_issues_per_status_in_data_dir(
-                data_dir,
-                project_id,
-                per_status_limit,
-            );
-        }
-        // 滚动加载下一页：按状态 + limit/offset 取数。
-        if status.is_some() || limit.is_some() || offset.is_some() {
-            return IssueService::list_issues_page_in_data_dir(
-                data_dir, project_id, status, limit, offset,
-            );
-        }
-        IssueService::list_issues_in_data_dir(data_dir, project_id)
+        load_issue_board(
+            &data_dir,
+            project_id,
+            source_filter.as_deref(),
+            status,
+            limit,
+            offset,
+            per_status_limit,
+        )
     })
     .await
     .map_err(|error| {
@@ -72,7 +66,7 @@ pub async fn list_issues(
             .with_reason("queryFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })??;
-    enrich_issue_list(&enrich_dir, response)
+    Ok(response)
 }
 
 #[tauri::command]

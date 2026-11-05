@@ -7,6 +7,8 @@ import {
 } from "react";
 
 import { listIssues, type IssueRecord } from "./issue-commands";
+import { issueBoardListInput } from "./issue-board-query";
+import type { IssueSourceFilter } from "./issue-source-filter";
 import {
   EMPTY_FORM,
   ISSUE_PAGE_SIZE,
@@ -75,6 +77,7 @@ interface UseIssueRunDialogOptions {
   messages: Messages;
   onOpenAgentsActivity?: (sessionId: number) => void;
   startingIssueId: number | null;
+  sourceFilter?: IssueSourceFilter;
 }
 
 export function useIssueRunDialog({
@@ -100,6 +103,7 @@ export function useIssueRunDialog({
   messages,
   onOpenAgentsActivity,
   startingIssueId,
+  sourceFilter = "all",
 }: UseIssueRunDialogOptions) {
   const [isStartingSession, setIsStartingSession] = useState(false);
   const sessionStartingMessage = useIssueSessionStartProgressMessage({
@@ -202,8 +206,9 @@ export function useIssueRunDialog({
 
     try {
       const response = await listIssues({
-        projectId,
-        perStatusLimit: ISSUE_PAGE_SIZE,
+        ...issueBoardListInput(projectId, sourceFilter, {
+          perStatusLimit: ISSUE_PAGE_SIZE,
+        }),
       });
       if (activeProjectIdRef.current !== projectId) {
         return;

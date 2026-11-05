@@ -795,6 +795,56 @@
   cursor: pointer;
 }
 
+.issue-board-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.issue-board-tab {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.issue-board-tab[aria-selected="true"] {
+  color: var(--color-text);
+}
+
+.issue-board-tab__count {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-source-filter {
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.issue-pull-requests-empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: var(--color-text);
+}
+
+.issue-pull-requests-empty h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
 .issue-card__shell[data-tone="info"] {
   background: color-mix(
     in srgb,

@@ -78,29 +78,245 @@ pub fn enrich_issue_list(
         Some(project_id) => projection_map(&database.connection, project_id)?,
         None => HashMap::new(),
     };
-    let issues = response
-        .issues
-        .into_iter()
-        .map(|issue| {
-            let projection = projections.get(&issue.id);
-            let view = view_from(&issue, projection);
-            IssueBoardRecord {
-                source: view.source,
-                provider: view.provider,
-                external_number: view.external_number,
-                remote_state: projection.and_then(|item| item.remote_state.clone()),
-                remote_labels: view.remote_labels,
-                sync_status: view.sync_status,
-                remote_closed_while_running: view.remote_closed_while_running,
-                remote_reopened: view.remote_reopened,
-                issue,
-            }
-        })
-        .collect();
+    let issues = response.issues.into_iter().map(|issue| {
+        let projection = projections.get(&issue.id);
+        let view = view_from(&issue, projection);
+        board_record(issue, &view, projection)
+    });
     Ok(IssueBoardListResponse {
-        issues,
+        issues: issues.collect(),
         status_totals: response.status_totals,
     })
+}
+
+#[cfg(test)]
+pub fn list_board_with_source_filter(
+    connection: &Connection,
+    project_id: i64,
+    source_filter: &str,
+) -> Result<IssueBoardListResponse, CommandError> {
+    list_board_page(
+        connection,
+        project_id,
+        Some(source_filter),
+        None,
+        None,
+        None,
+        None,
+    )
+}
+
+pub fn list_board_page(
+    connection: &Connection,
+    project_id: i64,
+    source_filter: Option<&str>,
+    status: Option<IssueStatus>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    per_status_limit: Option<i64>,
+) -> Result<IssueBoardListResponse, CommandError> {
+    let filtered = filtered_board(connection, project_id, source_filter.unwrap_or(""))?;
+    Ok(apply_board_page(
+        filtered,
+        status,
+        limit,
+        offset,
+        per_status_limit,
+    ))
+}
+
+pub fn load_issue_board(
+    data_dir: &Path,
+    project_id: i64,
+    source_filter: Option<&str>,
+    status: Option<IssueStatus>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    per_status_limit: Option<i64>,
+) -> Result<IssueBoardListResponse, CommandError> {
+    let database = open_issue_database(data_dir)?;
+    let mode = issue_source_mode(&database.connection, project_id)?;
+    let filter = canonical_source_filter(source_filter.unwrap_or(""));
+    if mode == "mixed" && filter != "all" {
+        return list_board_page(
+            &database.connection,
+            project_id,
+            Some(filter),
+            status,
+            limit,
+            offset,
+            per_status_limit,
+        );
+    }
+
+    use crate::db::issue_repository::IssueRepository;
+    use crate::db::project_repository::ProjectRepository;
+    use crate::features::issue::service::IssueService;
+
+    let response = {
+        let service = IssueService::new(
+            IssueRepository::new(&database.connection),
+            ProjectRepository::new(&database.connection),
+        );
+        if let Some(per_status_limit) = per_status_limit {
+            service.list_issues_per_status(project_id, per_status_limit)?
+        } else if status.is_some() || limit.is_some() || offset.is_some() {
+            service.list_issues_page(project_id, status, limit, offset)?
+        } else {
+            service.list_issues(project_id)?
+        }
+    };
+    drop(database);
+    enrich_issue_list(data_dir, response)
+}
+
+fn filtered_board(
+    connection: &Connection,
+    project_id: i64,
+    source_filter: &str,
+) -> Result<IssueBoardListResponse, CommandError> {
+    use crate::db::issue_repository::IssueRepository;
+    use crate::db::project_repository::ProjectRepository;
+    use crate::features::issue::service::IssueService;
+
+    let response = IssueService::new(
+        IssueRepository::new(connection),
+        ProjectRepository::new(connection),
+    )
+    .list_issues(project_id)?;
+    let projections = projection_map(connection, project_id)?;
+    let mode = issue_source_mode(connection, project_id)?;
+    let filter = canonical_source_filter(source_filter);
+    let mut totals = IssueStatusTotals::default();
+    let mut issues = Vec::new();
+    for issue in response.issues {
+        let projection = projections.get(&issue.id);
+        let view = view_from(&issue, projection);
+        if !source_filter_keeps(&mode, filter, &view.source) {
+            continue;
+        }
+        match issue.status {
+            IssueStatus::Backlog => totals.backlog += 1,
+            IssueStatus::Running => totals.running += 1,
+            IssueStatus::Review => totals.review += 1,
+            IssueStatus::Completed => totals.completed += 1,
+        }
+        issues.push(board_record(issue, &view, projection));
+    }
+    Ok(IssueBoardListResponse {
+        issues,
+        status_totals: Some(totals),
+    })
+}
+
+fn apply_board_page(
+    response: IssueBoardListResponse,
+    status: Option<IssueStatus>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    per_status_limit: Option<i64>,
+) -> IssueBoardListResponse {
+    let IssueBoardListResponse {
+        issues,
+        status_totals,
+    } = response;
+    if let Some(per_status_limit) = per_status_limit {
+        let cap = per_status_limit.max(0);
+        let mut paged = Vec::new();
+        for lane in [
+            IssueStatus::Backlog,
+            IssueStatus::Running,
+            IssueStatus::Review,
+            IssueStatus::Completed,
+        ] {
+            let mut taken = 0i64;
+            for issue in issues.iter().filter(|issue| issue.issue.status == lane) {
+                if taken >= cap {
+                    break;
+                }
+                paged.push(issue.clone());
+                taken += 1;
+            }
+        }
+        return IssueBoardListResponse {
+            issues: paged,
+            status_totals,
+        };
+    }
+
+    if status.is_some() || limit.is_some() || offset.is_some() {
+        let offset = usize::try_from(offset.unwrap_or(0).max(0)).unwrap_or(usize::MAX);
+        let filtered = issues
+            .into_iter()
+            .filter(|issue| status.is_none_or(|lane| issue.issue.status == lane))
+            .skip(offset);
+        let issues = if let Some(limit) = limit {
+            filtered
+                .take(usize::try_from(limit.max(0)).unwrap_or(usize::MAX))
+                .collect()
+        } else {
+            filtered.collect()
+        };
+        return IssueBoardListResponse {
+            issues,
+            status_totals,
+        };
+    }
+
+    IssueBoardListResponse {
+        issues,
+        status_totals,
+    }
+}
+
+pub fn canonical_source_filter(source_filter: &str) -> &'static str {
+    match source_filter.trim() {
+        "local" => "local",
+        "remote" => "remote",
+        _ => "all",
+    }
+}
+
+fn source_filter_keeps(mode: &str, filter: &str, source: &str) -> bool {
+    mode != "mixed" || filter == "all" || source == filter
+}
+
+fn issue_source_mode(connection: &Connection, project_id: i64) -> Result<String, CommandError> {
+    connection
+        .query_row(
+            "SELECT issue_source_mode FROM projects WHERE id = ?1",
+            rusqlite::params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            CommandError::new(
+                crate::types::errors::CommandErrorCode::IssuePersistenceFailed,
+                "Failed to read issue source mode.",
+            )
+            .with_reason("queryFailed")
+            .with_detail(
+                crate::types::errors::ErrorDetail::new("Cause")
+                    .with_value("message", error.to_string()),
+            )
+        })
+}
+
+fn board_record(
+    issue: IssueRecord,
+    view: &BoardIssueView,
+    projection: Option<&crate::db::issue_external_ref_repository::IssueMirrorProjection>,
+) -> IssueBoardRecord {
+    IssueBoardRecord {
+        source: view.source.clone(),
+        provider: view.provider.clone(),
+        external_number: view.external_number,
+        remote_state: projection.and_then(|item| item.remote_state.clone()),
+        remote_labels: view.remote_labels.clone(),
+        sync_status: view.sync_status.clone(),
+        remote_closed_while_running: view.remote_closed_while_running,
+        remote_reopened: view.remote_reopened,
+        issue,
+    }
 }
 
 fn view_from(

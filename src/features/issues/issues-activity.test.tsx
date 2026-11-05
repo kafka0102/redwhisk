@@ -50,6 +50,7 @@ import {
   listProjectLabels,
   listSavedAgentSkills,
 } from "../settings/settings-commands";
+import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
@@ -102,6 +103,10 @@ vi.mock("../settings/settings-commands", async (importOriginal) => {
     listSavedAgentSkills: vi.fn(),
   };
 });
+
+vi.mock("../settings/issue-source-commands", () => ({
+  getProjectIssueSourceSettings: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -251,6 +256,9 @@ const updateIssueMock = vi.mocked(updateIssue);
 const listAgentProfilesMock = vi.mocked(listAgentProfiles);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
+const getProjectIssueSourceSettingsMock = vi.mocked(
+  getProjectIssueSourceSettings,
+);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
@@ -571,6 +579,29 @@ describe("IssuesActivity", () => {
     toastSuccessMock.mockReset();
     listenMock.mockReset();
     listenMock.mockImplementation(async () => () => {});
+    getProjectIssueSourceSettingsMock.mockReset();
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      projectId: 1,
+      issueSourceMode: "local",
+      issueSyncScope: "all_open",
+      issueSyncLabel: null,
+      issueSyncEnabled: false,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: false,
+      issueWritebackCloseOnPrMerge: false,
+      issueWritebackComment: false,
+      issueCreateSource: "local",
+      connection: {
+        provider: null,
+        hostUrl: null,
+        repoPath: null,
+        login: null,
+        cliInstalled: false,
+        cliAuthenticated: false,
+        authStatus: "unknown",
+        checkedAt: 1,
+      },
+    });
     completeIssueFlowMock.mockImplementation(async (input) =>
       completedFlowResult({
         id: input.issueId,
@@ -873,7 +904,7 @@ describe("IssuesActivity", () => {
     renderIssuesActivity();
 
     expect(
-      await screen.findByRole("heading", { name: "Issues" }),
+      await screen.findByRole("tab", { name: "Issues" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "议题" }),
@@ -1979,8 +2010,8 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(screen.getByRole("button", { name: "New Issue" }));
-    const page = screen.getByRole("form", { name: "New Issue" });
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
+    const page = await screen.findByRole("form", { name: "New Issue" });
 
     await user.click(within(page).getByRole("button", { name: "Back" }));
 
@@ -1995,8 +2026,8 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    await user.click(screen.getByRole("button", { name: "New Issue" }));
-    await user.type(screen.getByLabelText("Title"), "dirty draft");
+    await user.click(await screen.findByRole("button", { name: "New Issue" }));
+    await user.type(await screen.findByLabelText("Title"), "dirty draft");
     expect(screen.getByRole("form", { name: "New Issue" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back" }));
@@ -2046,9 +2077,9 @@ describe("IssuesActivity", () => {
 
     renderIssuesActivity();
 
-    const header = screen.getByRole("heading", {
-      name: "Issues",
-    }).parentElement;
+    const header = screen
+      .getByRole("tab", { name: "Issues" })
+      .closest("header");
     const backlogLane = await screen.findByRole("region", { name: "Backlog" });
     const createButton = within(backlogLane).getByRole("button", {
       name: "New Issue",

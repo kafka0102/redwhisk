@@ -131,14 +131,12 @@ export interface GetIssueTimelineInput {
 
 export interface ListIssuesInput {
   projectId: number;
-  /** 滚动加载下一页时按状态过滤。 */
   status?: IssueStatus;
-  /** 单页条数。 */
   limit?: number;
-  /** 偏移量，与 limit 配合实现分页。 */
   offset?: number;
   /** 看板首屏：四个状态各自取前 N 条，单次返回扁平列表。 */
   perStatusLimit?: number;
+  sourceFilter?: "all" | "local" | "remote";
 }
 
 export interface CreateIssueInput {
@@ -453,6 +451,7 @@ export function listIssues(input: ListIssuesInput): Promise<IssueListResponse> {
     limit: input.limit,
     offset: input.offset,
     perStatusLimit: input.perStatusLimit,
+    ...(input.sourceFilter == null ? {} : { sourceFilter: input.sourceFilter }),
   });
 }
 

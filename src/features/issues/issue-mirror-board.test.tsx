@@ -7,6 +7,7 @@ import { I18nProvider } from "../../shared/i18n/i18n";
 import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
+import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 import {
   getIssueTimeline,
   listIssues,
@@ -370,4 +371,354 @@ describe("GitHub issue mirror board", () => {
     view.unmount();
     expect(eventUnlisten).toHaveBeenCalled();
   });
+
+  it("filters mixed issues from the backend and updates counts", async () => {
+    const user = userEvent.setup();
+    const local = boardIssue({
+      id: 12,
+      number: 12,
+      title: "Local twelve",
+      source: "local",
+      status: "backlog",
+    });
+    const githubBacklog = boardIssue({
+      id: 128,
+      number: 40,
+      title: "Github backlog",
+      externalNumber: 128,
+      source: "remote",
+      status: "backlog",
+    });
+    const githubRunning = boardIssue({
+      id: 130,
+      number: 41,
+      title: "Github running",
+      externalNumber: 130,
+      source: "remote",
+      status: "running",
+    });
+    listIssuesMock.mockImplementation(async (input) => {
+      if (input.sourceFilter === "local") {
+        return {
+          issues: [local],
+          statusTotals: { backlog: 1, running: 0, review: 0, completed: 0 },
+        };
+      }
+      if (input.sourceFilter === "remote") {
+        return {
+          issues: [githubBacklog, githubRunning],
+          statusTotals: { backlog: 1, running: 1, review: 0, completed: 0 },
+        };
+      }
+      return {
+        issues: [local, githubBacklog, githubRunning],
+        statusTotals: { backlog: 2, running: 1, review: 0, completed: 0 },
+      };
+    });
+
+    renderBoard();
+    expect(
+      await screen.findByRole("tab", { name: "Issues" }),
+    ).toHaveTextContent("3");
+    expect(screen.getByText("#12")).toBeInTheDocument();
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("GH #130")).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("region", { name: "待办" })
+        .querySelector(".issue-lane__count"),
+    ).toHaveTextContent("2");
+    expect(
+      screen
+        .getByRole("region", { name: "进行中" })
+        .querySelector(".issue-lane__count"),
+    ).toHaveTextContent("1");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "来源" }),
+      "local",
+    );
+    expect(
+      await screen.findByRole("tab", { name: "Issues" }),
+    ).toHaveTextContent("1");
+    expect(screen.getByText("#12")).toBeInTheDocument();
+    expect(screen.queryByText("GH #128")).not.toBeInTheDocument();
+    expect(screen.queryByText("GH #130")).not.toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("region", { name: "待办" })
+        .querySelector(".issue-lane__count"),
+    ).toHaveTextContent("1");
+    expect(
+      screen
+        .getByRole("region", { name: "进行中" })
+        .querySelector(".issue-lane__count"),
+    ).toHaveTextContent("0");
+    expect(listIssuesMock).toHaveBeenCalledWith({
+      projectId: 1,
+      perStatusLimit: ISSUE_PAGE_SIZE,
+      sourceFilter: "local",
+    });
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "来源" }),
+      "remote",
+    );
+    expect(
+      await screen.findByRole("tab", { name: "Issues" }),
+    ).toHaveTextContent("2");
+    expect(screen.queryByText("#12")).not.toBeInTheDocument();
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("GH #130")).toBeInTheDocument();
+    expect(listIssuesMock).toHaveBeenCalledWith({
+      projectId: 1,
+      perStatusLimit: ISSUE_PAGE_SIZE,
+      sourceFilter: "remote",
+    });
+  });
+
+  it("keeps the backlog column total when the page is shorter", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: Array.from({ length: 5 }, (_, index) =>
+        boardIssue({
+          id: index + 1,
+          number: index + 1,
+          title: `Local ${index + 1}`,
+          source: "local",
+          status: "backlog",
+        }),
+      ),
+      statusTotals: { backlog: 6, running: 0, review: 0, completed: 0 },
+    });
+    renderBoard();
+    const backlog = await screen.findByRole("region", { name: "待办" });
+    expect(backlog.querySelector(".issue-lane__count")).toHaveTextContent("6");
+    expect(backlog.querySelectorAll(".issue-card")).toHaveLength(5);
+    expect(screen.getByRole("tab", { name: "Issues" })).toHaveTextContent("6");
+  });
+
+  it("hides source chrome until the source mode is known", async () => {
+    const user = userEvent.setup();
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: Date.now() - 120_000,
+      syncError: null,
+    });
+    getProjectIssueSourceSettingsMock.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    const view = renderBoard();
+    expect(
+      await screen.findByRole("region", { name: "待办" }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getIssueSyncStatusMock).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryByRole("combobox", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/已同步/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "刷新" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("local"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/已同步/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "刷新" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("remote"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={3} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "刷新" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/已同步/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("mixed"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={4} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "来源" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    expect(screen.getByText(/已同步/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "新建 Issue" }));
+    expect(
+      await screen.findByRole("form", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Issue 标题")).toBeInTheDocument();
+  });
+
+  it("shows source controls only in the modes that use them", async () => {
+    const user = userEvent.setup();
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...(await sourceSettings("local")),
+    });
+    const view = renderBoard();
+    expect(
+      await screen.findByRole("button", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "刷新" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      await sourceSettings("remote"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "刷新" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      await sourceSettings("mixed"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={3} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "来源" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "新建 Issue" }));
+    expect(
+      await screen.findByPlaceholderText("Issue 标题"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the pull request tab empty", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const tab = await screen.findByRole("tab", { name: /Pull requests/ });
+    expect(tab).toHaveTextContent("0");
+    await user.click(tab);
+    expect(
+      screen.getByRole("heading", { name: "还没有 Pull request" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the english credential, cache, and empty pull request copy", async () => {
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "credential_expired",
+    });
+    const view = render(
+      <I18nProvider fixedLocale="en">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByText("GitHub credentials expired"),
+    ).toBeInTheDocument();
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "cache_failed",
+    });
+    view.rerender(
+      <I18nProvider fixedLocale="en">
+        <IssuesActivity projectId={4} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByText("Sync failed. Cached issues kept."),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /Pull requests/ }));
+    expect(
+      screen.getByRole("heading", { name: "No pull requests yet" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not send a second sync while one is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveSync: (value: { outcome: "synced" }) => void = () => undefined;
+    syncProjectIssuesMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSync = resolve;
+        }),
+    );
+    renderBoard();
+    expect(await screen.findByText("#12")).toBeInTheDocument();
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+    expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("#12")).toBeInTheDocument();
+    resolveSync({ outcome: "synced" });
+  });
 });
+
+function sourceSettings(mode: "local" | "remote" | "mixed") {
+  return {
+    projectId: 1,
+    issueSourceMode: mode,
+    issueSyncScope: "all_open" as const,
+    issueSyncLabel: null,
+    issueSyncEnabled: true,
+    issueSyncIntervalSeconds: 90,
+    issueWritebackCloseOnComplete: false,
+    issueWritebackCloseOnPrMerge: false,
+    issueWritebackComment: false,
+    issueCreateSource: "local" as const,
+    connection: {
+      provider: "github" as const,
+      hostUrl: "https://github.com",
+      repoPath: "acme/redwhisk",
+      login: "octocat",
+      cliInstalled: true,
+      cliAuthenticated: true,
+      authStatus: "ready" as const,
+      checkedAt: 1,
+    },
+  };
+}

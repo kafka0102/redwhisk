@@ -14,6 +14,7 @@ import {
   getUserProfile,
   listProjectLabels,
 } from "../features/settings/settings-commands";
+import { getProjectIssueSourceSettings } from "../features/settings/issue-source-commands";
 import {
   createProject,
   initializeLocalData,
@@ -100,6 +101,10 @@ vi.mock("../features/settings/settings-commands", () => ({
   listProjectLabels: vi.fn(),
 }));
 
+vi.mock("../features/settings/issue-source-commands", () => ({
+  getProjectIssueSourceSettings: vi.fn(),
+}));
+
 vi.mock("../features/issues/issue-form/issue-description-editor", () => ({
   IssueDescriptionEditor: ({
     ariaLabel,
@@ -141,6 +146,9 @@ const openSessionMonitorWindowMock = vi.mocked(openSessionMonitorWindow);
 const createIssueMock = vi.mocked(createIssue);
 const listIssuesMock = vi.mocked(listIssues);
 const listProjectLabelsMock = vi.mocked(listProjectLabels);
+const getProjectIssueSourceSettingsMock = vi.mocked(
+  getProjectIssueSourceSettings,
+);
 const getUserProfileMock = vi.mocked(getUserProfile);
 const updateIssueMock = vi.mocked(updateIssue);
 const createProjectMock = vi.mocked(createProject);
@@ -173,6 +181,29 @@ describe("App project entry", () => {
     listIssuesMock.mockReset();
     listProjectLabelsMock.mockReset();
     getUserProfileMock.mockReset();
+    getProjectIssueSourceSettingsMock.mockReset();
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      projectId: 1,
+      issueSourceMode: "local",
+      issueSyncScope: "all_open",
+      issueSyncLabel: null,
+      issueSyncEnabled: false,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: false,
+      issueWritebackCloseOnPrMerge: false,
+      issueWritebackComment: false,
+      issueCreateSource: "local",
+      connection: {
+        provider: null,
+        hostUrl: null,
+        repoPath: null,
+        login: null,
+        cliInstalled: false,
+        cliAuthenticated: false,
+        authStatus: "unknown",
+        checkedAt: 1,
+      },
+    });
     updateIssueMock.mockReset();
     getCurrentWindowMock.mockClear();
     openSessionMonitorWindowMock.mockReset();
@@ -452,7 +483,7 @@ describe("App project entry", () => {
     expect(
       await screen.findByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Issues" })).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Projects" }),
     ).not.toBeInTheDocument();
@@ -747,7 +778,7 @@ describe("App project entry", () => {
     expect(
       within(activityBar).getByRole("button", { name: "全局设置" }),
     ).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("heading", { name: "Issues" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Issues" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "当前项目 RedWhisk" }),
     ).toBeInTheDocument();
@@ -1092,7 +1123,7 @@ describe("App project entry", () => {
       prDraft: false,
     });
     expect(
-      await screen.findByRole("heading", { name: "Issues" }),
+      await screen.findByRole("tab", { name: "Issues" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "当前项目 new-repo" }),
@@ -1582,7 +1613,7 @@ describe("App project entry", () => {
       screen.getByRole("menu", { name: "项目切换器" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("heading", { name: "Issues" }));
+    await user.click(screen.getByRole("tab", { name: "Issues" }));
 
     expect(
       screen.queryByRole("menu", { name: "项目切换器" }),
