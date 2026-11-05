@@ -57,3 +57,13 @@ cd - && git worktree remove --force "$tmp/base" && rmdir "$tmp"   # 清理用 wo
 判据：基线同样失败 → 既有问题，写进回报但不纳入本次改动；基线通过 → 本次引入，必须在本次修掉。
 
 注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**全量** `pnpm test`，过滤运行只用于定位，不作为通过依据。
+
+## 文件树右键菜单
+
+改文件树右键菜单或行内新建草稿时，行为测试在这三处：
+
+- [file-tree-panel.test.tsx](../../src/shared/workspace/file-tree-panel.test.tsx)
+- [workspace-path-context-menu.test.tsx](../../src/shared/workspace/workspace-path-context-menu.test.tsx)
+- [file-tree-draft-typing.test.tsx](../../src/shared/workspace/file-tree-draft-typing.test.tsx)
+
+通过口径仍是全量 `pnpm test`。

@@ -65,7 +65,7 @@ export interface FileTreePanelProps {
   /** 展开目录时按层拉取子节点。已加载的目录由调用方去重。 */
   onDirectoryOpen?: (directoryPath: string) => void;
   /**
-   * 可选的行内新建能力：注入后目录行与文件行的右键菜单出现「新建文件 / 新建文件夹」。
+   * 可选的行内新建能力：注入后目录行出现「新建文件 / 新建文件夹」，文件行只出现「新建文件」。
    * 未注入时面板保持只读，菜单与行为与现状逐字一致。
    */
   onCreateEntry?: (input: FileTreeEntryCreateInput) => Promise<void>;
