@@ -62,7 +62,7 @@
 | ----------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------- |
 | TypeScript / TSX              | 工程规范、编码风格、[前端大型组件拆分规则](./architecture-design/frontend-large-component-splitting-rules.md) | [项目代码地图](./architecture-design/project-map.md)、[测试策略](./testing/strategy.md) |
 | Rust（`src-tauri/**/*.rs`）   | [后端 Rust 大文件拆分规则](./architecture-design/backend-large-file-splitting-rules.md)、Agent 开发规则 | [项目代码地图](./architecture-design/project-map.md) |
-| UI、页面或组件                | 上述 TypeScript 文档、设计系统指南、大型组件拆分规则                        | Settings 页面布局规范、i18n 章节   |
+| UI、页面或组件                | 上述 TypeScript 文档、设计系统指南、大型组件拆分规则                        | Settings 页面布局规范、i18n 章节。改 Issues 设置或 `src/features/issues/issue-pr-workbench.prototype.html` 时，另读 [远程 Issue 与 PR 工作台设计](./superpowers/specs/2026-10-31-remote-issue-and-pr-workbench-design.md) 的「5.5 项目设置」 |
 | Agent 消息流 / 工具卡 / 链接   | [结构化消息流渲染链](./architecture-design/agent-development-rules.md#结构化消息流渲染链json-模式)、设计系统指南 | 大型组件拆分规则、测试策略        |
 | 完成回看 / 归档回看           | [完成回看](./architecture-design/agent-development-rules.md#完成回看)                                      | [ADR-0055](./adr/0055-tui-archive-user-prompt-marker-for-review-cards.md) |
 | Tauri command、DTO、event     | [Tauri 契约](./architecture-design/tauri-contract.md)                       | Agent 开发规则、测试策略           |
