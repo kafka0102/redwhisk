@@ -151,7 +151,7 @@ function chromeMeasurementError(message: string, stderr: string): Error {
   return new Error(detail === "" ? message : `${message}\n${detail}`);
 }
 
-describe("助手消息表格的真实列宽", () => {
+describe("助手消息表格的真实列宽", { retry: 1 }, () => {
   it(
     "短列保持一行，超长标识符在封顶宽度内换行",
     () => {

@@ -78,6 +78,9 @@ jobs:
       - name: 新增 command 失败路径
         run: bash scripts/check-rust-command-failure-tests.sh --from "${{ github.event.pull_request.base.sha }}"
 
+      - name: 新增事件封装
+        run: bash scripts/check-rust-event-emit.sh --from "${{ github.event.pull_request.base.sha }}"
+
       - name: Rust 测试
         run: cargo test --lib
         working-directory: src-tauri

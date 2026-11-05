@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# 提交前只跑便宜的 diff 门禁。完整测试仍由 PR 的 release.yml 执行。
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+bash scripts/check-rust-user-strings.sh
+bash scripts/check-rust-command-failure-tests.sh
+bash scripts/check-rust-event-emit.sh
+bash scripts/check-rust-file-size.sh
+bash scripts/check-frontend-file-size.sh

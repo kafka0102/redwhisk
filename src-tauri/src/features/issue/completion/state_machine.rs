@@ -330,21 +330,28 @@ fn detect_commit(
     head: String,
     attempt_id: i64,
 ) -> Transition {
-    let mut routed = after_dirty(state, world);
-    routed.new_state.actual_path = Some(world.actual_path.clone());
-    routed.effects.insert(
-        0,
-        Effect::RecordCompletionAttempt {
+    let mut next = state
+        .clone()
+        .with_phase(IssueCompletionPhase::ConfirmingContinueAfterCommit);
+    next.actual_path = Some(world.actual_path.clone());
+    Transition {
+        new_state: next,
+        effects: vec![Effect::RecordCompletionAttempt {
             result: CompletionAttemptResultForEffect::Completed,
             head,
             changed_files: vec![],
             attempt_id: Some(attempt_id),
-        },
-    );
-    routed
+        }],
+    }
 }
 
 fn after_dirty(state: &CompletionState, world: &CompletionWorld) -> Transition {
+    if world.workspace_missing
+        && world.owner == WorktreeOwner::Redwhisk
+        && world.missing_worktree_error.is_some()
+    {
+        return reconcile(state, world);
+    }
     let isolated_worktree = world.workspace_mode == WorkspaceMode::Worktree;
     let mut next = state.clone();
     if let Some(applied) = applied_saved_closeout(
@@ -711,7 +718,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_phase(&t, IssueCompletionPhase::Completed);
+        assert_phase(&t, IssueCompletionPhase::ConfirmingContinueAfterCommit);
         match &t.effects[0] {
             Effect::RecordCompletionAttempt {
                 result: CompletionAttemptResultForEffect::Completed,
@@ -844,11 +851,9 @@ mod tests {
         w.missing_worktree_error =
             Some("RedWhisk worktree 路径缺失，但工作分支 issue-16 尚未合入 main。".to_string());
         let t = advance(&detecting(), &w, CompletionEvent::Begin).unwrap();
-        // branch_mismatch 为假时 route_closeout 直接 Complete，不进入 reconcile。
-        assert_phase(&t, IssueCompletionPhase::Completed);
-        assert_eq!(t.effects.len(), 1);
-        assert!(matches!(t.effects[0], Effect::CommitCompletion { .. }));
-        assert_eq!(t.new_state.failure_reason, None);
+        assert_phase(&t, IssueCompletionPhase::Blocked);
+        assert!(t.effects.is_empty());
+        assert!(t.new_state.failure_reason.is_some());
     }
 
     // ---- 非法组合 ----

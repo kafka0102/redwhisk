@@ -829,7 +829,7 @@ detecting_workspace
 - 远程 Issue 重复同步幂等；`(provider, host, external_id)` 唯一。
 - 本地工作流状态不会被同步覆盖；远端关闭/重开严格按 4.6 表。
 - 顶部 Tab 右侧显示筛选（仅混合 Issues）、同步时间 / 错误信息与刷新图标；不放新建 Issue；刷新仅图标。
-- 混合模式 Issues 的来源筛选只在左侧，选项为全部 / 仅本地 / GitHub 或 GitLab；仅远程与仅本地模式不展示来源筛选。
+- 混合模式 Issues 的来源筛选在顶栏右侧，选项为全部 / 仅本地 / GitHub 或 GitLab；仅远程与仅本地模式不展示来源筛选。模式尚未返回时也不展示来源筛选、同步状态、刷新和待办加号。
 - 混合模式卡片正常为 Info 背景，出错为 Error 背景。
 - 远程详情评论/事件按时间合并；本地 Agent 交付摘要仍可出现。
 - 完成 flow：merge_to_base 关闭远程；open_pull_request 不提前关闭；PR 合并后关闭。
