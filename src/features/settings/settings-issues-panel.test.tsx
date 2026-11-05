@@ -9,6 +9,8 @@ import {
   openShadcnSelect,
   selectShadcnOption,
 } from "../../test/select-helpers";
+import { updateProjectSettings } from "../project/project-commands";
+import { inspectProjectForge } from "../project/project-forge-commands";
 import {
   getProjectIssueSourceSettings,
   inspectProjectIssueConnection,
@@ -76,6 +78,25 @@ vi.mock("./issue-source-commands", () => ({
 const getSettingsMock = vi.mocked(getProjectIssueSourceSettings);
 const updateSettingsMock = vi.mocked(updateProjectIssueSourceSettings);
 const inspectConnectionMock = vi.mocked(inspectProjectIssueConnection);
+const inspectForgeMock = vi.mocked(inspectProjectForge);
+const updateProjectMock = vi.mocked(updateProjectSettings);
+
+function forgeInspection(
+  overrides: Partial<Awaited<ReturnType<typeof inspectProjectForge>>> = {},
+) {
+  return {
+    host: "github" as const,
+    remoteLabel: "acme/app",
+    cliInstalled: true,
+    cliAuthenticated: true,
+    repoDefaultBranch: "main",
+    completionAction: "merge_to_base" as const,
+    prTarget: "issue_base" as const,
+    prDraft: true,
+    confirmCompletionAction: true,
+    ...overrides,
+  };
+}
 
 function settings(
   overrides: Partial<ProjectIssueSourceSettings> = {},
@@ -108,7 +129,13 @@ function settings(
 function renderPanel(locale: "en" | "zh" = "en") {
   return render(
     <I18nProvider initialLocale={locale}>
-      <IssuesSettingsPanel projectId={7} />
+      <IssuesSettingsPanel
+        projectId={7}
+        projectName="App"
+        projectPath="/tmp/app"
+        worktreeLocation="repo_sibling"
+        worktreeSetupCommand=""
+      />
     </I18nProvider>,
   );
 }
@@ -192,6 +219,9 @@ describe("Issues settings panel", () => {
     getSettingsMock.mockReset();
     updateSettingsMock.mockReset();
     inspectConnectionMock.mockReset();
+    inspectForgeMock.mockReset();
+    updateProjectMock.mockReset();
+    inspectForgeMock.mockResolvedValue(forgeInspection());
     getSettingsMock.mockResolvedValue(settings());
     inspectConnectionMock.mockResolvedValue(settings());
     updateSettingsMock.mockImplementation(async (input) =>
@@ -209,10 +239,11 @@ describe("Issues settings panel", () => {
   });
 
   it("lays out Chinese GitHub settings as source and connection cards", async () => {
-    renderPanel("zh");
+    renderWith("zh", { issueSourceMode: "mixed" });
 
     const modeRegion = await screen.findByRole("region", { name: "来源模式" });
     const remoteRegion = screen.getByRole("region", { name: "远程连接" });
+    expect(screen.getByRole("region", { name: "完成后" })).toBeInTheDocument();
     expect(modeRegion).toHaveClass("settings-card");
     expect(remoteRegion).toHaveClass("settings-card");
     expect(modeRegion.closest("form")).not.toHaveClass("settings-card");
@@ -224,9 +255,9 @@ describe("Issues settings panel", () => {
       expect(radio).toHaveAttribute("type", "radio");
       expect(radio).toBeVisible();
     }
-    expect(modeCard(radios[0])).toHaveAttribute("data-selected", "true");
+    expect(modeCard(radios[0])).not.toHaveAttribute("data-selected", "true");
     expect(modeCard(radios[1])).not.toHaveAttribute("data-selected", "true");
-    expect(modeCard(radios[2])).not.toHaveAttribute("data-selected", "true");
+    expect(modeCard(radios[2])).toHaveAttribute("data-selected", "true");
     expect(within(modeRegion).queryByRole("combobox")).not.toBeInTheDocument();
     expect(within(modeRegion).queryByText("宿主")).not.toBeInTheDocument();
     expect(
@@ -315,13 +346,11 @@ describe("Issues settings panel", () => {
       screen.queryByRole("button", { name: "刷新" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/已同步/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "取消" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
   });
 
   it("uses English labels for the same GitHub layout when signed in", async () => {
-    renderPanel("en");
+    renderWith("en", { issueSourceMode: "mixed" });
 
     const modeRegion = await screen.findByRole("region", {
       name: "Source mode",
@@ -330,7 +359,10 @@ describe("Issues settings panel", () => {
       name: "Remote connection",
     });
     expect(
-      within(modeRegion).getByRole("radio", { name: "Local" }),
+      screen.getByRole("region", { name: "After completion" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modeRegion).getByRole("radio", { name: "Mixed" }),
     ).toBeChecked();
     expect(
       screen.queryByText("Local-only mode does not sync remote issues."),
@@ -384,15 +416,24 @@ describe("Issues settings panel", () => {
   });
 
   it.each(["local", "remote", "mixed"] as const)(
-    "shows both cards when the source mode is %s",
+    "shows the cards that belong to source mode %s",
     async (mode: IssueSourceMode) => {
       renderWith("zh", { issueSourceMode: mode });
       expect(
         await screen.findByRole("region", { name: "来源模式" }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("region", { name: "远程连接" }),
+        await screen.findByRole("region", { name: "完成后" }),
       ).toBeInTheDocument();
+      if (mode === "local") {
+        expect(
+          screen.queryByRole("region", { name: "远程连接" }),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByRole("region", { name: "远程连接" }),
+        ).toBeInTheDocument();
+      }
       const selectedName = {
         local: "仅本地",
         remote: "仅远程",
@@ -410,7 +451,10 @@ describe("Issues settings panel", () => {
   ] as const)(
     "shows the %s all-open scope label instead of the raw value",
     async (locale, label, scopeName) => {
-      renderWith(locale, { issueSyncScope: "all_open" });
+      renderWith(locale, {
+        issueSourceMode: "mixed",
+        issueSyncScope: "all_open",
+      });
       const scope = await screen.findByRole("combobox", { name: scopeName });
       await waitFor(() => {
         expect(scope).toHaveTextContent(label);
@@ -421,7 +465,10 @@ describe("Issues settings panel", () => {
   );
 
   it("shows GitLab as the host and the signed-out tag in Chinese", async () => {
-    renderWith("zh", { connection: gitlabConnection("unauthenticated") });
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      connection: gitlabConnection("unauthenticated"),
+    });
     const host = await screen.findByRole("combobox", { name: "宿主" });
     await waitFor(() => {
       expect(host).toHaveTextContent("GitLab");
@@ -445,7 +492,10 @@ describe("Issues settings panel", () => {
   });
 
   it("uses merge request copy for an English GitLab connection", async () => {
-    renderWith("en", { connection: gitlabConnection("unauthenticated") });
+    renderWith("en", {
+      issueSourceMode: "mixed",
+      connection: gitlabConnection("unauthenticated"),
+    });
     const host = await screen.findByRole("combobox", { name: "Host" });
     await waitFor(() => {
       expect(host).toHaveTextContent("GitLab");
@@ -467,6 +517,7 @@ describe("Issues settings panel", () => {
 
   it("does not preselect a host when the provider is empty", async () => {
     renderWith("en", {
+      issueSourceMode: "mixed",
       connection: connectionFor("not_forge", null),
     });
     const host = await screen.findByRole("combobox", { name: "Host" });
@@ -482,7 +533,7 @@ describe("Issues settings panel", () => {
 
   it("keeps the detected host and omits it from the save payload", async () => {
     const user = userEvent.setup();
-    renderPanel("en");
+    renderWith("en", { issueSourceMode: "mixed" });
 
     const host = await screen.findByRole("combobox", { name: "Host" });
     await waitFor(() => {
@@ -523,11 +574,12 @@ describe("Issues settings panel", () => {
     expect(
       screen.queryByRole("button", { name: /refresh/i }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("radio", { name: "Remote" }));
     await waitFor(() => {
       expect(screen.getByLabelText("Repository")).toHaveValue("acme/redwhisk");
     });
-    await user.click(screen.getByRole("radio", { name: "Remote" }));
     await selectShadcnOption(user, screen, "Sync scope", "All open");
     await user.click(
       screen.getByRole("checkbox", {
@@ -559,7 +611,7 @@ describe("Issues settings panel", () => {
         issueWritebackComment: false,
       });
     });
-    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+    expect(getSettingsMock).toHaveBeenCalledTimes(1);
     const payload = updateSettingsMock.mock.calls[0]?.[0];
     expect(payload).not.toHaveProperty("provider");
     expect(payload).not.toHaveProperty("hostUrl");
@@ -585,6 +637,7 @@ describe("Issues settings panel", () => {
     "shows %s %s copy on %s",
     async (locale, authStatus, provider, text, tone, exact) => {
       renderWith(locale, {
+        issueSourceMode: "mixed",
         connection: connectionFor(authStatus, provider),
       });
       const status = await screen.findByTestId("issue-source-status");
@@ -597,7 +650,7 @@ describe("Issues settings panel", () => {
 
   it("re-login only inspects the connection again", async () => {
     const user = userEvent.setup();
-    renderPanel("en");
+    renderWith("en", { issueSourceMode: "mixed" });
     await screen.findByRole("button", { name: "Sign in again" });
     await user.click(screen.getByRole("button", { name: "Sign in again" }));
     await waitFor(() => {
@@ -608,7 +661,10 @@ describe("Issues settings panel", () => {
 
   it("shows the label field only for label scope and disables save while it is empty", async () => {
     const user = userEvent.setup();
-    renderWith("en", { connection: gitlabConnection("unauthenticated") });
+    renderWith("en", {
+      issueSourceMode: "mixed",
+      connection: gitlabConnection("unauthenticated"),
+    });
     expect(
       await screen.findByRole("checkbox", {
         name: "Close the linked remote issue after the merge request merges",
@@ -623,6 +679,118 @@ describe("Issues settings panel", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     await user.type(screen.getByLabelText("Label"), "bug");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("hides remote connection in local mode and shows completion from general", async () => {
+    const user = userEvent.setup();
+    renderPanel("zh");
+
+    expect(
+      await screen.findByRole("region", { name: "完成后" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "远程连接" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("合并到 base 分支");
+    expect(
+      screen.queryByRole("combobox", { name: "PR 目标" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "完成时再次确认动作" }),
+    ).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: "混合" }));
+    expect(
+      screen.getByRole("region", { name: "远程连接" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(
+      screen.queryByRole("region", { name: "远程连接" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "仅本地" })).toBeChecked();
+  });
+
+  it("saves the migrated completion fields when the action opens a pull request", async () => {
+    const user = userEvent.setup();
+    inspectForgeMock.mockResolvedValue(
+      forgeInspection({
+        completionAction: "open_pull_request",
+        confirmCompletionAction: false,
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "mixed" });
+
+    expect(
+      await screen.findByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("提交 Pull Request");
+    expect(screen.getByRole("combobox", { name: "PR 目标" })).toHaveTextContent(
+      "Issue 的 base 分支（main）",
+    );
+    expect(screen.getByRole("combobox", { name: "PR 目标" })).toHaveClass(
+      "w-full",
+    );
+    expect(screen.getByRole("checkbox", { name: "创建为草稿" })).toBeChecked();
+    await user.click(
+      screen.getByRole("checkbox", { name: "完成时再次确认动作" }),
+    );
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(updateProjectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 7,
+          name: "App",
+          repoPath: "/tmp/app",
+          worktreeLocation: "repo_sibling",
+          worktreeSetupCommand: "",
+          completionAction: "open_pull_request",
+          prTarget: "issue_base",
+          prDraft: true,
+          confirmCompletionAction: true,
+        }),
+      );
+    });
+  });
+
+  it("uses the merge request target label for GitLab", async () => {
+    inspectForgeMock.mockResolvedValue(
+      forgeInspection({
+        host: "gitlab",
+        completionAction: "open_pull_request",
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(
+      await screen.findByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("提交 Merge Request");
+    expect(
+      screen.getByRole("combobox", { name: "MR 目标" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "远程连接" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides completion when the repository is not GitHub or GitLab", async () => {
+    inspectForgeMock.mockResolvedValue(
+      forgeInspection({
+        host: "none",
+        remoteLabel: null,
+        cliInstalled: false,
+        cliAuthenticated: false,
+        repoDefaultBranch: null,
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "mixed" });
+
+    expect(
+      await screen.findByRole("region", { name: "远程连接" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("完成后")).not.toBeInTheDocument();
+    expect(screen.queryByText("完成后动作")).not.toBeInTheDocument();
   });
 
   it("keeps the issue source locale key trees aligned", () => {

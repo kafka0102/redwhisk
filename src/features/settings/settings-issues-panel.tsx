@@ -4,6 +4,16 @@ import { Button } from "../../components/ui/button";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import {
+  updateProjectSettings,
+  type ProjectWorktreeLocation,
+} from "../project/project-commands";
+import {
+  inspectProjectForge,
+  type ForgeHostName,
+  type ProjectCompletionAction,
+  type ProjectPrTarget,
+} from "../project/project-forge-commands";
+import {
   getProjectIssueSourceSettings,
   inspectProjectIssueConnection,
   updateProjectIssueSourceSettings,
@@ -12,15 +22,31 @@ import {
   type ProjectIssueConnection,
   type ProjectIssueSourceSettings,
 } from "./issue-source-commands";
+import { IssueSourceCompletionCard } from "./settings-issues-completion-card";
 import { IssueSourceConnectionCard } from "./settings-issues-connection-card";
 import { IssueSourceModeCard } from "./settings-issues-mode-card";
 
 interface IssuesSettingsPanelProps {
   projectId: number;
+  projectName: string;
+  projectPath: string;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
+}
+
+interface CompletionBaseline {
+  action: ProjectCompletionAction;
+  confirm: boolean;
+  draft: boolean;
+  target: ProjectPrTarget;
 }
 
 export function IssuesSettingsPanel({
   projectId,
+  projectName,
+  projectPath,
+  worktreeLocation,
+  worktreeSetupCommand,
 }: IssuesSettingsPanelProps): ReactElement {
   const { messages, t } = useI18n();
   const [mode, setMode] = useState<IssueSourceMode>("local");
@@ -34,6 +60,19 @@ export function IssuesSettingsPanel({
   const [connection, setConnection] = useState<ProjectIssueConnection | null>(
     null,
   );
+  const [sourceBaseline, setSourceBaseline] =
+    useState<ProjectIssueSourceSettings | null>(null);
+  const [host, setHost] = useState<ForgeHostName>("none");
+  const [repoDefaultBranch, setRepoDefaultBranch] = useState<string | null>(
+    null,
+  );
+  const [completionAction, setCompletionAction] =
+    useState<ProjectCompletionAction>("merge_to_base");
+  const [prTarget, setPrTarget] = useState<ProjectPrTarget>("issue_base");
+  const [prDraft, setPrDraft] = useState(true);
+  const [confirmCompletionAction, setConfirmCompletionAction] = useState(false);
+  const [completionBaseline, setCompletionBaseline] =
+    useState<CompletionBaseline | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,9 +95,11 @@ export function IssuesSettingsPanel({
           setWritebackComment,
           setConnection,
         });
+        setSourceBaseline(settings);
         const inspected = await inspectProjectIssueConnection(projectId);
         if (cancelled) return;
         setConnection(inspected.connection);
+        setSourceBaseline({ ...settings, connection: inspected.connection });
       } catch (error: unknown) {
         if (!cancelled) setErrorMessage(getCommandErrorMessage(error, t));
       } finally {
@@ -70,7 +111,47 @@ export function IssuesSettingsPanel({
     };
   }, [projectId, t]);
 
-  const labelRequired = scope === "label" && label.trim().length === 0;
+  useEffect(() => {
+    let cancelled = false;
+    void inspectProjectForge(projectId)
+      .then((inspection) => {
+        if (cancelled) return;
+        const nextHost =
+          inspection.host === "github" || inspection.host === "gitlab"
+            ? inspection.host
+            : "none";
+        setHost(nextHost);
+        setRepoDefaultBranch(inspection.repoDefaultBranch);
+        setCompletionAction(inspection.completionAction);
+        setPrTarget(inspection.prTarget);
+        setPrDraft(inspection.prDraft);
+        setConfirmCompletionAction(inspection.confirmCompletionAction);
+        setCompletionBaseline({
+          action: inspection.completionAction,
+          confirm: inspection.confirmCompletionAction,
+          draft: inspection.prDraft,
+          target: inspection.prTarget,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setHost("none");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const showRemote = mode !== "local";
+  const showCompletion = host === "github" || host === "gitlab";
+  const labelRequired =
+    showRemote && scope === "label" && label.trim().length === 0;
+  const completionDirty =
+    showCompletion &&
+    completionBaseline != null &&
+    (completionAction !== completionBaseline.action ||
+      prTarget !== completionBaseline.target ||
+      prDraft !== completionBaseline.draft ||
+      confirmCompletionAction !== completionBaseline.confirm);
 
   async function handleRelogin(): Promise<void> {
     setErrorMessage(null);
@@ -93,7 +174,7 @@ export function IssuesSettingsPanel({
     setErrorMessage(null);
     setIsSaving(true);
     try {
-      await updateProjectIssueSourceSettings({
+      const refreshed = await updateProjectIssueSourceSettings({
         projectId,
         issueSourceMode: mode,
         issueSyncScope: scope,
@@ -104,7 +185,6 @@ export function IssuesSettingsPanel({
         issueWritebackComment: writebackComment,
         ...(scope === "label" ? { issueSyncLabel: label.trim() } : {}),
       });
-      const refreshed = await getProjectIssueSourceSettings(projectId);
       applySettings(refreshed, {
         setMode,
         setScope,
@@ -116,6 +196,26 @@ export function IssuesSettingsPanel({
         setWritebackComment,
         setConnection,
       });
+      setSourceBaseline(refreshed);
+      if (completionDirty) {
+        await updateProjectSettings({
+          projectId,
+          name: projectName,
+          repoPath: projectPath,
+          worktreeLocation,
+          worktreeSetupCommand,
+          completionAction,
+          prTarget,
+          prDraft,
+          confirmCompletionAction,
+        });
+        setCompletionBaseline({
+          action: completionAction,
+          confirm: confirmCompletionAction,
+          draft: prDraft,
+          target: prTarget,
+        });
+      }
     } catch (error: unknown) {
       setErrorMessage(getCommandErrorMessage(error, t));
     } finally {
@@ -126,34 +226,77 @@ export function IssuesSettingsPanel({
   return (
     <form className="grid gap-3" onSubmit={(event) => void handleSubmit(event)}>
       <IssueSourceModeCard mode={mode} onModeChange={setMode} />
-      <IssueSourceConnectionCard
-        closeOnComplete={closeOnComplete}
-        closeOnMerge={closeOnMerge}
-        connection={connection}
-        intervalSeconds={intervalSeconds}
-        isInspecting={isInspecting}
-        isLoading={isLoading}
-        label={label}
-        scope={scope}
-        syncEnabled={syncEnabled}
-        writebackComment={writebackComment}
-        onCloseOnCompleteChange={setCloseOnComplete}
-        onCloseOnMergeChange={setCloseOnMerge}
-        onIntervalChange={setIntervalSeconds}
-        onLabelChange={setLabel}
-        onRelogin={() => {
-          void handleRelogin();
-        }}
-        onScopeChange={setScope}
-        onSyncEnabledChange={setSyncEnabled}
-        onWritebackCommentChange={setWritebackComment}
-      />
+      {showRemote ? (
+        <IssueSourceConnectionCard
+          closeOnComplete={closeOnComplete}
+          closeOnMerge={closeOnMerge}
+          connection={connection}
+          intervalSeconds={intervalSeconds}
+          isInspecting={isInspecting}
+          isLoading={isLoading}
+          label={label}
+          scope={scope}
+          syncEnabled={syncEnabled}
+          writebackComment={writebackComment}
+          onCloseOnCompleteChange={setCloseOnComplete}
+          onCloseOnMergeChange={setCloseOnMerge}
+          onIntervalChange={setIntervalSeconds}
+          onLabelChange={setLabel}
+          onRelogin={() => {
+            void handleRelogin();
+          }}
+          onScopeChange={setScope}
+          onSyncEnabledChange={setSyncEnabled}
+          onWritebackCommentChange={setWritebackComment}
+        />
+      ) : null}
+      {showCompletion ? (
+        <IssueSourceCompletionCard
+          action={completionAction}
+          confirmCompletionAction={confirmCompletionAction}
+          draft={prDraft}
+          host={host}
+          repoDefaultBranch={repoDefaultBranch}
+          target={prTarget}
+          onActionChange={setCompletionAction}
+          onConfirmCompletionActionChange={setConfirmCompletionAction}
+          onDraftChange={setPrDraft}
+          onTargetChange={setPrTarget}
+        />
+      ) : null}
       {errorMessage ? (
         <p className="settings-status" role="alert">
           {errorMessage}
         </p>
       ) : null}
       <div className="settings-form__actions-row settings-form__actions-row--footer">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (sourceBaseline) {
+              applySettings(sourceBaseline, {
+                setMode,
+                setScope,
+                setLabel,
+                setSyncEnabled,
+                setIntervalSeconds,
+                setCloseOnComplete,
+                setCloseOnMerge,
+                setWritebackComment,
+                setConnection,
+              });
+            }
+            if (completionBaseline) {
+              setCompletionAction(completionBaseline.action);
+              setPrTarget(completionBaseline.target);
+              setPrDraft(completionBaseline.draft);
+              setConfirmCompletionAction(completionBaseline.confirm);
+            }
+          }}
+        >
+          {messages.settings.cancel}
+        </Button>
         <Button
           className="settings-save-button"
           disabled={isLoading || isSaving || labelRequired}

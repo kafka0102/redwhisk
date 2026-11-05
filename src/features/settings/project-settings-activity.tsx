@@ -792,7 +792,14 @@ export function ProjectSettingsActivity({
             ) : null}
 
             {activeMenu === "issues" ? (
-              <IssuesSettingsPanel key={projectId} projectId={projectId} />
+              <IssuesSettingsPanel
+                key={projectId}
+                projectId={projectId}
+                projectName={projectName}
+                projectPath={projectPath}
+                worktreeLocation={worktreeLocation}
+                worktreeSetupCommand={worktreeSetupCommand}
+              />
             ) : null}
 
             {activeMenu === "agents" ? (

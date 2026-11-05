@@ -3,10 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
-import {
-  openShadcnSelect,
-  selectShadcnOption,
-} from "../../test/select-helpers";
 import { updateProjectSettings } from "../project/project-commands";
 import { inspectProjectForge } from "../project/project-forge-commands";
 import { GeneralSettingsPanel } from "./settings-general-panel";
@@ -32,118 +28,27 @@ vi.mock("../project/project-forge-commands", async (importOriginal) => {
 const inspectProjectForgeMock = vi.mocked(inspectProjectForge);
 const updateProjectSettingsMock = vi.mocked(updateProjectSettings);
 
-function inspection(
-  host: "github" | "gitlab" | "none",
-  confirmCompletionAction = false,
-) {
-  return {
-    host,
-    remoteLabel: host === "none" ? null : "acme/app",
-    cliInstalled: true,
-    cliAuthenticated: true,
-    repoDefaultBranch: "main",
-    completionAction: "open_pull_request" as const,
-    prTarget: "issue_base" as const,
-    prDraft: true,
-    confirmCompletionAction,
-  };
-}
-
-describe("general settings completion confirmation", () => {
+describe("general settings", () => {
   beforeEach(() => {
     inspectProjectForgeMock.mockReset();
     updateProjectSettingsMock.mockReset();
-  });
-
-  it("shows the confirm select under after completion and above the target for GitHub", async () => {
-    inspectProjectForgeMock.mockResolvedValue(inspection("github"));
-    render(
-      <I18nProvider initialLocale="zh">
-        <GeneralSettingsPanel
-          projectId={1}
-          projectName="App"
-          projectPath="/tmp/app"
-          worktreeLocation="repo_sibling"
-          worktreeSetupCommand=""
-        />
-      </I18nProvider>,
-    );
-
-    const afterCompletion = await screen.findByText("完成后");
-    const confirm = screen.getByText("完成后是否确认合并方式");
-    const target = screen.getByText("Pull Request 目标");
-    expect(
-      afterCompletion.compareDocumentPosition(confirm) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      confirm.compareDocumentPosition(target) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("combobox", { name: "完成后是否确认合并方式" }),
-    ).toHaveTextContent("否");
-  });
-
-  it("uses the english confirm completion action labels", async () => {
-    inspectProjectForgeMock.mockResolvedValue(inspection("gitlab", true));
-    render(
-      <I18nProvider initialLocale="en">
-        <GeneralSettingsPanel
-          projectId={1}
-          projectName="App"
-          projectPath="/tmp/app"
-          worktreeLocation="repo_sibling"
-          worktreeSetupCommand=""
-        />
-      </I18nProvider>,
-    );
-
-    const user = userEvent.setup();
-    await screen.findByText("Confirm completion action");
-    await openShadcnSelect(user, screen, "Confirm completion action");
-    expect(
-      await screen.findByRole("option", { name: "No" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Yes" })).toBeInTheDocument();
-  });
-
-  it("hides the select when the host is not GitHub or GitLab", async () => {
-    inspectProjectForgeMock.mockResolvedValue(inspection("none"));
-    render(
-      <I18nProvider initialLocale="zh">
-        <GeneralSettingsPanel
-          projectId={1}
-          projectName="App"
-          projectPath="/tmp/app"
-          worktreeLocation="repo_sibling"
-          worktreeSetupCommand=""
-        />
-      </I18nProvider>,
-    );
-    await waitFor(() => expect(inspectProjectForgeMock).toHaveBeenCalled());
-    expect(
-      screen.queryByText("完成后是否确认合并方式"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("完成后")).not.toBeInTheDocument();
-  });
-
-  it("saves when only the confirm choice changes and keeps the other completion values", async () => {
-    inspectProjectForgeMock.mockResolvedValue(inspection("github", false));
     updateProjectSettingsMock.mockResolvedValue({
       id: 1,
-      name: "App",
+      name: "Renamed",
       repoPath: "/tmp/app",
       worktreeLocation: "repo_sibling",
       worktreeSetupCommand: "",
-      completionAction: "open_pull_request",
+      completionAction: "merge_to_base",
       prTarget: "issue_base",
       prDraft: true,
-      confirmCompletionAction: true,
+      confirmCompletionAction: false,
       createdAt: 1,
       lastOpenedAt: 2,
       codeWorkspaces: [],
     });
+  });
+
+  it("does not show completion fields that moved to Issues", () => {
     render(
       <I18nProvider initialLocale="zh">
         <GeneralSettingsPanel
@@ -155,21 +60,44 @@ describe("general settings completion confirmation", () => {
         />
       </I18nProvider>,
     );
+
+    expect(screen.queryByText("完成后")).not.toBeInTheDocument();
+    expect(screen.queryByText("完成后动作")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("完成后是否确认合并方式"),
+    ).not.toBeInTheDocument();
+    expect(inspectProjectForgeMock).not.toHaveBeenCalled();
+  });
+
+  it("saves the project identity without completion fields", async () => {
     const user = userEvent.setup();
-    await screen.findByText("完成后是否确认合并方式");
-    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
-    await selectShadcnOption(user, screen, "完成后是否确认合并方式", "是");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() =>
-      expect(updateProjectSettingsMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          projectId: 1,
-          completionAction: "open_pull_request",
-          prTarget: "issue_base",
-          prDraft: true,
-          confirmCompletionAction: true,
-        }),
-      ),
+    render(
+      <I18nProvider initialLocale="zh">
+        <GeneralSettingsPanel
+          projectId={1}
+          projectName="App"
+          projectPath="/tmp/app"
+          worktreeLocation="repo_sibling"
+          worktreeSetupCommand=""
+        />
+      </I18nProvider>,
     );
+
+    await user.clear(screen.getByLabelText("项目名称"));
+    await user.type(screen.getByLabelText("项目名称"), "Renamed");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(updateProjectSettingsMock).toHaveBeenCalledWith({
+        projectId: 1,
+        name: "Renamed",
+        repoPath: "/tmp/app",
+        worktreeLocation: "repo_sibling",
+        worktreeSetupCommand: "",
+      });
+    });
+    const payload = updateProjectSettingsMock.mock.calls[0]?.[0];
+    expect(payload).not.toHaveProperty("completionAction");
+    expect(payload).not.toHaveProperty("confirmCompletionAction");
   });
 });
