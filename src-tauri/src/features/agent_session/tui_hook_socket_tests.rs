@@ -1,4 +1,4 @@
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::thread;
 
 use super::tui_hook_socket::{
@@ -162,4 +162,18 @@ fn listener_bind_failure_is_queryable_as_unavailable() {
     let channel = TuiHookChannel::start(&path);
     assert_eq!(channel.status(), TuiHookChannelStatus::Unavailable);
     assert!(channel.listener().is_none());
+}
+
+#[test]
+fn stale_socket_file_is_reclaimed_and_becomes_available() {
+    let dir = tempfile::tempdir().expect("temp");
+    let path = dir.path().join("tui-hook.sock");
+    {
+        let _abandoned = UnixListener::bind(&path).expect("abandon");
+    }
+    assert!(path.exists(), "dropped listener must leave the socket file");
+    let channel = TuiHookChannel::start(&path);
+    assert_eq!(channel.status(), TuiHookChannelStatus::Available);
+    let listener = channel.into_listener().expect("reclaimed listener");
+    UnixStream::connect(listener.path()).expect("connect after reclaim");
 }

@@ -88,7 +88,16 @@ impl TuiHookListener {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let listener = UnixListener::bind(path)?;
+        let listener = match UnixListener::bind(path) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == ErrorKind::AddrInUse && !socket_is_listening(path) => {
+                // 上次进程退出时 listener 线程不会跑 Drop，socket 文件会留下。
+                // 只有连不上的残留才删掉重绑；仍有实例在听时保持失败。
+                fs::remove_file(path)?;
+                UnixListener::bind(path)?
+            }
+            Err(error) => return Err(error),
+        };
         Ok(Self {
             listener,
             path: path.to_path_buf(),
@@ -206,5 +215,17 @@ fn empty_success() -> HookCommandOutput {
     HookCommandOutput {
         exit_code: 0,
         stdout: String::new(),
+    }
+}
+
+/// 残留 socket 连不上；活着的 listener 能连上。判断不清时不当成残留。
+fn socket_is_listening(path: &Path) -> bool {
+    match UnixStream::connect(path) {
+        Ok(stream) => {
+            let _ = stream.shutdown(Shutdown::Both);
+            true
+        }
+        Err(error) if error.kind() == ErrorKind::ConnectionRefused => false,
+        Err(_) => true,
     }
 }
