@@ -15,6 +15,15 @@ const alphaFile: WorkspaceFileTreeNode = {
   path: "alpha.ts",
 };
 
+const folderDirectory: WorkspaceFileTreeNode = {
+  id: "src",
+  isIgnored: false,
+  kind: "directory",
+  name: "src",
+  path: "src",
+  children: [],
+};
+
 async function openDraft(
   kind: "New File" | "New Folder",
   onCreateEntry: (input: FileTreeEntryCreateInput) => Promise<void>,
@@ -23,7 +32,7 @@ async function openDraft(
     <I18nProvider fixedLocale="en">
       <FileTreePanel
         errorMessage={null}
-        fileTree={[alphaFile]}
+        fileTree={[folderDirectory, alphaFile]}
         isLoading={false}
         onCreateEntry={onCreateEntry}
         onOpenFile={() => {}}
@@ -31,7 +40,9 @@ async function openDraft(
       />
     </I18nProvider>,
   );
-  const row = await screen.findByRole("button", { name: "alpha.ts" });
+  const row = await screen.findByRole("button", {
+    name: kind === "New Folder" ? folderDirectory.name : alphaFile.name,
+  });
   fireEvent.contextMenu(row, { clientX: 12, clientY: 12 });
   fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
   return (await screen.findByRole("textbox", {
@@ -62,7 +73,7 @@ describe("file tree draft typing", () => {
       await user.keyboard("{Enter}");
       await waitFor(() => {
         expect(onCreateEntry).toHaveBeenCalledWith({
-          directoryPath: "",
+          directoryPath: kind === "New Folder" ? folderDirectory.path : "",
           kind: kind === "New File" ? "file" : "directory",
           name: "za",
         });
