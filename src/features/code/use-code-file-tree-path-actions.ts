@@ -15,6 +15,8 @@ import {
   createProjectWorktreeDirectory,
   createProjectWorktreeFile,
   deleteProjectWorktreePath,
+  copyProjectWorktreePath,
+  moveProjectWorktreePath,
   readProjectWorktreeFile,
   type CodeWorkspaceRoot,
   type WorkspaceFileTreeNode,
@@ -27,6 +29,9 @@ import {
   parentFileTreeDirectory,
   visitFileTreeAncestorDirectories,
 } from "../../shared/workspace/file-tree-listings";
+import { rebaseRelativePath } from "../../shared/workspace/file-tree-path-rebase";
+import type { FileTreePathTransferInput } from "../../shared/workspace/use-file-tree-path-edit";
+import { rebaseCodeFileTabs, rebasePathSet } from "./code-file-tab-rebase";
 import type { CodeRevealRequest } from "./code-content";
 import type { CodeFileTab } from "./code-workspace-cache";
 import {
@@ -78,6 +83,8 @@ export interface CodeFileTreePathActions {
   createEntry: (input: FileTreeEntryCreateInput) => Promise<void>;
   /** 删除条目：确认后删除该路径，关闭其自身与子孙路径的 tab 并强刷父目录。 */
   deleteEntry: (input: FileTreeEntryDeleteInput) => Promise<void>;
+  /** 复制或移动路径。移动成功后改挂打开的标签，不弹未保存确认。 */
+  transferEntry: (input: FileTreePathTransferInput) => Promise<void>;
   /**
    * 静默关闭给定路径的 tab（不追未保存确认）：未保存改动由调用方先行处理。
    * 删除路径与容器关 tab 共用本实现，避免出现两份关闭状态机。
@@ -356,7 +363,75 @@ export function useCodeFileTreePathActions({
     ],
   );
 
-  return { closeTabs, createEntry, deleteEntry, openFile, openMatchFromSearch };
+  const transferEntry = useCallback(
+    async (input: FileTreePathTransferInput) => {
+      const rootPath = selectedRoot?.path;
+      if (!rootPath) {
+        return;
+      }
+      const request = {
+        destinationPath: input.destinationPath,
+        projectId,
+        sourcePath: input.sourcePath,
+        workspacePath: rootPath,
+      };
+      if (input.operation === "copy") {
+        await copyProjectWorktreePath(request);
+        refreshDirectory(input.destinationDirectory);
+        return;
+      }
+      await moveProjectWorktreePath(request);
+      setTabs((currentTabs) => {
+        const nextTabs = rebaseCodeFileTabs(
+          currentTabs,
+          input.sourcePath,
+          input.destinationPath,
+        );
+        tabsRef.current = nextTabs;
+        return nextTabs;
+      });
+      openFilePathsRef.current = rebasePathSet(
+        openFilePathsRef.current,
+        input.sourcePath,
+        input.destinationPath,
+      );
+      const activePath = activePathRef.current;
+      if (activePath !== null) {
+        const nextActive = rebaseRelativePath(
+          activePath,
+          input.sourcePath,
+          input.destinationPath,
+        );
+        if (nextActive !== activePath) {
+          activePathRef.current = nextActive;
+          activateFilePath(nextActive);
+        }
+      }
+      refreshDirectory(input.sourceDirectory);
+      if (input.destinationDirectory !== input.sourceDirectory) {
+        refreshDirectory(input.destinationDirectory);
+      }
+    },
+    [
+      activateFilePath,
+      activePathRef,
+      openFilePathsRef,
+      projectId,
+      refreshDirectory,
+      selectedRoot?.path,
+      setTabs,
+      tabsRef,
+    ],
+  );
+
+  return {
+    closeTabs,
+    createEntry,
+    deleteEntry,
+    openFile,
+    openMatchFromSearch,
+    transferEntry,
+  };
 }
 
 /** 目标路径自身或其子孙路径（删除目录时要一并关闭子孙路径的 tab）。 */

@@ -329,6 +329,50 @@ describe("WorkspacePathContextMenu", () => {
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "New File",
+      "Copy file name",
+      "Copy relative path",
+      "Copy absolute path",
+      "Open in Finder",
+      "Delete",
+    ]);
+    expect(screen.queryByRole("menuitem", { name: "New Folder" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Cut",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Copy",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Paste",
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Rename",
+      }),
+    ).toBeNull();
+    expect(
+      document.querySelectorAll('[data-slot="context-menu-separator"]'),
+    ).toHaveLength(0);
+  });
+
+  it("keeps New Folder on an uninjected directory row and does not add clipboard actions", async () => {
+    renderFinderMenu({
+      displayName: "src",
+      kind: "directory",
+      relativePath: "src",
+      withCreateAndDelete: true,
+    });
+    openFileRowMenu(40, 80);
+
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "New File",
       "New Folder",
       "Copy file name",
       "Copy relative path",
@@ -336,6 +380,11 @@ describe("WorkspacePathContextMenu", () => {
       "Open in Finder",
       "Delete",
     ]);
+    expect(
+      screen.queryByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Cut",
+      }),
+    ).toBeNull();
   });
 
   it("shows the Finder failure alert instead of the browser failure", async () => {

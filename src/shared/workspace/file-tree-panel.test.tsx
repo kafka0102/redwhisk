@@ -26,6 +26,7 @@ import {
   isFileTreeDraftNodeId,
   type FileTreeEntryCreateInput,
 } from "./file-tree-create-draft";
+import { findFileTreeNode } from "./file-tree-listings";
 import {
   FileTreeDraftRow,
   FileTreeStatusBadge,
@@ -50,6 +51,8 @@ const treeDataSnapshots: WorkspaceFileTreeNode[][] = [];
 const treeScrollTo = vi.fn();
 const treeOpen = vi.fn();
 const treeSelect = vi.fn();
+const treeClose = vi.fn();
+const treeOpenState: Record<string, boolean> = {};
 const treeOnScrollHandlers: Array<
   (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => void
 > = [];
@@ -85,12 +88,14 @@ vi.mock("react-arborist", () => ({
       data,
       height,
       "aria-label": ariaLabel,
+      initialOpenState,
       onScroll,
     }: {
       children?: FileTreeRowRenderer;
       data?: WorkspaceFileTreeNode[];
       height: number;
       "aria-label"?: string;
+      initialOpenState?: Record<string, boolean>;
       onScroll?: (props: {
         scrollOffset: number;
         scrollUpdateWasRequested: boolean;
@@ -98,6 +103,13 @@ vi.mock("react-arborist", () => ({
     },
     ref,
   ) {
+    if (initialOpenState) {
+      for (const [path, isOpen] of Object.entries(initialOpenState)) {
+        if (!(path in treeOpenState)) {
+          treeOpenState[path] = isOpen;
+        }
+      }
+    }
     treeHeights.push(height);
     if (data) {
       treeDataSnapshots.push(data);
@@ -111,7 +123,14 @@ vi.mock("react-arborist", () => ({
     useImperativeHandle(ref, () => ({
       list: { current: { scrollTo: treeScrollTo } },
       listEl: { current: null },
+      close: (id: string) => {
+        treeOpenState[id] = false;
+        treeClose(id);
+      },
       open: treeOpen,
+      get openState() {
+        return treeOpenState;
+      },
       select: treeSelect,
     }));
     return (
@@ -155,6 +174,10 @@ describe("FileTreePanel", () => {
     treeScrollTo.mockReset();
     treeOpen.mockReset();
     treeSelect.mockReset();
+    treeClose.mockReset();
+    for (const path of Object.keys(treeOpenState)) {
+      delete treeOpenState[path];
+    }
     toastErrorMock.mockReset();
     resetFileTreeScrollOffsetCacheForTests();
     resizeObserverCallback = null;
@@ -688,6 +711,10 @@ describe("FileTreePanel", () => {
         "Copy file name",
         "Copy relative path",
         "Copy absolute path",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
       ]);
     });
 
@@ -720,7 +747,7 @@ describe("FileTreePanel", () => {
     it("attributes a root level file row to the code root", async () => {
       const row = renderCreatePanelRow(vi.fn(), createRootFileNode);
 
-      await startDraft(row, "New Folder");
+      await startDraft(row, "New File");
 
       const tree = latestTreeData();
       expect(findDraftNode(tree)).toBe(tree[0]);
@@ -944,10 +971,13 @@ describe("FileTreePanel", () => {
       const items = await openRowMenu(row);
       expect(items.map((item) => item.textContent)).toEqual([
         "New File",
-        "New Folder",
         "Copy file name",
         "Copy relative path",
         "Copy absolute path",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
         "Delete",
       ]);
 
@@ -957,6 +987,37 @@ describe("FileTreePanel", () => {
         kind: "file",
         relativePath: "src/a.ts",
       });
+    });
+
+    it("omits New Folder on a file row and shows cut, copy, paste, and rename", async () => {
+      const onDeleteEntry = vi.fn();
+      renderDeletePanel(onDeleteEntry);
+      const row = renderTreeRowElement(deleteFileNode);
+
+      const items = await openRowMenu(row);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "New File",
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
+        "Delete",
+      ]);
+      expect(screen.queryByRole("menuitem", { name: "New Folder" })).toBeNull();
+      expect(
+        screen.queryByRole("menuitem", { name: "Open in Finder" }),
+      ).toBeNull();
+      expect(
+        document.querySelectorAll('[data-slot="context-menu-separator"]'),
+      ).toHaveLength(3);
+      const paste = screen.getByRole("menuitem", { name: "Paste" });
+      expect(
+        paste.getAttribute("aria-disabled") === "true" ||
+          paste.hasAttribute("data-disabled"),
+      ).toBe(true);
     });
 
     it("deletes the directory itself from a directory row menu", async () => {
@@ -999,12 +1060,625 @@ describe("FileTreePanel", () => {
       const items = await openRowMenu(row);
       expect(items.map((item) => item.textContent)).toEqual([
         "New File",
+        "Copy file name",
+        "Copy relative path",
+        "Copy absolute path",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
+      ]);
+      expect(onDeleteEntry).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("path clipboard and rename", () => {
+    const writeText = vi.fn();
+    const appFile: WorkspaceFileTreeNode = {
+      id: "src/app.tsx",
+      isIgnored: false,
+      kind: "file",
+      name: "app.tsx",
+      path: "src/app.tsx",
+    };
+    const mainFile: WorkspaceFileTreeNode = {
+      id: "src/main.ts",
+      isIgnored: false,
+      kind: "file",
+      name: "main.ts",
+      path: "src/main.ts",
+    };
+    const buttonFile: WorkspaceFileTreeNode = {
+      id: "src/components/button.tsx",
+      isIgnored: false,
+      kind: "file",
+      name: "button.tsx",
+      path: "src/components/button.tsx",
+    };
+    const uiDir: WorkspaceFileTreeNode = {
+      children: [],
+      id: "src/components/ui",
+      isIgnored: false,
+      kind: "directory",
+      name: "ui",
+      path: "src/components/ui",
+    };
+    const nestedComponents: WorkspaceFileTreeNode = {
+      children: [buttonFile, uiDir],
+      id: "src/components",
+      isIgnored: false,
+      kind: "directory",
+      name: "components",
+      path: "src/components",
+    };
+    const srcDir: WorkspaceFileTreeNode = {
+      children: [appFile, mainFile, nestedComponents],
+      id: "src",
+      isIgnored: false,
+      kind: "directory",
+      name: "src",
+      path: "src",
+    };
+    const rootComponents: WorkspaceFileTreeNode = {
+      children: [],
+      id: "components",
+      isIgnored: false,
+      kind: "directory",
+      name: "components",
+      path: "components",
+    };
+    const occupiedComponents: WorkspaceFileTreeNode = {
+      children: [
+        {
+          id: "components/app.tsx",
+          isIgnored: false,
+          kind: "file",
+          name: "app.tsx",
+          path: "components/app.tsx",
+        },
+      ],
+      id: "components",
+      isIgnored: false,
+      kind: "directory",
+      name: "components",
+      path: "components",
+    };
+    const libDir: WorkspaceFileTreeNode = {
+      children: [],
+      id: "lib",
+      isIgnored: false,
+      kind: "directory",
+      name: "lib",
+      path: "lib",
+    };
+    const gitignore: WorkspaceFileTreeNode = {
+      id: ".gitignore",
+      isIgnored: false,
+      kind: "file",
+      name: ".gitignore",
+      path: ".gitignore",
+    };
+    const appTest: WorkspaceFileTreeNode = {
+      id: "app.test.tsx",
+      isIgnored: false,
+      kind: "file",
+      name: "app.test.tsx",
+      path: "app.test.tsx",
+    };
+    const clipboardTree = [srcDir, rootComponents, libDir, gitignore, appTest];
+
+    beforeEach(() => {
+      writeText.mockReset();
+      writeText.mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+      });
+    });
+
+    function renderEditable(
+      fileTree: WorkspaceFileTreeNode[],
+      options: {
+        initialOpenState?: Record<string, boolean>;
+        locale?: "en" | "zh";
+        onOpenFile?: (file: WorkspaceFileTreeNode) => void;
+        onOpenStateChange?: (openState: Record<string, boolean>) => void;
+        onTransferEntry?: (input: {
+          destinationDirectory: string;
+          destinationPath: string;
+          operation: "copy" | "move";
+          sourceDirectory: string;
+          sourcePath: string;
+        }) => Promise<void>;
+        workspacePath?: string | null;
+      } = {},
+    ) {
+      return render(
+        <I18nProvider fixedLocale={options.locale ?? "en"}>
+          <FileTreePanel
+            errorMessage={null}
+            fileTree={fileTree}
+            initialOpenState={options.initialOpenState}
+            isLoading={false}
+            workspacePath={
+              options.workspacePath === undefined
+                ? "/repo"
+                : options.workspacePath
+            }
+            onCreateEntry={vi.fn(async () => undefined)}
+            onDeleteEntry={vi.fn()}
+            onOpenFile={options.onOpenFile ?? (() => {})}
+            onOpenStateChange={options.onOpenStateChange}
+            onTransferEntry={options.onTransferEntry}
+          />
+        </I18nProvider>,
+      );
+    }
+
+    async function openNodeMenu(node: WorkspaceFileTreeNode) {
+      const row = renderTreeRowElement(node);
+      return openRowMenu(row);
+    }
+
+    async function clickExact(name: string) {
+      fireEvent.click(
+        await screen.findByRole("menuitem", {
+          name: (accessibleName) => accessibleName === name,
+        }),
+      );
+    }
+
+    function expectPasteDisabled() {
+      const paste = screen.getByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Paste",
+      });
+      expect(
+        paste.getAttribute("aria-disabled") === "true" ||
+          paste.hasAttribute("data-disabled"),
+      ).toBe(true);
+    }
+
+    it("orders a Chinese macOS folder menu and keeps paste disabled until a path is copied", async () => {
+      const previousPlatform = navigator.platform;
+      setNavigatorPlatform("MacIntel");
+      try {
+        const onTransferEntry = vi.fn(async () => undefined);
+        renderEditable(clipboardTree, { locale: "zh", onTransferEntry });
+        const items = await openNodeMenu(srcDir);
+        expect(items.map((item) => item.textContent)).toEqual([
+          "新建文件",
+          "新建文件夹",
+          "在 Finder 中打开",
+          "复制文件名",
+          "复制相对路径",
+          "复制绝对路径",
+          "剪切",
+          "复制",
+          "粘贴",
+          "重命名",
+          "删除",
+        ]);
+        expect(
+          document.querySelectorAll('[data-slot="context-menu-separator"]'),
+        ).toHaveLength(3);
+        const paste = screen.getByRole("menuitem", { name: "粘贴" });
+        expect(
+          paste.getAttribute("aria-disabled") === "true" ||
+            paste.hasAttribute("data-disabled"),
+        ).toBe(true);
+        fireEvent.click(paste);
+        expect(onTransferEntry).not.toHaveBeenCalled();
+      } finally {
+        setNavigatorPlatform(previousPlatform);
+      }
+    });
+
+    it("orders a Chinese macOS file menu without New Folder", async () => {
+      const previousPlatform = navigator.platform;
+      setNavigatorPlatform("MacIntel");
+      try {
+        renderEditable(clipboardTree, { locale: "zh" });
+        const items = await openNodeMenu(appFile);
+        expect(items.map((item) => item.textContent)).toEqual([
+          "新建文件",
+          "在 Finder 中打开",
+          "复制文件名",
+          "复制相对路径",
+          "复制绝对路径",
+          "剪切",
+          "复制",
+          "粘贴",
+          "重命名",
+          "删除",
+        ]);
+        expect(
+          screen.queryByRole("menuitem", { name: "新建文件夹" }),
+        ).toBeNull();
+        expect(
+          document.querySelectorAll('[data-slot="context-menu-separator"]'),
+        ).toHaveLength(3);
+      } finally {
+        setNavigatorPlatform(previousPlatform);
+      }
+    });
+
+    it("orders an English folder menu without Finder when the platform is not macOS", async () => {
+      renderEditable(clipboardTree);
+      const items = await openNodeMenu(srcDir);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "New File",
         "New Folder",
         "Copy file name",
         "Copy relative path",
         "Copy absolute path",
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
+        "Delete",
       ]);
-      expect(onDeleteEntry).not.toHaveBeenCalled();
+      expect(
+        document.querySelectorAll('[data-slot="context-menu-separator"]'),
+      ).toHaveLength(3);
+    });
+
+    it("does not arm paste when copying the file name, then copies into the clicked folder", async () => {
+      const onOpenFile = vi.fn();
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onOpenFile, onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Copy file name");
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith("app.tsx");
+      });
+
+      await openNodeMenu(appFile);
+      expectPasteDisabled();
+
+      await openNodeMenu(appFile);
+      await clickExact("Copy");
+      await openNodeMenu(rootComponents);
+      await clickExact("Paste");
+
+      expect(onTransferEntry).toHaveBeenCalledWith({
+        destinationDirectory: "components",
+        destinationPath: "components/app.tsx",
+        operation: "copy",
+        sourceDirectory: "src",
+        sourcePath: "src/app.tsx",
+      });
+      expect(onOpenFile).not.toHaveBeenCalled();
+      expect(findDraftNode(latestTreeData())).toBeNull();
+    });
+
+    it("adds a copy suffix when pasting into the source directory", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(
+        [
+          {
+            ...srcDir,
+            children: [
+              appFile,
+              {
+                ...appFile,
+                id: "src/app 副本.tsx",
+                name: "app 副本.tsx",
+                path: "src/app 副本.tsx",
+              },
+              mainFile,
+            ],
+          },
+          gitignore,
+          appTest,
+          rootComponents,
+        ],
+        { onTransferEntry },
+      );
+
+      await openNodeMenu(appFile);
+      await clickExact("Copy");
+      await openNodeMenu(mainFile);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenLastCalledWith(
+        expect.objectContaining({ destinationPath: "src/app 副本 2.tsx" }),
+      );
+
+      await openNodeMenu(gitignore);
+      await clickExact("Copy");
+      await openNodeMenu(appTest);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenLastCalledWith(
+        expect.objectContaining({ destinationPath: ".gitignore 副本" }),
+      );
+
+      await openNodeMenu(appTest);
+      await clickExact("Copy");
+      await openNodeMenu(gitignore);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenLastCalledWith(
+        expect.objectContaining({ destinationPath: "app.test 副本.tsx" }),
+      );
+
+      await openNodeMenu(rootComponents);
+      await clickExact("Copy");
+      await openNodeMenu(gitignore);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          destinationPath: "components 副本",
+          operation: "copy",
+        }),
+      );
+    });
+
+    it("reports an existing target when a copied file is pasted twice into another folder", async () => {
+      const onTransferEntry = vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce({
+          code: "AGENT_SESSION_VALIDATION_FAILED",
+          message: "Target already exists.",
+          reason: "pathAlreadyExists",
+        });
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Copy");
+      await openNodeMenu(rootComponents);
+      await clickExact("Paste");
+      await openNodeMenu(rootComponents);
+      const paste = await screen.findByRole("menuitem", {
+        name: (accessibleName) => accessibleName === "Paste",
+      });
+      expect(paste).not.toHaveAttribute("aria-disabled", "true");
+      expect(paste).not.toHaveAttribute("data-disabled");
+      fireEvent.click(paste);
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith("Target already exists.");
+      });
+      expect(onTransferEntry).toHaveBeenCalledTimes(2);
+      expect(findFileTreeNode(latestTreeData(), "src/app.tsx")).not.toBeNull();
+    });
+
+    it("copies a directory into another directory", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(nestedComponents);
+      await clickExact("Copy");
+      await openNodeMenu(libDir);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenCalledWith({
+        destinationDirectory: "lib",
+        destinationPath: "lib/components",
+        operation: "copy",
+        sourceDirectory: "src",
+        sourcePath: "src/components",
+      });
+    });
+
+    it("rejects pasting a folder into itself", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(nestedComponents);
+      await clickExact("Copy");
+      await openNodeMenu(nestedComponents);
+      await clickExact("Paste");
+      await openNodeMenu(buttonFile);
+      await clickExact("Paste");
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Cannot paste a folder into itself.",
+      );
+      expect(onTransferEntry).not.toHaveBeenCalled();
+    });
+
+    it("moves a cut file, clears the clipboard, and leaves same-directory paste armed", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Cut");
+      await openNodeMenu(srcDir);
+      await clickExact("Paste");
+      expect(onTransferEntry).not.toHaveBeenCalled();
+
+      await openNodeMenu(mainFile);
+      await clickExact("Paste");
+      expect(onTransferEntry).not.toHaveBeenCalled();
+
+      await openNodeMenu(rootComponents);
+      await clickExact("Paste");
+      expect(onTransferEntry).toHaveBeenCalledWith({
+        destinationDirectory: "components",
+        destinationPath: "components/app.tsx",
+        operation: "move",
+        sourceDirectory: "src",
+        sourcePath: "src/app.tsx",
+      });
+      await openNodeMenu(rootComponents);
+      expectPasteDisabled();
+    });
+
+    it("rejects moving a folder into its descendant and keeps paste available", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(nestedComponents);
+      await clickExact("Cut");
+      await openNodeMenu(uiDir);
+      await clickExact("Paste");
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Cannot move a folder into itself.",
+      );
+      expect(onTransferEntry).not.toHaveBeenCalled();
+      await openNodeMenu(uiDir);
+      expect(
+        screen.getByRole("menuitem", {
+          name: (accessibleName) => accessibleName === "Paste",
+        }),
+      ).not.toHaveAttribute("data-disabled");
+    });
+
+    it("does not overwrite an existing file when a cut is pasted", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable([srcDir, occupiedComponents], { onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Cut");
+      await openNodeMenu(occupiedComponents);
+      await clickExact("Paste");
+      expect(toastErrorMock).toHaveBeenCalledWith("Target already exists.");
+      expect(onTransferEntry).not.toHaveBeenCalled();
+      await openNodeMenu(occupiedComponents);
+      expect(
+        screen.getByRole("menuitem", {
+          name: (accessibleName) => accessibleName === "Paste",
+        }),
+      ).not.toHaveAttribute("data-disabled");
+    });
+
+    it("disables paste when the workspace root no longer matches the clipboard", async () => {
+      const view = renderEditable([{ ...appFile, id: "a.ts", path: "a.ts" }], {
+        workspacePath: "/repo-a",
+      });
+      await openNodeMenu({ ...appFile, id: "a.ts", path: "a.ts" });
+      await clickExact("Copy");
+      view.rerender(
+        <I18nProvider fixedLocale="en">
+          <FileTreePanel
+            errorMessage={null}
+            fileTree={[{ ...appFile, id: "a.ts", path: "a.ts" }]}
+            isLoading={false}
+            workspacePath="/repo-b"
+            onCreateEntry={vi.fn(async () => undefined)}
+            onDeleteEntry={vi.fn()}
+            onOpenFile={() => {}}
+          />
+        </I18nProvider>,
+      );
+      await openNodeMenu({ ...appFile, id: "a.ts", path: "a.ts" });
+      expectPasteDisabled();
+      view.rerender(
+        <I18nProvider fixedLocale="en">
+          <FileTreePanel
+            errorMessage={null}
+            fileTree={[{ ...appFile, id: "a.ts", path: "a.ts" }]}
+            isLoading={false}
+            workspacePath="/repo-a"
+            onCreateEntry={vi.fn(async () => undefined)}
+            onDeleteEntry={vi.fn()}
+            onOpenFile={() => {}}
+          />
+        </I18nProvider>,
+      );
+      await openNodeMenu({ ...appFile, id: "a.ts", path: "a.ts" });
+      expect(
+        screen.getByRole("menuitem", {
+          name: (accessibleName) => accessibleName === "Paste",
+        }),
+      ).not.toHaveAttribute("data-disabled");
+    });
+
+    it("renames the current row in place and cancels an unchanged or blank name", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Rename");
+      expect(findDraftNode(latestTreeData())).toBeNull();
+      const input = within(renderTreeRowElement(appFile)).getByRole("textbox", {
+        name: "Rename",
+      });
+      expect(input).toHaveValue("app.tsx");
+
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onTransferEntry).not.toHaveBeenCalled();
+      expect(
+        within(renderTreeRowElement(appFile)).queryByRole("textbox"),
+      ).toBeNull();
+
+      await openNodeMenu(appFile);
+      await clickExact("Rename");
+      const blank = within(renderTreeRowElement(appFile)).getByRole("textbox", {
+        name: "Rename",
+      });
+      fireEvent.change(blank, { target: { value: "   " } });
+      fireEvent.keyDown(blank, { key: "Enter" });
+      expect(onTransferEntry).not.toHaveBeenCalled();
+
+      await openNodeMenu(appFile);
+      await clickExact("Rename");
+      const next = within(renderTreeRowElement(appFile)).getByRole("textbox", {
+        name: "Rename",
+      });
+      fireEvent.change(next, { target: { value: "main.tsx" } });
+      fireEvent.keyDown(next, { key: "Enter" });
+      await waitFor(() => {
+        expect(onTransferEntry).toHaveBeenCalledWith({
+          destinationDirectory: "src",
+          destinationPath: "src/main.tsx",
+          operation: "move",
+          sourceDirectory: "src",
+          sourcePath: "src/app.tsx",
+        });
+      });
+    });
+
+    it("keeps the rename input for an invalid or existing name", async () => {
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, { onTransferEntry });
+      await openNodeMenu(appFile);
+      await clickExact("Rename");
+      const input = within(renderTreeRowElement(appFile)).getByRole("textbox", {
+        name: "Rename",
+      });
+      fireEvent.change(input, { target: { value: "a/b" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith(
+          "Name is invalid. It cannot contain / or be . or ..",
+        );
+      });
+      expect(
+        within(renderTreeRowElement(appFile)).getByRole("textbox", {
+          name: "Rename",
+        }),
+      ).toHaveAttribute("aria-invalid", "true");
+      expect(onTransferEntry).not.toHaveBeenCalled();
+
+      const again = within(renderTreeRowElement(appFile)).getByRole("textbox", {
+        name: "Rename",
+      });
+      fireEvent.change(again, { target: { value: "main.ts" } });
+      fireEvent.keyDown(again, { key: "Enter" });
+      await waitFor(() => {
+        expect(toastErrorMock).toHaveBeenCalledWith("Target already exists.");
+      });
+      expect(onTransferEntry).not.toHaveBeenCalled();
+      expect(findFileTreeNode(latestTreeData(), "src/app.tsx")).not.toBeNull();
+    });
+
+    it("rebases expanded directories when a directory is renamed", async () => {
+      const onOpenStateChange = vi.fn();
+      const onTransferEntry = vi.fn(async () => undefined);
+      renderEditable(clipboardTree, {
+        initialOpenState: { src: true, "src/components": true },
+        onOpenStateChange,
+        onTransferEntry,
+      });
+      await openNodeMenu(srcDir);
+      await clickExact("Rename");
+      const input = within(renderTreeRowElement(srcDir)).getByRole("textbox", {
+        name: "Rename",
+      });
+      fireEvent.change(input, { target: { value: "library" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => {
+        expect(onTransferEntry).toHaveBeenCalledWith(
+          expect.objectContaining({
+            destinationPath: "library",
+            sourcePath: "src",
+          }),
+        );
+      });
+      expect(onOpenStateChange).toHaveBeenLastCalledWith({
+        library: true,
+        "library/components": true,
+      });
     });
   });
 

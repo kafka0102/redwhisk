@@ -4,7 +4,9 @@ import { invokeCommand } from "../commands/command-client";
 import {
   createProjectWorktreeDirectory,
   createProjectWorktreeFile,
+  copyProjectWorktreePath,
   deleteProjectWorktreePath,
+  moveProjectWorktreePath,
   getProjectWorktreeFileTree,
   listCodeWorkspaceRoots,
   readProjectWorktreeFile,
@@ -317,6 +319,45 @@ describe("workspace commands", () => {
           projectId: 1,
           workspacePath: "/tmp/root",
           filePath: "src/main.ts",
+        },
+      },
+    );
+
+    await expect(
+      copyProjectWorktreePath({
+        destinationPath: "components/app.tsx",
+        projectId: 1,
+        sourcePath: "src/app.tsx",
+        workspacePath: "/tmp/root",
+      }),
+    ).resolves.toEqual({ command: "copy_project_worktree_path" });
+    await expect(
+      moveProjectWorktreePath({
+        destinationPath: "lib/app.tsx",
+        projectId: 1,
+        sourcePath: "src/app.tsx",
+        workspacePath: "/tmp/root",
+      }),
+    ).resolves.toEqual({ command: "move_project_worktree_path" });
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "copy_project_worktree_path",
+      {
+        input: {
+          destinationPath: "components/app.tsx",
+          projectId: 1,
+          sourcePath: "src/app.tsx",
+          workspacePath: "/tmp/root",
+        },
+      },
+    );
+    expect(invokeCommandMock).toHaveBeenCalledWith(
+      "move_project_worktree_path",
+      {
+        input: {
+          destinationPath: "lib/app.tsx",
+          projectId: 1,
+          sourcePath: "src/app.tsx",
+          workspacePath: "/tmp/root",
         },
       },
     );

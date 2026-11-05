@@ -1155,6 +1155,15 @@
         "workspacePath": "optional"
       }
     },
+    "ProjectWorkspaceTransferPathInput": {
+      "fields": {
+        "destinationPath": "required",
+        "projectId": "required",
+        "sessionId": "optional",
+        "sourcePath": "required",
+        "workspacePath": "optional"
+      }
+    },
     "ProjectWorkspaceWriteFileInput": {
       "fields": {
         "content": "required",

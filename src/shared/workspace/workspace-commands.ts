@@ -20,6 +20,11 @@ export interface ProjectWorkspacePathInput extends ProjectWorkspaceInput {
   commitHash?: string | null;
 }
 
+export interface ProjectWorkspaceTransferPathInput extends ProjectWorkspaceInput {
+  sourcePath: string;
+  destinationPath: string;
+}
+
 export interface ProjectWorkspaceWriteFileInput extends ProjectWorkspaceInput {
   filePath: string;
   content: string;
@@ -147,6 +152,18 @@ export function deleteProjectWorktreePath(
   input: ProjectWorkspacePathInput,
 ): Promise<void> {
   return invokeCommand<void>("delete_project_worktree_path", { input });
+}
+
+export function copyProjectWorktreePath(
+  input: ProjectWorkspaceTransferPathInput,
+): Promise<void> {
+  return invokeCommand<void>("copy_project_worktree_path", { input });
+}
+
+export function moveProjectWorktreePath(
+  input: ProjectWorkspaceTransferPathInput,
+): Promise<void> {
+  return invokeCommand<void>("move_project_worktree_path", { input });
 }
 
 export type WorkspaceChangeKind =

@@ -5,6 +5,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
 } from "../../components/ui/context-menu";
 import { useAlertDialog } from "../../components/ui/use-alert-dialog";
 import { copyTextToClipboard } from "../commands/copy-text-to-clipboard";
@@ -33,6 +34,10 @@ export interface WorkspacePathContextMenuProps {
    * 未注入的调用方菜单保持现状。
    */
   deleteAction?: WorkspacePathContextMenuDeleteAction | null;
+  /**
+   * 只有「代码」Activity 文件树注入。注入后菜单改成四组，并提供剪切、复制、粘贴、重命名。
+   */
+  editActions?: WorkspacePathContextMenuEditActions | null;
   onClose: () => void;
 }
 
@@ -45,11 +50,20 @@ export interface WorkspacePathContextMenuDeleteAction {
   onDelete: () => void;
 }
 
+export interface WorkspacePathContextMenuEditActions {
+  canPaste: boolean;
+  onCopyEntry: () => void;
+  onCut: () => void;
+  onPaste: () => void;
+  onRename: () => void;
+}
+
 export function WorkspacePathContextMenu({
   target,
   workspacePath,
   createActions,
   deleteAction,
+  editActions,
   onClose,
 }: WorkspacePathContextMenuProps): ReactElement {
   const { messages, t } = useI18n();
@@ -82,6 +96,154 @@ export function WorkspacePathContextMenu({
     });
   }, [showAlert, t, target, workspacePath]);
 
+  const showNewFolder = createActions != null && target?.kind === "directory";
+  const sections: ReactElement[][] = [];
+  const createSection: ReactElement[] = [];
+  if (createActions) {
+    createSection.push(
+      <ContextMenuItem
+        key="new-file"
+        onClick={() => {
+          if (target) {
+            createActions.onCreateFile();
+          }
+        }}
+      >
+        {t("agentsFeature.newFile")}
+      </ContextMenuItem>,
+    );
+  }
+  if (showNewFolder && createActions) {
+    createSection.push(
+      <ContextMenuItem
+        key="new-folder"
+        onClick={() => {
+          if (target) {
+            createActions.onCreateDirectory();
+          }
+        }}
+      >
+        {t("agentsFeature.newFolder")}
+      </ContextMenuItem>,
+    );
+  }
+  if (editActions && showOpenInFinder) {
+    createSection.push(
+      <ContextMenuItem key="finder" onClick={handleOpenInFinder}>
+        {t("agentsFeature.openInFinder")}
+      </ContextMenuItem>,
+    );
+  }
+  if (createSection.length > 0) {
+    sections.push(createSection);
+  }
+
+  const copySection: ReactElement[] = [
+    <ContextMenuItem
+      key="copy-name"
+      onClick={() => {
+        if (target) {
+          void handleCopy(target.displayName);
+        }
+      }}
+    >
+      {messages.agentsFeature.copyFileName}
+    </ContextMenuItem>,
+    <ContextMenuItem
+      key="copy-relative"
+      onClick={() => {
+        if (target) {
+          void handleCopy(target.relativePath);
+        }
+      }}
+    >
+      {messages.agentsFeature.copyRelativePath}
+    </ContextMenuItem>,
+  ];
+  if (workspacePath && target) {
+    const absolutePath = joinWorkspacePath(workspacePath, target.relativePath);
+    copySection.push(
+      <ContextMenuItem
+        key="copy-absolute"
+        onClick={() => {
+          void handleCopy(absolutePath);
+        }}
+      >
+        {messages.agentsFeature.copyAbsolutePath}
+      </ContextMenuItem>,
+    );
+  } else if (workspacePath) {
+    copySection.push(
+      <ContextMenuItem key="copy-absolute">
+        {messages.agentsFeature.copyAbsolutePath}
+      </ContextMenuItem>,
+    );
+  }
+  if (!editActions && showOpenInFinder) {
+    copySection.push(
+      <ContextMenuItem key="finder" onClick={handleOpenInFinder}>
+        {t("agentsFeature.openInFinder")}
+      </ContextMenuItem>,
+    );
+  }
+  sections.push(copySection);
+
+  if (editActions) {
+    sections.push([
+      <ContextMenuItem key="cut" onClick={editActions.onCut}>
+        {t("agentsFeature.cut")}
+      </ContextMenuItem>,
+      <ContextMenuItem key="copy-entry" onClick={editActions.onCopyEntry}>
+        {t("agentsFeature.copyEntry")}
+      </ContextMenuItem>,
+      <ContextMenuItem
+        key="paste"
+        aria-disabled={editActions.canPaste ? undefined : true}
+        disabled={!editActions.canPaste}
+        onClick={() => {
+          if (editActions.canPaste) {
+            editActions.onPaste();
+          }
+        }}
+      >
+        {t("agentsFeature.paste")}
+      </ContextMenuItem>,
+    ]);
+  }
+
+  const renameSection: ReactElement[] = [];
+  if (editActions) {
+    renameSection.push(
+      <ContextMenuItem key="rename" onClick={editActions.onRename}>
+        {t("agentsFeature.rename")}
+      </ContextMenuItem>,
+    );
+  }
+  if (deleteAction) {
+    renameSection.push(
+      <ContextMenuItem
+        key="delete"
+        onClick={() => {
+          if (target) {
+            deleteAction.onDelete();
+          }
+        }}
+      >
+        {t("agentsFeature.deleteEntry")}
+      </ContextMenuItem>,
+    );
+  }
+  if (renameSection.length > 0) {
+    sections.push(renameSection);
+  }
+
+  const menuItems = sections.flatMap((section, index) => {
+    if (!editActions || index === 0) {
+      return section;
+    }
+    return [<ContextMenuSeparator key={`separator-${index}`} />, ...section];
+  });
+
   return (
     <>
       <ContextMenu
@@ -95,75 +257,7 @@ export function WorkspacePathContextMenu({
         <ContextMenuContent
           anchor={target ? { x: target.x, y: target.y } : null}
         >
-          {createActions ? (
-            <>
-              <ContextMenuItem
-                onClick={() => {
-                  if (target) {
-                    createActions.onCreateFile();
-                  }
-                }}
-              >
-                {t("agentsFeature.newFile")}
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() => {
-                  if (target) {
-                    createActions.onCreateDirectory();
-                  }
-                }}
-              >
-                {t("agentsFeature.newFolder")}
-              </ContextMenuItem>
-            </>
-          ) : null}
-          <ContextMenuItem
-            onClick={() => {
-              if (target) {
-                void handleCopy(target.displayName);
-              }
-            }}
-          >
-            {messages.agentsFeature.copyFileName}
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              if (target) {
-                void handleCopy(target.relativePath);
-              }
-            }}
-          >
-            {messages.agentsFeature.copyRelativePath}
-          </ContextMenuItem>
-          {workspacePath ? (
-            <ContextMenuItem
-              onClick={() => {
-                if (target) {
-                  void handleCopy(
-                    joinWorkspacePath(workspacePath, target.relativePath),
-                  );
-                }
-              }}
-            >
-              {messages.agentsFeature.copyAbsolutePath}
-            </ContextMenuItem>
-          ) : null}
-          {showOpenInFinder ? (
-            <ContextMenuItem onClick={handleOpenInFinder}>
-              {t("agentsFeature.openInFinder")}
-            </ContextMenuItem>
-          ) : null}
-          {deleteAction ? (
-            <ContextMenuItem
-              onClick={() => {
-                if (target) {
-                  deleteAction.onDelete();
-                }
-              }}
-            >
-              {t("agentsFeature.deleteEntry")}
-            </ContextMenuItem>
-          ) : null}
+          {menuItems}
         </ContextMenuContent>
       </ContextMenu>
       {alertDialog}

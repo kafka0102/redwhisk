@@ -66,6 +66,7 @@ mod workspace_diff_preview;
 mod workspace_github;
 mod workspace_merge_ops;
 mod workspace_path_ops;
+mod workspace_path_transfer;
 mod workspace_preview;
 mod workspace_remote_ops;
 mod worktree_setup;

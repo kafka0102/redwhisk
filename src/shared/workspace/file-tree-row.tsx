@@ -13,7 +13,14 @@ import {
   Folder,
   SquareCode,
 } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactElement,
+} from "react";
 import type { NodeRendererProps } from "react-arborist";
 
 import { Input } from "../../components/ui/input";
@@ -38,6 +45,18 @@ export interface FileTreeRowProps extends NodeRendererProps<WorkspaceFileTreeNod
     x: number,
     y: number,
   ) => void;
+  /** 当前行就地重命名。有值时名字换成输入框，不另插草稿行。 */
+  rename?: FileTreeRenameControls | null;
+}
+
+export interface FileTreeRenameControls {
+  errorMessage: string | null;
+  errorRevision: number;
+  generation: number;
+  name: string;
+  onCancel: () => void;
+  onChange: (name: string) => void;
+  onSubmit: (generation: number) => void;
 }
 
 export function FileTreeRow({
@@ -47,12 +66,36 @@ export function FileTreeRow({
   isMenuTarget,
   onOpenFile,
   onContextMenuNode,
+  rename,
   style,
 }: FileTreeRowProps) {
   const treeDepthStyle = {
     ...style,
     "--tree-depth": node.level,
   } as CSSProperties;
+
+  if (rename) {
+    return (
+      <FileTreeRenameRow
+        errorMessage={rename.errorMessage}
+        errorRevision={rename.errorRevision}
+        generation={rename.generation}
+        isDirectory={node.data.kind === "directory"}
+        isIgnored={node.data.isIgnored}
+        isMenuTarget={isMenuTarget}
+        isOpen={node.isOpen}
+        name={rename.name}
+        style={treeDepthStyle}
+        onCancel={rename.onCancel}
+        onChange={rename.onChange}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenuNode(node.data, event.clientX, event.clientY);
+        }}
+        onSubmit={rename.onSubmit}
+      />
+    );
+  }
 
   if (node.data.kind === "directory") {
     const directoryKind = directoryKinds?.get(node.data.path);
@@ -127,6 +170,115 @@ export interface FileTreeDraftRowProps extends NodeRendererProps<WorkspaceFileTr
   errorRevision: number;
   onCancel: () => void;
   onSubmit: (name: string) => void;
+}
+
+function FileTreeRenameRow({
+  errorMessage,
+  errorRevision,
+  generation,
+  isDirectory,
+  isIgnored,
+  isMenuTarget,
+  isOpen,
+  name,
+  onCancel,
+  onChange,
+  onContextMenu,
+  onSubmit,
+  style,
+}: {
+  errorMessage: string | null;
+  errorRevision: number;
+  generation: number;
+  isDirectory: boolean;
+  isIgnored: boolean;
+  isMenuTarget: boolean;
+  isOpen: boolean;
+  name: string;
+  onCancel: () => void;
+  onChange: (name: string) => void;
+  onContextMenu: (event: MouseEvent<HTMLDivElement>) => void;
+  onSubmit: (generation: number) => void;
+  style: CSSProperties;
+}): ReactElement {
+  const { t } = useI18n();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (errorRevision === 0) {
+      return;
+    }
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [errorRevision]);
+
+  return (
+    <div
+      className={fileTreeRowClassName(
+        isDirectory ? "session-file-tree__folder" : "session-file-tree__row",
+        { isIgnored, isMenuTarget },
+      )}
+      style={style}
+      onContextMenu={onContextMenu}
+    >
+      {isDirectory ? (
+        isOpen ? (
+          <ChevronDown
+            aria-hidden="true"
+            className="session-file-tree__chevron"
+            size={13}
+            strokeWidth={2}
+          />
+        ) : (
+          <ChevronRight
+            aria-hidden="true"
+            className="session-file-tree__chevron"
+            size={13}
+            strokeWidth={2}
+          />
+        )
+      ) : (
+        <span
+          aria-hidden="true"
+          className="session-file-tree__chevron session-file-tree__chevron--placeholder"
+        />
+      )}
+      {isDirectory ? (
+        <Folder aria-hidden="true" size={15} strokeWidth={1.8} />
+      ) : (
+        <FileTypeIcon fileName={name} />
+      )}
+      <Input
+        ref={inputRef}
+        aria-invalid={errorMessage !== null}
+        aria-label={t("agentsFeature.rename")}
+        className="session-file-tree__draft-input"
+        title={errorMessage ?? undefined}
+        value={name}
+        onBlur={() => {
+          onSubmit(generation);
+        }}
+        onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onSubmit(generation);
+          }
+        }}
+      />
+    </div>
+  );
 }
 
 /**

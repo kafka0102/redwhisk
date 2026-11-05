@@ -23,6 +23,10 @@ import {
 import { FileTreeDraftRow, FileTreeRow } from "./file-tree-row";
 import { useFileTreeCreateDraft } from "./use-file-tree-create-draft";
 import {
+  useFileTreePathEdit,
+  type FileTreePathTransferInput,
+} from "./use-file-tree-path-edit";
+import {
   WorkspacePathContextMenu,
   type WorkspacePathContextMenuTarget,
 } from "./workspace-path-context-menu";
@@ -70,6 +74,10 @@ export interface FileTreePanelProps {
    * 未注入时面板保持只读，菜单与行为与现状逐字一致。
    */
   onDeleteEntry?: (input: FileTreeEntryDeleteInput) => void;
+  /**
+   * 代码文件树的复制 / 移动。与新建一起注入；会话侧栏不传，菜单保持原样。
+   */
+  onTransferEntry?: (input: FileTreePathTransferInput) => Promise<void>;
   // worktree / 代码根的绝对路径，用于拼接「复制绝对路径」。为空时隐藏绝对路径菜单项。
   workspacePath?: string | null;
   /** 文件路径 → 变更类型（git status），用于文件名着色与行末 A/M/D 徽标。 */
@@ -94,6 +102,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onDirectoryOpen,
   onCreateEntry,
   onDeleteEntry,
+  onTransferEntry,
   workspacePath,
   changedFileKinds,
   directoryKinds,
@@ -156,6 +165,24 @@ export const FileTreePanel = memo(function FileTreePanel({
       onDirectoryOpen: openCreateTargetDirectory,
       onRevealDirectory: revealDirectory,
     });
+  const pathEdit = useFileTreePathEdit({
+    fileTree,
+    onOpenStateChange,
+    onTransferEntry: onCreateEntry ? onTransferEntry : undefined,
+    treeApiRef,
+    workspacePath,
+  });
+  const {
+    beginRename,
+    canPaste,
+    cancelRename,
+    changeRenameName,
+    copyEntry,
+    cutEntry,
+    pasteEntry,
+    rename,
+    submitRename,
+  } = pathEdit;
 
   const handleScroll = useCallback(
     (props: { scrollOffset: number; scrollUpdateWasRequested: boolean }) => {
@@ -267,6 +294,21 @@ export const FileTreePanel = memo(function FileTreePanel({
           isMenuTarget={menu?.relativePath === props.node.data.path}
           onOpenFile={onOpenFile}
           onContextMenuNode={handleContextMenuNode}
+          rename={
+            rename?.path === props.node.data.path
+              ? {
+                  errorMessage: rename.errorMessage,
+                  errorRevision: rename.errorRevision,
+                  generation: rename.generation,
+                  name: rename.name,
+                  onCancel: cancelRename,
+                  onChange: changeRenameName,
+                  onSubmit: (generation: number) => {
+                    void submitRename(generation);
+                  },
+                }
+              : null
+          }
         />
       ),
     [
@@ -278,6 +320,10 @@ export const FileTreePanel = memo(function FileTreePanel({
       handleContextMenuNode,
       menu?.relativePath,
       onOpenFile,
+      cancelRename,
+      changeRenameName,
+      rename,
+      submitRename,
       submitDraftName,
     ],
   );
@@ -307,6 +353,18 @@ export const FileTreePanel = memo(function FileTreePanel({
               kind: menu.kind,
               relativePath: menu.relativePath,
             }),
+        }
+      : null;
+  const editActions =
+    onCreateEntry && menu
+      ? {
+          canPaste,
+          onCopyEntry: () => copyEntry(menu),
+          onCut: () => cutEntry(menu),
+          onPaste: () => {
+            void pasteEntry(menu);
+          },
+          onRename: () => beginRename(menu),
         }
       : null;
 
@@ -356,6 +414,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         workspacePath={workspacePath}
         createActions={createActions}
         deleteAction={deleteAction}
+        editActions={editActions}
         onClose={() => setMenu(null)}
       />
     </div>

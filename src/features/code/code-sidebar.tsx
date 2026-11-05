@@ -6,6 +6,7 @@ import {
   type FileTreeEntryDeleteInput,
   type FileTreeOpenState,
 } from "../../shared/workspace/file-tree-panel";
+import type { FileTreePathTransferInput } from "../../shared/workspace/use-file-tree-path-edit";
 import type {
   WorkspaceChangeKind,
   WorkspaceFileTreeNode,
@@ -29,6 +30,7 @@ export interface CodeSidebarProps {
   onCreateEntry?: (input: FileTreeEntryCreateInput) => Promise<void>;
   /** 代码页才注入的删除能力；未注入时文件树菜单不出现「删除」。 */
   onDeleteEntry?: (input: FileTreeEntryDeleteInput) => void;
+  onTransferEntry?: (input: FileTreePathTransferInput) => Promise<void>;
   onDirectoryOpen: (directoryPath: string) => void;
   onOpenFile: (file: WorkspaceFileTreeNode) => void;
   onOpenMatch: (match: {
@@ -60,6 +62,7 @@ export function CodeSidebar({
   onContentSearchChange,
   onCreateEntry,
   onDeleteEntry,
+  onTransferEntry,
   onDirectoryOpen,
   onOpenFile,
   onOpenMatch,
@@ -94,6 +97,7 @@ export function CodeSidebar({
       workspacePath={workspacePath}
       onCreateEntry={onCreateEntry}
       onDeleteEntry={onDeleteEntry}
+      onTransferEntry={onTransferEntry}
       onDirectoryOpen={onDirectoryOpen}
       onOpenFile={onOpenFile}
       onOpenStateChange={onOpenStateChange}

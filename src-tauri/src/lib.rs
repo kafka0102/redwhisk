@@ -233,6 +233,8 @@ pub fn run() {
             features::agent_session::workspace_commands::create_project_worktree_file,
             features::agent_session::workspace_commands::create_project_worktree_directory,
             features::agent_session::workspace_commands::delete_project_worktree_path,
+            features::agent_session::workspace_commands::copy_project_worktree_path,
+            features::agent_session::workspace_commands::move_project_worktree_path,
             features::agent_session::workspace_commands::read_project_worktree_diff,
             features::agent_session::workspace_commands::resolve_workspace_github_remote,
             features::agent_session::workspace_commands::probe_github_commit,

@@ -345,24 +345,30 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
     return true;
   }, [saveTabByPath]);
 
-  const { closeTabs, createEntry, deleteEntry, openFile, openMatchFromSearch } =
-    useCodeFileTreePathActions({
-      activateFilePath,
-      activePathRef,
-      confirmBulkUnsaved,
-      confirm,
-      loadDirectory,
-      openFilePathsRef,
-      projectId,
-      refreshDirectory,
-      resolveErrorMessage: resolveActiveFileErrorMessage,
-      saveAllDirtyTabs,
-      selectedRoot,
-      setRevealRequest,
-      setTabs,
-      showAlert,
-      tabsRef,
-    });
+  const {
+    closeTabs,
+    createEntry,
+    deleteEntry,
+    openFile,
+    openMatchFromSearch,
+    transferEntry,
+  } = useCodeFileTreePathActions({
+    activateFilePath,
+    activePathRef,
+    confirmBulkUnsaved,
+    confirm,
+    loadDirectory,
+    openFilePathsRef,
+    projectId,
+    refreshDirectory,
+    resolveErrorMessage: resolveActiveFileErrorMessage,
+    saveAllDirtyTabs,
+    selectedRoot,
+    setRevealRequest,
+    setTabs,
+    showAlert,
+    tabsRef,
+  });
 
   useCodeLanguageDefinition({
     onOpenMatch: openMatchFromSearch,
@@ -575,6 +581,7 @@ export function CodeActivity({ projectId, roots }: CodeActivityProps) {
             onContentSearchChange={setContentSearch}
             onCreateEntry={selectedRoot ? createEntry : undefined}
             onDeleteEntry={selectedRoot ? deleteEntry : undefined}
+            onTransferEntry={selectedRoot ? transferEntry : undefined}
             onDirectoryOpen={loadDirectory}
             onOpenFile={openFile}
             onOpenMatch={openMatchFromSearch}

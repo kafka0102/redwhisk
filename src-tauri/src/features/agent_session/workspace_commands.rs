@@ -9,10 +9,11 @@ use crate::types::session_workspace::{
     ProjectCheckoutBranchInput, ProjectCheckoutBranchResponse, ProjectCheckoutBranchesResponse,
     ProjectCreateBranchInput, ProjectCreateBranchResponse, ProjectMergeBranchInput,
     ProjectMergeBranchResponse, ProjectWorkspaceInput, ProjectWorkspacePathInput,
-    ProjectWorkspaceWriteFileInput, ProjectWorktreeChangesResponse,
-    ProjectWorktreeCommitHistoryResponse, ProjectWorktreeFileTreeResponse,
-    ResolveWorkspaceGithubRemoteResponse, WorkspaceContentSearchInput,
-    WorkspaceContentSearchResponse, WorkspaceDiffContent, WorkspaceFileContent, WorkspaceFileStat,
+    ProjectWorkspaceTransferPathInput, ProjectWorkspaceWriteFileInput,
+    ProjectWorktreeChangesResponse, ProjectWorktreeCommitHistoryResponse,
+    ProjectWorktreeFileTreeResponse, ResolveWorkspaceGithubRemoteResponse,
+    WorkspaceContentSearchInput, WorkspaceContentSearchResponse, WorkspaceDiffContent,
+    WorkspaceFileContent, WorkspaceFileStat,
 };
 
 pub const CODE_WORKSPACE_ROOTS_UPDATED_EVENT: &str = "code-workspace-roots-updated";
@@ -135,6 +136,26 @@ pub async fn delete_project_worktree_path(
 ) -> Result<(), CommandError> {
     let data_dir = prepare_workspace_data_dir(&app, &state)?;
     run_workspace_blocking(data_dir, move |service| service.delete_path(input)).await
+}
+
+#[tauri::command]
+pub async fn copy_project_worktree_path(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceTransferPathInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.copy_path(input)).await
+}
+
+#[tauri::command]
+pub async fn move_project_worktree_path(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: ProjectWorkspaceTransferPathInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_workspace_data_dir(&app, &state)?;
+    run_workspace_blocking(data_dir, move |service| service.move_path(input)).await
 }
 
 #[tauri::command]
