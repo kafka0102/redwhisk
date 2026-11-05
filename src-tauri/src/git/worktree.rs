@@ -667,7 +667,7 @@ fn unique_worktree_path(root: &Path, base_name: &str) -> PathBuf {
 }
 
 fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> {
-    command::run_git(repo_path, args)
+    crate::git::index_lock::run_git(repo_path, args)
         .map(|value| value.trim().to_string())
         .map_err(GitWorktreeError::from)
 }

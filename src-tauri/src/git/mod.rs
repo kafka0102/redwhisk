@@ -7,6 +7,7 @@ pub mod create_branch;
 pub mod forge;
 pub mod github_commit_probe;
 pub mod github_remote;
+pub mod index_lock;
 pub mod merge_branch;
 pub mod merge_branches;
 pub mod operation_state;
