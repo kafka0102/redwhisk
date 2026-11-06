@@ -7,6 +7,7 @@ interface IssueSurfaceHeaderProps {
   actions?: ReactNode;
   variant?: "activity" | "fullscreen" | "card";
   titleLevel?: 2 | 3;
+  titleAsChild?: boolean;
   className?: string;
 }
 
@@ -15,9 +16,17 @@ export function IssueSurfaceHeader({
   actions,
   variant = "card",
   titleLevel = 3,
+  titleAsChild = false,
   className,
 }: IssueSurfaceHeaderProps) {
   const titleClassName = "issue-surface-header__title";
+  const titleNode = titleAsChild ? (
+    title
+  ) : titleLevel === 2 ? (
+    <h2 className={titleClassName}>{title}</h2>
+  ) : (
+    <h3 className={titleClassName}>{title}</h3>
+  );
 
   return (
     <header
@@ -27,11 +36,7 @@ export function IssueSurfaceHeader({
         className,
       )}
     >
-      {titleLevel === 2 ? (
-        <h2 className={titleClassName}>{title}</h2>
-      ) : (
-        <h3 className={titleClassName}>{title}</h3>
-      )}
+      {titleNode}
       {actions ? (
         <div className="issue-surface-header__actions">{actions}</div>
       ) : null}

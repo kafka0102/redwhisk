@@ -5,6 +5,7 @@ use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::Emitter;
 use tauri::State;
 
+use super::detail_read::read_issue_detail_in_data_dir;
 use super::github_issue_mirror::{load_issue_board, sync_connected_issues, IssueBoardListResponse};
 use super::service::IssueService;
 use crate::app_state::AppState;
@@ -23,6 +24,7 @@ use crate::types::issue::{
     SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
+use crate::types::issue_detail::{GetIssueDetailInput, IssueDetailRecord};
 use crate::types::issue_mirror::{
     IssueSyncChangedEvent, IssueSyncResult, IssueSyncStatus, ISSUE_SYNC_CHANGED_EVENT,
 };
@@ -534,6 +536,25 @@ pub async fn get_issue_summary(
         .with_reason("summaryReadFailed")
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+}
+
+#[tauri::command]
+pub async fn get_issue_detail(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: GetIssueDetailInput,
+) -> Result<IssueDetailRecord, CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || read_issue_detail_in_data_dir(data_dir, input))
+        .await
+        .map_err(|error| {
+            CommandError::new(
+                CommandErrorCode::IssuePersistenceFailed,
+                "Failed to read issue detail.",
+            )
+            .with_reason("detailReadFailed")
+            .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+        })?
 }
 
 #[tauri::command]

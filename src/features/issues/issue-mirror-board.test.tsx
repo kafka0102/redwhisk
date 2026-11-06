@@ -336,7 +336,7 @@ describe("GitHub issue mirror board", () => {
     );
   });
 
-  it("opens a remote backlog card read-only and ignores edit", async () => {
+  it("opens a remote backlog card read-only and edits the local copy", async () => {
     const user = userEvent.setup();
     renderBoard();
     await user.click(
@@ -350,10 +350,12 @@ describe("GitHub issue mirror board", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: "编辑 Issue" }),
     );
-    expect(screen.queryByPlaceholderText("Issue 标题")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Issue 详情" }),
+      await screen.findByPlaceholderText("Issue 标题"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Issue 详情" }),
+    ).not.toBeInTheDocument();
   });
 
   it("reloads the current project after issue-sync-changed and unsubscribes", async () => {

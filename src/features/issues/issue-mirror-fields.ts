@@ -1,6 +1,52 @@
 import type { IssueRecord } from "./issue-commands";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
 
+const ISSUE_MIRROR_FIELDS = [
+  "source",
+  "provider",
+  "externalNumber",
+  "remoteState",
+  "remoteLabels",
+  "syncStatus",
+  "remoteClosedWhileRunning",
+  "remoteReopened",
+  "pullRequestUrl",
+] as const;
+
+type IssueMirrorField = (typeof ISSUE_MIRROR_FIELDS)[number];
+type IssueMirrorCarrier = IssueRecord &
+  Partial<Pick<IssueBoardRecord, IssueMirrorField>>;
+
+function hasOwnMirrorField(value: object, field: IssueMirrorField): boolean {
+  return Object.prototype.hasOwnProperty.call(value, field);
+}
+
+function copyMirrorField<Field extends IssueMirrorField>(
+  target: IssueMirrorCarrier,
+  source: IssueMirrorCarrier,
+  field: Field,
+): void {
+  target[field] = source[field];
+}
+
+export function retainIssueMirrorFields(
+  previous: IssueRecord,
+  next: IssueRecord,
+): IssueRecord {
+  const prior = previous as IssueMirrorCarrier;
+  const incoming = next as IssueMirrorCarrier;
+  const retained: IssueMirrorCarrier = { ...incoming };
+  for (const field of ISSUE_MIRROR_FIELDS) {
+    if (
+      !hasOwnMirrorField(incoming, field) &&
+      hasOwnMirrorField(prior, field)
+    ) {
+      copyMirrorField(retained, prior, field);
+    }
+  }
+  return retained;
+}
+
 type BoardRecordInput = IssueRecord &
   Partial<
     Pick<

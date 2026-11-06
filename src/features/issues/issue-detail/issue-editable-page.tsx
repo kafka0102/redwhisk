@@ -23,6 +23,8 @@ import type { DialogMode, IssueFormState } from "../issue-activity-types";
 import type { IssueAttachmentDraft } from "../issue-form/issue-description-editor";
 import { IssueDescriptionEditor } from "../issue-form/issue-description-editor";
 import { IssueSurfaceHeader } from "../issue-surface-header";
+import { IssueDetailHeading } from "./issue-detail-heading";
+import { issueDetailTitleParts } from "./issue-detail-mode";
 
 interface IssueEditablePageProps {
   mode: DialogMode;
@@ -78,6 +80,10 @@ export function IssueEditablePage({
   const { messages } = useI18n();
   const pageTitle =
     mode === "create" ? messages.issues.newIssue : messages.issues.edit;
+  const titleParts =
+    mode === "edit" && selectedIssue != null
+      ? issueDetailTitleParts(selectedIssue)
+      : null;
   const canDelete = mode === "edit" && selectedIssue?.status === "backlog";
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -89,20 +95,19 @@ export function IssueEditablePage({
         onSubmit={onSubmit}
       >
         <IssueSurfaceHeader
-          title={pageTitle}
-          titleLevel={2}
+          title={
+            <IssueDetailHeading
+              backLabel={messages.issues.backEditable}
+              disabled={isSaving}
+              numberLabel={titleParts?.numberLabel}
+              title={titleParts?.title ?? pageTitle}
+              onBack={onCancel}
+            />
+          }
+          titleAsChild
           variant="fullscreen"
           actions={
             <>
-              <Button
-                className="issues-button"
-                disabled={isSaving}
-                type="button"
-                variant="secondary"
-                onClick={onCancel}
-              >
-                {messages.issues.backEditable}
-              </Button>
               {mode === "edit" && onRunIssue ? (
                 <Button
                   className="issues-button"

@@ -70,7 +70,7 @@ const getProjectIssueSourceSettingsMock = vi.mocked(
   getProjectIssueSourceSettings,
 );
 
-function boardIssue(id: number): IssueRecord {
+function boardIssue(id: number): IssueRecord & { source: "local" } {
   return {
     id,
     number: id,
@@ -92,6 +92,7 @@ function boardIssue(id: number): IssueRecord {
     createdAt: 1,
     updatedAt: 1,
     statusChangedAt: 1,
+    source: "local",
   };
 }
 

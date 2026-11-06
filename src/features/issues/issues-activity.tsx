@@ -58,7 +58,7 @@ import {
 } from "./issue-board-header";
 import { IssuesKanban } from "./issues-kanban";
 import type { IssueSourceFilter } from "./issue-source-filter";
-import { readIssueMirror, toBoardRecord } from "./issue-mirror-fields";
+import { isIssueEditorOpen } from "./issue-detail/issue-detail-mode";
 import { useIssueSyncChrome } from "./use-issue-sync-chrome";
 import { useIssueLabelCatalog } from "./use-issue-label-catalog";
 import { IssueRunDialog } from "./issue-run/issue-run-dialog";
@@ -508,25 +508,14 @@ export function IssuesActivity({
     onOpenAgentsActivity,
   });
 
-  const isBacklogDialog =
-    dialogMode === "create" ||
-    (selectedIssue?.status === "backlog" &&
-      !(
-        selectedIssue != null &&
-        readIssueMirror(toBoardRecord(selectedIssue)).source === "remote"
-      ));
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
   const canOpenLinkedSession =
     hasLinkedSession && Boolean(onOpenAgentsActivity);
-  const isEditablePageOpen = Boolean(
-    dialogMode &&
-    (isBacklogDialog ||
-      (isReadOnlyEditRequested &&
-        !(
-          selectedIssue != null &&
-          readIssueMirror(toBoardRecord(selectedIssue)).source === "remote"
-        ))),
-  );
+  const isEditablePageOpen = isIssueEditorOpen({
+    dialogMode,
+    issue: selectedIssue,
+    readOnlyEditRequested: isReadOnlyEditRequested,
+  });
 
   function isFormDirty(): boolean {
     if (dialogMode === "create") {
@@ -617,7 +606,7 @@ export function IssuesActivity({
         isEditablePageOpen ? " activity-surface--issues-form" : ""
       }`}
     >
-      {!isEditablePageOpen ? (
+      {dialogMode == null ? (
         <>
           <IssueBoardHeader
             actions={issueSyncToolbar}
@@ -733,6 +722,11 @@ export function IssuesActivity({
             onDeleteIssue={() => void handleDeleteIssue()}
             onEditIssue={editSelectedIssue}
             onOpenLinkedSession={openLinkedSession}
+            onRunIssue={
+              selectedIssue && canRunIssueFor(selectedIssue)
+                ? (trigger) => void confirmRunIssueFromEditPage(trigger)
+                : undefined
+            }
           />
         </Suspense>
       ) : null}

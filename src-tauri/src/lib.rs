@@ -182,6 +182,7 @@ pub fn run() {
             features::issue::commands::send_agent_commit_prompt,
             features::issue::commands::detect_agent_commit_completion,
             features::issue::commands::get_issue_summary,
+            features::issue::commands::get_issue_detail,
             features::issue::commands::get_issue_timeline,
             features::issue::commands::delete_issue,
             features::issue::commands::get_issue_worktree_status,

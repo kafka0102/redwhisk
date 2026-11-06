@@ -265,7 +265,7 @@ const convertFileSrcMock = vi.mocked(convertFileSrc);
 const toastSuccessMock = vi.mocked(toast.success);
 const listenMock = vi.mocked(listen);
 
-const existingIssue: IssueRecord = {
+const existingIssue: IssueRecord & { source: "local" } = {
   id: 20,
   number: 1,
   projectId: 1,
@@ -295,9 +295,10 @@ const existingIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_632_000_000,
   statusChangedAt: 1_780_632_000_000,
+  source: "local",
 };
 
-const runningIssue: IssueRecord = {
+const runningIssue: IssueRecord & { source: "local" } = {
   id: 21,
   number: 21,
   projectId: 1,
@@ -318,9 +319,10 @@ const runningIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_633_000_000,
   statusChangedAt: 1_780_633_000_000,
+  source: "local",
 };
 
-const reviewIssue: IssueRecord = {
+const reviewIssue: IssueRecord & { source: "local" } = {
   id: 22,
   number: 22,
   projectId: 1,
@@ -341,9 +343,10 @@ const reviewIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_634_000_000,
   statusChangedAt: 1_780_634_000_000,
+  source: "local",
 };
 
-const completedIssue: IssueRecord = {
+const completedIssue: IssueRecord & { source: "local" } = {
   id: 23,
   number: 23,
   projectId: 1,
@@ -364,9 +367,10 @@ const completedIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_635_000_000,
   statusChangedAt: 1_780_635_000_000,
+  source: "local",
 };
 
-const linkedSessionIssue: IssueRecord = {
+const linkedSessionIssue: IssueRecord & { source: "local" } = {
   id: 24,
   number: 24,
   projectId: 1,
@@ -387,9 +391,10 @@ const linkedSessionIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_636_000_000,
   statusChangedAt: 1_780_636_000_000,
+  source: "local",
 };
 
-const completedLinkedSessionIssue: IssueRecord = {
+const completedLinkedSessionIssue: IssueRecord & { source: "local" } = {
   id: 25,
   number: 25,
   projectId: 1,
@@ -410,9 +415,10 @@ const completedLinkedSessionIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_637_000_000,
   statusChangedAt: 1_780_637_000_000,
+  source: "local",
 };
 
-const attentionIssue: IssueRecord = {
+const attentionIssue: IssueRecord & { source: "local" } = {
   id: 27,
   number: 27,
   projectId: 1,
@@ -433,6 +439,7 @@ const attentionIssue: IssueRecord = {
   createdAt: 1_780_632_000_000,
   updatedAt: 1_780_639_000_000,
   statusChangedAt: 1_780_639_000_000,
+  source: "local",
 };
 
 const projectProfile = {
@@ -1084,7 +1091,7 @@ describe("IssuesActivity", () => {
     ).not.toBeInTheDocument();
     expect(
       within(page).getByRole("button", { name: "Back" }).querySelector("svg"),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(within(page).getByText(issue.title)).toBeInTheDocument();
     expect(within(page).getByText(issue.description)).toBeInTheDocument();
     expect(within(page).queryByLabelText("Title")).not.toBeInTheDocument();
@@ -1642,7 +1649,7 @@ describe("IssuesActivity", () => {
     });
     expect(
       within(readOnlyPageAfterSave).getByRole("heading", {
-        name: "Updated running issue",
+        name: "#21 · Updated running issue",
       }),
     ).toBeInTheDocument();
   });
@@ -2070,8 +2077,8 @@ describe("IssuesActivity", () => {
     renderIssuesActivity({ requestedIssueId: reviewIssue.id });
 
     expect(
-      await screen.findByRole("button", { name: "Review issue" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      await screen.findByRole("heading", { name: "#22 · Review issue" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the backlog lane header plus action to create issues", async () => {
@@ -3712,10 +3719,9 @@ describe("IssuesActivity", () => {
     const runButton = within(page).getByRole("button", { name: "Run" });
 
     expect(
-      Array.from(
-        backButton.parentElement?.querySelectorAll("button") ?? [],
-      ).slice(0, 2),
-    ).toEqual([backButton, runButton]);
+      backButton.compareDocumentPosition(runButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     await user.click(runButton);
 
@@ -5537,6 +5543,7 @@ describe("Run Dialog 启动期模型选择", () => {
   });
 
   function seedRunDialog() {
+    resetIssuePageStateCacheForTests();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
     listAgentProfilesMock.mockImplementation(async ({ scope }) => {
       if (scope === "project") {

@@ -81,6 +81,39 @@
   overflow: auto;
 }
 
+.issue-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issue-detail__readonly-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.issue-detail__readonly-label {
+  border-radius: 999px;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.issue-detail-side-card {
+  margin-bottom: 12px;
+}
+
+.issue-detail-side-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .issue-readonly-session-panel {
   height: 100%;
   padding: 0;

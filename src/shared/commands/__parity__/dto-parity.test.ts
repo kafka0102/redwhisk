@@ -19,6 +19,7 @@ const tsFiles = [
   path.join(srcDir, "features/project/project-commands.ts"),
   path.join(srcDir, "features/project/project-forge-commands.ts"),
   path.join(srcDir, "features/issues/issue-commands.ts"),
+  path.join(srcDir, "features/issues/issue-detail/issue-detail-commands.ts"),
   path.join(srcDir, "features/issues/issue-mirror-commands.ts"),
   path.join(srcDir, "features/issues/issue-completion/closeout-action.ts"),
   path.join(srcDir, "features/agents/agent-session-commands.ts"),

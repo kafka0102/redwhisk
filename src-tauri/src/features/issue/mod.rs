@@ -3,6 +3,7 @@ mod attachment;
 pub mod commands;
 pub mod completion;
 mod completion_comment;
+mod detail_read;
 mod github_issue_mirror;
 mod service;
 mod source_gate;

@@ -602,6 +602,12 @@
         "targetPath": "required"
       }
     },
+    "GetIssueDetailInput": {
+      "fields": {
+        "issueId": "required",
+        "projectId": "required"
+      }
+    },
     "GetIssueSummaryInput": {
       "fields": {
         "issueId": "required",
@@ -739,6 +745,23 @@
         "worktreeCleanupDecision": "required"
       }
     },
+    "IssueDetailProjection": {
+      "fields": {
+        "assignees": "required",
+        "authorLogin": "required",
+        "externalUrl": "required",
+        "labels": "required",
+        "provider": "required",
+        "remoteState": "required",
+        "repo": "required"
+      }
+    },
+    "IssueDetailRecord": {
+      "fields": {
+        "linkedChangeRequest": "required",
+        "projection": "required"
+      }
+    },
     "IssueLabelRecord": {
       "fields": {
         "color": "required",
@@ -861,6 +884,17 @@
         "exists": "required",
         "workspaceBranch": "required",
         "workspacePath": "required"
+      }
+    },
+    "LinkedChangeRequestSummary": {
+      "fields": {
+        "checksLabel": "required",
+        "number": "required",
+        "sourceBranch": "required",
+        "state": "required",
+        "targetBranch": "required",
+        "title": "required",
+        "url": "required"
       }
     },
     "ListAgentModelsInput": {

@@ -160,7 +160,7 @@ const validateProjectRepoPathMock = vi.mocked(validateProjectRepoPath);
 
 describe("App project entry", () => {
   let currentProjectList: ProjectListResponse;
-  let currentIssues: IssueRecord[];
+  let currentIssues: Array<IssueRecord & { source: "local" }>;
 
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
@@ -267,7 +267,7 @@ describe("App project entry", () => {
     });
     createIssueMock.mockImplementation(
       async ({ projectId, title, description }) => {
-        const createdIssue = {
+        const createdIssue: IssueRecord & { source: "local" } = {
           id: 10,
           number: 10,
           projectId,
@@ -288,6 +288,7 @@ describe("App project entry", () => {
           createdAt: 1_780_632_000_000,
           updatedAt: 1_780_632_000_000,
           statusChangedAt: 1_780_632_000_000,
+          source: "local",
         };
         currentIssues = [createdIssue, ...currentIssues];
         return createdIssue;
@@ -295,7 +296,7 @@ describe("App project entry", () => {
     );
     updateIssueMock.mockImplementation(
       async ({ projectId, issueId, title, description }) => {
-        const updatedIssue = {
+        const updatedIssue: IssueRecord & { source: "local" } = {
           id: issueId,
           number: issueId,
           projectId,
@@ -316,6 +317,7 @@ describe("App project entry", () => {
           createdAt: 1_780_632_000_000,
           updatedAt: 1_780_635_600_000,
           statusChangedAt: 1_780_635_600_000,
+          source: "local",
         };
         currentIssues = currentIssues.map((issue) =>
           issue.id === issueId ? updatedIssue : issue,
@@ -982,6 +984,7 @@ describe("App project entry", () => {
         createdAt: 1_780_632_000_000,
         updatedAt: 1_780_632_000_000,
         statusChangedAt: 1_780_632_000_000,
+        source: "local",
       },
     ];
     render(<App />);
