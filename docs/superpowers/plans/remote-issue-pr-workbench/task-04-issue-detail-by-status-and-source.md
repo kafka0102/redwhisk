@@ -141,7 +141,7 @@ Issue 详情按工作流状态和来源组合渲染正确内容：本地待办�
 ```text
 日期：2026-11-06
 状态：已完成
-提交：见本票提交
+提交：74e2bbdbf317beadfbf1543a14f852da183ade15
 实际改动：远程评论与系统事件分表。现有 get_issue_timeline 按时间合并本地动作、本地评论、远程评论和远程事件。source 为 local 或 remote，远程评论不是本地评论。重复远程 id 保留第一次创建时间。失败写入不清空。本地评论不进入远程唯一键。时间轴查询失败时详情标题和正文仍在。
 验证命令与结果：pnpm format、pnpm lint、pnpm typecheck 通过。pnpm test 195 文件、2200 通过。check-rust-file-size、check-rust-compile、check-rust-user-strings、check-rust-command-failure-tests、check-rust-event-emit、check-frontend-file-size 通过。未跑 pnpm build：未改依赖、锁文件或构建配置。
 原型场景对照：时间轴用来源区分本地与远程。未新做宿主拉取界面。
