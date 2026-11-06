@@ -47,6 +47,10 @@ export function IssueSourceModeCard({
                 className="size-3.5 shrink-0"
                 name="issue-source-mode"
                 type="radio"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onModeChange(option);
+                }}
                 onChange={() => {
                   onModeChange(option);
                 }}

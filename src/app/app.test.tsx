@@ -193,6 +193,8 @@ describe("App project entry", () => {
       issueWritebackCloseOnPrMerge: false,
       issueWritebackComment: false,
       issueCreateSource: "local",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
       connection: {
         provider: null,
         hostUrl: null,

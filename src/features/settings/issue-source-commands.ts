@@ -34,6 +34,8 @@ export interface ProjectIssueSourceSettings {
   issueWritebackCloseOnPrMerge: boolean;
   issueWritebackComment: boolean;
   issueCreateSource: IssueCreateSource;
+  localIssueCount: number;
+  remoteIssueCount: number;
   connection: ProjectIssueConnection;
 }
 

@@ -132,6 +132,22 @@
         "remote": "Remote",
         "mixed": "Mixed"
       },
+      "confirmTitle": "Switch to \"{{mode}}\"?",
+      "confirmMode": {
+        "local": "Local only",
+        "remote": "Remote only",
+        "mixed": "Mixed"
+      },
+      "confirmCancel": "Cancel",
+      "confirmSwitch": "Switch mode",
+      "confirmLocalLabel": "Local issues",
+      "confirmRemoteLabel": "Remote issues",
+      "confirmSyncLabel": "Sync",
+      "confirmHidden": "{{count}} kept but hidden after switching",
+      "confirmShown": "{{count}} shown after switching",
+      "confirmSyncAccess": "Remote only and mixed access {{repo}}",
+      "confirmSyncUnknown": "Remote only and mixed access the remote",
+      "confirmSyncLocal": "Local only does not access the remote",
       "host": "Host",
       "providerValue": {
         "github": "GitHub",

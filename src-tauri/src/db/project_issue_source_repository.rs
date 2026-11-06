@@ -61,6 +61,8 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
                         issue_writeback_comment: row.get::<_, i64>(7)? != 0,
                         issue_create_source: IssueCreateSource::parse(&row.get::<_, String>(8)?)
                             .ok_or(rusqlite::Error::InvalidQuery)?,
+                        local_issue_count: 0,
+                        remote_issue_count: 0,
                         connection: ProjectIssueConnection::unknown(),
                     })
                 },
@@ -71,8 +73,11 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
         };
 
         let connection = self.read_connection(project_id)?;
+        let (local_issue_count, remote_issue_count) = self.count_issues(project_id)?;
         Ok(Some(ProjectIssueSourceSettings {
             connection,
+            local_issue_count,
+            remote_issue_count,
             ..settings
         }))
     }
@@ -149,6 +154,18 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
             )
             .optional()?;
         Ok(row.unwrap_or_else(ProjectIssueConnection::unknown))
+    }
+
+    fn count_issues(&self, project_id: i64) -> rusqlite::Result<(i64, i64)> {
+        self.connection.query_row(
+            "SELECT
+                COALESCE(SUM(CASE WHEN source = 'local' AND del = 0 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN source = 'remote' AND del = 0 THEN 1 ELSE 0 END), 0)
+             FROM issues
+             WHERE project_id = ?1",
+            params![project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
     }
 }
 

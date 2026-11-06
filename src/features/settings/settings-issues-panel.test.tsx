@@ -112,6 +112,8 @@ function settings(
     issueWritebackCloseOnPrMerge: true,
     issueWritebackComment: true,
     issueCreateSource: "local",
+    localIssueCount: 0,
+    remoteIssueCount: 0,
     connection: {
       provider: "github",
       hostUrl: "https://github.com",
@@ -445,6 +447,392 @@ describe("Issues settings panel", () => {
     },
   );
 
+  it("keeps the saved source mode until the switch is confirmed", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", { issueSourceMode: "mixed" });
+
+    expect(await screen.findByRole("radio", { name: "混合" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "仅远程" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: /切换到「仅远程」？/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { hidden: true, name: "混合" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("radio", { hidden: true, name: "仅远程" }),
+    ).not.toBeChecked();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("confirms a mode switch with the saved scope instead of the dirty scope", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      issueSyncScope: "assigned_to_me",
+    });
+
+    expect(await screen.findByRole("radio", { name: "混合" })).toBeChecked();
+    await selectShadcnOption(user, screen, "拉取范围", "全部未关闭");
+    await user.click(screen.getByRole("radio", { name: "仅远程" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", { name: /切换到「仅远程」？/ }),
+      ).getByRole("button", { name: "切换模式" }),
+    );
+
+    await waitFor(() => {
+      expect(updateSettingsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(updateSettingsMock).toHaveBeenCalledWith({
+      projectId: 7,
+      issueSourceMode: "remote",
+      issueSyncScope: "assigned_to_me",
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: true,
+      issueWritebackCloseOnPrMerge: true,
+      issueWritebackComment: true,
+    });
+    expect(screen.getByRole("radio", { name: "仅远程" })).toBeChecked();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "拉取范围" }),
+    ).toHaveTextContent("全部未关闭");
+  });
+
+  it.each([
+    {
+      saved: "mixed" as const,
+      target: "仅远程",
+      local: "6 个，切换后隐藏（保留）",
+      remote: "18 个，切换后显示",
+      sync: "仅远程与混合模式会访问 acme/redwhisk",
+    },
+    {
+      saved: "mixed" as const,
+      target: "仅本地",
+      local: "6 个，切换后显示",
+      remote: "18 个，切换后隐藏（保留）",
+      sync: "仅本地模式不会访问远程",
+    },
+    {
+      saved: "remote" as const,
+      target: "混合",
+      local: "6 个，切换后显示",
+      remote: "18 个，切换后显示",
+      sync: "仅远程与混合模式会访问 acme/redwhisk",
+    },
+  ])(
+    "explains switching from $saved to $target with the saved counts",
+    async ({ saved, target, local, remote, sync }) => {
+      const user = userEvent.setup();
+      renderWith("zh", {
+        issueSourceMode: saved,
+        localIssueCount: 6,
+        remoteIssueCount: 18,
+      });
+
+      await user.click(await screen.findByRole("radio", { name: target }));
+      const dialog = await screen.findByRole("dialog", {
+        name: new RegExp(`切换到「${target}」？`),
+      });
+      expect(dialog).toHaveTextContent(local);
+      expect(dialog).toHaveTextContent(remote);
+      expect(dialog).toHaveTextContent(sync);
+    },
+  );
+
+  it("does not render source radios before settings return", async () => {
+    let resolveSettings: (value: ProjectIssueSourceSettings) => void = () => {
+      throw new Error("settings resolver missing");
+    };
+    getSettingsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      }),
+    );
+    inspectConnectionMock.mockReturnValue(new Promise(() => undefined));
+    renderPanel("zh");
+
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    resolveSettings(settings({ issueSourceMode: "mixed" }));
+    expect(await screen.findByRole("radio", { name: "混合" })).toBeChecked();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["local", "仅本地", "remote", "仅远程"],
+    ["local", "仅本地", "mixed", "混合"],
+    ["remote", "仅远程", "local", "仅本地"],
+    ["remote", "仅远程", "mixed", "混合"],
+    ["mixed", "混合", "local", "仅本地"],
+    ["mixed", "混合", "remote", "仅远程"],
+  ] as const)(
+    "asks before switching %s to %s",
+    async (from, fromLabel, _to, toLabel) => {
+      const user = userEvent.setup();
+      renderWith("zh", { issueSourceMode: from });
+      await user.click(await screen.findByRole("radio", { name: toLabel }));
+      expect(
+        await screen.findByRole("dialog", {
+          name: new RegExp(`切换到「${toLabel}」？`),
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("radio", { hidden: true, name: fromLabel }),
+      ).toBeChecked();
+      expect(updateSettingsMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("saves other settings without a dialog when the mode stays the same", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      issueSyncScope: "assigned_to_me",
+    });
+    await user.click(await screen.findByRole("radio", { name: "混合" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await selectShadcnOption(user, screen, "拉取范围", "全部未关闭");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueSourceMode: "mixed",
+          issueSyncScope: "all_open",
+        }),
+      );
+    });
+  });
+
+  it("keeps dirty source fields when the mode switch is cancelled", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      issueSyncScope: "label",
+      issueSyncLabel: "kept",
+      issueSyncIntervalSeconds: 90,
+    });
+    expect(await screen.findByLabelText("标签")).toHaveValue("kept");
+    await user.clear(screen.getByLabelText("标签"));
+    await user.type(screen.getByLabelText("标签"), "dirty");
+    await selectShadcnOption(user, screen, "间隔", "5 分钟");
+    await user.click(screen.getByRole("radio", { name: "仅本地" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", { name: /切换到「仅本地」？/ }),
+      ).getByRole("button", { name: "取消" }),
+    );
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: "混合" })).toBeChecked();
+    expect(screen.getByLabelText("标签")).toHaveValue("dirty");
+    expect(screen.getByRole("combobox", { name: "间隔" })).toHaveTextContent(
+      "5 分钟",
+    );
+  });
+
+  it("keeps the saved label when confirming a mode switch", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      issueSyncScope: "label",
+      issueSyncLabel: "kept",
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+    });
+    await user.clear(await screen.findByLabelText("标签"));
+    await user.type(screen.getByLabelText("标签"), "dirty");
+    await user.click(
+      screen.getByRole("checkbox", { name: "页面可见时自动同步" }),
+    );
+    await user.click(screen.getByRole("radio", { name: "仅远程" }));
+    await user.click(screen.getByRole("button", { name: "切换模式" }));
+    await waitFor(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith({
+        projectId: 7,
+        issueSourceMode: "remote",
+        issueSyncScope: "label",
+        issueSyncLabel: "kept",
+        issueSyncEnabled: true,
+        issueSyncIntervalSeconds: 90,
+        issueWritebackCloseOnComplete: true,
+        issueWritebackCloseOnPrMerge: true,
+        issueWritebackComment: true,
+      });
+    });
+    expect(screen.getByLabelText("标签")).toHaveValue("dirty");
+    expect(
+      screen.getByRole("checkbox", { name: "页面可见时自动同步" }),
+    ).not.toBeChecked();
+  });
+
+  it("keeps the dialog and the saved mode when the switch update fails", async () => {
+    const user = userEvent.setup();
+    updateSettingsMock.mockRejectedValueOnce(new Error("save failed"));
+    renderWith("zh", { issueSourceMode: "mixed" });
+    await user.click(await screen.findByRole("radio", { name: "仅远程" }));
+    await user.click(screen.getByRole("button", { name: "切换模式" }));
+    expect(
+      await screen.findByRole("dialog", { name: /切换到「仅远程」？/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { hidden: true, name: "混合" }),
+    ).toBeChecked();
+  });
+
+  it("does not send a second update while the mode switch is confirming", async () => {
+    const user = userEvent.setup();
+    let resolveUpdate: (value: ProjectIssueSourceSettings) => void = () => {
+      throw new Error("update resolver missing");
+    };
+    updateSettingsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpdate = resolve;
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "mixed" });
+    await user.click(await screen.findByRole("radio", { name: "仅远程" }));
+    const confirm = await screen.findByRole("button", { name: "切换模式" });
+    await user.click(confirm);
+    await user.click(confirm);
+    expect(updateSettingsMock).toHaveBeenCalledTimes(1);
+    resolveUpdate(
+      settings({
+        issueSourceMode: "remote",
+        issueSyncScope: "assigned_to_me",
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(updateSettingsMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("radio", { name: "仅远程" })).toBeChecked();
+  });
+
+  it("shows undeleted local and remote counts without applying source visibility", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "remote",
+      localIssueCount: 2,
+      remoteIssueCount: 3,
+    });
+    await user.click(await screen.findByRole("radio", { name: "仅本地" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /切换到「仅本地」？/,
+    });
+    expect(dialog).toHaveTextContent("2 个，切换后显示");
+    expect(dialog).toHaveTextContent("3 个，切换后隐藏（保留）");
+  });
+
+  it("shows zero counts instead of hiding the fact rows", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
+    });
+    await user.click(await screen.findByRole("radio", { name: "仅远程" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /切换到「仅远程」？/,
+    });
+    expect(dialog).toHaveTextContent("0 个，切换后隐藏（保留）");
+    expect(dialog).toHaveTextContent("0 个，切换后显示");
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("does not invent a repository name on the sync line", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", {
+      issueSourceMode: "mixed",
+      localIssueCount: 6,
+      remoteIssueCount: 18,
+      connection: {
+        provider: "github",
+        hostUrl: "https://github.com",
+        repoPath: null,
+        login: "yujianjia",
+        cliInstalled: true,
+        cliAuthenticated: true,
+        authStatus: "ready",
+        checkedAt: 10,
+      },
+    });
+    await user.click(await screen.findByRole("radio", { name: "仅远程" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("仅远程与混合模式会访问远程");
+    expect(dialog).not.toHaveTextContent("acme/redwhisk");
+  });
+
+  it("does not inspect the connection again when the confirm dialog opens", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", { issueSourceMode: "mixed" });
+    await screen.findByRole("radio", { name: "混合" });
+    await waitFor(() => {
+      expect(inspectConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    await user.click(screen.getByRole("radio", { name: "仅远程" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(inspectConnectionMock).toHaveBeenCalledTimes(1);
+    expect(getSettingsMock).toHaveBeenCalledTimes(1);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the English confirm copy", async () => {
+    const user = userEvent.setup();
+    renderWith("en", {
+      issueSourceMode: "local",
+      localIssueCount: 6,
+      remoteIssueCount: 18,
+    });
+    await user.click(await screen.findByRole("radio", { name: "Remote" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: 'Switch to "Remote only"?',
+    });
+    expect(dialog).toHaveTextContent("Local issues");
+    expect(dialog).toHaveTextContent("Remote issues");
+    expect(dialog).toHaveTextContent("6 kept but hidden after switching");
+    expect(dialog).toHaveTextContent("18 shown after switching");
+    expect(dialog).toHaveTextContent(
+      "Remote only and mixed access acme/redwhisk",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Switch mode" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("radio", { name: "Mixed" }));
+    expect(
+      await screen.findByRole("dialog", { name: 'Switch to "Mixed"?' }),
+    ).toHaveTextContent("Remote only and mixed access acme/redwhisk");
+  });
+
+  it("says local mode does not access the remote", async () => {
+    const user = userEvent.setup();
+    renderWith("en", {
+      issueSourceMode: "remote",
+      localIssueCount: 6,
+      remoteIssueCount: 18,
+    });
+    await user.click(await screen.findByRole("radio", { name: "Local" }));
+    expect(
+      await screen.findByRole("dialog", { name: 'Switch to "Local only"?' }),
+    ).toHaveTextContent("Local only does not access the remote");
+    expect(
+      screen.getByRole("dialog", { name: 'Switch to "Local only"?' }),
+    ).toHaveTextContent("6 shown after switching");
+    expect(
+      screen.getByRole("dialog", { name: 'Switch to "Local only"?' }),
+    ).toHaveTextContent("18 kept but hidden after switching");
+  });
+
   it.each([
     ["zh", "全部未关闭", "拉取范围"],
     ["en", "All open", "Sync scope"],
@@ -577,6 +965,13 @@ describe("Issues settings panel", () => {
     expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Remote" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: /Switch to "Remote only"\?/,
+        }),
+      ).getByRole("button", { name: "Switch mode" }),
+    );
     await waitFor(() => {
       expect(screen.getByLabelText("Repository")).toHaveValue("acme/redwhisk");
     });
@@ -612,7 +1007,8 @@ describe("Issues settings panel", () => {
       });
     });
     expect(getSettingsMock).toHaveBeenCalledTimes(1);
-    const payload = updateSettingsMock.mock.calls[0]?.[0];
+    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    const payload = updateSettingsMock.mock.calls[1]?.[0];
     expect(payload).not.toHaveProperty("provider");
     expect(payload).not.toHaveProperty("hostUrl");
     expect(payload).not.toHaveProperty("connection");
@@ -702,14 +1098,18 @@ describe("Issues settings panel", () => {
     ).toBeChecked();
 
     await user.click(screen.getByRole("radio", { name: "混合" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /切换到「混合」？/,
+    });
     expect(
-      screen.getByRole("region", { name: "远程连接" }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "取消" }));
+      screen.queryByRole("region", { name: "远程连接" }),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(
       screen.queryByRole("region", { name: "远程连接" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "仅本地" })).toBeChecked();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
   it("saves the migrated completion fields when the action opens a pull request", async () => {

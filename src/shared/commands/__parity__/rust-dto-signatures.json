@@ -1053,7 +1053,9 @@
         "issueWritebackCloseOnComplete": "required",
         "issueWritebackCloseOnPrMerge": "required",
         "issueWritebackComment": "required",
-        "projectId": "required"
+        "localIssueCount": "required",
+        "projectId": "required",
+        "remoteIssueCount": "required"
       }
     },
     "ProjectLabelListResponse": {

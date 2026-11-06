@@ -183,6 +183,8 @@ pub struct ProjectIssueSourceSettings {
     pub issue_writeback_close_on_pr_merge: bool,
     pub issue_writeback_comment: bool,
     pub issue_create_source: IssueCreateSource,
+    pub local_issue_count: i64,
+    pub remote_issue_count: i64,
     pub connection: ProjectIssueConnection,
 }
 

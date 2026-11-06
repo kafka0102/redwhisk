@@ -148,6 +148,8 @@ describe("issue auto sync gate", () => {
       issueWritebackCloseOnPrMerge: false,
       issueWritebackComment: false,
       issueCreateSource: "local",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
       connection: {
         provider: "github",
         hostUrl: "https://github.com",
@@ -305,6 +307,8 @@ describe("issue auto sync gate", () => {
       issueWritebackCloseOnPrMerge: false,
       issueWritebackComment: false,
       issueCreateSource: "local",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
       connection: {
         provider: "gitlab",
         hostUrl: "https://gitlab.example.com/",
@@ -342,6 +346,8 @@ describe("issue auto sync gate", () => {
       issueWritebackCloseOnPrMerge: false,
       issueWritebackComment: false,
       issueCreateSource: "local",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
       connection: {
         provider: "gitlab",
         hostUrl: "https://gitlab.example.com/",

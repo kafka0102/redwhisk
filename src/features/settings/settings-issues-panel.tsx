@@ -24,6 +24,7 @@ import {
 } from "./issue-source-commands";
 import { IssueSourceCompletionCard } from "./settings-issues-completion-card";
 import { IssueSourceConnectionCard } from "./settings-issues-connection-card";
+import { IssueSourceModeConfirmDialog } from "./settings-issue-source-mode-confirm-dialog";
 import { IssueSourceModeCard } from "./settings-issues-mode-card";
 
 interface IssuesSettingsPanelProps {
@@ -77,6 +78,8 @@ export function IssuesSettingsPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isInspecting, setIsInspecting] = useState(false);
+  const [pendingMode, setPendingMode] = useState<IssueSourceMode | null>(null);
+  const [isConfirmingMode, setIsConfirmingMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +169,47 @@ export function IssuesSettingsPanel({
     }
   }
 
+  function requestModeChange(next: IssueSourceMode): void {
+    if (next === mode) return;
+    setPendingMode(next);
+  }
+
+  async function confirmModeChange(): Promise<void> {
+    if (pendingMode === null || sourceBaseline === null || isConfirmingMode) {
+      return;
+    }
+    const saved = sourceBaseline;
+    setIsConfirmingMode(true);
+    setErrorMessage(null);
+    try {
+      const refreshed = await updateProjectIssueSourceSettings({
+        projectId,
+        issueSourceMode: pendingMode,
+        issueSyncScope: saved.issueSyncScope,
+        issueSyncEnabled: saved.issueSyncEnabled,
+        issueSyncIntervalSeconds: saved.issueSyncIntervalSeconds,
+        issueWritebackCloseOnComplete: saved.issueWritebackCloseOnComplete,
+        issueWritebackCloseOnPrMerge: saved.issueWritebackCloseOnPrMerge,
+        issueWritebackComment: saved.issueWritebackComment,
+        ...(saved.issueSyncScope === "label" && saved.issueSyncLabel
+          ? { issueSyncLabel: saved.issueSyncLabel }
+          : {}),
+      });
+      setMode(refreshed.issueSourceMode);
+      setSourceBaseline({
+        ...saved,
+        issueSourceMode: refreshed.issueSourceMode,
+        issueCreateSource: refreshed.issueCreateSource,
+        connection: refreshed.connection,
+      });
+      setPendingMode(null);
+    } catch (error: unknown) {
+      setErrorMessage(getCommandErrorMessage(error, t));
+    } finally {
+      setIsConfirmingMode(false);
+    }
+  }
+
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
   ): Promise<void> {
@@ -225,7 +269,23 @@ export function IssuesSettingsPanel({
 
   return (
     <form className="grid gap-3" onSubmit={(event) => void handleSubmit(event)}>
-      <IssueSourceModeCard mode={mode} onModeChange={setMode} />
+      {sourceBaseline ? (
+        <IssueSourceModeCard mode={mode} onModeChange={requestModeChange} />
+      ) : null}
+      <IssueSourceModeConfirmDialog
+        targetMode={pendingMode}
+        localIssueCount={sourceBaseline?.localIssueCount ?? 0}
+        remoteIssueCount={sourceBaseline?.remoteIssueCount ?? 0}
+        repoPath={
+          connection?.repoPath ?? sourceBaseline?.connection.repoPath ?? null
+        }
+        onCancel={() => {
+          setPendingMode(null);
+        }}
+        onConfirm={() => {
+          void confirmModeChange();
+        }}
+      />
       {showRemote ? (
         <IssueSourceConnectionCard
           closeOnComplete={closeOnComplete}

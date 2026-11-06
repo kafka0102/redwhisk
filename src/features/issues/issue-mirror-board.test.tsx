@@ -143,6 +143,8 @@ describe("GitHub issue mirror board", () => {
       issueWritebackCloseOnPrMerge: false,
       issueWritebackComment: false,
       issueCreateSource: "local",
+      localIssueCount: 0,
+      remoteIssueCount: 0,
       connection: {
         provider: "github",
         hostUrl: "https://github.com",
@@ -897,6 +899,8 @@ function sourceSettings(mode: "local" | "remote" | "mixed") {
     issueWritebackCloseOnPrMerge: false,
     issueWritebackComment: false,
     issueCreateSource: "local" as const,
+    localIssueCount: 0,
+    remoteIssueCount: 0,
     connection: {
       provider: "github" as const,
       hostUrl: "https://github.com",

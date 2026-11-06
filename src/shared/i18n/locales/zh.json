@@ -132,6 +132,22 @@
         "remote": "仅远程",
         "mixed": "混合"
       },
+      "confirmTitle": "切换到「{{mode}}」？",
+      "confirmMode": {
+        "local": "仅本地",
+        "remote": "仅远程",
+        "mixed": "混合"
+      },
+      "confirmCancel": "取消",
+      "confirmSwitch": "切换模式",
+      "confirmLocalLabel": "本地",
+      "confirmRemoteLabel": "远程",
+      "confirmSyncLabel": "同步",
+      "confirmHidden": "{{count}} 个，切换后隐藏（保留）",
+      "confirmShown": "{{count}} 个，切换后显示",
+      "confirmSyncAccess": "仅远程与混合模式会访问 {{repo}}",
+      "confirmSyncUnknown": "仅远程与混合模式会访问远程",
+      "confirmSyncLocal": "仅本地模式不会访问远程",
       "host": "宿主",
       "providerValue": {
         "github": "GitHub",

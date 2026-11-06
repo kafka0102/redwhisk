@@ -1,6 +1,6 @@
 # 远程 Issue 与 PR/MR 工作台实施计划
 
-> 这是该项工作的唯一执行入口。任务 1、2 已完成；后续开发从任务 3 开始。
+> 这是该项工作的唯一执行入口。任务 1、2、3 已完成；任务 4、6 依赖已解除，状态仍为待开始。
 
 ## 基本信息
 
@@ -21,10 +21,10 @@
 | --- | --- | --- | --- | --- |
 | 1 | [项目来源模式与连接设置](./task-01-project-issue-source-settings.md) | 已完成 | 无 | 已落地；模式切换确认框作为遗留项并入任务 3 |
 | 2 | [GitHub Issue 只读镜像与混合看板](./task-02-github-issue-mirror.md) | 已完成 | 1 | 已落地；包含原任务 3 的通用同步生命周期 |
-| 3 | [GitLab Issue 与同步生命周期收口](./task-03-gitlab-issue-sync.md) | 可开始 | 1、2 | 当前应执行的下一项 |
-| 4 | [Issue 详情分状态与来源展示](./task-04-issue-detail-by-status-and-source.md) | 待开始 | 3 | 包含远程评论、系统事件和宿主信息 |
+| 3 | [GitLab Issue 与同步生命周期收口](./task-03-gitlab-issue-sync.md) | 已完成 | 1、2 | 已落地；GitLab Issue 同步、看板 GL 徽标、来源模式确认 |
+| 4 | [Issue 详情分状态与来源展示](./task-04-issue-detail-by-status-and-source.md) | 待开始 | 3（已完成，依赖已解除） | 包含远程评论、系统事件和宿主信息；本任务仍未完成 |
 | 5 | [远程 Issue 创建与写回](./task-05-remote-issue-create-and-writeback.md) | 待开始 | 4 | 包含远端异常后的保留、解绑与重试 |
-| 6 | [PR/MR 一等数据与列表](./task-06-change-request-data-and-list.md) | 待开始 | 3 | 可与任务 4 并行 |
+| 6 | [PR/MR 一等数据与列表](./task-06-change-request-data-and-list.md) | 待开始 | 3（已完成，依赖已解除） | 可与任务 4 并行；本任务仍未完成 |
 | 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 待开始 | 6 | 可与任务 5 并行 |
 | 8 | [PR/MR 操作与完成流程接入](./task-08-change-request-actions-and-completion.md) | 待开始 | 5、7 | 最后收口写操作与联动 |
 
@@ -152,10 +152,10 @@ UI 任务执行时：
 
 每个任务只需要使用一句提示词，具体边界、依赖、原型和更新规则都写在任务文档中。
 
-当前下一项：
+当前下一项：任务 4 与任务 6（依赖已解除，状态仍为待开始，可并行）
 
 ```text
-请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-03-gitlab-issue-sync.md 完成任务 3。具体任务、边界、原型页面和更新规则都在文档里。
+请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-04-issue-detail-by-status-and-source.md 完成任务 4。具体任务、边界、原型页面和更新规则都在文档里。
 ```
 
 通用格式：
@@ -169,3 +169,4 @@ UI 任务执行时：
 | 日期 | 变更 |
 | --- | --- |
 | 2026-11-06 | 根据归档会话和当前实现创建正式 8 任务计划；任务 1、2 回填完成记录；任务 3 收窄为 GitLab 与跨宿主收口。 |
+| 2026-11-06 | 任务 3 完成。 |

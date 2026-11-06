@@ -87,6 +87,8 @@ vi.mock("./issue-source-commands", () => ({
     issueWritebackCloseOnPrMerge: true,
     issueWritebackComment: true,
     issueCreateSource: "local",
+    localIssueCount: 0,
+    remoteIssueCount: 0,
     connection: {
       provider: "github",
       hostUrl: "https://github.com",
@@ -109,6 +111,8 @@ vi.mock("./issue-source-commands", () => ({
     issueWritebackCloseOnPrMerge: true,
     issueWritebackComment: true,
     issueCreateSource: "local",
+    localIssueCount: 0,
+    remoteIssueCount: 0,
     connection: {
       provider: "github",
       hostUrl: "https://github.com",

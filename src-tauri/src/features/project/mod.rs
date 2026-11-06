@@ -10,6 +10,8 @@ mod completion_host_class_tests;
 #[cfg(test)]
 mod completion_settings_tests;
 #[cfg(test)]
+mod issue_source_count_tests;
+#[cfg(test)]
 mod issue_source_settings_tests;
 
 pub use service::ProjectService;
