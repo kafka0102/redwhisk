@@ -682,6 +682,45 @@
         "storedName": "required"
       }
     },
+    "IssueBoardListResponse": {
+      "fields": {
+        "issues": "required",
+        "statusTotals": "optional"
+      }
+    },
+    "IssueBoardRecord": {
+      "fields": {
+        "attachments": "required",
+        "createdAt": "required",
+        "description": "required",
+        "externalNumber": "required",
+        "id": "required",
+        "labels": "required",
+        "linkedSessionAgentProfileId": "required",
+        "linkedSessionAgentType": "required",
+        "linkedSessionAttention": "required",
+        "linkedSessionDisplayMode": "required",
+        "linkedSessionId": "required",
+        "linkedSessionLatestOutput": "required",
+        "linkedSessionLogPath": "required",
+        "linkedSessionProviderSessionId": "required",
+        "linkedSessionStatus": "required",
+        "number": "required",
+        "projectId": "required",
+        "provider": "required",
+        "pullRequestUrl": "required",
+        "remoteClosedWhileRunning": "required",
+        "remoteLabels": "required",
+        "remoteReopened": "required",
+        "remoteState": "required",
+        "source": "required",
+        "status": "required",
+        "statusChangedAt": "required",
+        "syncStatus": "required",
+        "title": "required",
+        "updatedAt": "required"
+      }
+    },
     "IssueCompletionFlowRecord": {
       "fields": {
         "actualPath": "required",

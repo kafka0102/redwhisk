@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde::Serialize;
 
 use crate::db::issue_external_ref_repository::IssueExternalRefRepository;
 use crate::features::issue::archive::open_issue_database;
 use crate::types::errors::CommandError;
 use crate::types::issue::{IssueListResponse, IssueRecord, IssueStatus, IssueStatusTotals};
+pub use crate::types::issue_mirror::{IssueBoardListResponse, IssueBoardRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardIssueView {
@@ -21,30 +21,6 @@ pub struct BoardIssueView {
     pub remote_closed_while_running: bool,
     pub remote_reopened: bool,
     pub title: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IssueBoardRecord {
-    #[serde(flatten)]
-    pub issue: IssueRecord,
-    pub source: String,
-    pub provider: Option<String>,
-    pub external_number: Option<i64>,
-    pub remote_state: Option<String>,
-    pub remote_labels: Vec<String>,
-    pub sync_status: Option<String>,
-    pub remote_closed_while_running: bool,
-    pub remote_reopened: bool,
-    pub pull_request_url: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IssueBoardListResponse {
-    pub issues: Vec<IssueBoardRecord>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_totals: Option<IssueStatusTotals>,
 }
 
 #[cfg(test)]

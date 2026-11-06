@@ -1,6 +1,25 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
+import type { IssueRecord, IssueStatusTotals } from "./issue-commands";
+
 export const ISSUE_SYNC_CHANGED_EVENT = "issue-sync-changed";
+
+export interface IssueBoardRecord extends IssueRecord {
+  source: string;
+  provider: string | null;
+  externalNumber: number | null;
+  remoteState: string | null;
+  remoteLabels: string[];
+  syncStatus: string | null;
+  remoteClosedWhileRunning: boolean;
+  remoteReopened: boolean;
+  pullRequestUrl: string | null;
+}
+
+export interface IssueBoardListResponse {
+  issues: IssueBoardRecord[];
+  statusTotals?: IssueStatusTotals;
+}
 
 export type IssueSyncOutcome =
   | "synced"

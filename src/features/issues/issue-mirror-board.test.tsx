@@ -10,11 +10,8 @@ import { getProjectIssueSourceSettings } from "../settings/issue-source-commands
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
-import {
-  getIssueTimeline,
-  listIssues,
-  type IssueRecord,
-} from "./issue-commands";
+import { getIssueTimeline, listIssues } from "./issue-commands";
+import { type IssueBoardRecord } from "./issue-mirror-commands";
 import {
   getIssueSyncStatus,
   ISSUE_SYNC_CHANGED_EVENT,
@@ -81,8 +78,8 @@ const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const listenMock = vi.mocked(listen);
 
 function boardIssue(
-  partial: Partial<IssueRecord> & { id: number } & Record<string, unknown>,
-): IssueRecord {
+  partial: Partial<IssueBoardRecord> & { id: number },
+): IssueBoardRecord {
   return {
     number: partial.number ?? partial.id,
     projectId: 1,
@@ -103,6 +100,15 @@ function boardIssue(
     createdAt: 1,
     updatedAt: partial.updatedAt ?? 1,
     statusChangedAt: 1,
+    source: "local",
+    provider: null,
+    externalNumber: null,
+    remoteState: null,
+    remoteLabels: [],
+    syncStatus: null,
+    remoteClosedWhileRunning: false,
+    remoteReopened: false,
+    pullRequestUrl: null,
     ...partial,
   };
 }

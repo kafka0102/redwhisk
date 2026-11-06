@@ -622,7 +622,7 @@ pub trait ForgePort: Send + Sync {
 | 能力 | GitHub | GitLab |
 | --- | --- | --- |
 | 当前账号 | `gh api user` | `glab api user` |
-| Issue 列表 | `gh issue list --json ...` | `glab issue list -F json` |
+| Issue 列表 | `gh issue list --json ...` | `glab issue list --output json` |
 | Issue 详情 | `gh issue view <n> --json ...` | `glab issue view <n> -F json` |
 | 评论 | `gh issue view <n> --json comments` | `glab issue view <n> -F json`（notes 含 system） |
 | 系统事件 | `gh api repos/{owner}/{repo}/issues/{n}/timeline` | `glab api projects/:id/issues/{iid}/resource_state_events` 等 |
@@ -633,7 +633,7 @@ pub trait ForgePort: Send + Sync {
 | 检查 | `gh pr checks <n> --json ...` | `glab ci status` / MR pipelines |
 | 合并 | `gh pr merge --squash` | `glab mr merge --squash` |
 
-具体 flag 与可用 JSON 字段以调研原文的 CLI 手册链接为准；实现时为每个命令写 fixture，不允许靠字符串猜输出。
+glab 的开关以本机 `glab issue list --help` 为准，表里的 flag 不是契约。具体字段以 fixture 为准，不允许靠字符串猜输出。
 
 CLI 适配的硬约束：
 

@@ -8,6 +8,7 @@ import {
   issueNumberLabel,
   linkedRequestLabel,
   readIssueMirror,
+  toBoardRecord,
 } from "./issue-mirror-fields";
 import type { RunDialogIssue } from "./use-issue-run-dialog";
 import { useI18n } from "../../shared/i18n/i18n";
@@ -182,7 +183,7 @@ function IssueCard({
 }) {
   const { messages, t } = useI18n();
   const [now] = useState(() => Date.now());
-  const mirror = readIssueMirror(issue);
+  const mirror = readIssueMirror(toBoardRecord(issue));
   const remoteLabels = mirror.source === "remote" ? mirror.remoteLabels : [];
   const metaId = `issue-card-meta-${issue.id}`;
   const attentionId = `issue-card-attention-${issue.id}`;

@@ -1,3 +1,22 @@
+import type { IssueRecord } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
+
+type BoardRecordInput = IssueRecord &
+  Partial<
+    Pick<
+      IssueBoardRecord,
+      | "source"
+      | "provider"
+      | "externalNumber"
+      | "remoteState"
+      | "remoteLabels"
+      | "syncStatus"
+      | "remoteClosedWhileRunning"
+      | "remoteReopened"
+      | "pullRequestUrl"
+    >
+  >;
+
 export interface IssueMirrorView {
   source: "local" | "remote";
   externalNumber: number | null;
@@ -9,32 +28,39 @@ export interface IssueMirrorView {
   remoteReopened: boolean;
 }
 
-export function readIssueMirror(issue: object): IssueMirrorView {
-  const record = issue as Record<string, unknown>;
+export function toBoardRecord(issue: BoardRecordInput): IssueBoardRecord {
   return {
-    source: record.source === "remote" ? "remote" : "local",
-    externalNumber:
-      typeof record.externalNumber === "number" ? record.externalNumber : null,
+    ...issue,
+    source: issue.source ?? "local",
+    provider: issue.provider ?? null,
+    externalNumber: issue.externalNumber ?? null,
+    remoteState: issue.remoteState ?? null,
+    remoteLabels: issue.remoteLabels ?? [],
+    syncStatus: issue.syncStatus ?? null,
+    remoteClosedWhileRunning: issue.remoteClosedWhileRunning ?? false,
+    remoteReopened: issue.remoteReopened ?? false,
+    pullRequestUrl: issue.pullRequestUrl ?? null,
+  };
+}
+
+export function readIssueMirror(issue: IssueBoardRecord): IssueMirrorView {
+  return {
+    source: issue.source === "remote" ? "remote" : "local",
+    externalNumber: issue.externalNumber,
     provider:
-      record.provider === "gitlab"
+      issue.provider === "gitlab"
         ? "gitlab"
-        : record.provider === "github"
+        : issue.provider === "github"
           ? "github"
           : null,
     pullRequestUrl:
-      typeof record.pullRequestUrl === "string" &&
-      record.pullRequestUrl.length > 0
-        ? record.pullRequestUrl
+      issue.pullRequestUrl != null && issue.pullRequestUrl.length > 0
+        ? issue.pullRequestUrl
         : null,
-    remoteLabels: Array.isArray(record.remoteLabels)
-      ? record.remoteLabels.filter(
-          (label): label is string => typeof label === "string",
-        )
-      : [],
-    syncStatus:
-      typeof record.syncStatus === "string" ? record.syncStatus : null,
-    remoteClosedWhileRunning: record.remoteClosedWhileRunning === true,
-    remoteReopened: record.remoteReopened === true,
+    remoteLabels: issue.remoteLabels,
+    syncStatus: issue.syncStatus,
+    remoteClosedWhileRunning: issue.remoteClosedWhileRunning,
+    remoteReopened: issue.remoteReopened,
   };
 }
 

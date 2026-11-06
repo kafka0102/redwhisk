@@ -29,7 +29,17 @@ struct StructSig {
     fields: BTreeMap<String, FieldOptionality>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+struct RawStruct {
+    fields: BTreeMap<String, FieldOptionality>,
+    flatten_into: Vec<FlattenTarget>,
+}
+
+struct FlattenTarget {
+    field_name: String,
+    type_name: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
 enum FieldOptionality {
     Required,
@@ -245,7 +255,7 @@ fn apply_enum_rename(variant_ident: &str, rename_all: &str) -> String {
 // 主解析
 // ---------------------------------------------------------------------------
 
-fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
+fn parse_struct(item: &ItemStruct) -> Option<(String, RawStruct)> {
     if !derives_serde(&item.attrs) {
         return None;
     }
@@ -255,17 +265,23 @@ fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
     // 否则按序列化语义判定（skip_serializing_if 是唯一可选信号）。
     let is_input_dto = is_deserialize_only(&item.attrs);
     let mut fields: BTreeMap<String, FieldOptionality> = BTreeMap::new();
+    let mut flatten_into = Vec::new();
     if let syn::Fields::Named(named) = &item.fields {
         for f in &named.named {
             if is_skipped(&f.attrs) {
                 continue;
             }
-            // per-field #[serde(rename = "...")] 优先；否则按 struct rename_all 转换。
             let raw = f.ident.as_ref().unwrap().to_string();
-            let name = field_rename(&f.attrs).unwrap_or_else(|| match rename_all.as_deref() {
-                Some("camelCase") => to_camel_case(&raw),
-                _ => raw.clone(),
-            });
+            let name = field_name(&f.attrs, &raw, rename_all.as_deref());
+            if is_flatten(&f.attrs) {
+                if let Some(type_name) = path_ident(&f.ty) {
+                    flatten_into.push(FlattenTarget {
+                        field_name: name,
+                        type_name,
+                    });
+                    continue;
+                }
+            }
             // 「键在序列化时是否可能缺失」唯一信号是 skip_serializing_if：
             // - `Option<T>` 无 skip：serde 始终写出键（值为 null）→ required
             // - `Vec<T>` 无 skip：始终写出键（值可能为空数组）→ required
@@ -291,7 +307,13 @@ fn parse_struct(item: &ItemStruct) -> Option<(String, StructSig)> {
             );
         }
     }
-    Some((item.ident.to_string(), StructSig { fields }))
+    Some((
+        item.ident.to_string(),
+        RawStruct {
+            fields,
+            flatten_into,
+        },
+    ))
 }
 
 fn parse_enum(item: &ItemEnum) -> Option<(String, EnumSig)> {
@@ -323,7 +345,7 @@ fn parse_enum(item: &ItemEnum) -> Option<(String, EnumSig)> {
 
 fn collect_signatures() -> DtoSignatures {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/types");
-    let mut structs = BTreeMap::new();
+    let mut raw_structs = BTreeMap::new();
     let mut enums = BTreeMap::new();
     for entry in fs::read_dir(&dir).expect("read types dir") {
         let path = entry.expect("dir entry").path();
@@ -335,8 +357,8 @@ fn collect_signatures() -> DtoSignatures {
         for item in file.items {
             match item {
                 Item::Struct(s) => {
-                    if let Some((name, sig)) = parse_struct(&s) {
-                        structs.insert(name, sig);
+                    if let Some((name, raw)) = parse_struct(&s) {
+                        raw_structs.insert(name, raw);
                     }
                 }
                 Item::Enum(e) => {
@@ -348,7 +370,84 @@ fn collect_signatures() -> DtoSignatures {
             }
         }
     }
-    DtoSignatures { structs, enums }
+    DtoSignatures {
+        structs: expand_flattened_structs(&raw_structs),
+        enums,
+    }
+}
+
+fn field_name(attrs: &[syn::Attribute], raw: &str, rename_all: Option<&str>) -> String {
+    field_rename(attrs).unwrap_or_else(|| match rename_all {
+        Some("camelCase") => to_camel_case(raw),
+        _ => raw.to_string(),
+    })
+}
+
+fn is_flatten(attrs: &[syn::Attribute]) -> bool {
+    let mut hit = false;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("flatten") {
+                hit = true;
+            }
+            Ok(())
+        });
+    }
+    hit
+}
+
+fn path_ident(ty: &syn::Type) -> Option<String> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    path.path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+}
+
+fn expand_flattened_structs(
+    raw_structs: &BTreeMap<String, RawStruct>,
+) -> BTreeMap<String, StructSig> {
+    raw_structs
+        .keys()
+        .map(|name| {
+            (
+                name.clone(),
+                StructSig {
+                    fields: expanded_fields(name, raw_structs, &mut Vec::new()),
+                },
+            )
+        })
+        .collect()
+}
+
+fn expanded_fields(
+    name: &str,
+    raw_structs: &BTreeMap<String, RawStruct>,
+    stack: &mut Vec<String>,
+) -> BTreeMap<String, FieldOptionality> {
+    if stack.iter().any(|seen| seen == name) {
+        return BTreeMap::new();
+    }
+    let Some(raw) = raw_structs.get(name) else {
+        return BTreeMap::new();
+    };
+    stack.push(name.to_string());
+    let mut fields = raw.fields.clone();
+    for target in &raw.flatten_into {
+        if raw_structs.contains_key(&target.type_name) {
+            for (field, optionality) in expanded_fields(&target.type_name, raw_structs, stack) {
+                fields.entry(field).or_insert(optionality);
+            }
+        } else {
+            fields
+                .entry(target.field_name.clone())
+                .or_insert(FieldOptionality::Required);
+        }
+    }
+    stack.pop();
+    fields
 }
 
 fn snapshot_path() -> PathBuf {
@@ -446,6 +545,25 @@ fn export_dto_signatures_matches_snapshot() {
             "grok".to_string(),
             "deepseek".to_string()
         ]
+    );
+
+    let board_record = sigs
+        .structs
+        .get("IssueBoardRecord")
+        .expect("IssueBoardRecord 存在");
+    assert_eq!(
+        board_record.fields.get("pullRequestUrl"),
+        Some(&FieldOptionality::Required)
+    );
+    assert_eq!(
+        board_record.fields.get("title"),
+        Some(&FieldOptionality::Required)
+    );
+    assert!(!board_record.fields.contains_key("issue"));
+    let error_detail = sigs.structs.get("ErrorDetail").expect("ErrorDetail 存在");
+    assert_eq!(
+        error_detail.fields.get("values"),
+        Some(&FieldOptionality::Required)
     );
 
     let out = snapshot_path();

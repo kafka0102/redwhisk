@@ -58,7 +58,7 @@ import {
 } from "./issue-board-header";
 import { IssuesKanban } from "./issues-kanban";
 import type { IssueSourceFilter } from "./issue-source-filter";
-import { readIssueMirror } from "./issue-mirror-fields";
+import { readIssueMirror, toBoardRecord } from "./issue-mirror-fields";
 import { useIssueSyncChrome } from "./use-issue-sync-chrome";
 import { useIssueLabelCatalog } from "./use-issue-label-catalog";
 import { IssueRunDialog } from "./issue-run/issue-run-dialog";
@@ -513,7 +513,7 @@ export function IssuesActivity({
     (selectedIssue?.status === "backlog" &&
       !(
         selectedIssue != null &&
-        readIssueMirror(selectedIssue).source === "remote"
+        readIssueMirror(toBoardRecord(selectedIssue)).source === "remote"
       ));
   const hasLinkedSession = selectedIssue?.linkedSessionId != null;
   const canOpenLinkedSession =
@@ -524,7 +524,7 @@ export function IssuesActivity({
       (isReadOnlyEditRequested &&
         !(
           selectedIssue != null &&
-          readIssueMirror(selectedIssue).source === "remote"
+          readIssueMirror(toBoardRecord(selectedIssue)).source === "remote"
         ))),
   );
 
