@@ -533,6 +533,7 @@ fn default_migrations() -> Vec<Migration> {
         Migration { version: PROJECT_FORGE_HOST_MIGRATION_VERSION, sql: PROJECT_FORGE_HOST_MIGRATION_SQL },
         Migration { version: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_VERSION, sql: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_SQL },
         Migration { version: ISSUE_EXTERNAL_REFS_MIGRATION_VERSION, sql: ISSUE_EXTERNAL_REFS_MIGRATION_SQL },
+        Migration { version: super::issue_remote_comments_migration::VERSION, sql: super::issue_remote_comments_migration::SQL },
     ]
 }
 

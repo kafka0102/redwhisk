@@ -1,6 +1,8 @@
 // 迁移后收敛：en/zh 字典数据已迁入 locales/{en,zh}.json，由 messages-bridge 经
 // i18next 派生。本文件仅保留 I18nMessages 接口（桥接的类型 schema）并 re-export
 // i18n-constants 的类型/常量，维持既有 `from ".../i18n/messages"` 导入不变。
+import type { IssueTimelineMessages } from "./issue-timeline-messages";
+
 export type {
   ContentFontSize,
   Locale,
@@ -283,17 +285,6 @@ export interface I18nMessages {
     titleField: string;
     titlePlaceholder: string;
     titleRequired: string;
-    timelineAgentSessionStarted: string;
-    timelineCommentAdded: string;
-    timelineCompleted: string;
-    timelineCreated: string;
-    timelineDaysAgo: (days: number) => string;
-    timelineHoursAgo: (hours: number) => string;
-    timelineJustNow: string;
-    timelineMinutesAgo: (minutes: number) => string;
-    timelineReviewMarked: string;
-    timelineStatusChanged: string;
-    timelineTitle: string;
     viewSession: string;
     viewSummary: string;
     workflowSkill: string;
@@ -327,7 +318,7 @@ export interface I18nMessages {
     mergeConflictCompleteMerge: string;
     mergeConflictNoSessionHandoff: string;
     agentSessionOpenMissing: string;
-  };
+  } & IssueTimelineMessages;
   issueSummary: {
     closedAt: string;
     commitHash: string;

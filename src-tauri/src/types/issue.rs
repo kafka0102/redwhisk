@@ -302,6 +302,15 @@ pub struct IssueTimelineEntry {
     /// 评论动作（`IssueCommentAdded`）内联的评论正文；其余动作为 `None`。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment_body: Option<String>,
+    /// 条目来源。远程评论不是本地 `issue_comments` 动作。
+    pub source: IssueTimelineSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueTimelineSource {
+    Local,
+    Remote,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -313,6 +322,8 @@ pub enum IssueTimelineActionType {
     IssueStatusChanged,
     IssueCompleted,
     IssueCommentAdded,
+    RemoteComment,
+    RemoteEvent,
 }
 
 impl IssueTimelineActionType {

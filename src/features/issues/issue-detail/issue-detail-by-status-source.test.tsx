@@ -846,6 +846,29 @@ describe("Issue 详情按状态与来源", () => {
     expect(within(root).queryByRole("region", { name: "GitHub" })).toBeNull();
   });
 
+  it("时间轴查询失败时标题和正文仍在", async () => {
+    getIssueTimelineMock.mockRejectedValue(new Error("timeline failed"));
+    const issue = boardIssue({
+      id: 59,
+      source: "remote",
+      provider: "github",
+      externalNumber: 59,
+      description: "正文还在",
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection(),
+      linkedChangeRequest: null,
+    });
+    expect(
+      within(root).getByRole("heading", {
+        level: 2,
+        name: "GH #59 · 完成流程",
+      }),
+    ).toBeInTheDocument();
+    expect(within(root).getByText("正文还在")).toBeInTheDocument();
+    expect(within(root).queryByRole("region", { name: "动态" })).toBeNull();
+  });
+
   it("远端状态为空或未知时显示不可用，指派为空显示占位", async () => {
     for (const remoteState of ["", "bogus"]) {
       const issue = boardIssue({

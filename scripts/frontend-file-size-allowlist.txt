@@ -8,6 +8,6 @@ src/features/agents/session-workspace/use-session-workspace-cache.ts # 1368 line
 src/features/issues/issue-run/issue-run-dialog.tsx # 819 lines, registered 2026-10-24
 src/features/agents/message-stream/message-stream-reducer.ts # 988 lines, registered 2026-10-24
 src/components/ui/rich-text-editor.tsx # 739 lines, registered 2026-10-24
-src/shared/i18n/messages.ts # 682 lines, registered 2026-10-24
-src/features/issues/issue-commands.ts # 610 lines, registered 2026-10-24
+src/shared/i18n/messages.ts # 673 lines, registered 2026-10-24
+src/features/issues/issue-commands.ts # 588 lines, registered 2026-10-24
 src/features/settings/project-settings-activity.tsx # 918 lines, registered 2026-10-24

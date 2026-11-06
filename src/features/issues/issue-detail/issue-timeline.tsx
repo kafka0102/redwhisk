@@ -102,10 +102,18 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
     issue_status_changed: messages.issues.timelineStatusChanged,
     issue_completed: messages.issues.timelineCompleted,
     issue_comment_added: messages.issues.timelineCommentAdded,
+    remote_comment: messages.issues.timelineSourceRemote,
+    remote_event: messages.issues.timelineRemoteEvent,
   };
 
   const isComment =
-    entry.actionType === "issue_comment_added" && Boolean(entry.commentBody);
+    (entry.actionType === "issue_comment_added" ||
+      entry.actionType === "remote_comment") &&
+    Boolean(entry.commentBody);
+  const sourceLabel =
+    entry.source === "remote"
+      ? messages.issues.timelineSourceRemote
+      : messages.issues.timelineSourceLocal;
 
   return (
     <li
@@ -134,6 +142,7 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
         >
           {formatRelativeTime(entry.createdAt, messages)}
         </time>
+        <span className="issue-timeline__source">{sourceLabel}</span>
       </div>
       {isComment && entry.commentBody ? (
         <div className="issue-timeline__comment">

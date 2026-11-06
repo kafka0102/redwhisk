@@ -60,6 +60,7 @@ describe("IssueTimeline", () => {
           actionType: "issue_created",
           actor: { name: "Alice", avatarPath: null, actorKind: "user" },
           createdAt: Date.now() - 120_000,
+          source: "local",
         },
       ],
     });
@@ -90,6 +91,7 @@ describe("IssueTimeline", () => {
             agentType: "codex",
           },
           createdAt: Date.now() - 120_000,
+          source: "local",
         },
       ],
     });
@@ -115,6 +117,7 @@ describe("IssueTimeline", () => {
           },
           commentBody: "已完成提交并验证通过",
           createdAt: Date.now() - 120_000,
+          source: "local",
         },
       ],
     });
@@ -148,6 +151,7 @@ describe("IssueTimeline", () => {
           },
           commentBody: longBody,
           createdAt: Date.now() - 120_000,
+          source: "local",
         },
       ],
     });
@@ -166,5 +170,70 @@ describe("IssueTimeline", () => {
     expect(screen.getByText("codex")).toBeVisible();
     // 评论条目不再把 action 文案塞进 meta
     expect(screen.queryByText("commented")).toBeNull();
+  });
+
+  it("shows a remote comment as remote instead of a local comment", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "remote_comment",
+          actor: { name: "maya", avatarPath: null, actorKind: "remote" },
+          commentBody: "mixed numbering",
+          createdAt: Date.now() - 120_000,
+          source: "remote",
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("mixed numbering")).toBeVisible();
+    expect(screen.getByText("Remote")).toBeVisible();
+    expect(screen.queryByText("added a comment")).toBeNull();
+  });
+
+  it("shows a remote system event with a remote source", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "remote_event",
+          actor: { name: "lin", avatarPath: null, actorKind: "remote" },
+          createdAt: Date.now() - 120_000,
+          source: "remote",
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("recorded a system event")).toBeVisible();
+    expect(screen.getByText("Remote")).toBeVisible();
+    expect(screen.queryByText("added a comment")).toBeNull();
+  });
+
+  it("shows a local agent delivery as local", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "issue_comment_added",
+          actor: {
+            name: "Codex",
+            avatarPath: null,
+            actorKind: "agent",
+            agentType: "codex",
+          },
+          commentBody: "local delivery",
+          createdAt: Date.now() - 120_000,
+          source: "local",
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("local delivery")).toBeVisible();
+    expect(screen.getByText("Local")).toBeVisible();
+    expect(screen.queryByText("Remote")).toBeNull();
+    expect(screen.queryByText("added a comment")).toBeNull();
   });
 });

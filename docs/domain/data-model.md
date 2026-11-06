@@ -8,6 +8,9 @@ SQLite 位于 `~/.redwhisk/redwhisk.sqlite3`，是业务状态唯一事实源。
 projects
  ├─ issues ── issue_actions
  │     ├─ issue_attachments
+ │     ├─ issue_comments
+ │     ├─ issue_remote_comments
+ │     ├─ issue_remote_events
  │     └─ issue_completion_flows
  ├─ project_forge_connections
  ├─ agent_profiles（project / global scope）
@@ -30,6 +33,9 @@ completion_attempts 保留历史完成尝试审计。
 | `project_forge_connections`             | 项目 Forge 连接快照      | `project_id` 主键并级联删除；`provider` 仅 `github` / `gitlab` 或空；`auth_status` 为 `unknown` / `ready` / `expired` / `unauthenticated` / `cli_missing` / `not_forge`；未探测则没有行。不存 token |
 | `agent_sessions`                        | Agent 业务会话快照       | 可关联 Issue；活动关联有 partial unique index；记录 workspace、provider、turn、处理时长（json 由后台心跳按活跃时长累加、含进行中的 Turn；Codex 的 tui 取 session log 各 turn 处理耗时之和）与 Session Token 消耗三项累计（`token_input` / `token_output` / `token_cache`，json 来自结构化用量事件、Codex 的 tui 来自 session log 线程累计快照，尚未收到用量为 NULL） |
 | `issue_actions` / `session_events`      | 审计                     | payload 为 JSON 字符串，按实体与时间索引                                                     |
+| `issue_comments`                        | 本地评论正文             | `UNIQUE(linked_session_id, linked_turn_id)` 只约束本地 Agent 评论。正文不进 `issue_actions` 负载 |
+| `issue_remote_comments`                 | 远程评论                 | `(issue_id, remote_comment_id)` 唯一。不写入 `issue_comments`，不进入本地评论唯一键 |
+| `issue_remote_events`                   | 远程系统事件             | `(issue_id, remote_event_id)` 唯一。不写入 `issue_actions`，也不进入本地评论唯一键 |
 | `issue_completion_flows`                | 完成流程状态             | 每 Issue 最多一条；phase 见状态机                                                            |
 | `agent_profiles`                        | provider 配置            | `agent_type` 为 `codex` 或 `claude`；scope 为 `project` 或 `global`；软删除                  |
 | `issue_attachments`                     | Issue 落盘附件元数据     | 路径、种类、大小和 preview 能力；Issue 删除级联                                              |
@@ -53,5 +59,6 @@ completion_attempts 保留历史完成尝试审计。
 5. 用新库与已迁移库验证升级；迁移执行后检查唯一索引和外键行为。
 6. `0060_project_issue_source_settings` 给已有项目和 Issue 补默认来源，并新建 `project_forge_connections`。不修改已发布 migration。
 7. `0061_issue_external_refs` 只新增项目同步水位、最后错误和 `issue_external_refs`。不修改 `0060`，也不回写已有 Issue 的标题、状态、`del` 或 `source`。
+8. `0062_issue_remote_comments` 新增 `issue_remote_comments` 与 `issue_remote_events`。两表都不进入本地 `issue_comments` 的唯一键。重复的远程 id 不新增第二行，失败写入不清空已有行。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

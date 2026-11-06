@@ -870,7 +870,8 @@
         "actionType": "required",
         "actor": "required",
         "commentBody": "optional",
-        "createdAt": "required"
+        "createdAt": "required",
+        "source": "required"
       }
     },
     "IssueTimelineResponse": {
@@ -2279,7 +2280,16 @@
         "issue_review_marked",
         "issue_status_changed",
         "issue_completed",
-        "issue_comment_added"
+        "issue_comment_added",
+        "remote_comment",
+        "remote_event"
+      ]
+    },
+    "IssueTimelineSource": {
+      "rename": "snake_case",
+      "variants": [
+        "local",
+        "remote"
       ]
     },
     "PermissionBehavior": {

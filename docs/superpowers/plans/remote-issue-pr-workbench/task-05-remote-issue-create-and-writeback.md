@@ -20,7 +20,7 @@
 - 当前 `require_local_issue_create` 在创建来源为 remote 时直接拒绝，reason 为 `remoteCreateUnavailable`。
 - GitHub/GitLab Issue 读取由前序任务提供；写入能力尚未实现。
 - 现有完成 flow 已支持 `merge_to_base` 和 `open_pull_request`，且能在创建 PR 后记录旧 URL。
-- 任务 4 已建立远程详情、时间轴和宿主信息。
+- 任务 4 的时间轴契约：只扩展现有 `get_issue_timeline`。条目合并本地动作、本地评论、远程评论和远程系统事件，`source` 为 `local` 或 `remote`，远程评论的 `actionType` 是 `remote_comment`。本任务不拉取宿主评论或系统事件。那次拉取属于下一次 Issue 同步扩展，验收是同步成功写入两表且失败不清空。本任务仍负责远程创建和完成写回。
 
 先核对：
 

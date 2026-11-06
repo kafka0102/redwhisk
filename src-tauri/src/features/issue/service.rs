@@ -38,10 +38,10 @@ use crate::types::issue::{
     DetectAgentCommitCompletionInput, DetectAgentCommitCompletionResult,
     ExportIssueAttachmentInput, GetIssueSummaryInput, GetIssueTimelineInput, IssueAttachmentKind,
     IssueAttachmentPreview, IssueLabelRecord, IssueListResponse, IssueRecord, IssueStatus,
-    IssueSummaryRecord, IssueTimelineActionType, IssueTimelineActor, IssueTimelineEntry,
-    IssueTimelineResponse, MarkIssueReviewInput, PrepareAgentCommitCompletionInput,
-    PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
-    SendAgentCommitPromptInput, SendAgentCommitPromptResult, UpdateIssueInput,
+    IssueSummaryRecord, IssueTimelineResponse, MarkIssueReviewInput,
+    PrepareAgentCommitCompletionInput, PreviewIssueAttachmentInput, SaveIssueAttachmentDraftInput,
+    SaveIssueAttachmentDraftResult, SendAgentCommitPromptInput, SendAgentCommitPromptResult,
+    UpdateIssueInput,
 };
 use crate::types::issue_action::{IssueActionActor, IssueActionType};
 use crate::types::issue_completion::{
@@ -261,49 +261,7 @@ impl<'connection> IssueService<'connection> {
             .filter(|issue| issue.project_id == input.project_id)
             .ok_or_else(|| issue_not_found(input.issue_id))?;
 
-        let rows = EventRepository::new(self.issue_repository.connection())
-            .list_issue_timeline_rows(issue.id)
-            .map_err(issue_database_error)?;
-
-        let mut entries = Vec::new();
-        for row in rows {
-            let action_type = row.action_type;
-            let actor_kind = row.actor_kind;
-            let agent_name_snapshot = row.agent_name_snapshot;
-            let agent_type = row.agent_type;
-            let user_name = row.user_name;
-            let user_avatar_path = row.user_avatar_path;
-            let created_at = row.created_at;
-            let comment_body = row.comment_body;
-            let Some(action_type) = IssueTimelineActionType::from_action_str(&action_type) else {
-                continue;
-            };
-            let (name, avatar_path, resolved_agent_type) = if actor_kind == "agent" {
-                (agent_name_snapshot.unwrap_or_default(), None, agent_type)
-            } else {
-                (user_name.unwrap_or_default(), user_avatar_path, None)
-            };
-            // 评论正文仅在评论动作上内联，其余动作显式置空。
-            let resolved_comment_body = if action_type == IssueTimelineActionType::IssueCommentAdded
-            {
-                comment_body
-            } else {
-                None
-            };
-            entries.push(IssueTimelineEntry {
-                action_type,
-                actor: IssueTimelineActor {
-                    name,
-                    avatar_path,
-                    actor_kind,
-                    agent_type: resolved_agent_type,
-                },
-                created_at,
-                comment_body: resolved_comment_body,
-            });
-        }
-
-        Ok(IssueTimelineResponse { entries })
+        super::remote_timeline::load_issue_timeline(self.issue_repository.connection(), issue.id)
     }
 
     /// 在单事务内写一条 Issue 评论与对应的 `IssueCommentAdded` 动作。

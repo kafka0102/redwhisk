@@ -1,5 +1,9 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 import type { AgentType } from "../agents/agent-session-commands";
+import type {
+  GetIssueTimelineInput,
+  IssueTimelineResponse,
+} from "./issue-timeline-commands";
 
 export type IssueStatus = "backlog" | "running" | "review" | "completed";
 export type AgentSessionStatus = "running" | "closed" | "crashed" | "stopped";
@@ -95,39 +99,14 @@ export interface IssueListResponse {
   statusTotals?: IssueStatusTotals;
 }
 
-export type IssueTimelineActionType =
-  | "issue_created"
-  | "agent_session_started"
-  | "issue_review_marked"
-  | "issue_status_changed"
-  | "issue_completed"
-  | "issue_comment_added";
-
-export interface IssueTimelineActor {
-  name: string;
-  avatarPath: string | null;
-  /** 操作者类型：`user` 或 `agent`，前端按此切换头像来源。 */
-  actorKind: string;
-  /** Agent 操作者的类型（如 `codex` / `claude`）；用户操作者为 `undefined`。 */
-  agentType?: string;
-}
-
-export interface IssueTimelineEntry {
-  actionType: IssueTimelineActionType;
-  actor: IssueTimelineActor;
-  createdAt: number;
-  /** 评论动作（`issue_comment_added`）内联的评论正文；其余动作为 `undefined`。 */
-  commentBody?: string;
-}
-
-export interface IssueTimelineResponse {
-  entries: IssueTimelineEntry[];
-}
-
-export interface GetIssueTimelineInput {
-  projectId: number;
-  issueId: number;
-}
+export type {
+  GetIssueTimelineInput,
+  IssueTimelineActionType,
+  IssueTimelineActor,
+  IssueTimelineEntry,
+  IssueTimelineResponse,
+  IssueTimelineSource,
+} from "./issue-timeline-commands";
 
 export interface ListIssuesInput {
   projectId: number;
