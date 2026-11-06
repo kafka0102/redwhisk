@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import { createIssue, type IssueRecord } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
 import {
   EMPTY_FORM,
   type AttachmentPreviewState,
@@ -35,7 +36,7 @@ interface UseIssueDialogLifecycleOptions {
   selectedIssue: IssueRecord | null;
   selectedIssueId: number | null;
   isSaving: boolean;
-  issues: IssueRecord[];
+  issues: IssueBoardRecord[];
   dialogMode: DialogMode | null;
   isReadOnlyEditRequested: boolean;
   form: IssueFormState;
@@ -50,7 +51,7 @@ interface UseIssueDialogLifecycleOptions {
   setDialogErrorMessage: Dispatch<SetStateAction<string | null>>;
   setTitleError: Dispatch<SetStateAction<string | null>>;
   setIsSaving: Dispatch<SetStateAction<boolean>>;
-  setIssues: Dispatch<SetStateAction<IssueRecord[]>>;
+  setIssues: Dispatch<SetStateAction<IssueBoardRecord[]>>;
   setLaneTotals: Dispatch<SetStateAction<LaneTotalsMap>>;
   setSelectedIssueId: (id: number | null) => void;
   setForm: Dispatch<SetStateAction<IssueFormState>>;

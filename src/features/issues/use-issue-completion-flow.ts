@@ -13,6 +13,7 @@ import {
   type IssueRecord,
   type IssueStatus,
 } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
 import {
   EMPTY_FORM,
   type AttachmentPreviewState,
@@ -55,7 +56,7 @@ interface UseIssueCompletionFlowOptions {
   locale: Locale;
   selectedIssue: IssueRecord | null;
   isSaving: boolean;
-  issues: IssueRecord[];
+  issues: IssueBoardRecord[];
   isEditablePageOpen: boolean;
   activeProjectIdRef: MutableRefObject<number>;
   dirtyWorkspaceDecisionRef: MutableRefObject<DirtyWorkspaceDecisionResolver | null>;
@@ -64,7 +65,7 @@ interface UseIssueCompletionFlowOptions {
   setIsSaving: Dispatch<SetStateAction<boolean>>;
   setIsAdvancingStatus: Dispatch<SetStateAction<boolean>>;
   setIsDeletingIssue: Dispatch<SetStateAction<boolean>>;
-  setIssues: Dispatch<SetStateAction<IssueRecord[]>>;
+  setIssues: Dispatch<SetStateAction<IssueBoardRecord[]>>;
   setLaneTotals: Dispatch<SetStateAction<LaneTotalsMap>>;
   setSelectedIssueId: (id: number | null) => void;
   setForm: Dispatch<SetStateAction<IssueFormState>>;

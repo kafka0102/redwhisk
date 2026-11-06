@@ -3,6 +3,8 @@ import {
   type IssueStatus,
   type IssueStatusTotals,
 } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
+import { toBoardRecord } from "./issue-mirror-fields";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 
 const ISSUE_STATUSES: readonly IssueStatus[] = [
@@ -95,13 +97,14 @@ function computeLaneLoadState(issues: IssueRecord[]): LaneLoadStateMap {
 
 /** 追加下一页数据，按 id 去重后按状态进入时间重排，与后端 ORDER BY 一致。 */
 function mergeIssues(
-  current: IssueRecord[],
-  next: IssueRecord[],
-): IssueRecord[] {
+  current: readonly IssueBoardRecord[],
+  next: readonly IssueRecord[],
+): IssueBoardRecord[] {
+  const incoming = next.map((issue) => toBoardRecord(issue));
   const existingIds = new Set(current.map((issue) => issue.id));
   return sortIssuesByStatusChangedAtDesc([
     ...current,
-    ...next.filter((issue) => !existingIds.has(issue.id)),
+    ...incoming.filter((issue) => !existingIds.has(issue.id)),
   ]);
 }
 
@@ -109,7 +112,9 @@ function mergeIssues(
  * 按状态进入时间降序排序，与后端 `ORDER BY status_changed_at DESC,
  * created_at DESC, id DESC` 对齐；保证跨页合并顺序稳定。
  */
-function sortIssuesByStatusChangedAtDesc(issues: IssueRecord[]): IssueRecord[] {
+function sortIssuesByStatusChangedAtDesc<T extends IssueRecord>(
+  issues: readonly T[],
+): T[] {
   return [...issues].sort((left, right) => {
     if (left.statusChangedAt !== right.statusChangedAt) {
       return right.statusChangedAt - left.statusChangedAt;

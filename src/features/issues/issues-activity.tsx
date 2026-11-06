@@ -57,6 +57,8 @@ import {
   type IssueBoardPane,
 } from "./issue-board-header";
 import { IssuesKanban } from "./issues-kanban";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
+import { toBoardIssues } from "./issue-mirror-fields";
 import type { IssueSourceFilter } from "./issue-source-filter";
 import { isIssueEditorOpen } from "./issue-detail/issue-detail-mode";
 import { useIssueSyncChrome } from "./use-issue-sync-chrome";
@@ -113,7 +115,9 @@ export function IssuesActivity({
   });
   const { hasRequestedIssue, openRequestToken, requestedIssueId } =
     initialPageState;
-  const [issues, setIssues] = useState<IssueRecord[]>(initialPageState.issues);
+  const [issues, setIssues] = useState<IssueBoardRecord[]>(
+    initialPageState.issues,
+  );
   const [selectedIssueId, setSelectedIssueId] = useState(
     initialPageState.selectedIssueId,
   );
@@ -162,7 +166,7 @@ export function IssuesActivity({
           perStatusLimit: ISSUE_PAGE_SIZE,
         }),
       ).then((response) => {
-        setIssues(response.issues);
+        setIssues(toBoardIssues(response.issues));
         setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
       });
     },

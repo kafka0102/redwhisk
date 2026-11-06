@@ -7,6 +7,8 @@ import {
 } from "react";
 
 import { listIssues, type IssueRecord } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
+import { toBoardIssues } from "./issue-mirror-fields";
 import { issueBoardListInput } from "./issue-board-query";
 import type { IssueSourceFilter } from "./issue-source-filter";
 import {
@@ -56,7 +58,7 @@ interface UseIssueRunDialogOptions {
   selectedIssue: IssueRecord | null;
   isSaving: boolean;
   activeProjectIdRef: MutableRefObject<number>;
-  setIssues: Dispatch<SetStateAction<IssueRecord[]>>;
+  setIssues: Dispatch<SetStateAction<IssueBoardRecord[]>>;
   setSelectedIssueId: (id: number | null) => void;
   setForm: Dispatch<SetStateAction<IssueFormState>>;
   setDialogErrorMessage: Dispatch<SetStateAction<string | null>>;
@@ -214,7 +216,7 @@ export function useIssueRunDialog({
         return;
       }
 
-      setIssues(response.issues);
+      setIssues(toBoardIssues(response.issues));
       setLaneLoadState(computeLaneLoadState(response.issues));
       setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
       setSelectedIssueId(result.issueId);

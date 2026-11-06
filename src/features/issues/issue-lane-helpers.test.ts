@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { IssueRecord } from "./issue-commands";
+import { toBoardRecord } from "./issue-mirror-fields";
 import {
   mergeIssues,
   sortIssuesByStatusChangedAtDesc,
@@ -74,8 +75,8 @@ describe("sortIssuesByStatusChangedAtDesc", () => {
 describe("mergeIssues", () => {
   it("按 statusChangedAt 降序合并并对重复 id 去重", () => {
     const current = [
-      makeIssue({ id: 1, statusChangedAt: 100 }),
-      makeIssue({ id: 2, statusChangedAt: 300 }),
+      toBoardRecord(makeIssue({ id: 1, statusChangedAt: 100 })),
+      toBoardRecord(makeIssue({ id: 2, statusChangedAt: 300 })),
     ];
     const next = [
       makeIssue({ id: 2, statusChangedAt: 300 }),
@@ -88,8 +89,8 @@ describe("mergeIssues", () => {
   it("跨页合并后整体按 statusChangedAt 降序，交界处不被 id 重排", () => {
     // 已有页 statusChangedAt 100 / 90；新页含 200，应排到最前（非简单 append）。
     const current = [
-      makeIssue({ id: 1, statusChangedAt: 100 }),
-      makeIssue({ id: 2, statusChangedAt: 90 }),
+      toBoardRecord(makeIssue({ id: 1, statusChangedAt: 100 })),
+      toBoardRecord(makeIssue({ id: 2, statusChangedAt: 90 })),
     ];
     const next = [makeIssue({ id: 3, statusChangedAt: 200 })];
     const merged = mergeIssues(current, next);

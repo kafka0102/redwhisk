@@ -1,5 +1,5 @@
 import type { IssueOpenRequest } from "./issue-open-request";
-import type { IssueRecord } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
 import type { DialogMode, IssueFormState } from "./issue-activity-types";
 
 export interface CachedIssuePageState {
@@ -9,7 +9,7 @@ export interface CachedIssuePageState {
   selectedIssueId: number | null;
   isReadOnlyEditRequested: boolean;
   /** 首屏分页可能不包含正在编辑的 issue，用快照保住表单。 */
-  issueSnapshot: IssueRecord | null;
+  issueSnapshot: IssueBoardRecord | null;
 }
 
 type IssueOpenRequestIdentity = IssueOpenRequest | number | null;

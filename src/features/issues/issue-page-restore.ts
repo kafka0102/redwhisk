@@ -8,6 +8,8 @@ import {
   type IssueFormState,
 } from "./issue-activity-types";
 import type { IssueRecord, IssueStatusTotals } from "./issue-commands";
+import type { IssueBoardRecord } from "./issue-mirror-commands";
+import { toBoardRecord } from "./issue-mirror-fields";
 import {
   type LaneLoadStateMap,
   type LaneTotalsMap,
@@ -29,7 +31,7 @@ export interface InitialIssuePageState {
   openRequestToken: number;
   requestedIssueId: number | null;
   hasRequestedIssue: boolean;
-  issues: IssueRecord[];
+  issues: IssueBoardRecord[];
   selectedIssueId: number | null;
   dialogMode: DialogMode | null;
   form: IssueFormState;
@@ -38,7 +40,7 @@ export interface InitialIssuePageState {
 }
 
 export interface ResolvedIssuePage {
-  issues: IssueRecord[];
+  issues: IssueBoardRecord[];
   laneLoadState: LaneLoadStateMap;
   laneTotals: LaneTotalsMap;
   selectedIssueId: number | null;
@@ -103,7 +105,9 @@ export function resolveLoadedIssuePage(input: {
   requestedIssueId: number | null;
   cached: CachedIssuePageState | null;
 }): ResolvedIssuePage {
-  const serverIssues = sortIssuesByStatusChangedAtDesc(input.issues);
+  const serverIssues = sortIssuesByStatusChangedAtDesc(
+    input.issues.map((issue) => toBoardRecord(issue)),
+  );
   const laneLoadState = computeLaneLoadState(serverIssues);
   const laneTotals = deriveLaneTotals(input.statusTotals, serverIssues);
 
@@ -178,7 +182,7 @@ export function resolveLoadedIssuePage(input: {
 
 function canRestoreCachedIssuePage(
   cached: CachedIssuePageState,
-  serverIssues: IssueRecord[],
+  serverIssues: IssueBoardRecord[],
 ): boolean {
   if (cached.dialogMode === "create") {
     return true;

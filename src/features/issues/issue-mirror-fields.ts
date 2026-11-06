@@ -30,21 +30,30 @@ function copyMirrorField<Field extends IssueMirrorField>(
 }
 
 export function retainIssueMirrorFields(
-  previous: IssueRecord,
+  previous: IssueBoardRecord,
   next: IssueRecord,
-): IssueRecord {
-  const prior = previous as IssueMirrorCarrier;
+): IssueBoardRecord {
   const incoming = next as IssueMirrorCarrier;
   const retained: IssueMirrorCarrier = { ...incoming };
   for (const field of ISSUE_MIRROR_FIELDS) {
-    if (
-      !hasOwnMirrorField(incoming, field) &&
-      hasOwnMirrorField(prior, field)
-    ) {
-      copyMirrorField(retained, prior, field);
+    if (!hasOwnMirrorField(incoming, field)) {
+      copyMirrorField(retained, previous, field);
     }
   }
-  return retained;
+  return retained as IssueBoardRecord;
+}
+
+export function toBoardIssues(
+  issues: readonly IssueRecord[],
+): IssueBoardRecord[] {
+  return issues.map((issue) => toBoardRecord(issue));
+}
+
+export function toCreatedBoardRecord(issue: IssueRecord): IssueBoardRecord {
+  if (Object.prototype.hasOwnProperty.call(issue, "source")) {
+    return toBoardRecord(issue);
+  }
+  return toBoardRecord({ ...issue, source: "local" });
 }
 
 type BoardRecordInput = IssueRecord &
@@ -75,9 +84,11 @@ export interface IssueMirrorView {
 }
 
 export function toBoardRecord(issue: BoardRecordInput): IssueBoardRecord {
+  const source =
+    issue.source === "local" || issue.source === "remote" ? issue.source : "";
   return {
     ...issue,
-    source: issue.source ?? "local",
+    source,
     provider: issue.provider ?? null,
     externalNumber: issue.externalNumber ?? null,
     remoteState: issue.remoteState ?? null,

@@ -14,7 +14,11 @@ import {
 } from "../issue-activity-types";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
 import { sortIssuesByStatusChangedAtDesc } from "../issue-lane-helpers";
-import { retainIssueMirrorFields } from "../issue-mirror-fields";
+import type { IssueBoardRecord } from "../issue-mirror-commands";
+import {
+  retainIssueMirrorFields,
+  toCreatedBoardRecord,
+} from "../issue-mirror-fields";
 import type { useI18n } from "../../../shared/i18n/i18n";
 
 function issueToForm(issue: IssueRecord): IssueFormState {
@@ -31,15 +35,15 @@ function issueToForm(issue: IssueRecord): IssueFormState {
 }
 
 function mergeIssue(
-  currentIssues: IssueRecord[],
+  currentIssues: readonly IssueBoardRecord[],
   nextIssue: IssueRecord,
-): IssueRecord[] {
+): IssueBoardRecord[] {
   const previousIssue = currentIssues.find(
     (issue) => issue.id === nextIssue.id,
   );
   const mergedIssue =
     previousIssue == null
-      ? nextIssue
+      ? toCreatedBoardRecord(nextIssue)
       : retainIssueMirrorFields(previousIssue, nextIssue);
   const remainingIssues = currentIssues.filter(
     (issue) => issue.id !== nextIssue.id,
