@@ -6,7 +6,7 @@
 
 - Rust command 用 `snake_case` 动词短语；前端 wrapper 用 `camelCase`，统一经 `invokeCommand` 调用。
 - DTO struct 用 `#[serde(rename_all = "camelCase")]`；状态 enum 用 `snake_case`。ID 与 epoch milliseconds 时间在前端均为 `number`。
-- 成功结果返回显式 DTO；列表包进对象，如 `{ issues: IssueRecord[] }`。
+- 成功结果返回显式 DTO；列表包进对象，如 `{ issues: IssueBoardRecord[] }`。
 - 失败返回 `CommandError`：`code`、`message`、可选 `reason`、可选 `details`；每个 detail 必须有 `@type`。
 - 前端以 `getCommandErrorMessage(error, t)` 做本地化；Rust 不返回面向 locale 的文案逻辑。
 - **Agent Session 新建**必须关联 Issue：仅 `start_agent_session`（及 Issue 完成相关注入等既有路径）；不存在、不得再注册无 Issue / structured standalone 新建 command（[ADR-0024](../adr/0024-agent-session-must-link-issue.md)）。历史独立 Session 的 list / resume / delete / title 等非新建 command 仍可保留。
@@ -38,6 +38,8 @@
 > `get_issue_timeline` 仍是唯一时间轴命令，不另开第二条。返回按 `createdAt` 升序合并的本地动作、本地评论、远程评论和远程系统事件。`IssueTimelineEntry.source` 为 `local` 或 `remote`。远程评论的 `actionType` 是 `remote_comment`，不是 `issue_comment_added`；系统事件是 `remote_event`。本地评论正文只出现在 `commentBody`，不写入动作负载。该命令不访问网络。
 
 > `sync_project_issues` 同步当前项目的 GitHub 或 GitLab Issue 镜像，不新增 command。`list_issues` 返回 `IssueBoardRecord`，在 Issue 字段上附加 `source`、`provider`、`externalNumber`、`remoteState`、`remoteLabels`、`syncStatus`、`remoteClosedWhileRunning`、`remoteReopened`、`pullRequestUrl`。这些字段由 DTO parity 核对。成功、跳过、凭据过期和缓存失败都返回 `outcome`，并广播 `issue-sync-changed`。outcome 集合仍是 `synced`、`skipped`、`credential_expired`、`cache_failed`。项目不存在返回 `ProjectNotFound`，消息为 `Project not found.`。标签范围为空时返回既有 `ProjectValidationFailed`（`reason=issueSyncLabelRequired`）。`get_issue_sync_status` 返回 `lastSyncedAt` 与 `syncError`。`syncError` 代码为 `credential_expired`、`cli_missing`、`offline`、`rate_limited`、`cache_failed`。`credential_expired` 的 outcome 是 `credential_expired`，另外四个的 outcome 是 `cache_failed`。一次同步只拉一次列表，阻塞的 CLI 与 SQLite 放在 `spawn_blocking`。`list_issues` 的 `sourceFilter` 可取 `all`、`local`、`remote`；缺省和空字符串都是 `all`，空字符串不报错。`local` 只留 `source=local`，`remote` 只留 `source=remote`。仅本地和仅远程模式忽略该参数。`statusTotals` 是过滤后的各状态总数，不是当前页张数。
+
+> `create_issue`、`update_issue`、`advance_issue_status`、`mark_issue_review` 和完成流程返回 `IssueRecord`，不含上面的镜像字段。写回看板行时保留上一行缺失的字段，入口是 `retainIssueMirrorFields`（`issue-mirror-fields.ts`，由 `issue-description-serializer.ts` 的 `mergeIssue` 调用）。来源缺失、空串或 null 不是 local。
 
 > `save_agent_display_order`：入参 `SaveAgentDisplayOrderInput.profileIds`，为当前全部未删除 profile 的 id 顺序。缺少未删除 profile、重复、未知或已软删 id 时返回既有 `AgentProfileValidationFailed`（`reason=agentDisplayOrderMismatch`），原顺序不变。成功后项目级与全局级列表都按这份全应用顺序返回。
 
