@@ -1,12 +1,13 @@
 # 远程 Issue 与 PR/MR 工作台改版方案
 
-> 状态：待产品 review 静态稿，未实现
+> 状态：已评审通过；任务 1、2 已完成，后续按实施计划执行
 > 日期：2026-10-31
 > 调研原文：[2026-10-31-remote-issue-and-pr-sync-research.md](../../survey/2026-10-31-remote-issue-and-pr-sync-research.md)
 > 相关：[任务完成后的合入与 PR/MR 调研](../../survey/task-completion-pr-mr.md)、[Issue 完成后的合入与 PR/MR](./2026-10-25-task-completion-pr-mr-design.md)、[Worktree 与 Git 生命周期](../../architecture-design/worktree-git-lifecycle.md)、[Settings 页面布局](../../architecture-design/settings-page-layout.md)、[数据模型与 Migration](../../domain/data-model.md)
 > 静态原型：[issue-pr-workbench.prototype.html](../../../src/features/issues/issue-pr-workbench.prototype.html)
+> 分步执行：[远程 Issue 与 PR/MR 工作台 8 任务实施计划](../plans/remote-issue-pr-workbench/README.md)
 
-本文是产品与技术方案，不是实现。实现前先按第 15 节用静态原型给产品 review；通过后再拆 ticket。
+本文是产品与技术方案。任务拆分与当前执行状态以链接的实施计划为准；行为与视觉验收同时依据本文和静态原型。
 
 ## 1. 一句话结论
 

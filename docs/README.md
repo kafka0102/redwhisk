@@ -54,6 +54,10 @@
 - `docs/superpowers/specs/`：具体功能设计规格。
 - `docs/superpowers/plans/`：具体功能实施计划。
 
+当前进行中的分步实施计划：
+
+- [远程 Issue 与 PR/MR 工作台 8 任务实施计划](./superpowers/plans/remote-issue-pr-workbench/README.md)
+
 ## 读取顺序建议
 
 - 所有任务：先读本索引，再按下表选择最小必要文档；代码事实以链接的源码为最终依据。
