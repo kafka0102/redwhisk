@@ -8,7 +8,7 @@ use crate::db::migrations::MigrationRunner;
 use crate::types::issue::IssueStatus;
 use crate::types::issue_mirror::IssueSyncOutcome;
 
-use super::super::board::list_board_issues;
+use super::super::board::{list_board_issues, list_board_page, IssueBoardRecord};
 use super::super::cli::github_issue_list_args;
 use super::super::parse::parse_github_issue_list;
 use super::super::port::{
@@ -16,7 +16,7 @@ use super::super::port::{
 };
 use super::super::sync::sync_project_issues;
 use super::support::{
-    action_count, insert_project, issue_deleted, ready_github_project, remote_issue,
+    action_count, insert_project, issue_deleted, open_database, ready_github_project, remote_issue,
     seed_remote_issue, sync_forge, sync_with,
 };
 
@@ -222,6 +222,99 @@ fn incremental_sync_excludes_same_day_updates_before_the_success_time() {
         vec![201],
         "the 09:00Z issues must not occupy the 200 limit ahead of 13:00Z"
     );
+}
+
+#[test]
+fn gitlab_sync_imports_one_issue_with_provider_gitlab() {
+    let connection = open_database();
+    let project_id = insert_project(&connection);
+    connection
+        .execute(
+            "UPDATE projects
+             SET issue_source_mode = 'mixed', issue_sync_scope = 'all_open'
+             WHERE id = ?1",
+            params![project_id],
+        )
+        .expect("scope");
+    connection
+        .execute(
+            "INSERT INTO project_forge_connections (
+                project_id, provider, host_url, repo_path, login, auth_status,
+                cli_installed, cli_authenticated, checked_at
+             ) VALUES (?1, 'gitlab', 'https://gitlab.example.com/', 'acme/redwhisk', 'octocat', 'ready', 1, 1, 1)",
+            params![project_id],
+        )
+        .expect("connection");
+    let forge = FixedForge::new(vec![remote_issue(
+        8,
+        RemoteIssueState::Open,
+        "GitLab issue",
+    )]);
+    sync_project_issues(&connection, project_id, &forge, 5_000).expect("sync");
+    let listed = list_board_issues(&connection, project_id).expect("list");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].external_number, Some(8));
+    assert_eq!(listed[0].title, "GitLab issue");
+    assert_eq!(listed[0].status, IssueStatus::Backlog);
+    assert_eq!(listed[0].source, "remote");
+    assert_eq!(listed[0].provider.as_deref(), Some("gitlab"));
+}
+
+#[test]
+fn board_list_includes_pull_request_url_from_table() {
+    let connection = open_database();
+    let project_id = insert_project(&connection);
+    let linked_id = insert_board_issue(&connection, project_id, 1, "linked");
+    let unlinked_id = insert_board_issue(&connection, project_id, 2, "unlinked");
+    connection
+        .execute(
+            "INSERT INTO issue_pull_requests (issue_id, url, created_at) VALUES (?1, ?2, ?3)",
+            params![
+                linked_id,
+                "https://github.com/acme/redwhisk/pull/124",
+                30_i64
+            ],
+        )
+        .expect("pull request");
+
+    let listed = list_board_page(&connection, project_id, None, None, None, None, None)
+        .expect("list")
+        .issues;
+    let linked = listed
+        .iter()
+        .find(|issue| issue.issue.id == linked_id)
+        .expect("linked issue");
+    let unlinked = listed
+        .iter()
+        .find(|issue| issue.issue.id == unlinked_id)
+        .expect("unlinked issue");
+
+    assert_eq!(
+        serialized_pull_request_url(linked).as_deref(),
+        Some("https://github.com/acme/redwhisk/pull/124")
+    );
+    assert_eq!(serialized_pull_request_url(unlinked), None);
+}
+
+fn insert_board_issue(connection: &Connection, project_id: i64, number: i64, title: &str) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO issues (
+                project_id, number, title, description, status, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, 'body', 'backlog', 10, 20)",
+            params![project_id, number, title],
+        )
+        .expect("issue");
+    connection.last_insert_rowid()
+}
+
+fn serialized_pull_request_url(record: &IssueBoardRecord) -> Option<String> {
+    serde_json::to_value(record)
+        .expect("board record")
+        .get("pullRequestUrl")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 struct SearchWindowForge {

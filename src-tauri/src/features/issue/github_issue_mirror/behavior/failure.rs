@@ -156,7 +156,7 @@ fn local_mode_skips_without_calling_the_list() {
 }
 
 #[test]
-fn gitlab_connection_does_not_call_github_and_keeps_cache() {
+fn ready_gitlab_lists_issues_and_keeps_the_cached_issue_when_the_list_is_empty() {
     let harness = ready_github_project("all_open", None);
     seed_remote_issue(
         &harness.connection,
@@ -170,8 +170,8 @@ fn gitlab_connection_does_not_call_github_and_keeps_cache() {
     set_auth(&harness.connection, harness.project_id, "gitlab", "ready");
     let forge = FixedForge::new(vec![]);
     let result = sync_forge(&harness, &forge);
-    assert_eq!(result.outcome, IssueSyncOutcome::CacheFailed);
-    assert!(forge.calls().is_empty());
+    assert_eq!(result.outcome, IssueSyncOutcome::Synced);
+    assert_eq!(forge.calls().len(), 1);
     assert_eq!(
         list_board_issues(&harness.connection, harness.project_id)
             .expect("list")

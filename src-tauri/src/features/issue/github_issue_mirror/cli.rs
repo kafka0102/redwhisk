@@ -1,15 +1,48 @@
-use chrono::TimeZone;
-use std::process::Command;
-
-use crate::git::command::apply_interactive_path;
-
+use super::forge_process::capture_forge_stdout;
+use super::gitlab::GitlabCliForge;
 use super::parse::parse_github_issue_list;
 use super::port::{
     ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue, RemoteIssueState,
 };
+use crate::types::project_issue_source::ForgeProvider;
+use chrono::TimeZone;
 
 pub struct GithubCliForge {
     pub repo_dir: std::path::PathBuf,
+}
+
+pub(crate) enum ProjectIssueForge {
+    Github(GithubCliForge),
+    Gitlab(GitlabCliForge),
+}
+
+impl ProjectIssueForge {
+    pub(crate) fn new(provider: Option<ForgeProvider>, repo_dir: std::path::PathBuf) -> Self {
+        match provider {
+            Some(ForgeProvider::Gitlab) => Self::Gitlab(GitlabCliForge { repo_dir }),
+            _ => Self::Github(GithubCliForge { repo_dir }),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn program(&self) -> &'static str {
+        match self {
+            Self::Github(_) => "gh",
+            Self::Gitlab(_) => "glab",
+        }
+    }
+}
+
+impl ForgeIssuePort for ProjectIssueForge {
+    fn list_issues(
+        &self,
+        query: &ForgeIssueListQuery,
+    ) -> Result<Vec<RemoteIssue>, ForgeIssueError> {
+        match self {
+            Self::Github(forge) => forge.list_issues(query),
+            Self::Gitlab(forge) => forge.list_issues(query),
+        }
+    }
 }
 
 impl ForgeIssuePort for GithubCliForge {
@@ -17,17 +50,7 @@ impl ForgeIssuePort for GithubCliForge {
         &self,
         query: &ForgeIssueListQuery,
     ) -> Result<Vec<RemoteIssue>, ForgeIssueError> {
-        let mut command = Command::new("gh");
-        command.args(github_issue_list_args(query));
-        command.current_dir(&self.repo_dir);
-        apply_interactive_path(&mut command);
-        let output = command
-            .output()
-            .map_err(|_| ForgeIssueError::CommandFailed)?;
-        if !output.status.success() {
-            return Err(ForgeIssueError::CommandFailed);
-        }
-        let stdout = String::from_utf8(output.stdout).map_err(|_| ForgeIssueError::Unparseable)?;
+        let stdout = capture_forge_stdout("gh", &github_issue_list_args(query), &self.repo_dir)?;
         parse_github_issue_list(&stdout)
     }
 }

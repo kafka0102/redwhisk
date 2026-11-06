@@ -1,6 +1,8 @@
 export interface IssueMirrorView {
   source: "local" | "remote";
   externalNumber: number | null;
+  provider: "github" | "gitlab" | null;
+  pullRequestUrl: string | null;
   remoteLabels: string[];
   syncStatus: string | null;
   remoteClosedWhileRunning: boolean;
@@ -13,6 +15,17 @@ export function readIssueMirror(issue: object): IssueMirrorView {
     source: record.source === "remote" ? "remote" : "local",
     externalNumber:
       typeof record.externalNumber === "number" ? record.externalNumber : null,
+    provider:
+      record.provider === "gitlab"
+        ? "gitlab"
+        : record.provider === "github"
+          ? "github"
+          : null,
+    pullRequestUrl:
+      typeof record.pullRequestUrl === "string" &&
+      record.pullRequestUrl.length > 0
+        ? record.pullRequestUrl
+        : null,
     remoteLabels: Array.isArray(record.remoteLabels)
       ? record.remoteLabels.filter(
           (label): label is string => typeof label === "string",
@@ -23,6 +36,41 @@ export function readIssueMirror(issue: object): IssueMirrorView {
     remoteClosedWhileRunning: record.remoteClosedWhileRunning === true,
     remoteReopened: record.remoteReopened === true,
   };
+}
+
+export function issueNumberLabel(
+  issueNumber: number,
+  mirror: IssueMirrorView,
+): string {
+  if (mirror.source === "remote" && mirror.externalNumber != null) {
+    const prefix = mirror.provider === "gitlab" ? "GL" : "GH";
+    return `${prefix} #${mirror.externalNumber}`;
+  }
+  return `#${issueNumber}`;
+}
+
+export function issueForgeBadgeKey(
+  mirror: IssueMirrorView,
+): "issues.githubBadge" | "issues.gitlabBadge" | "issues.localBadge" {
+  if (mirror.source !== "remote") {
+    return "issues.localBadge";
+  }
+  return mirror.provider === "gitlab"
+    ? "issues.gitlabBadge"
+    : "issues.githubBadge";
+}
+
+export function linkedRequestLabel(mirror: IssueMirrorView): string | null {
+  if (mirror.source !== "remote" || mirror.pullRequestUrl == null) {
+    return null;
+  }
+  const path = mirror.pullRequestUrl.split(/[?#]/, 1)[0] ?? "";
+  const segment = path.split("/").pop() ?? "";
+  if (!/^\d+$/.test(segment)) {
+    return null;
+  }
+  const prefix = mirror.provider === "gitlab" ? "MR" : "PR";
+  return `${prefix} #${segment}`;
 }
 
 export function formatIssueAge(

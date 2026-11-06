@@ -292,4 +292,84 @@ describe("issue auto sync gate", () => {
     await flush();
     expect(syncProjectIssuesMock).toHaveBeenCalledTimes(5);
   });
+
+  it("does not start auto sync for local mode", async () => {
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      projectId: 1,
+      issueSourceMode: "local",
+      issueSyncScope: "all_open",
+      issueSyncLabel: null,
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: false,
+      issueWritebackCloseOnPrMerge: false,
+      issueWritebackComment: false,
+      issueCreateSource: "local",
+      connection: {
+        provider: "gitlab",
+        hostUrl: "https://gitlab.example.com/",
+        repoPath: "acme/redwhisk",
+        login: "octocat",
+        cliInstalled: true,
+        cliAuthenticated: true,
+        authStatus: "ready",
+        checkedAt: 1,
+      },
+    });
+    render(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+    await flush();
+    await flush();
+    expect(syncProjectIssuesMock).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(90_000);
+    });
+    expect(syncProjectIssuesMock).not.toHaveBeenCalled();
+  });
+
+  it("starts the existing auto sync timer for remote mode", async () => {
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      projectId: 1,
+      issueSourceMode: "remote",
+      issueSyncScope: "all_open",
+      issueSyncLabel: null,
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: false,
+      issueWritebackCloseOnPrMerge: false,
+      issueWritebackComment: false,
+      issueCreateSource: "local",
+      connection: {
+        provider: "gitlab",
+        hostUrl: "https://gitlab.example.com/",
+        repoPath: "acme/redwhisk",
+        login: "octocat",
+        cliInstalled: true,
+        cliAuthenticated: true,
+        authStatus: "ready",
+        checkedAt: 1,
+      },
+    });
+    syncProjectIssuesMock.mockResolvedValue({ outcome: "synced" });
+    render(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+    await flush();
+    await flush();
+    expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(89_000);
+    });
+    expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    await flush();
+    expect(syncProjectIssuesMock).toHaveBeenCalledTimes(2);
+  });
 });

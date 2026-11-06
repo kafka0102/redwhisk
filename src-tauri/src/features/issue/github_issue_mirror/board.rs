@@ -36,6 +36,7 @@ pub struct IssueBoardRecord {
     pub sync_status: Option<String>,
     pub remote_closed_while_running: bool,
     pub remote_reopened: bool,
+    pub pull_request_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,10 +79,15 @@ pub fn enrich_issue_list(
         Some(project_id) => projection_map(&database.connection, project_id)?,
         None => HashMap::new(),
     };
+    let pull_request_urls = match project_id {
+        Some(project_id) => latest_pull_request_urls(&database.connection, project_id)?,
+        None => HashMap::new(),
+    };
     let issues = response.issues.into_iter().map(|issue| {
         let projection = projections.get(&issue.id);
         let view = view_from(&issue, projection);
-        board_record(issue, &view, projection)
+        let pull_request_url = pull_request_urls.get(&issue.id).cloned();
+        board_record(issue, &view, projection, pull_request_url)
     });
     Ok(IssueBoardListResponse {
         issues: issues.collect(),
@@ -185,6 +191,7 @@ fn filtered_board(
     )
     .list_issues(project_id)?;
     let projections = projection_map(connection, project_id)?;
+    let pull_request_urls = latest_pull_request_urls(connection, project_id)?;
     let mode = issue_source_mode(connection, project_id)?;
     let filter = canonical_source_filter(source_filter);
     let mut totals = IssueStatusTotals::default();
@@ -201,7 +208,8 @@ fn filtered_board(
             IssueStatus::Review => totals.review += 1,
             IssueStatus::Completed => totals.completed += 1,
         }
-        issues.push(board_record(issue, &view, projection));
+        let pull_request_url = pull_request_urls.get(&issue.id).cloned();
+        issues.push(board_record(issue, &view, projection, pull_request_url));
     }
     Ok(IssueBoardListResponse {
         issues,
@@ -305,6 +313,7 @@ fn board_record(
     issue: IssueRecord,
     view: &BoardIssueView,
     projection: Option<&crate::db::issue_external_ref_repository::IssueMirrorProjection>,
+    pull_request_url: Option<String>,
 ) -> IssueBoardRecord {
     IssueBoardRecord {
         source: view.source.clone(),
@@ -315,6 +324,7 @@ fn board_record(
         sync_status: view.sync_status.clone(),
         remote_closed_while_running: view.remote_closed_while_running,
         remote_reopened: view.remote_reopened,
+        pull_request_url,
         issue,
     }
 }
@@ -376,4 +386,41 @@ fn projection_map(
             )
         })?;
     Ok(rows.into_iter().collect())
+}
+
+fn latest_pull_request_urls(
+    connection: &Connection,
+    project_id: i64,
+) -> Result<HashMap<i64, String>, CommandError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT pull_requests.issue_id, pull_requests.url
+             FROM issue_pull_requests AS pull_requests
+             INNER JOIN issues ON issues.id = pull_requests.issue_id
+             WHERE issues.project_id = ?1
+             ORDER BY pull_requests.created_at DESC",
+        )
+        .map_err(pull_request_query_error)?;
+    let rows = statement
+        .query_map(rusqlite::params![project_id], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(pull_request_query_error)?;
+    let mut urls = HashMap::new();
+    for row in rows {
+        let (issue_id, url) = row.map_err(pull_request_query_error)?;
+        urls.entry(issue_id).or_insert(url);
+    }
+    Ok(urls)
+}
+
+fn pull_request_query_error(error: rusqlite::Error) -> CommandError {
+    CommandError::new(
+        crate::types::errors::CommandErrorCode::IssuePersistenceFailed,
+        "Failed to read issue pull requests.",
+    )
+    .with_reason("queryFailed")
+    .with_detail(
+        crate::types::errors::ErrorDetail::new("Cause").with_value("message", error.to_string()),
+    )
 }

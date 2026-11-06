@@ -12,7 +12,23 @@ use crate::types::project_issue_source::{
     ForgeAuthStatus, ForgeProvider, IssueSourceMode, IssueSyncScope, ProjectIssueSourceSettings,
 };
 
-use super::port::{ForgeIssueListQuery, ForgeIssuePort, RemoteIssue, RemoteIssueState};
+use super::port::{
+    ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue, RemoteIssueState,
+};
+
+pub(crate) fn sync_connected_issues(
+    connection: &Connection,
+    project_id: i64,
+    repo_dir: std::path::PathBuf,
+    now_ms: i64,
+) -> Result<IssueSyncResult, CommandError> {
+    let provider = ProjectIssueSourceRepository::new(connection)
+        .get(project_id)
+        .map_err(persistence)?
+        .and_then(|settings| settings.connection.provider);
+    let forge = super::cli::ProjectIssueForge::new(provider, repo_dir);
+    sync_project_issues(connection, project_id, &forge, now_ms)
+}
 
 pub fn sync_project_issues(
     connection: &Connection,
@@ -31,19 +47,19 @@ pub fn sync_project_issues(
     }
     let label = label_filter(&settings)?;
     let refs = IssueExternalRefRepository::new(connection);
-    if settings.connection.provider == Some(ForgeProvider::Gitlab) {
-        refs.mark_sync_error(project_id, "cache_failed")
-            .map_err(persistence)?;
-        return Ok(IssueSyncResult {
-            outcome: IssueSyncOutcome::CacheFailed,
-        });
-    }
     match settings.connection.auth_status {
         ForgeAuthStatus::Expired | ForgeAuthStatus::Unauthenticated => {
             refs.mark_sync_error(project_id, "credential_expired")
                 .map_err(persistence)?;
             return Ok(IssueSyncResult {
                 outcome: IssueSyncOutcome::CredentialExpired,
+            });
+        }
+        ForgeAuthStatus::CliMissing => {
+            refs.mark_sync_error(project_id, "cli_missing")
+                .map_err(persistence)?;
+            return Ok(IssueSyncResult {
+                outcome: IssueSyncOutcome::CacheFailed,
             });
         }
         ForgeAuthStatus::Ready => {}
@@ -55,6 +71,17 @@ pub fn sync_project_issues(
             });
         }
     }
+    let provider = match settings.connection.provider {
+        Some(ForgeProvider::Github) => "github",
+        Some(ForgeProvider::Gitlab) => "gitlab",
+        _ => {
+            refs.mark_sync_error(project_id, "cache_failed")
+                .map_err(persistence)?;
+            return Ok(IssueSyncResult {
+                outcome: IssueSyncOutcome::CacheFailed,
+            });
+        }
+    };
     let Some(host) = settings
         .connection
         .host_url
@@ -101,8 +128,8 @@ pub fn sync_project_issues(
     };
     let listed = match forge.list_issues(&query) {
         Ok(issues) => issues,
-        Err(_) => {
-            refs.mark_sync_error(project_id, "cache_failed")
+        Err(error) => {
+            refs.mark_sync_error(project_id, list_sync_error(&error))
                 .map_err(persistence)?;
             return Ok(IssueSyncResult {
                 outcome: IssueSyncOutcome::CacheFailed,
@@ -113,13 +140,24 @@ pub fn sync_project_issues(
         if remote.is_pull_request {
             continue;
         }
-        apply_remote(connection, project_id, &host, &repo, &remote, now_ms)?;
+        apply_remote(
+            connection, project_id, provider, &host, &repo, &remote, now_ms,
+        )?;
     }
     refs.mark_sync_success(project_id, now_ms)
         .map_err(persistence)?;
     Ok(IssueSyncResult {
         outcome: IssueSyncOutcome::Synced,
     })
+}
+
+fn list_sync_error(error: &ForgeIssueError) -> &'static str {
+    match error {
+        ForgeIssueError::CliMissing => "cli_missing",
+        ForgeIssueError::Offline => "offline",
+        ForgeIssueError::RateLimited => "rate_limited",
+        ForgeIssueError::CommandFailed | ForgeIssueError::Unparseable => "cache_failed",
+    }
 }
 
 fn label_filter(settings: &ProjectIssueSourceSettings) -> Result<Option<String>, CommandError> {
@@ -144,6 +182,7 @@ fn label_filter(settings: &ProjectIssueSourceSettings) -> Result<Option<String>,
 fn apply_remote(
     connection: &Connection,
     project_id: i64,
+    provider: &str,
     host: &str,
     repo: &str,
     remote: &RemoteIssue,
@@ -151,10 +190,10 @@ fn apply_remote(
 ) -> Result<(), CommandError> {
     let refs = IssueExternalRefRepository::new(connection);
     let existing = refs
-        .find_by_external_id("github", host, &remote.external_id)
+        .find_by_external_id(provider, host, &remote.external_id)
         .map_err(persistence)?
         .or(refs
-            .find_by_external_number(project_id, "github", host, repo, remote.number)
+            .find_by_external_number(project_id, provider, host, repo, remote.number)
             .map_err(persistence)?);
     if remote.title.trim().is_empty() {
         if let Some(issue_id) = existing {
@@ -163,15 +202,18 @@ fn apply_remote(
         return Ok(());
     }
     if let Some(issue_id) = existing {
-        update_existing(connection, project_id, host, repo, issue_id, remote, now_ms)
+        update_existing(
+            connection, project_id, provider, host, repo, issue_id, remote, now_ms,
+        )
     } else {
-        insert_new(connection, project_id, host, repo, remote, now_ms)
+        insert_new(connection, project_id, provider, host, repo, remote, now_ms)
     }
 }
 
 fn insert_new(
     connection: &Connection,
     project_id: i64,
+    provider: &str,
     host: &str,
     repo: &str,
     remote: &RemoteIssue,
@@ -202,6 +244,7 @@ fn insert_new(
     refs.insert_ref(&ref_row(
         created.id,
         project_id,
+        provider,
         host,
         repo,
         remote,
@@ -219,6 +262,7 @@ fn insert_new(
 fn update_existing(
     connection: &Connection,
     project_id: i64,
+    provider: &str,
     host: &str,
     repo: &str,
     issue_id: i64,
@@ -259,6 +303,7 @@ fn update_existing(
     refs.update_ref(&ref_row(
         issue_id,
         project_id,
+        provider,
         host,
         repo,
         remote,
@@ -330,6 +375,7 @@ fn decide(local: IssueStatus, remote_open: bool, has_session: bool) -> StatusDec
 fn ref_row<'value>(
     issue_id: i64,
     project_id: i64,
+    provider: &'value str,
     host: &'value str,
     repo: &'value str,
     remote: &'value RemoteIssue,
@@ -342,7 +388,7 @@ fn ref_row<'value>(
     NewIssueExternalRef {
         issue_id,
         project_id,
-        provider: "github",
+        provider,
         host,
         repo,
         external_id: &remote.external_id,

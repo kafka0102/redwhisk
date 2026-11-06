@@ -5,9 +5,7 @@ use crate::agent::session_registry::AgentSessionRegistry;
 use tauri::Emitter;
 use tauri::State;
 
-use super::github_issue_mirror::{
-    load_issue_board, sync_github_issues, GithubCliForge, IssueBoardListResponse,
-};
+use super::github_issue_mirror::{load_issue_board, sync_connected_issues, IssueBoardListResponse};
 use super::service::IssueService;
 use crate::app_state::AppState;
 use crate::features::agent_session::AgentSessionService;
@@ -136,12 +134,7 @@ pub fn sync_project_issues_in_data_dir(
         })?
         .map(|project| std::path::PathBuf::from(project.repo_path))
         .unwrap_or_default();
-    sync_github_issues(
-        &database.connection,
-        project_id,
-        &GithubCliForge { repo_dir },
-        now_millis(),
-    )
+    sync_connected_issues(&database.connection, project_id, repo_dir, now_millis())
 }
 
 pub fn get_issue_sync_status_in_data_dir(

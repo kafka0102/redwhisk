@@ -2,7 +2,13 @@ import { LoaderCircle, Play, Plus } from "lucide-react";
 import { useState } from "react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
-import { formatIssueAge, readIssueMirror } from "./issue-mirror-fields";
+import {
+  formatIssueAge,
+  issueForgeBadgeKey,
+  issueNumberLabel,
+  linkedRequestLabel,
+  readIssueMirror,
+} from "./issue-mirror-fields";
 import type { RunDialogIssue } from "./use-issue-run-dialog";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -191,10 +197,8 @@ function IssueCard({
       : sourceMode === "mixed" && mirror.source === "remote"
         ? "info"
         : undefined;
-  const issueNumber =
-    mirror.source === "remote" && mirror.externalNumber != null
-      ? `GH #${mirror.externalNumber}`
-      : `#${issue.number}`;
+  const issueNumber = issueNumberLabel(issue.number, mirror);
+  const requestLabel = linkedRequestLabel(mirror);
   const describedBy = [
     metaId,
     issue.linkedSessionAttention === "requested" ? attentionId : null,
@@ -224,25 +228,27 @@ function IssueCard({
             onClick={(event) => onOpenIssue(issue, event.currentTarget)}
           >
             <span id={metaId} className="issue-card__meta-row">
-              <span className="issue-card__id">
-                {mirror.source === "remote" ? (
-                  <span className="issue-card__forge">
-                    {t("issues.githubBadge")}
-                  </span>
-                ) : null}
-                {issueNumber}
-              </span>
-              <span className="issue-card__updated">
-                {formatIssueAge(issue.updatedAt, now, {
-                  justNow: t("issues.timelineJustNow"),
-                  minutesAgo: (minutes) =>
-                    t("issues.timelineMinutesAgo", { minutes }),
-                  hoursAgo: (hours) => t("issues.timelineHoursAgo", { hours }),
-                  daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
-                })}
+              <span className="issue-card__id">{issueNumber}</span>
+              <span className="issue-card__meta-aside">
+                <span className="issue-card__updated">
+                  {formatIssueAge(issue.updatedAt, now, {
+                    justNow: t("issues.timelineJustNow"),
+                    minutesAgo: (minutes) =>
+                      t("issues.timelineMinutesAgo", { minutes }),
+                    hoursAgo: (hours) =>
+                      t("issues.timelineHoursAgo", { hours }),
+                    daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
+                  })}
+                </span>
+                <span className="issue-card__forge">
+                  {t(issueForgeBadgeKey(mirror))}
+                </span>
               </span>
             </span>
             <span className="issue-card__title">{issue.title}</span>
+            {requestLabel ? (
+              <span className="issue-card__remote-note">{requestLabel}</span>
+            ) : null}
             {mirror.remoteClosedWhileRunning ? (
               <span className="issue-card__remote-note">
                 {t("issues.remoteClosed")}

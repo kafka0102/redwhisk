@@ -44,6 +44,9 @@ pub struct ForgeIssueListQuery {
 pub enum ForgeIssueError {
     CommandFailed,
     Unparseable,
+    CliMissing,
+    Offline,
+    RateLimited,
 }
 
 pub trait ForgeIssuePort {

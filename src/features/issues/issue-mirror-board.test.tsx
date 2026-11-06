@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
@@ -695,6 +697,191 @@ describe("GitHub issue mirror board", () => {
     expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("#12")).toBeInTheDocument();
     resolveSync({ outcome: "synced" });
+  });
+
+  it("shows GitHub, GitLab, and local badges on one mixed board", async () => {
+    const user = userEvent.setup();
+    const local = boardIssue({
+      id: 1,
+      number: 12,
+      title: "Local card",
+      source: "local",
+    });
+    const github = boardIssue({
+      id: 2,
+      number: 4,
+      title: "GitHub card",
+      source: "remote",
+      provider: "github",
+      externalNumber: 128,
+      pullRequestUrl: "https://github.com/acme/redwhisk/pull/124",
+    });
+    const gitlab = boardIssue({
+      id: 3,
+      number: 5,
+      title: "GitLab card",
+      source: "remote",
+      provider: "gitlab",
+      externalNumber: 7,
+      pullRequestUrl:
+        "https://gitlab.example.com/acme/redwhisk/-/merge_requests/41",
+    });
+    const plain = boardIssue({
+      id: 4,
+      number: 6,
+      title: "Plain remote",
+      source: "remote",
+      provider: "github",
+      externalNumber: 9,
+    });
+    listIssuesMock.mockImplementation(async (input) => {
+      const issues =
+        input.sourceFilter === "remote"
+          ? [github, gitlab]
+          : [local, github, gitlab, plain];
+      return {
+        issues,
+        statusTotals: {
+          backlog: issues.length,
+          running: 0,
+          review: 0,
+          completed: 0,
+        },
+      };
+    });
+
+    renderBoard();
+    expect(await screen.findByText("#12")).toBeInTheDocument();
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("GL #7")).toBeInTheDocument();
+    expect(screen.getByText("PR #124")).toBeInTheDocument();
+    expect(screen.getByText("MR #41")).toBeInTheDocument();
+    expect(
+      screen.getByText("Plain remote").closest(".issue-card"),
+    ).not.toHaveTextContent(/PR #|MR #/);
+    expect(screen.queryByText(/通过|失败|已合并/)).not.toBeInTheDocument();
+    const githubRow = screen
+      .getByText("GH #128")
+      .closest(".issue-card__meta-row");
+    const gitlabRow = screen
+      .getByText("GL #7")
+      .closest(".issue-card__meta-row");
+    const localRow = screen.getByText("#12").closest(".issue-card__meta-row");
+    expect(githubRow?.querySelector(".issue-card__forge")).toHaveTextContent(
+      "GitHub",
+    );
+    expect(gitlabRow?.querySelector(".issue-card__forge")).toHaveTextContent(
+      "GitLab",
+    );
+    expect(localRow?.querySelector(".issue-card__forge")).toHaveTextContent(
+      "本地",
+    );
+    expect(githubRow?.innerHTML.indexOf("GH #128")).toBeLessThan(
+      githubRow?.innerHTML.indexOf("issue-card__forge") ?? -1,
+    );
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "来源" }),
+      "remote",
+    );
+    await waitFor(() => {
+      expect(screen.queryByText("Local card")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("GL #7")).toBeInTheDocument();
+    expect(listIssuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceFilter: "remote" }),
+    );
+  });
+
+  it("shows a GitLab credential error without dropping cached cards", async () => {
+    const gitlabSettings = sourceSettings("mixed");
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...gitlabSettings,
+      connection: { ...gitlabSettings.connection, provider: "gitlab" },
+    });
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "credential_expired",
+    });
+    const view = renderBoard();
+    expect(await screen.findByText("GitLab 凭据已过期")).toBeInTheDocument();
+    expect(
+      document.querySelector('.issue-sync-status__dot[data-tone="error"]'),
+    ).not.toBeNull();
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "offline",
+    });
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("mixed"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText("GitHub 当前离线")).toBeInTheDocument();
+
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "rate_limited",
+    });
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...gitlabSettings,
+      connection: { ...gitlabSettings.connection, provider: "gitlab" },
+    });
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={3} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText("GitLab 请求过于频繁")).toBeInTheDocument();
+
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "cli_missing",
+    });
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={4} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByText("未找到 GitLab 命令行，已保留缓存"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("GH #128")).toBeInTheDocument();
+  });
+
+  it("uses the english GitLab credential sentence", async () => {
+    const gitlabSettings = sourceSettings("mixed");
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...gitlabSettings,
+      connection: { ...gitlabSettings.connection, provider: "gitlab" },
+    });
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "credential_expired",
+    });
+    render(
+      <I18nProvider fixedLocale="en">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+    expect(
+      await screen.findByText("GitLab credentials expired"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not read issues.githubCredentialExpired", () => {
+    const toolbar = readFileSync(
+      resolve(process.cwd(), "src/features/issues/issue-sync-toolbar.tsx"),
+      "utf8",
+    );
+    expect(toolbar).not.toContain("githubCredentialExpired");
+    expect(toolbar).toContain('t("issues.credentialExpired"');
   });
 });
 

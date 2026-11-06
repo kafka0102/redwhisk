@@ -38,6 +38,39 @@ pub fn ready_github_project(scope: &str, label: Option<&str>) -> Harness {
     }
 }
 
+pub fn ready_gitlab_project(scope: &str, label: Option<&str>) -> Harness {
+    let harness = ready_github_project(scope, label);
+    harness
+        .connection
+        .execute(
+            "UPDATE project_forge_connections
+             SET provider = 'gitlab',
+                 host_url = 'https://gitlab.example.com/',
+                 repo_path = 'acme/redwhisk',
+                 auth_status = 'ready'
+             WHERE project_id = ?1",
+            params![harness.project_id],
+        )
+        .expect("gitlab connection");
+    harness
+}
+
+pub fn issue_row_count(connection: &Connection, project_id: i64) -> i64 {
+    IssueExternalRefRepository::new(connection)
+        .issue_count(project_id)
+        .expect("count")
+}
+
+pub fn last_sync_error(connection: &Connection, project_id: i64) -> Option<String> {
+    connection
+        .query_row(
+            "SELECT last_issue_sync_error FROM projects WHERE id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .expect("sync error")
+}
+
 pub fn open_database() -> Connection {
     let connection = Connection::open_in_memory().expect("memory db");
     connection

@@ -1,13 +1,14 @@
 pub(crate) mod board;
 mod cli;
+mod forge_process;
+mod gitlab;
 mod parse;
 mod port;
 mod sync;
 
 pub(crate) use board::load_issue_board;
 pub(crate) use board::IssueBoardListResponse;
-pub(crate) use cli::GithubCliForge;
-pub(crate) use sync::sync_project_issues as sync_github_issues;
+pub(crate) use sync::sync_connected_issues;
 
 #[cfg(test)]
 mod behavior;
@@ -21,7 +22,7 @@ mod tests {
     use super::board::list_board_page;
     use super::board::list_board_with_source_filter;
     use super::port::{open_issue, FixedForge};
-    use super::sync_github_issues as sync_project_issues;
+    use super::sync::sync_project_issues;
     use crate::types::issue::IssueStatus;
     use rusqlite::params;
     use rusqlite::Connection;
@@ -37,6 +38,7 @@ mod tests {
         assert_eq!(listed[0].source, "remote");
         assert_eq!(listed[0].status, crate::types::issue::IssueStatus::Backlog);
         assert_eq!(listed[0].external_number, Some(17));
+        assert_eq!(listed[0].provider.as_deref(), Some("github"));
     }
 
     #[test]

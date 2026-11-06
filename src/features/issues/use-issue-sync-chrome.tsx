@@ -175,6 +175,7 @@ export function useIssueSyncChrome(
           <IssueSyncToolbar
             status={status}
             syncing={syncing}
+            provider={settings?.connection.provider ?? null}
             onRefresh={refresh}
           />
         ) : null}

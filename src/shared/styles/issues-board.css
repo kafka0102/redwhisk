@@ -231,6 +231,14 @@
   white-space: nowrap;
 }
 
+.issue-card__meta-aside {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .issue-card__title {
   display: block;
   min-width: 0;
@@ -858,7 +866,6 @@
 }
 
 .issue-card__forge {
-  margin-right: 6px;
   color: var(--color-text-muted);
   font-weight: 650;
 }

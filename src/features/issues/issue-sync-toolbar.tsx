@@ -6,19 +6,22 @@ import { useState } from "react";
 import { useI18n } from "../../shared/i18n/i18n";
 import { formatIssueAge } from "./issue-mirror-fields";
 import type { IssueSyncStatus } from "./issue-mirror-commands";
+import type { ForgeProvider } from "../settings/issue-source-commands";
 
 export function IssueSyncToolbar({
   status,
   syncing,
+  provider,
   onRefresh,
 }: {
   status: IssueSyncStatus | null;
   syncing: boolean;
+  provider: ForgeProvider | null;
   onRefresh: () => void;
 }): JSX.Element {
   const { t } = useI18n();
   const [now] = useState(() => Date.now());
-  const text = syncStatusText(status, syncing, t, now);
+  const text = syncStatusText(status, syncing, provider, t, now);
   const tone = syncing
     ? undefined
     : status?.syncError
@@ -58,14 +61,26 @@ export function IssueSyncToolbar({
 function syncStatusText(
   status: IssueSyncStatus | null,
   syncing: boolean,
+  provider: ForgeProvider | null,
   t: TFunction,
   now: number,
 ): string | null {
   if (syncing) {
     return t("issues.syncing");
   }
+  const forgeName =
+    provider === "gitlab" ? t("issues.gitlabBadge") : t("issues.githubBadge");
   if (status?.syncError === "credential_expired") {
-    return t("issues.githubCredentialExpired");
+    return t("issues.credentialExpired", { provider: forgeName });
+  }
+  if (status?.syncError === "offline") {
+    return t("issues.forgeOffline", { provider: forgeName });
+  }
+  if (status?.syncError === "rate_limited") {
+    return t("issues.forgeRateLimited", { provider: forgeName });
+  }
+  if (status?.syncError === "cli_missing") {
+    return t("issues.forgeCliMissing", { provider: forgeName });
   }
   if (status?.syncError === "cache_failed") {
     return t("issues.syncCacheFailed");
