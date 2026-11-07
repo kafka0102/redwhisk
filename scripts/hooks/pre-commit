@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 提交前只跑便宜的 diff 门禁。完整测试仍由 PR 的 release.yml 执行。
+# 提交前跑便宜的 diff 门禁。暂存了前端 TypeScript 时再跑 lint 和 typecheck。
+# 完整测试仍由 PR 的 release.yml 执行。
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -7,6 +8,13 @@ cd "$ROOT"
 
 bash scripts/check-rust-user-strings.sh
 bash scripts/check-rust-command-failure-tests.sh
+bash scripts/check-rust-command-reasons.sh
 bash scripts/check-rust-event-emit.sh
 bash scripts/check-rust-file-size.sh
 bash scripts/check-frontend-file-size.sh
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+if printf "%s\n" "$staged" | grep -Eq "^(src/.*\.(ts|tsx)|eslint\.config\.js|eslint-rules/|vite\.config\.ts|vitest\.config\.ts)$"; then
+  pnpm lint
+  pnpm typecheck
+fi

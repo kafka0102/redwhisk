@@ -37,7 +37,7 @@
 
 > `apply_issue_recovery` 对不可用横幅的三个动作共用一个入口。`action` 为 `keep_local`、`unlink` 或 `retry`。Issue 不存在返回 `IssueNotFound`，reason `issueNotFound`。保留为本地把 `issues.source` 改为 `local`，外部身份改为 `kept_local` 并不再参与同步。移除关联把身份改为 `unlinked`，后续同步跳过，时间轴增加 `remote_origin`，`commentBody` 是原来的外部 URL。重试重新探测：成功后横幅消失并继续同步，失败则横幅仍在且 Issue 行仍在。命令失败的 join 错误是 `IssuePersistenceFailed`，reason `recoveryFailed`。
 
-> `retry_issue_completion_writeback` 重试同一条已完成远程 Issue 的写回。Issue 不存在返回 `IssueNotFound`，reason `issueNotFound`。写回再次失败返回 `ForgeUnavailable`，reason 与上面的 `writebackError` 相同，不把本地完成改回未完成。成功后评论总数仍是一条。
+> `retry_issue_completion_writeback` 重试同一条已完成远程 Issue 的写回。Issue 不存在返回 `IssueNotFound`，reason `issueNotFound`。写回再次失败返回 `ForgeUnavailable`，reason 与上面的 `writebackError` 相同，不把本地完成改回未完成。成功后评论总数仍是一条。命令任务本身失败返回 `IssuePersistenceFailed`，reason `writebackRetryFailed`。待写回状态落库失败返回 `IssuePersistenceFailed`，reason `writebackSaveFailed`。这两个 reason 对应 `errors.ISSUE_PERSISTENCE_FAILED` 同名键。
 
 > `get_issue_timeline` 仍是唯一时间轴命令，不另开第二条。返回按 `createdAt` 升序合并的本地动作、本地评论、远程评论和远程系统事件。`IssueTimelineEntry.source` 为 `local` 或 `remote`。远程评论的 `actionType` 是 `remote_comment`，不是 `issue_comment_added`；系统事件是 `remote_event`。移除关联留下的远程来历是 `remote_origin`，`commentBody` 为外部 URL。本地评论正文只出现在 `commentBody`，不写入动作负载。该命令不访问网络。
 
