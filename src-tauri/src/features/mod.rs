@@ -7,5 +7,8 @@ pub mod change_request;
 pub mod code_language;
 pub mod issue;
 pub mod project;
+mod project_sync_lock;
 pub mod project_terminal;
 pub mod settings;
+
+pub(crate) use project_sync_lock::try_acquire_project_sync;

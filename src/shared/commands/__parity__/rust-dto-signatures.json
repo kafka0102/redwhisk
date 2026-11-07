@@ -261,7 +261,8 @@
     "ChangeRequestLinkedIssue": {
       "fields": {
         "issueId": "required",
-        "label": "required"
+        "label": "required",
+        "linkKind": "required"
       }
     },
     "ChangeRequestListResponse": {
@@ -288,6 +289,18 @@
         "targetBranch": "required",
         "title": "required",
         "url": "required"
+      }
+    },
+    "ChangeRequestSyncChangedEvent": {
+      "fields": {
+        "outcome": "required",
+        "projectId": "required"
+      }
+    },
+    "ChangeRequestSyncResult": {
+      "fields": {
+        "errorCode": "required",
+        "outcome": "required"
       }
     },
     "CheckoutBranchItem": {
@@ -2090,6 +2103,16 @@
         "deepseek"
       ]
     },
+    "ChangeRequestSyncOutcome": {
+      "rename": "snake_case",
+      "variants": [
+        "synced",
+        "skipped",
+        "credential_expired",
+        "cache_failed",
+        "coalesced"
+      ]
+    },
     "CheckoutBranchKind": {
       "rename": "camelCase",
       "variants": [
@@ -2328,7 +2351,8 @@
         "synced",
         "skipped",
         "credential_expired",
-        "cache_failed"
+        "cache_failed",
+        "coalesced"
       ]
     },
     "IssueSyncScope": {

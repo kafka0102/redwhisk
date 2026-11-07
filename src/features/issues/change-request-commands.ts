@@ -16,6 +16,26 @@ export interface ChangeRequestFilterCounts {
 export interface ChangeRequestLinkedIssue {
   issueId: number;
   label: string;
+  linkKind: string;
+}
+
+export const CHANGE_REQUEST_SYNC_CHANGED_EVENT = "change-request-sync-changed";
+
+export type ChangeRequestSyncOutcome =
+  | "synced"
+  | "skipped"
+  | "credential_expired"
+  | "cache_failed"
+  | "coalesced";
+
+export interface ChangeRequestSyncResult {
+  outcome: ChangeRequestSyncOutcome;
+  errorCode: string | null;
+}
+
+export interface ChangeRequestSyncChangedEvent {
+  projectId: number;
+  outcome: ChangeRequestSyncOutcome;
 }
 
 export interface ChangeRequestListRow {
@@ -60,4 +80,23 @@ export function listProjectChangeRequests(input: {
       viewerLogin: input.viewerLogin,
     },
   );
+}
+
+export function syncProjectChangeRequests(
+  projectId: number,
+): Promise<ChangeRequestSyncResult> {
+  return invokeCommand<ChangeRequestSyncResult>(
+    "sync_project_change_requests",
+    {
+      projectId,
+    },
+  );
+}
+
+export function linkChangeRequestIssue(input: {
+  projectId: number;
+  changeRequestId: number;
+  issueId: number;
+}): Promise<void> {
+  return invokeCommand<void>("link_change_request_issue", input);
 }

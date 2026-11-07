@@ -42,7 +42,12 @@ vi.mock("./issue-mirror-commands", () => ({
 }));
 
 vi.mock("./change-request-commands", () => ({
+  CHANGE_REQUEST_SYNC_CHANGED_EVENT: "change-request-sync-changed",
   listProjectChangeRequests: vi.fn(),
+  syncProjectChangeRequests: vi.fn(async () => ({
+    outcome: "skipped",
+    errorCode: null,
+  })),
 }));
 
 vi.mock("../settings/issue-source-commands", () => ({

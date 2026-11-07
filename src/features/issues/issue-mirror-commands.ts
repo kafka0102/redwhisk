@@ -25,7 +25,8 @@ export type IssueSyncOutcome =
   | "synced"
   | "skipped"
   | "credential_expired"
-  | "cache_failed";
+  | "cache_failed"
+  | "coalesced";
 
 export interface IssueSyncResult {
   outcome: IssueSyncOutcome;

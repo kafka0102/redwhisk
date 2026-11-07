@@ -46,8 +46,8 @@ function response(): ChangeRequestListResponse {
         reviewDecision: "review_required",
         remoteUpdatedAt: Date.parse("2026-11-07T14:58:00Z"),
         linkedIssues: [
-          { issueId: 12, label: "#12" },
-          { issueId: 128, label: "GH #128" },
+          { issueId: 12, label: "#12", linkKind: "branch" },
+          { issueId: 128, label: "GH #128", linkKind: "closing" },
         ],
       }),
       row({
@@ -60,7 +60,7 @@ function response(): ChangeRequestListResponse {
         checksPending: 1,
         reviewDecision: "pending",
         remoteUpdatedAt: Date.parse("2026-11-07T12:00:00Z"),
-        linkedIssues: [{ issueId: 7, label: "GL #7" }],
+        linkedIssues: [{ issueId: 7, label: "GL #7", linkKind: "closing" }],
       }),
       row({
         id: 130,
@@ -82,7 +82,7 @@ function response(): ChangeRequestListResponse {
         checksPending: null,
         reviewDecision: "none",
         remoteUpdatedAt: Date.parse("2026-11-07T13:00:00Z"),
-        linkedIssues: [{ issueId: 12, label: "#12" }],
+        linkedIssues: [{ issueId: 12, label: "#12", linkKind: "branch" }],
       }),
       row({
         id: 140,

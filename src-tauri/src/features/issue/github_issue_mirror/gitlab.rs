@@ -26,6 +26,14 @@ impl ForgeIssuePort for GitlabCliForge {
         ))
     }
 
+    fn list_change_requests(
+        &self,
+    ) -> Result<Vec<super::port::RemoteChangeRequest>, ForgeIssueError> {
+        let stdout =
+            capture_forge_stdout("glab", &gitlab_merge_request_list_args(), &self.repo_dir)?;
+        crate::features::change_request::parse_gitlab_merge_request_list(&stdout)
+    }
+
     fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
         super::create_cli::create_then_view(
             "glab",
@@ -81,6 +89,18 @@ pub fn gitlab_issue_list_args(query: &ForgeIssueListQuery) -> Vec<String> {
         "desc".to_string(),
     ]);
     args
+}
+
+pub fn gitlab_merge_request_list_args() -> Vec<String> {
+    vec![
+        "mr".to_string(),
+        "list".to_string(),
+        "--all".to_string(),
+        "--output".to_string(),
+        "json".to_string(),
+        "--per-page".to_string(),
+        "100".to_string(),
+    ]
 }
 
 pub fn parse_gitlab_issue_list(stdout: &str) -> Result<Vec<RemoteIssue>, ForgeIssueError> {

@@ -178,7 +178,7 @@ fn load_links(
     let mut statement = connection
         .prepare(
             "SELECT links.change_request_id, issues.id, issues.number, refs.provider,
-                    refs.external_number
+                    refs.external_number, links.link_kind
              FROM change_request_issue_links AS links
              JOIN issues ON issues.id = links.issue_id
              LEFT JOIN issue_external_refs AS refs ON refs.issue_id = issues.id
@@ -193,11 +193,13 @@ fn load_links(
             let local_number: i64 = row.get(2)?;
             let provider: Option<String> = row.get(3)?;
             let external_number: Option<i64> = row.get(4)?;
+            let link_kind: String = row.get(5)?;
             Ok((
                 change_request_id,
                 ChangeRequestLinkedIssue {
                     issue_id,
                     label: link_label(local_number, provider.as_deref(), external_number),
+                    link_kind,
                 },
             ))
         })

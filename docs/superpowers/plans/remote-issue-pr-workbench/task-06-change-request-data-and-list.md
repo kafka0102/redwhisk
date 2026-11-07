@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 状态 | 待开始 |
+| 状态 | 已完成 |
 | 依赖 | 任务 3 |
 | 直接后续 | 任务 7 |
 | 最近更新 | 2026-11-06 |
@@ -127,19 +127,19 @@
 
 ## 完成记录
 
-实现完成后追加。
+## 完成记录
 
 ```text
-日期：
-状态：
-提交：
-实际改动：
-验证命令与结果：
-原型场景对照：
-旧 URL 升级结果：
-与原计划的差异：
-对任务 7 的数据与接口影响：
-未完成项及承接任务：
+日期：2026-11-08
+状态：已完成
+提交：未提交。本票要求停在提交之前。
+实际改动：GitHub / GitLab fixture 经同一同步入口入库；open 与 draft 不受 30 天窗口限制，merged / closed 只保留 updated_at >= 时钟减 30 天。重复同步更新同一行。forge 失败保留已有行，outcome 为 cache_failed。local 跳过且不调用 forge。项目不存在返回 ProjectNotFound。同一项目锁被占用时 outcome 为 coalesced。closing、分支和手动关联写入 change_request_issue_links，不改 Issue 状态。详情 JSON 仍是空数组。前端在面板可见、窗口可见且聚焦、来源为 remote 或 mixed 时每 60 秒同步；失败不把已有列表换成空态。
+验证命令与结果：pnpm test 2224 通过。cargo test --lib change_request 28 通过。check-rust-compile、文件大小、用户字符串、命令失败、reason、event emit、前端文件大小通过。dto_parity_export 更新快照后通过，dto-parity.test.ts 2 通过。未跑 pnpm build。
+原型场景对照：s7 列表与 s15 仅本地空态由上一票落地。本票没有新的详情页，同步失败时保留上一票的列表行，不另做假详情。
+旧 URL 升级结果：沿用上一票。能解析的 GitHub / GitLab URL 填 change_request_id，解析失败保留原文。
+与原计划的差异：没有单独的 change request repository。列表和同步 SQL 留在 change_request feature，和上一票的列表查询同一层。Issue 同步与 PR 同步共用进程内锁；文件库按路径加项目编号，内存库按连接区分，避免测试互相挡住。
+对任务 7 的数据与接口影响：可复用 list_project_change_requests、sync_project_change_requests、link_change_request_issue 和 change-request-sync-changed。change_request_details 的四个 JSON 仍是空数组，不要另建 PR 模型。
+未完成项及承接任务：详情四个 Tab、标记就绪、请求审阅、关闭、合并留给任务 7 和任务 8。普通正文提到不建立链接。
 ```
 
 ## 计划校准

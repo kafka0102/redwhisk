@@ -59,6 +59,20 @@ pub struct ForgeIssueDraft {
     pub body: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteChangeRequest {
+    pub external_id: String,
+    pub number: i64,
+    pub title: String,
+    pub body: String,
+    pub state: String,
+    pub url: String,
+    pub author_login: Option<String>,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub updated_at: i64,
+}
+
 pub trait ForgeIssuePort {
     fn list_issues(&self, query: &ForgeIssueListQuery)
         -> Result<Vec<RemoteIssue>, ForgeIssueError>;
@@ -67,12 +81,17 @@ pub trait ForgeIssuePort {
         let _ = draft;
         Err(ForgeIssueError::CommandFailed)
     }
+
+    fn list_change_requests(&self) -> Result<Vec<RemoteChangeRequest>, ForgeIssueError> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(test)]
 #[derive(Debug)]
 pub struct FixedForge {
     pub issues: Vec<RemoteIssue>,
+    pub change_requests: Vec<RemoteChangeRequest>,
     pub calls: Mutex<Vec<ForgeIssueListQuery>>,
     pub created: Mutex<Option<RemoteIssue>>,
     pub create_calls: Mutex<Vec<ForgeIssueDraft>>,
@@ -84,11 +103,17 @@ impl FixedForge {
     pub fn new(issues: Vec<RemoteIssue>) -> Self {
         Self {
             issues,
+            change_requests: Vec::new(),
             calls: Mutex::new(Vec::new()),
             created: Mutex::new(None),
             create_calls: Mutex::new(Vec::new()),
             error: Mutex::new(None),
         }
+    }
+
+    pub fn with_change_requests(mut self, change_requests: Vec<RemoteChangeRequest>) -> Self {
+        self.change_requests = change_requests;
+        self
     }
 
     pub fn with_created(self, issue: RemoteIssue) -> Self {
@@ -99,6 +124,7 @@ impl FixedForge {
     pub fn failing(error: ForgeIssueError) -> Self {
         Self {
             issues: Vec::new(),
+            change_requests: Vec::new(),
             calls: Mutex::new(Vec::new()),
             created: Mutex::new(None),
             create_calls: Mutex::new(Vec::new()),
@@ -122,6 +148,13 @@ impl ForgeIssuePort for FixedForge {
             return Err(error);
         }
         Ok(self.issues.clone())
+    }
+
+    fn list_change_requests(&self) -> Result<Vec<RemoteChangeRequest>, ForgeIssueError> {
+        if let Some(error) = self.error.lock().expect("forge error").clone() {
+            return Err(error);
+        }
+        Ok(self.change_requests.clone())
     }
 
     fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {

@@ -1,13 +1,19 @@
 use std::path::Path;
 
+use tauri::Emitter;
 use tauri::State;
 
+use super::links::link_change_request_issue as link_on_connection;
 use super::list::list_project_change_requests as list_on_connection;
+use super::sync::sync_connected_change_requests;
 use crate::app_state::AppState;
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::features::project::commands::prepare_project_data_dir;
-use crate::types::change_request::ChangeRequestListResponse;
+use crate::types::change_request::{
+    ChangeRequestListResponse, ChangeRequestSyncChangedEvent, ChangeRequestSyncResult,
+    CHANGE_REQUEST_SYNC_CHANGED_EVENT,
+};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 
 #[tauri::command]
@@ -54,4 +60,113 @@ pub(crate) fn list_project_change_requests_in_data_dir(
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?;
     list_on_connection(&database.connection, project_id, filter, viewer_login)
+}
+
+#[tauri::command]
+pub async fn sync_project_change_requests(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+) -> Result<ChangeRequestSyncResult, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = sync_project_change_requests_in_data_dir(&data_dir, project_id)?;
+        emit_change_request_sync_changed(
+            &app_handle,
+            &ChangeRequestSyncChangedEvent {
+                project_id,
+                outcome: result.outcome,
+            },
+        );
+        Ok(result)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to sync change requests.",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+}
+
+#[tauri::command]
+pub async fn link_change_request_issue(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    change_request_id: i64,
+    issue_id: i64,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        link_change_request_issue_in_data_dir(&data_dir, project_id, change_request_id, issue_id)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to link change request.",
+        )
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
+}
+
+fn emit_change_request_sync_changed(app: &tauri::AppHandle, event: &ChangeRequestSyncChangedEvent) {
+    let _ = app.emit(CHANGE_REQUEST_SYNC_CHANGED_EVENT, event);
+}
+
+fn sync_project_change_requests_in_data_dir(
+    data_dir: &Path,
+    project_id: i64,
+) -> Result<ChangeRequestSyncResult, CommandError> {
+    let database = open_database(data_dir)?;
+    let repo_dir = crate::db::project_repository::ProjectRepository::new(&database.connection)
+        .find_by_id(project_id)
+        .map_err(persistence)?
+        .map(|project| std::path::PathBuf::from(project.repo_path))
+        .unwrap_or_default();
+    sync_connected_change_requests(&database.connection, project_id, repo_dir, now_millis())
+}
+
+fn link_change_request_issue_in_data_dir(
+    data_dir: &Path,
+    project_id: i64,
+    change_request_id: i64,
+    issue_id: i64,
+) -> Result<(), CommandError> {
+    let database = open_database(data_dir)?;
+    link_on_connection(
+        &database.connection,
+        project_id,
+        change_request_id,
+        issue_id,
+        now_millis(),
+    )
+}
+
+fn open_database(data_dir: &Path) -> Result<crate::db::connection::Database, CommandError> {
+    let database = DatabaseConfig::new(data_dir)
+        .open()
+        .map_err(CommandError::from)?;
+    MigrationRunner::default()
+        .run(&database.connection)
+        .map_err(persistence)?;
+    Ok(database)
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn persistence(error: impl std::fmt::Display) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssuePersistenceFailed,
+        "Failed to sync change requests.",
+    )
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }

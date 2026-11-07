@@ -115,6 +115,15 @@ impl ForgeIssuePort for ProjectIssueForge {
         }
     }
 
+    fn list_change_requests(
+        &self,
+    ) -> Result<Vec<super::port::RemoteChangeRequest>, ForgeIssueError> {
+        match self {
+            Self::Github(forge) => forge.list_change_requests(),
+            Self::Gitlab(forge) => forge.list_change_requests(),
+        }
+    }
+
     fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
         match self {
             Self::Github(forge) => forge.create_issue(draft),
@@ -130,6 +139,13 @@ impl ForgeIssuePort for GithubCliForge {
     ) -> Result<Vec<RemoteIssue>, ForgeIssueError> {
         let stdout = capture_forge_stdout("gh", &github_issue_list_args(query), &self.repo_dir)?;
         parse_github_issue_list(&stdout)
+    }
+
+    fn list_change_requests(
+        &self,
+    ) -> Result<Vec<super::port::RemoteChangeRequest>, ForgeIssueError> {
+        let stdout = capture_forge_stdout("gh", &github_pull_request_list_args(), &self.repo_dir)?;
+        crate::features::change_request::parse_github_pull_request_list(&stdout)
     }
 
     fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
@@ -169,6 +185,20 @@ pub fn github_issue_list_args(query: &ForgeIssueListQuery) -> Vec<String> {
         "id,number,title,body,state,updatedAt,url,author,assignees,labels".to_string(),
     ]);
     args
+}
+
+pub fn github_pull_request_list_args() -> Vec<String> {
+    vec![
+        "pr".to_string(),
+        "list".to_string(),
+        "--state".to_string(),
+        "all".to_string(),
+        "--limit".to_string(),
+        "200".to_string(),
+        "--json".to_string(),
+        "id,number,title,body,state,isDraft,mergedAt,updatedAt,url,author,headRefName,baseRefName"
+            .to_string(),
+    ]
 }
 
 fn millis_to_utc_timestamp(millis: i64) -> String {

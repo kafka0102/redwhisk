@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 状态 | 待开始 |
+| 状态 | 可开始 |
 | 依赖 | 任务 6 |
 | 直接后续 | 任务 8 |
 | 最近更新 | 2026-11-06 |
@@ -16,8 +16,9 @@
 
 ## 当前基线
 
-- 任务 6 完成后应提供 `change_requests`、多对多 Issue 关联和详情快照契约。
-- Pull requests 列表已有筛选、摘要和真实数量。
+- 任务 6 已提供 `change_requests`、`change_request_issue_links` 和 `change_request_details`。详情四个 JSON 仍是空数组，本任务写入这些数组，不要另建 PR 模型。
+- 可复用命令：`list_project_change_requests`、`sync_project_change_requests`、`link_change_request_issue`。同步事件是 `change-request-sync-changed`，载荷 `projectId` 与 `outcome`。
+- Pull requests 列表已有筛选、摘要、真实数量和 60 秒同步。同步失败保留已有列表。
 - Issue 详情已有轻量关联 PR 卡片，但数据源可能仍是旧 URL；本任务负责切换到一等实体。
 - 任务 4 的时间轴契约已固定：前端只消费 `get_issue_timeline`，不新增第二条时间轴命令。远程评论和系统事件分表，条目带 `source`。本任务不改这条契约，也不承接宿主评论拉取。
 - 现有 `view_change_request` 只返回标题、state 和有限检查，不足以支撑详情页。
@@ -25,7 +26,7 @@
 先核对任务 6 完成记录，并按实际接口核对：
 
 - `src-tauri/src/features/issue/` 中 Issue 详情数据读取
-- 任务 6 新增的 change request repository/service
+- 任务 6 的 change request 同步与列表：`src-tauri/src/features/change_request/`
 - `src/features/issues/`
 - 产品设计第 5.7、6.3、9.3 节
 

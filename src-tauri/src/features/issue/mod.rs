@@ -20,8 +20,11 @@ pub(crate) use attachment::{analyze_attachment, sanitize_attachment_file_name};
 pub(crate) use remote_create::create_in_data_dir_with_forge;
 pub use service::IssueService;
 
+pub(crate) use github_issue_mirror::ForgeIssueError;
+pub(crate) use github_issue_mirror::ProjectIssueForge;
 #[cfg(test)]
 pub(crate) use github_issue_mirror::{open_issue, FixedForge};
+pub(crate) use github_issue_mirror::{ForgeIssuePort, RemoteChangeRequest};
 
 pub use completion_comment::handle_turn_completed;
 pub use remote_timeline::{

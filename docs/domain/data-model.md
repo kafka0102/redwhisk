@@ -45,6 +45,7 @@ completion_attempts 保留历史完成尝试审计。
 | `change_requests`                       | PR/MR 列表快照           | `0065_change_requests` 新增。`state` 为 `open` / `draft` / `merged` / `closed`。唯一键是项目、provider、host、repo、number，另有 `(provider, host, external_id)`。`host` 小写。检查计数可空，三者都空表示未知。`remote_updated_at` 是 epoch milliseconds |
 | `change_request_issue_links`            | PR/MR 与 Issue 多对多    | 主键是 `(change_request_id, issue_id)`。`link_kind` 为 `closing` / `mentioned` / `branch` / `manual` |
 | `change_request_details`                | PR/MR 详情快照           | 每个 change request 一条。文件、检查、评审、评论 JSON 默认 `[]` |
+| `projects.last_change_request_synced_at` / `last_change_request_sync_error` | PR/MR 同步水位 | `0066_change_request_sync_status` 新增。错误码为 `credential_expired`、`cli_missing`、`offline`、`rate_limited`、`cache_failed` |
 | `issue_pull_requests.change_request_id` | 历史 URL 升级            | 可空，引用 `change_requests`。解析失败保持 null，URL 原文不变 |
 
 ## 数据约定
@@ -67,5 +68,6 @@ completion_attempts 保留历史完成尝试审计。
 8. `0062_issue_remote_comments` 新增 `issue_remote_comments` 与 `issue_remote_events`。两表都不进入本地 `issue_comments` 的唯一键。重复的远程 id 不新增第二行，失败写入不清空已有行。
 9. `0063_issue_completion_writeback` 新增 `issue_completion_writebacks`。不修改已发布 migration，也不回滚已经成立的本地完成。
 10. `0065_change_requests` 新增 `change_requests`、`change_request_issue_links`、`change_request_details`，并给 `issue_pull_requests` 增加可空 `change_request_id`。不修改已发布 migration。登记列表从 `0059` 起移到 `db/migration_list_tail.rs`。
+11. `0066_change_request_sync_status` 只给 `projects` 增加 PR/MR 同步水位和最后错误。不修改 `0065`。登记仍在 `db/migration_list_tail.rs`。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

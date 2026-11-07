@@ -11,6 +11,7 @@ pub enum IssueSyncOutcome {
     Skipped,
     CredentialExpired,
     CacheFailed,
+    Coalesced,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

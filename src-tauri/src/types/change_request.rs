@@ -1,5 +1,31 @@
 use serde::{Deserialize, Serialize};
 
+pub const CHANGE_REQUEST_SYNC_CHANGED_EVENT: &str = "change-request-sync-changed";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeRequestSyncOutcome {
+    Synced,
+    Skipped,
+    CredentialExpired,
+    CacheFailed,
+    Coalesced,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestSyncResult {
+    pub outcome: ChangeRequestSyncOutcome,
+    pub error_code: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequestSyncChangedEvent {
+    pub project_id: i64,
+    pub outcome: ChangeRequestSyncOutcome,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeRequestFilterCounts {
@@ -14,6 +40,7 @@ pub struct ChangeRequestFilterCounts {
 pub struct ChangeRequestLinkedIssue {
     pub issue_id: i64,
     pub label: String,
+    pub link_kind: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

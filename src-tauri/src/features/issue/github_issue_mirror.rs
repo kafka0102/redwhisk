@@ -7,11 +7,13 @@ mod parse;
 mod port;
 mod sync;
 
+pub(crate) use cli::view_remote_issue;
 pub(crate) use cli::ProjectIssueForge;
 pub(crate) use cli::{close_remote_issue, comment_remote_issue};
-pub(crate) use cli::view_remote_issue;
 pub(crate) use port::RemoteIssueState;
-pub(crate) use port::{ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteIssue};
+pub(crate) use port::{
+    ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteChangeRequest, RemoteIssue,
+};
 
 #[cfg(test)]
 pub(crate) use behavior::support::{ready_github_project, seed_remote_issue, set_auth, set_mode};

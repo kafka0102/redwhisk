@@ -45,6 +45,14 @@ pub fn sync_project_issues(
             outcome: IssueSyncOutcome::Skipped,
         });
     }
+    let _guard = match crate::features::try_acquire_project_sync(connection, project_id) {
+        Some(guard) => guard,
+        None => {
+            return Ok(IssueSyncResult {
+                outcome: IssueSyncOutcome::Coalesced,
+            });
+        }
+    };
     let label = label_filter(&settings)?;
     let refs = IssueExternalRefRepository::new(connection);
     match settings.connection.auth_status {
