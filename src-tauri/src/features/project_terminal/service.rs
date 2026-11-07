@@ -3,8 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::agent::pty_session_manager::{
-    read_terminal_snapshot, PendingPtySession, PtyCommandMode, PtyRegisterError, PtySessionManager,
-    PtySpawnRequest,
+    PendingPtySession, PtyCommandMode, PtyRegisterError, PtySessionManager, PtySpawnRequest,
 };
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -31,7 +30,9 @@ use crate::types::project_terminal_shortcut_command::{
     SaveProjectTerminalShortcutCommandInput,
 };
 
-use super::log::{remove_terminal_log_file, terminal_log_path};
+use super::log::{
+    read_project_terminal_snapshot, remove_terminal_log_file, terminal_log_path, SnapshotLoadError,
+};
 use super::registry::{
     final_path_segment, preferred_project_terminal_session, project_terminal_summary,
     ProjectTerminalRegistry, ProjectTerminalSession,
@@ -442,22 +443,9 @@ impl<'connection> ProjectTerminalService<'connection> {
         registry: &ProjectTerminalRegistry,
         pty_sessions: &PtySessionManager,
     ) -> Result<ReadProjectTerminalResult, CommandError> {
-        let session = registry.find(input.project_id, input.session_id)?;
-        let is_active = session.is_active && pty_sessions.contains(input.session_id);
-        if is_active {
-            // catch-up / 状态轮询前刷 log，避免 BufWriter 未落盘导致尾部缺失。
-            let _ = pty_sessions.flush_log(input.session_id);
-        }
-        let snapshot = read_terminal_snapshot(
-            Path::new(&session.log_path),
-            input.max_bytes.unwrap_or(32_768),
-        )
-        .map_err(project_terminal_start_error)?;
-
-        Ok(ReadProjectTerminalResult {
-            session_id: input.session_id,
-            snapshot,
-            is_active,
+        read_project_terminal_snapshot(input, registry, pty_sessions).map_err(|error| match error {
+            SnapshotLoadError::Command(error) => error,
+            SnapshotLoadError::Io(error) => project_terminal_start_error(error),
         })
     }
 

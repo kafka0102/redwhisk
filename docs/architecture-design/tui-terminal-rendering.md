@@ -179,6 +179,21 @@ Orca 也明确区分：
 `pty_session_manager::tests::register_keeps_pending_ids_disjoint_from_registry_session_ids`
 锁定「每个注册 session 的 flush 必须刷到自己那份 log」。
 
+### 4.8 第二个进程清掉仍在写的日志（输出停住，回车才出现提示符）
+
+release 与 `pnpm tauri dev` 共用 `~/.redwhisk/project-terminal-logs`。后启动的进程会在
+启动时清空这个目录。先启动的进程仍握着已打开的 fd，目录项被删掉之后它还在往已摘链的
+inode 里写，但按路径已经读不到。
+
+隐藏终端不订阅 live 输出，重新可见时只靠磁盘 tail 做 catch-up。文件不在，快照就是空的：
+已有画面停在最后一次 live 内容（例如命令后半段、远程输出的后半段都不见了），新开的
+终端则是黑屏。按回车只是新的 live 字节，所以提示符这时才出现，中间过程补不回来。
+内存里的 restore buffer 仍有最近一段输出。
+
+因此：启动清理跳过仍被任意进程打开的日志；活动会话的日志路径缺失时，catch-up 改用
+restore buffer。回归：`project_terminal::log::tests::purge_keeps_log_files_still_open_in_a_live_process`
+与 `catch_up_uses_restore_buffer_when_log_file_is_missing`。
+
 ## 5. Orca 对照（可借鉴点）
 
 来源：Orca asar `out/shared/*` 与竞品分析文档。
