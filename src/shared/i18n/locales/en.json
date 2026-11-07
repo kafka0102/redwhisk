@@ -346,6 +346,11 @@
     "backEditable": "Back",
     "closeAttachmentPreview": "Close attachment preview",
     "create": "Create Issue",
+    "createSourceGithub": "GitHub",
+    "createSourceGitlab": "GitLab",
+    "createSourceLabel": "Source",
+    "createSourceLocal": "Local",
+    "createSourceOpenSettings": "Project settings",
     "delete": "Delete",
     "deleteReadonly": "Delete",
     "deleteEditable": "Delete",
@@ -1070,6 +1075,7 @@
       "completionAttemptUpdateFailed": "Failed to update CompletionAttempt.",
       "deleteFailed": "Failed to delete Issue.",
       "queryFailed": "Failed to query Issue.",
+      "remoteCreateMirrorFailed": "The remote issue was created, but the local mirror was not saved: {{url}}",
       "saveFailed": "Failed to save Issue.",
       "statusUpdateFailed": "Failed to update Issue status.",
       "summaryParseFailed": "Failed to parse Issue Summary.",
@@ -1122,6 +1128,10 @@
       "default": "Local data initialization failed."
     },
     "FORGE_UNAVAILABLE": {
+      "remoteCreateForbidden": "You do not have permission to create this remote issue.",
+      "remoteCreateInvalid": "The remote issue response could not be read.",
+      "remoteCreateOffline": "Remote issue creation failed because the network is unavailable.",
+      "remoteCreateUnauthenticated": "Sign in to GitHub or GitLab before creating a remote issue.",
       "remoteCreateUnavailable": "Remote issue creation is unavailable."
     },
     "PROJECT_NOT_FOUND": {

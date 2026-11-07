@@ -7,7 +7,9 @@ pub fn parse_github_issue_list(stdout: &str) -> Result<Vec<RemoteIssue>, ForgeIs
     items.iter().map(parse_github_issue).collect()
 }
 
-fn parse_github_issue(value: &serde_json::Value) -> Result<RemoteIssue, ForgeIssueError> {
+pub(super) fn parse_github_issue(
+    value: &serde_json::Value,
+) -> Result<RemoteIssue, ForgeIssueError> {
     let number = value
         .get("number")
         .and_then(serde_json::Value::as_i64)

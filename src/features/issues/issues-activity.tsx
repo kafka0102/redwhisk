@@ -92,6 +92,7 @@ interface IssuesActivityProps {
   projectId: number;
   onOpenAgentsActivity?: (sessionId: number) => void;
   onOpenProjectSettingsLabels?: () => void;
+  onOpenProjectSettings?: () => void;
   requestedIssue?: IssueOpenRequest | number | null;
   requestedIssueId?: number | null;
   worktreeSetupCommand?: string;
@@ -102,6 +103,7 @@ export function IssuesActivity({
   projectId,
   onOpenAgentsActivity,
   onOpenProjectSettingsLabels,
+  onOpenProjectSettings,
   requestedIssue = null,
   requestedIssueId: legacyRequestedIssueId = null,
   worktreeSetupCommand = "",
@@ -691,9 +693,9 @@ export function IssuesActivity({
                 ? (trigger) => void confirmRunIssueFromEditPage(trigger)
                 : undefined
             }
-            onOpenProjectLabelsSettings={() => {
-              onOpenProjectSettingsLabels?.();
-            }}
+            onOpenProjectLabelsSettings={onOpenProjectSettingsLabels}
+            onOpenProjectSettings={onOpenProjectSettings}
+            projectId={projectId}
           />
         </Suspense>
       ) : null}

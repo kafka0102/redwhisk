@@ -106,6 +106,7 @@ vi.mock("../settings/settings-commands", async (importOriginal) => {
 
 vi.mock("../settings/issue-source-commands", () => ({
   getProjectIssueSourceSettings: vi.fn(),
+  updateProjectIssueSourceSettings: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -1204,6 +1205,42 @@ describe("IssuesActivity", () => {
       screen.queryByRole("button", { name: "draft local issue" }),
     ).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("draft local issue")).toBeInTheDocument();
+  });
+
+  it("shows the remote issue url when host create succeeds but the local mirror is not saved", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [] });
+    createIssueMock.mockRejectedValue({
+      code: "ISSUE_PERSISTENCE_FAILED",
+      message:
+        "Remote issue was created but the local mirror was not saved: https://github.com/acme/redwhisk/issues/128",
+      reason: "remoteCreateMirrorFailed",
+      details: [
+        {
+          "@type": "RemoteIssue",
+          url: "https://github.com/acme/redwhisk/issues/128",
+        },
+        {
+          "@type": "Cause",
+          message: "UNIQUE constraint failed: issue_external_refs.external_id",
+        },
+      ],
+    });
+
+    renderIssuesActivity();
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "New Issue" }))[0],
+    );
+    const page = await screen.findByRole("form", { name: "New Issue" });
+    await user.type(within(page).getByLabelText("Title"), "draft local issue");
+    await user.click(
+      within(page).getByRole("button", { name: "Create Issue" }),
+    );
+
+    expect(
+      await within(page).findByRole("status", { name: "Dialog status" }),
+    ).toHaveTextContent("https://github.com/acme/redwhisk/issues/128");
   });
 
   it("shows a field-level error under the title when submitting with an empty title", async () => {

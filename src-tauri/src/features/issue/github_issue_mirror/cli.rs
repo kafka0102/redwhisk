@@ -2,7 +2,8 @@ use super::forge_process::capture_forge_stdout;
 use super::gitlab::GitlabCliForge;
 use super::parse::parse_github_issue_list;
 use super::port::{
-    ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue, RemoteIssueState,
+    ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue,
+    RemoteIssueState,
 };
 use crate::types::project_issue_source::ForgeProvider;
 use chrono::TimeZone;
@@ -43,6 +44,13 @@ impl ForgeIssuePort for ProjectIssueForge {
             Self::Gitlab(forge) => forge.list_issues(query),
         }
     }
+
+    fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
+        match self {
+            Self::Github(forge) => forge.create_issue(draft),
+            Self::Gitlab(forge) => forge.create_issue(draft),
+        }
+    }
 }
 
 impl ForgeIssuePort for GithubCliForge {
@@ -52,6 +60,16 @@ impl ForgeIssuePort for GithubCliForge {
     ) -> Result<Vec<RemoteIssue>, ForgeIssueError> {
         let stdout = capture_forge_stdout("gh", &github_issue_list_args(query), &self.repo_dir)?;
         parse_github_issue_list(&stdout)
+    }
+
+    fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
+        super::create_cli::create_then_view(
+            "gh",
+            &super::create_cli::github_issue_create_args(draft),
+            &self.repo_dir,
+            super::create_cli::github_issue_view_args,
+            super::create_cli::parse_github_issue_view,
+        )
     }
 }
 

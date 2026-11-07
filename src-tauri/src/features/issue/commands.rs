@@ -26,7 +26,8 @@ use crate::types::issue::{
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 use crate::types::issue_detail::{GetIssueDetailInput, IssueDetailRecord};
 use crate::types::issue_mirror::{
-    IssueSyncChangedEvent, IssueSyncResult, IssueSyncStatus, ISSUE_SYNC_CHANGED_EVENT,
+    IssueSyncChangedEvent, IssueSyncOutcome, IssueSyncResult, IssueSyncStatus,
+    ISSUE_SYNC_CHANGED_EVENT,
 };
 
 #[tauri::command]
@@ -199,8 +200,17 @@ pub async fn create_issue(
     input: CreateIssueInput,
 ) -> Result<IssueRecord, CommandError> {
     let data_dir = prepare_issue_data_dir(&app, &state)?;
+    let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        IssueService::create_issue_in_data_dir(data_dir, input)
+        let created = IssueService::create_issue_in_data_dir(data_dir, input)?;
+        emit_issue_sync_changed(
+            &app_handle,
+            &IssueSyncChangedEvent {
+                project_id: created.project_id,
+                outcome: IssueSyncOutcome::Synced,
+            },
+        );
+        Ok(created)
     })
     .await
     .map_err(|error| {

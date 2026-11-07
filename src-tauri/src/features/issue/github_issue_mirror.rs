@@ -1,10 +1,21 @@
 pub(crate) mod board;
 mod cli;
+mod create_cli;
 mod forge_process;
 mod gitlab;
 mod parse;
 mod port;
 mod sync;
+
+pub(crate) use cli::ProjectIssueForge;
+pub(crate) use port::{ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteIssue};
+
+#[cfg(test)]
+pub(crate) use behavior::support::{ready_github_project, seed_remote_issue, set_auth, set_mode};
+#[cfg(test)]
+pub(crate) use port::{open_issue, FixedForge, RemoteIssueState};
+#[cfg(test)]
+pub(crate) use sync::sync_project_issues;
 
 pub(crate) use board::load_issue_board;
 pub(crate) use board::IssueBoardListResponse;

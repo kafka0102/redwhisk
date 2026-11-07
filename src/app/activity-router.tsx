@@ -58,6 +58,7 @@ interface ActivityRouterProps {
   onOpenAgentsActivity: (sessionId: number) => void;
   onOpenIssue: (request: IssueOpenRequest) => void;
   onOpenProjectSettingsLabels: () => void;
+  onOpenProjectSettings: () => void;
   onProjectSettingsMenuChange: (menu: SettingsMenu) => void;
   onProjectUpdated: (project: ProjectSummary) => void;
   onProjectTerminalsStateChange: Dispatch<
@@ -82,6 +83,7 @@ export function ActivityRouter({
   onOpenAgentsActivity,
   onOpenIssue,
   onOpenProjectSettingsLabels,
+  onOpenProjectSettings,
   onProjectSettingsMenuChange,
   onProjectUpdated,
   onProjectTerminalsStateChange,
@@ -121,6 +123,7 @@ export function ActivityRouter({
         issuesReturnSignal={issuesReturnSignal}
         onOpenAgentsActivity={onOpenAgentsActivity}
         onOpenProjectSettingsLabels={onOpenProjectSettingsLabels}
+        onOpenProjectSettings={onOpenProjectSettings}
         projectId={projectId}
         requestedIssue={requestedIssue}
         worktreeSetupCommand={projectWorktreeSetupCommand}

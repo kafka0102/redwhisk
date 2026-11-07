@@ -42,6 +42,7 @@ vi.mock("./issue-mirror-commands", () => ({
 
 vi.mock("../settings/issue-source-commands", () => ({
   getProjectIssueSourceSettings: vi.fn(),
+  updateProjectIssueSourceSettings: vi.fn(),
 }));
 
 vi.mock("../settings/settings-commands", () => ({

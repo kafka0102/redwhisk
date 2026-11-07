@@ -13,6 +13,10 @@ import { ConfirmContent } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "../../../shared/i18n/i18n";
+import {
+  updateProjectIssueSourceSettings,
+  type IssueCreateSource as IssueCreateSourceChoice,
+} from "../../settings/issue-source-commands";
 
 import type {
   IssueAttachmentRecord,
@@ -25,6 +29,7 @@ import { IssueDescriptionEditor } from "../issue-form/issue-description-editor";
 import { IssueSurfaceHeader } from "../issue-surface-header";
 import { IssueDetailHeading } from "./issue-detail-heading";
 import { issueDetailTitleParts } from "./issue-detail-mode";
+import { IssueCreateSource } from "./issue-create-source";
 
 interface IssueEditablePageProps {
   mode: DialogMode;
@@ -51,7 +56,9 @@ interface IssueEditablePageProps {
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
   onDeleteIssue: () => void;
-  onOpenProjectLabelsSettings: () => void;
+  onOpenProjectLabelsSettings?: () => void;
+  onOpenProjectSettings?: () => void;
+  projectId: number;
   onRunIssue?: (trigger: HTMLElement | null) => void;
 }
 
@@ -74,10 +81,15 @@ export function IssueEditablePage({
   onDownloadAttachment,
   onRemoveAttachment,
   onDeleteIssue,
-  onOpenProjectLabelsSettings,
+  onOpenProjectLabelsSettings = () => {},
+  onOpenProjectSettings = () => {},
+  projectId,
   onRunIssue,
 }: IssueEditablePageProps) {
   const { messages } = useI18n();
+  const [createBlocked, setCreateBlocked] = useState(false);
+  const [createChoice, setCreateChoice] =
+    useState<IssueCreateSourceChoice | null>(null);
   const pageTitle =
     mode === "create" ? messages.issues.newIssue : messages.issues.edit;
   const titleParts =
@@ -87,12 +99,27 @@ export function IssueEditablePage({
   const canDelete = mode === "edit" && selectedIssue?.status === "backlog";
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
+  function submitForm(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const persist =
+      mode === "create" && createChoice !== null
+        ? updateProjectIssueSourceSettings({
+            projectId,
+            issueCreateSource: createChoice,
+          })
+        : Promise.resolve();
+    void persist.then(
+      () => onSubmit(event),
+      () => onSubmit(event),
+    );
+  }
+
   return (
     <>
       <form
         aria-label={pageTitle}
         className="issue-page issue-page--editable issue-page--fullscreen"
-        onSubmit={onSubmit}
+        onSubmit={submitForm}
       >
         <IssueSurfaceHeader
           title={
@@ -121,7 +148,7 @@ export function IssueEditablePage({
               ) : null}
               <Button
                 className="issues-button issues-button--primary"
-                disabled={isSaving}
+                disabled={isSaving || createBlocked}
                 type="submit"
               >
                 {mode === "create"
@@ -145,6 +172,13 @@ export function IssueEditablePage({
 
         <div className="issue-page__body issue-page__body--fullscreen">
           <div className="issue-page__content-shell">
+            <IssueCreateSource
+              active={mode === "create"}
+              onBlockedChange={setCreateBlocked}
+              onChoiceChange={setCreateChoice}
+              onOpenSettings={onOpenProjectSettings}
+              projectId={projectId}
+            />
             <IssueEditableFields
               availableLabels={availableLabels}
               form={form}

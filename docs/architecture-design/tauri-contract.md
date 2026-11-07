@@ -41,6 +41,8 @@
 
 > `create_issue`、`update_issue`、`advance_issue_status`、`mark_issue_review` 和完成流程返回 `IssueRecord`，不含上面的镜像字段。写回看板行时保留上一行缺失的字段，入口是 `retainIssueMirrorFields`（`issue-mirror-fields.ts`，由 `issue-description-serializer.ts` 的 `mergeIssue` 调用）。来源缺失、空串或 null 不是 local。
 
+> `create_issue` 仍是既有命令，不另开远程创建 command。选择远程且连接就绪时，用当前 Forge CLI 创建远端 Issue，再在一个本地事务里写一条 `issues` 和一条 `issue_external_refs`。成功后发已有 `issue-sync-changed`。刷新失败不回滚远端，命令仍返回成功。连接未就绪，以及 `forge_create_error` 里的 `CliMissing`、`RateLimited`、`CommandFailed`，都返回 `ForgeUnavailable`，reason `remoteCreateUnavailable`（`errors.FORGE_UNAVAILABLE.remoteCreateUnavailable`），不写本地行。认证失败 reason `remoteCreateUnauthenticated`，无权限 `remoteCreateForbidden`，网络失败 `remoteCreateOffline`，空 URL、空编号或无法解析 `remoteCreateInvalid`；这些都是 `ForgeUnavailable`，locale 同名键在 `errors.FORGE_UNAVAILABLE`，不写本地行。远端已创建但本地事务失败返回 `IssuePersistenceFailed`，reason `remoteCreateMirrorFailed`。detail `@type=RemoteIssue` 的 `url` 是远端地址；前端 `errors.ISSUE_PERSISTENCE_FAILED.remoteCreateMirrorFailed` 用 `{{url}}` 展示。下一次同步按外部身份只导入一条。之后改标题、正文、标签、指派不写回远端。
+
 > `save_agent_display_order`：入参 `SaveAgentDisplayOrderInput.profileIds`，为当前全部未删除 profile 的 id 顺序。缺少未删除 profile、重复、未知或已软删 id 时返回既有 `AgentProfileValidationFailed`（`reason=agentDisplayOrderMismatch`），原顺序不变。成功后项目级与全局级列表都按这份全应用顺序返回。
 
 > `get_project_worktree_commit_history`：`ProjectWorkspaceInput` 可选 `limit` / `offset`（缺省 50 / 0）；`ProjectWorktreeCommitHistoryResponse.hasMore` 为本页条数 `>= limit`。允许 `limit > 50` 支撑整窗刷新；`signature` 仍对**本次响应** commits 计算。

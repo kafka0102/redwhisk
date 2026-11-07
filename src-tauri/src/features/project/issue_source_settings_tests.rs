@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 use crate::db::connection::DATABASE_FILE_NAME;
 use crate::db::issue_repository::IssueRepository;
-use crate::features::issue::IssueService;
+use crate::features::issue::{create_in_data_dir_with_forge, open_issue, FixedForge, IssueService};
 use crate::features::project::issue_source::{
     get_project_issue_source_settings_in_data_dir, update_project_issue_source_settings_in_data_dir,
 };
@@ -459,30 +459,39 @@ fn create_issue_rejects_remote_create_source_until_mode_returns_local() {
     assert_eq!(count, 0);
     drop(connection);
 
-    update_project_issue_source_settings_in_data_dir(
-        data_dir.path(),
-        input_from(json!({"projectId": project_id, "issueSourceMode": "local"})),
-    )
-    .expect("local mode");
-    let created = IssueService::create_issue_in_data_dir(
+    let connection =
+        rusqlite::Connection::open(data_dir.path().join(DATABASE_FILE_NAME)).expect("ready db");
+    connection
+        .execute(
+            "INSERT INTO project_forge_connections (
+                project_id, provider, host_url, repo_path, login, auth_status,
+                cli_installed, cli_authenticated, checked_at
+             ) VALUES (?1, 'github', 'https://github.com/', 'acme/redwhisk', 'lin', 'ready', 1, 1, 1)",
+            rusqlite::params![project_id],
+        )
+        .expect("ready connection");
+    drop(connection);
+    let forge = FixedForge::new(Vec::new()).with_created(open_issue(128, "remote draft"));
+    let created = create_in_data_dir_with_forge(
         data_dir.path(),
         CreateIssueInput {
             project_id,
-            title: "local draft".to_string(),
+            title: "remote draft".to_string(),
             description: String::new(),
             attachments: Vec::new(),
             label_ids: Vec::new(),
         },
+        &forge,
     )
-    .expect("local create");
+    .expect("ready remote create");
     let connection =
-        rusqlite::Connection::open(data_dir.path().join(DATABASE_FILE_NAME)).expect("reopen");
-    let source: String = connection
+        rusqlite::Connection::open(data_dir.path().join(DATABASE_FILE_NAME)).expect("after remote");
+    let remote_source: String = connection
         .query_row(
             "SELECT source FROM issues WHERE id = ?1",
             rusqlite::params![created.id],
             |row| row.get(0),
         )
-        .expect("source");
-    assert_eq!(source, "local");
+        .expect("remote source");
+    assert_eq!(remote_source, "remote");
 }

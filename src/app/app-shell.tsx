@@ -232,6 +232,11 @@ export function AppShell({
                 setActiveActivity("settings");
                 setIsGlobalSettingsOpen(false);
               }}
+              onOpenProjectSettings={() => {
+                setActiveProjectSettingsMenu("issues");
+                setActiveActivity("settings");
+                setIsGlobalSettingsOpen(false);
+              }}
               onProjectSettingsMenuChange={setActiveProjectSettingsMenu}
               onProjectUpdated={onProjectUpdated}
               onProjectTerminalsStateChange={handleProjectTerminalsStateChange}

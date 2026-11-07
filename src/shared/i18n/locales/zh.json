@@ -346,6 +346,11 @@
     "backEditable": "返回",
     "closeAttachmentPreview": "关闭附件预览",
     "create": "创建 Issue",
+    "createSourceGithub": "GitHub",
+    "createSourceGitlab": "GitLab",
+    "createSourceLabel": "来源",
+    "createSourceLocal": "本地",
+    "createSourceOpenSettings": "项目设置",
     "delete": "删除",
     "deleteReadonly": "删除",
     "deleteEditable": "删除",
@@ -1070,6 +1075,7 @@
       "completionAttemptUpdateFailed": "CompletionAttempt 更新失败。",
       "deleteFailed": "Issue 删除失败。",
       "queryFailed": "Issue 查询失败。",
+      "remoteCreateMirrorFailed": "远端 Issue 已创建，但本地镜像没有保存：{{url}}",
       "saveFailed": "Issue 保存失败。",
       "statusUpdateFailed": "Issue 状态更新失败。",
       "summaryParseFailed": "Issue Summary 解析失败。",
@@ -1122,6 +1128,10 @@
       "default": "本地数据初始化失败。"
     },
     "FORGE_UNAVAILABLE": {
+      "remoteCreateForbidden": "没有权限创建这个远程 Issue。",
+      "remoteCreateInvalid": "无法读取远端 Issue 的返回。",
+      "remoteCreateOffline": "网络不可用，远程 Issue 没有创建。",
+      "remoteCreateUnauthenticated": "请先登录 GitHub 或 GitLab，再创建远程 Issue。",
       "remoteCreateUnavailable": "暂时不能创建远程 Issue。"
     },
     "PROJECT_NOT_FOUND": {

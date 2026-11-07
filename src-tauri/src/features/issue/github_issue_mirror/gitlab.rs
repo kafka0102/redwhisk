@@ -4,7 +4,8 @@ use chrono::TimeZone;
 
 use super::forge_process::capture_forge_stdout;
 use super::port::{
-    ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue, RemoteIssueState,
+    ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue,
+    RemoteIssueState,
 };
 
 pub struct GitlabCliForge {
@@ -23,6 +24,16 @@ impl ForgeIssuePort for GitlabCliForge {
             query.updated_after,
             query.limit,
         ))
+    }
+
+    fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
+        super::create_cli::create_then_view(
+            "glab",
+            &super::create_cli::gitlab_issue_create_args(draft),
+            &self.repo_dir,
+            super::create_cli::gitlab_issue_view_args,
+            super::create_cli::parse_gitlab_issue_view,
+        )
     }
 }
 
@@ -79,7 +90,7 @@ pub fn parse_gitlab_issue_list(stdout: &str) -> Result<Vec<RemoteIssue>, ForgeIs
     Ok(items.iter().filter_map(parse_gitlab_issue).collect())
 }
 
-fn parse_gitlab_issue(value: &serde_json::Value) -> Option<RemoteIssue> {
+pub(super) fn parse_gitlab_issue(value: &serde_json::Value) -> Option<RemoteIssue> {
     let external_id = match value.get("id")? {
         serde_json::Value::String(id) if !id.is_empty() => id.clone(),
         serde_json::Value::Number(id) => id.to_string(),

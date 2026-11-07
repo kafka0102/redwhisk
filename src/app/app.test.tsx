@@ -103,6 +103,7 @@ vi.mock("../features/settings/settings-commands", () => ({
 
 vi.mock("../features/settings/issue-source-commands", () => ({
   getProjectIssueSourceSettings: vi.fn(),
+  updateProjectIssueSourceSettings: vi.fn(),
 }));
 
 vi.mock("../features/issues/issue-form/issue-description-editor", () => ({

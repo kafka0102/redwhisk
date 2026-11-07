@@ -47,11 +47,24 @@ pub enum ForgeIssueError {
     CliMissing,
     Offline,
     RateLimited,
+    Unauthenticated,
+    Forbidden,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForgeIssueDraft {
+    pub title: String,
+    pub body: String,
 }
 
 pub trait ForgeIssuePort {
     fn list_issues(&self, query: &ForgeIssueListQuery)
         -> Result<Vec<RemoteIssue>, ForgeIssueError>;
+
+    fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
+        let _ = draft;
+        Err(ForgeIssueError::CommandFailed)
+    }
 }
 
 #[cfg(test)]
@@ -59,6 +72,8 @@ pub trait ForgeIssuePort {
 pub struct FixedForge {
     pub issues: Vec<RemoteIssue>,
     pub calls: Mutex<Vec<ForgeIssueListQuery>>,
+    pub created: Mutex<Option<RemoteIssue>>,
+    pub create_calls: Mutex<Vec<ForgeIssueDraft>>,
     pub error: Mutex<Option<ForgeIssueError>>,
 }
 
@@ -68,14 +83,23 @@ impl FixedForge {
         Self {
             issues,
             calls: Mutex::new(Vec::new()),
+            created: Mutex::new(None),
+            create_calls: Mutex::new(Vec::new()),
             error: Mutex::new(None),
         }
+    }
+
+    pub fn with_created(self, issue: RemoteIssue) -> Self {
+        *self.created.lock().expect("created issue") = Some(issue);
+        self
     }
 
     pub fn failing(error: ForgeIssueError) -> Self {
         Self {
             issues: Vec::new(),
             calls: Mutex::new(Vec::new()),
+            created: Mutex::new(None),
+            create_calls: Mutex::new(Vec::new()),
             error: Mutex::new(Some(error)),
         }
     }
@@ -96,6 +120,21 @@ impl ForgeIssuePort for FixedForge {
             return Err(error);
         }
         Ok(self.issues.clone())
+    }
+
+    fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
+        self.create_calls
+            .lock()
+            .expect("create calls")
+            .push(draft.clone());
+        if let Some(error) = self.error.lock().expect("forge error").clone() {
+            return Err(error);
+        }
+        self.created
+            .lock()
+            .expect("created issue")
+            .clone()
+            .ok_or(ForgeIssueError::CommandFailed)
     }
 }
 

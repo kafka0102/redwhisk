@@ -156,7 +156,10 @@ fn list_sync_error(error: &ForgeIssueError) -> &'static str {
         ForgeIssueError::CliMissing => "cli_missing",
         ForgeIssueError::Offline => "offline",
         ForgeIssueError::RateLimited => "rate_limited",
-        ForgeIssueError::CommandFailed | ForgeIssueError::Unparseable => "cache_failed",
+        ForgeIssueError::Unauthenticated => "credential_expired",
+        ForgeIssueError::CommandFailed
+        | ForgeIssueError::Unparseable
+        | ForgeIssueError::Forbidden => "cache_failed",
     }
 }
 

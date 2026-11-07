@@ -321,83 +321,11 @@ impl<'connection> IssueService<'connection> {
     }
 
     pub fn create_issue(&self, input: CreateIssueInput) -> Result<IssueRecord, CommandError> {
-        super::source_gate::require_local_issue_create(self, input.project_id)?;
-        let title = validate_title(&input.title)?;
-        let description = input.description.trim().to_string();
-        let label_ids = self.validate_issue_label_ids(input.project_id, &input.label_ids)?;
-        let label_ids_json = serialize_label_ids(&label_ids)?;
-        let transaction = self
-            .issue_repository
-            .connection()
-            .unchecked_transaction()
-            .map_err(issue_database_error)?;
-        let issue = IssueRepository::insert_in_transaction(
-            &transaction,
-            input.project_id,
-            &title,
-            &description,
-            &label_ids_json,
-        )
-        .map_err(issue_database_error)?;
-        let (created_files, saved_issue) = match persist_new_attachments(
-            &transaction,
-            &self.data_dir,
-            issue.id,
-            issue.number,
-            &input.attachments,
-        ) {
-            Ok((attachments, files)) => {
-                let saved_issue = if attachments.is_empty() {
-                    issue
-                } else {
-                    let rewritten_description =
-                        rewrite_attachment_tokens(&description, &attachments)?;
-                    IssueRepository::update_title_and_description_in_transaction(
-                        &transaction,
-                        input.project_id,
-                        issue.id,
-                        &title,
-                        &rewritten_description,
-                        &label_ids_json,
-                    )
-                    .map_err(issue_database_error)?
-                    .ok_or_else(|| issue_not_found(issue.id))?
-                };
-                (files, saved_issue)
-            }
-            Err(error) => {
-                cleanup_created_files(&[] as &[PathBuf]);
-                return Err(error);
-            }
-        };
-        let payload_json = json!({
-            "title": saved_issue.title,
-            "description": saved_issue.description,
-            "labelIds": label_ids,
-            "status": "backlog",
-        })
-        .to_string();
+        super::remote_create::create_issue(self, input)
+    }
 
-        EventRepository::insert_issue_action_in_transaction(
-            &transaction,
-            saved_issue.id,
-            IssueActionType::IssueCreated,
-            &payload_json,
-            saved_issue.created_at,
-            IssueActionActor::User { profile_id: 1 },
-        )
-        .map_err(issue_database_error)?;
-
-        if let Err(error) = transaction.commit() {
-            cleanup_created_files(&created_files);
-            return Err(issue_database_error(error));
-        }
-
-        self.issue_repository
-            .find_by_id(saved_issue.id)
-            .map_err(issue_database_error)?
-            .ok_or_else(|| issue_not_found(saved_issue.id))
-            .and_then(|issue| self.hydrate_issue(issue))
+    pub(crate) fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     pub fn update_issue(&self, input: UpdateIssueInput) -> Result<IssueRecord, CommandError> {
@@ -1281,7 +1209,7 @@ impl<'connection> IssueService<'connection> {
         Ok(labels)
     }
 
-    fn validate_issue_label_ids(
+    pub(crate) fn validate_issue_label_ids(
         &self,
         project_id: i64,
         label_ids: &[i64],

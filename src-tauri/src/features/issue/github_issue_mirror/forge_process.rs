@@ -56,6 +56,23 @@ pub(super) fn classify_stderr(stderr: &str) -> ForgeIssueError {
     {
         return ForgeIssueError::Offline;
     }
+    if text.contains("401")
+        || text.contains("unauthorized")
+        || text.contains("authentication")
+        || text.contains("bad credentials")
+        || text.contains("auth login")
+        || text.contains("not logged")
+    {
+        return ForgeIssueError::Unauthenticated;
+    }
+    if text.contains("403")
+        || text.contains("forbidden")
+        || text.contains("permission denied")
+        || text.contains("you do not have")
+        || text.contains("resource not accessible")
+    {
+        return ForgeIssueError::Forbidden;
+    }
     ForgeIssueError::CommandFailed
 }
 
@@ -94,6 +111,14 @@ mod tests {
         assert_eq!(
             classify_stderr("write failed"),
             ForgeIssueError::CommandFailed
+        );
+        assert_eq!(
+            classify_stderr("HTTP 401 unauthorized"),
+            ForgeIssueError::Unauthenticated
+        );
+        assert_eq!(
+            classify_stderr("HTTP 403 forbidden"),
+            ForgeIssueError::Forbidden
         );
     }
 
