@@ -30,7 +30,7 @@ export function IssueBoardHeader({
           type="button"
           onClick={() => onPaneChange("issues")}
         >
-          {t("issues.title")}{" "}
+          {t("issues.title")}
           <span aria-hidden="true" className="issue-board-tab__count">
             {issueCount}
           </span>
@@ -42,7 +42,7 @@ export function IssueBoardHeader({
           type="button"
           onClick={() => onPaneChange("pullRequests")}
         >
-          {t("issues.pullRequestsTab")}{" "}
+          {t("issues.pullRequestsTab")}
           <span aria-hidden="true" className="issue-board-tab__count">
             0
           </span>
