@@ -32,6 +32,7 @@ import type { IssueRecord } from "../issue-commands";
 import {
   getIssueDetail,
   retryIssueCompletionWriteback,
+  type IssueDetailRecord,
 } from "./issue-detail-commands";
 import {
   getIssueSyncStatus,
@@ -57,6 +58,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 vi.mock("./issue-detail-commands", () => ({
+  applyIssueRecovery: vi.fn(),
   getIssueDetail: vi.fn(),
   retryIssueCompletionWriteback: vi.fn(),
 }));
@@ -169,6 +171,7 @@ interface DetailResponse {
   linkedChangeRequest: DetailChangeRequest | null;
   writebackPending?: boolean;
   writebackError?: string | null;
+  unavailableBanner?: IssueDetailRecord["unavailableBanner"];
 }
 
 const bugLabel = {
@@ -325,6 +328,7 @@ function renderBoard(issue: IssueBoardRecord, detail: DetailResponse): void {
     projection: detail.projection,
     writebackError: detail.writebackError ?? null,
     writebackPending: detail.writebackPending ?? false,
+    unavailableBanner: detail.unavailableBanner ?? null,
   });
   render(
     <I18nProvider fixedLocale="zh">

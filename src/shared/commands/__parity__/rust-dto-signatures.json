@@ -756,10 +756,24 @@
         "repo": "required"
       }
     },
+    "ApplyIssueRecoveryInput": {
+      "fields": {
+        "action": "required",
+        "issueId": "required",
+        "projectId": "required"
+      }
+    },
+    "UnavailableBanner": {
+      "fields": {
+        "actions": "required",
+        "showsDeleteConfirmation": "required"
+      }
+    },
     "IssueDetailRecord": {
       "fields": {
         "linkedChangeRequest": "required",
         "projection": "required",
+        "unavailableBanner": "required",
         "writebackError": "required",
         "writebackPending": "required"
       }
@@ -1936,6 +1950,14 @@
         "generic"
       ]
     },
+    "RecoveryAction": {
+      "rename": "snake_case",
+      "variants": [
+        "keep_local",
+        "unlink",
+        "retry"
+      ]
+    },
     "AgentPermissionDecision": {
       "rename": "snake_case",
       "variants": [
@@ -2290,7 +2312,8 @@
         "issue_completed",
         "issue_comment_added",
         "remote_comment",
-        "remote_event"
+        "remote_event",
+        "remote_origin"
       ]
     },
     "IssueTimelineSource": {

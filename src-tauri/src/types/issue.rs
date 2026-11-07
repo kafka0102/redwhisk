@@ -324,6 +324,7 @@ pub enum IssueTimelineActionType {
     IssueCommentAdded,
     RemoteComment,
     RemoteEvent,
+    RemoteOrigin,
 }
 
 impl IssueTimelineActionType {

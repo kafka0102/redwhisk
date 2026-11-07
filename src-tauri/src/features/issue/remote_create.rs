@@ -354,7 +354,9 @@ fn forge_create_error(error: ForgeIssueError) -> CommandError {
         ),
         ForgeIssueError::CliMissing
         | ForgeIssueError::RateLimited
-        | ForgeIssueError::CommandFailed => (
+        | ForgeIssueError::CommandFailed
+        | ForgeIssueError::NotFound
+        | ForgeIssueError::Gone => (
             "remoteCreateUnavailable",
             "Remote issue creation is unavailable.",
         ),

@@ -9,6 +9,7 @@ mod remote_create;
 mod remote_timeline;
 mod service;
 mod time;
+pub mod unavailable_recovery;
 mod validation;
 
 #[cfg(test)]

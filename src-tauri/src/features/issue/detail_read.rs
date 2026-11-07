@@ -14,6 +14,11 @@ pub(crate) fn read_issue_detail_in_data_dir(
     input: GetIssueDetailInput,
 ) -> Result<IssueDetailRecord, CommandError> {
     let database = open_issue_database(data_dir)?;
+    super::unavailable_recovery::refresh_remote_availability(
+        &database.connection,
+        input.project_id,
+        input.issue_id,
+    )?;
     read_issue_detail(&database.connection, &input)
 }
 
@@ -66,12 +71,26 @@ pub(crate) fn read_issue_detail(
         .map(linked_change_request_from_url);
 
     let (writeback_pending, writeback_error) = detail_writeback(connection, input.issue_id)?;
+    let unavailable_banner =
+        super::unavailable_recovery::unavailable_banner(connection, input.issue_id)?;
+    let mut projection =
+        if super::unavailable_recovery::hides_linked_projection(connection, input.issue_id)? {
+            None
+        } else {
+            projection
+        };
+    if unavailable_banner.is_some() {
+        if let Some(item) = projection.as_mut() {
+            item.remote_state = "unavailable".to_string();
+        }
+    }
 
     Ok(IssueDetailRecord {
         projection,
         linked_change_request,
         writeback_pending,
         writeback_error,
+        unavailable_banner,
     })
 }
 

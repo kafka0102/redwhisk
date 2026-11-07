@@ -191,7 +191,7 @@ fn remote_event_entries(
 ) -> Result<Vec<IssueTimelineEntry>, CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT actor_login, remote_created_at
+            "SELECT actor_login, remote_created_at, event_type, payload_json
              FROM issue_remote_events
              WHERE issue_id = ?1
              ORDER BY remote_created_at ASC, id ASC",
@@ -200,8 +200,19 @@ fn remote_event_entries(
     let rows = statement
         .query_map(params![issue_id], |row| {
             let actor_login: Option<String> = row.get(0)?;
+            let event_type: String = row.get(2)?;
+            let payload_json: String = row.get(3)?;
+            let origin_url = if event_type == "remote_origin" {
+                origin_url_from_payload(&payload_json)
+            } else {
+                None
+            };
             Ok(IssueTimelineEntry {
-                action_type: IssueTimelineActionType::RemoteEvent,
+                action_type: if origin_url.is_some() {
+                    IssueTimelineActionType::RemoteOrigin
+                } else {
+                    IssueTimelineActionType::RemoteEvent
+                },
                 actor: IssueTimelineActor {
                     name: actor_login.unwrap_or_default(),
                     avatar_path: None,
@@ -209,7 +220,7 @@ fn remote_event_entries(
                     agent_type: None,
                 },
                 created_at: row.get(1)?,
-                comment_body: None,
+                comment_body: origin_url,
                 source: IssueTimelineSource::Remote,
             })
         })
@@ -221,3 +232,11 @@ fn remote_event_entries(
 #[cfg(test)]
 #[path = "remote_timeline_test.rs"]
 mod tests;
+
+fn origin_url_from_payload(payload_json: &str) -> Option<String> {
+    let payload: serde_json::Value = serde_json::from_str(payload_json).ok()?;
+    payload
+        .get("externalUrl")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}

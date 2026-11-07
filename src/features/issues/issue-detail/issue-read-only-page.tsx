@@ -24,10 +24,13 @@ import { IssueTimeline } from "./issue-timeline";
 import { IssueDescriptionMarkdown } from "./issue-detail-description";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
+  applyIssueRecovery,
   getIssueDetail,
   retryIssueCompletionWriteback,
   type IssueDetailRecord,
+  type RecoveryAction,
 } from "./issue-detail-commands";
+import { IssueUnavailableBanner } from "./issue-unavailable-banner";
 import { IssueDetailHeading } from "./issue-detail-heading";
 import { issueDetailTitleParts } from "./issue-detail-mode";
 import {
@@ -90,6 +93,23 @@ export function IssueReadOnlyPage({
     activeDetail?.projection != null
       ? activeDetail.projection.labels
       : (selectedIssue?.labels ?? []).map((label) => label.name);
+  const unavailableBanner = activeDetail?.unavailableBanner ?? null;
+
+  function runRecovery(action: RecoveryAction): void {
+    if (selectedIssue == null) {
+      return;
+    }
+    const issueId = selectedIssue.id;
+    const requestProjectId = selectedIssue.projectId;
+    void applyIssueRecovery({
+      action,
+      issueId,
+      projectId: requestProjectId,
+    }).then((next) => {
+      setDetail(next);
+      setDetailIssueId(issueId);
+    });
+  }
 
   useEffect(() => {
     if (selectedIssue == null) {
@@ -181,6 +201,13 @@ export function IssueReadOnlyPage({
       />
 
       <div className="issue-page__body issue-page__body--readonly-fullscreen">
+        {unavailableBanner != null &&
+        !unavailableBanner.showsDeleteConfirmation ? (
+          <IssueUnavailableBanner
+            actions={unavailableBanner.actions}
+            onAction={runRecovery}
+          />
+        ) : null}
         <div className="issue-page__content-shell issue-page__content-shell--readonly">
           <IssueReadOnlyDetails
             attachments={form.attachments}

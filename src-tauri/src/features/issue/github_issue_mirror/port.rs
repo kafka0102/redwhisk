@@ -49,6 +49,8 @@ pub enum ForgeIssueError {
     RateLimited,
     Unauthenticated,
     Forbidden,
+    NotFound,
+    Gone,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

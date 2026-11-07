@@ -1,6 +1,6 @@
 # 远程 Issue 与 PR/MR 工作台实施计划
 
-> 这是该项工作的唯一执行入口。任务 1、2、3、4 已完成；任务 5 可开始；任务 6 依赖已解除，可与任务 5 并行。
+> 这是该项工作的唯一执行入口。任务 1、2、3、4、5 已完成；任务 6 依赖已解除，可开始。
 
 ## 基本信息
 
@@ -11,7 +11,7 @@
 | 产品方案 | [远程 Issue 与 PR/MR 工作台设计](../../specs/2026-10-31-remote-issue-and-pr-workbench-design.md) |
 | 静态原型 | [issue-pr-workbench.prototype.html](../../../../src/features/issues/issue-pr-workbench.prototype.html) |
 | 原始任务来源 | 归档会话 `issue-340-session-392.log`，`seq 66`、`seq 70` |
-| 最近更新 | 2026-11-06 |
+| 最近更新 | 2026-11-07 |
 
 本计划保留原始 8 个任务编号和主依赖骨架，避免已完成记录与后续提示词失联。任务边界根据当前代码重新校准：任务 2 已经吸收原任务 3 的自动同步、90 秒默认间隔、失败退避和运行锁，因此任务 3 不再重复实现这些能力。
 
@@ -23,7 +23,7 @@
 | 2 | [GitHub Issue 只读镜像与混合看板](./task-02-github-issue-mirror.md) | 已完成 | 1 | 已落地；包含原任务 3 的通用同步生命周期 |
 | 3 | [GitLab Issue 与同步生命周期收口](./task-03-gitlab-issue-sync.md) | 已完成 | 1、2 | 已落地；GitLab Issue 同步、看板 GL 徽标、来源模式确认 |
 | 4 | [Issue 详情分状态与来源展示](./task-04-issue-detail-by-status-and-source.md) | 已完成 | 3（已完成，依赖已解除） | 详情布局与统一时间轴已落地。宿主评论和事件拉取未做，由下一次 Issue 同步扩展承接，不是任务 5、6、7 |
-| 5 | [远程 Issue 创建与写回](./task-05-remote-issue-create-and-writeback.md) | 可开始 | 4（已完成） | 包含远端异常后的保留、解绑与重试。不拉取宿主评论 |
+| 5 | [远程 Issue 创建与写回](./task-05-remote-issue-create-and-writeback.md) | 已完成 | 4（已完成） | 创建 PR 后远程不关闭；写回幂等入口和待合并状态已落地。PR 合并后关闭留给任务 8。远端不可用可保留、解绑、重试 |
 | 6 | [PR/MR 一等数据与列表](./task-06-change-request-data-and-list.md) | 待开始 | 3（已完成，依赖已解除） | 可与任务 4 并行；本任务仍未完成 |
 | 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 待开始 | 6 | 可与任务 5 并行 |
 | 8 | [PR/MR 操作与完成流程接入](./task-08-change-request-actions-and-completion.md) | 待开始 | 5、7 | 最后收口写操作与联动 |
@@ -152,10 +152,10 @@ UI 任务执行时：
 
 每个任务只需要使用一句提示词，具体边界、依赖、原型和更新规则都写在任务文档中。
 
-当前下一项：任务 5（可开始）与任务 6（依赖已解除，可并行）
+当前下一项：任务 6（依赖已解除，可开始）。任务 5 已完成；PR 合并后关闭仍留给任务 8。
 
 ```text
-请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-05-remote-issue-create-and-writeback.md 完成任务 5。具体任务、边界、原型页面和更新规则都在文档里。任务 6 可并行。
+请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-06-change-request-data-and-list.md 完成任务 6。具体任务、边界、原型页面和更新规则都在文档里。
 ```
 
 通用格式：
@@ -172,3 +172,4 @@ UI 任务执行时：
 | 2026-11-06 | 任务 3 完成。 |
 | 2026-11-06 | 任务 4 改为进行中，开工基线 `5b0e9f30`。详情布局切片尚未完成，不标记已完成。 |
 | 2026-11-06 | 任务 4 完成。统一时间轴已落地。宿主评论和事件拉取未做，承接是下一次 Issue 同步扩展，不是任务 5、6、7。任务 5 改为可开始。 |
+| 2026-11-07 | 任务 5 完成。创建 PR 后远程不关闭，写回幂等入口和待合并状态已落地。PR 合并后关闭留给任务 8。提交 hash 待补。 |

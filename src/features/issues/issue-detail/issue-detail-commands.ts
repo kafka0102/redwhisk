@@ -30,6 +30,20 @@ export interface IssueDetailRecord {
   linkedChangeRequest: LinkedChangeRequestSummary | null;
   writebackPending: boolean;
   writebackError: string | null;
+  unavailableBanner: UnavailableBanner | null;
+}
+
+export type RecoveryAction = "keep_local" | "unlink" | "retry";
+
+export interface UnavailableBanner {
+  actions: RecoveryAction[];
+  showsDeleteConfirmation: boolean;
+}
+
+export interface ApplyIssueRecoveryInput {
+  projectId: number;
+  issueId: number;
+  action: RecoveryAction;
 }
 
 export interface RetryIssueCompletionWritebackInput {
@@ -47,4 +61,10 @@ export function retryIssueCompletionWriteback(
   input: RetryIssueCompletionWritebackInput,
 ): Promise<void> {
   return invokeCommand<void>("retry_issue_completion_writeback", { input });
+}
+
+export function applyIssueRecovery(
+  input: ApplyIssueRecoveryInput,
+): Promise<IssueDetailRecord> {
+  return invokeCommand<IssueDetailRecord>("apply_issue_recovery", { input });
 }

@@ -8,6 +8,7 @@ export interface IssueTimelineMessages {
   timelineJustNow: string;
   timelineMinutesAgo: (minutes: number) => string;
   timelineRemoteEvent: string;
+  timelineRemoteOrigin: string;
   timelineReviewMarked: string;
   timelineSourceLocal: string;
   timelineSourceRemote: string;

@@ -91,6 +91,19 @@ pub(crate) fn comment_remote_issue(
     super::forge_process::capture_forge_stdout(program, &args, repo_dir).map(|_| ())
 }
 
+pub(crate) fn view_remote_issue(
+    provider: &str,
+    repo_dir: &std::path::Path,
+    number: i64,
+) -> Result<(), ForgeIssueError> {
+    let (program, args) = if provider == "gitlab" {
+        ("glab", super::create_cli::gitlab_issue_view_args(number))
+    } else {
+        ("gh", super::create_cli::github_issue_view_args(number))
+    };
+    super::forge_process::capture_forge_stdout(program, &args, repo_dir).map(|_| ())
+}
+
 impl ForgeIssuePort for ProjectIssueForge {
     fn list_issues(
         &self,

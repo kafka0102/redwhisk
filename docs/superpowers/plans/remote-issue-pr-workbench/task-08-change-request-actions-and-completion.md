@@ -7,16 +7,15 @@
 | 状态 | 待开始 |
 | 依赖 | 任务 5、任务 7 |
 | 直接后续 | 无 |
-| 最近更新 | 2026-11-06 |
+| 最近更新 | 2026-11-07 |
 | 总计划 | [README](./README.md) |
 
 ## 目标
 
 完成 PR/MR 写操作和 Issue 完成流程集成：支持标记就绪、请求审阅、关闭、合并；创建 PR/MR 成功后建立应用内关联；合并或关闭后正确处理关联 Issue、远程 Issue 和摘要评论。
 
-## 当前基线
-
-- 任务 5 应提供远程 Issue 创建、关闭、摘要评论和可恢复写回能力。
+- 任务 5 已提供远程 Issue 创建、写回幂等入口和待合并状态。创建 PR 后远程不关闭。PR 合并后关闭远程 Issue 仍留给本任务。
+- 写回入口是 `apply_completion_writeback` 与 `retry_issue_completion_writeback`。同一本地完成结果最多一条远程摘要评论。详情在关联 PR 仍 open 时显示「PR 待合并」。
 - 任务 7 应提供 PR/MR 详情、检查、评审、关联关系和只读合并框。
 - 现有完成 flow 已支持“合并到 base”和“提交 PR/MR”，并保存旧 `issue_pull_requests.url`。
 - 现有 `publish_change_request` 会检测同分支已存在的 PR/MR；本任务必须把复用结果升级为一等实体关联。

@@ -24,8 +24,8 @@ use crate::types::issue::{
     SendAgentCommitPromptResult, UpdateIssueInput,
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
-use crate::types::issue_detail::{GetIssueDetailInput, IssueDetailRecord};
 use crate::types::issue_detail::RetryIssueCompletionWritebackInput;
+use crate::types::issue_detail::{GetIssueDetailInput, IssueDetailRecord};
 use crate::types::issue_mirror::{
     IssueSyncChangedEvent, IssueSyncOutcome, IssueSyncResult, IssueSyncStatus,
     ISSUE_SYNC_CHANGED_EVENT,
@@ -577,8 +577,7 @@ pub async fn retry_issue_completion_writeback(
     let data_dir = prepare_issue_data_dir(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
         super::completion::writeback_store::retry_issue_completion_writeback_in_data_dir(
-            &data_dir,
-            input,
+            &data_dir, input,
         )
     })
     .await
@@ -703,7 +702,7 @@ pub async fn delete_issue_worktree(
     })?
 }
 
-fn prepare_issue_data_dir(
+pub(crate) fn prepare_issue_data_dir(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
 ) -> Result<std::path::PathBuf, CommandError> {

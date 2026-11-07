@@ -6,7 +6,8 @@ export type IssueTimelineActionType =
   | "issue_completed"
   | "issue_comment_added"
   | "remote_comment"
-  | "remote_event";
+  | "remote_event"
+  | "remote_origin";
 
 export type IssueTimelineSource = "local" | "remote";
 

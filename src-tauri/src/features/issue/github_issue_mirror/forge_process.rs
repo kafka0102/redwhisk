@@ -73,6 +73,15 @@ pub(super) fn classify_stderr(stderr: &str) -> ForgeIssueError {
     {
         return ForgeIssueError::Forbidden;
     }
+    if text.contains("410") || text.contains("is gone") {
+        return ForgeIssueError::Gone;
+    }
+    if text.contains("404")
+        || text.contains("could not find")
+        || (text.contains("not found") && text.contains("issue"))
+    {
+        return ForgeIssueError::NotFound;
+    }
     ForgeIssueError::CommandFailed
 }
 

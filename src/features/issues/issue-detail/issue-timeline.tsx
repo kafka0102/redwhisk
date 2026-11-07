@@ -104,6 +104,7 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
     issue_comment_added: messages.issues.timelineCommentAdded,
     remote_comment: messages.issues.timelineSourceRemote,
     remote_event: messages.issues.timelineRemoteEvent,
+    remote_origin: messages.issues.timelineRemoteOrigin,
   };
 
   const isComment =
@@ -134,6 +135,9 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
         {!isComment ? (
           <span className="issue-timeline__action">
             {actionText[entry.actionType]}
+            {entry.actionType === "remote_origin" && entry.commentBody
+              ? ` ${entry.commentBody}`
+              : ""}
           </span>
         ) : null}
         <time

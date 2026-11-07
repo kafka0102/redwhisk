@@ -534,9 +534,9 @@ fn default_migrations() -> Vec<Migration> {
         Migration { version: ISSUE_EXTERNAL_REFS_MIGRATION_VERSION, sql: ISSUE_EXTERNAL_REFS_MIGRATION_SQL },
         Migration { version: super::issue_remote_comments_migration::VERSION, sql: super::issue_remote_comments_migration::SQL },
         Migration { version: super::issue_completion_writeback_migration::VERSION, sql: super::issue_completion_writeback_migration::SQL },
+        Migration { version: super::issue_external_ref_recovery_migration::VERSION, sql: super::issue_external_ref_recovery_migration::SQL },
     ]
 }
-
 #[cfg(test)]
 impl MigrationRunner {
     /// 构造一个跳过指定版本集合的 runner，用于测试单个 migration 的增量语义
@@ -558,6 +558,7 @@ struct Migration {
 }
 
 fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite::Result<()> {
+    if migration.version == super::issue_external_ref_recovery_migration::VERSION && !table_has_column(connection, "issue_external_refs", "issue_id")? { return Ok(()); }
     if migration.version == AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION
         && (has_migration(
             connection,
@@ -566,7 +567,6 @@ fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite
     {
         return Ok(());
     }
-
     if migration.version != ALLOW_CLAUDE_AGENT_PROFILES_MIGRATION_VERSION
         && migration.version != AGENT_DISPLAY_MODE_ENABLED_AND_OPENCODE_GROK_MIGRATION_VERSION
         && migration.version != AGENT_PROFILES_DEEPSEEK_MIGRATION_VERSION

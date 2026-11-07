@@ -159,7 +159,9 @@ fn list_sync_error(error: &ForgeIssueError) -> &'static str {
         ForgeIssueError::Unauthenticated => "credential_expired",
         ForgeIssueError::CommandFailed
         | ForgeIssueError::Unparseable
-        | ForgeIssueError::Forbidden => "cache_failed",
+        | ForgeIssueError::Forbidden
+        | ForgeIssueError::NotFound
+        | ForgeIssueError::Gone => "cache_failed",
     }
 }
 
@@ -198,6 +200,13 @@ fn apply_remote(
         .or(refs
             .find_by_external_number(project_id, provider, host, repo, remote.number)
             .map_err(persistence)?);
+    if let Some(issue_id) = existing {
+        if super::super::unavailable_recovery::sync_skips_issue(connection, issue_id)
+            .map_err(persistence)?
+        {
+            return Ok(());
+        }
+    }
     if remote.title.trim().is_empty() {
         if let Some(issue_id) = existing {
             refs.mark_ref_error(issue_id).map_err(persistence)?;
