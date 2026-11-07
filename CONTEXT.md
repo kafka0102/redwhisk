@@ -275,7 +275,7 @@ _Avoid_: 父 Turn、主线程
 _Avoid_: 筛选档、当前视图
 
 **执行时长**：
-Agent Session 详情展示的会话实际处理耗时；json 会话按「App 醒着且当前 Turn 在运行」的时间累加，不含系统睡眠、关机与 Turn 之间的用户等待；Codex 的 tui 会话取本机 provider session log 各 turn 处理耗时之和。累计值缺失或为 0（如其它 Agent 的 tui）时回退开始到结束/当前的墙钟差。
+Agent Session 详情展示的会话实际处理耗时；json 会话按「App 醒着且当前 Turn 在运行」的时间累加，不含系统睡眠、关机与 Turn 之间的用户等待；Codex 的 tui 会话取本机 provider session log 已完成 turn 的处理耗时之和，并加上进行中 turn 自开始到当前的墙钟；turn 之间的等待不计入。累计值缺失或为 0（如其它 Agent 的 tui）时回退开始到结束/当前的墙钟差。
 _Avoid_: 开始到现在的墙钟跨度、把睡眠与关机算进 json 会话、把用户等待算成处理时间
 
 **活跃时长**：

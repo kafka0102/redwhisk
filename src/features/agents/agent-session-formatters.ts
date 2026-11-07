@@ -195,7 +195,8 @@ function getSessionElapsedMs(
 }
 
 /**
- * 累计处理时长：json 由活跃时长心跳独占写入，TUI Codex 由 session log 同步写入；
+ * 累计处理时长：json 由活跃时长心跳独占写入；TUI Codex 由 session log 同步写入
+ * （已完成 turn 的 duration_ms，加上进行中 turn 自 task_started 起的墙钟）。
  * 累计值缺失或为 0 的存量会话走墙钟回退。
  */
 function getAccumulatedProcessingMs(

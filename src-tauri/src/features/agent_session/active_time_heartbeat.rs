@@ -92,7 +92,30 @@ fn run_active_time_heartbeat(app_handle: AppHandle) {
         expire_silent_tui_turns(&app_handle, &repository, current.wall_clock_ms);
         // 同一循环内推进 TUI + Codex session log 用量同步；与 json 活跃时长按
         // `display_mode` 互斥（本路径只覆盖 tui）。失败静默跳过、不中断线程。
-        tui_metrics_sync.sync_once(&repository, codex_home.as_deref());
+        // 进行中 turn 的时长每 tick 增长，但不产生结构化流事件；时长变了要主动
+        // 通知列表刷新，否则详情会停在上一次 hook 事件看到的旧值。
+        let duration_changed = tui_metrics_sync.sync_once(&repository, codex_home.as_deref());
+        emit_tui_processing_duration_changed(&app_handle, &repository, &duration_changed);
+    }
+}
+
+fn emit_tui_processing_duration_changed(
+    app_handle: &AppHandle,
+    repository: &AgentSessionRepository<'_>,
+    session_ids: &[i64],
+) {
+    for session_id in session_ids {
+        let Ok(Some(project_id)) = repository.find_session_project_id(*session_id) else {
+            continue;
+        };
+        let _ = app_handle.emit(
+            AGENT_SESSION_LIST_CHANGED_EVENT,
+            AgentSessionListChangedPayload {
+                project_id,
+                session_id: Some(*session_id),
+                reason: "tui_processing_duration",
+            },
+        );
     }
 }
 

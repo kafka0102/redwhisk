@@ -25,7 +25,7 @@ pub struct CodexSessionSummary {
     pub turns: Vec<CodexSessionTurn>,
     /// 线程累计 Token 用量；无 `token_count` 时为 `None`。
     pub token_usage: Option<SessionTokenUsage>,
-    /// 各 turn `duration_ms` 之和。
+    /// 已完成 turn 的 `duration_ms` 之和。进行中 turn 不计入这份快照。
     pub processing_ms: u64,
 }
 
@@ -152,10 +152,16 @@ impl CodexSessionLogTail {
         self.builder.token_usage
     }
 
-    /// 当前累计执行时长（各 turn `duration_ms` 之和）。
+    /// 当前累计执行时长：已完成 turn 的 `duration_ms` 之和，加上进行中 turn
+    /// 自 `task_started.started_at` 到现在的墙钟。没有进行中 turn 时与已完成之和相同。
     pub(crate) fn processing_ms(&self) -> u64 {
-        self.builder.processing_ms()
+        self.builder.processing_ms_at(unix_now_ms())
     }
+}
+
+struct OpenTurn {
+    turn_id: String,
+    started_at_ms: u64,
 }
 
 #[derive(Default)]
@@ -163,6 +169,8 @@ struct SessionSummaryBuilder {
     turns: Vec<CodexSessionTurn>,
     index_by_turn_id: HashMap<String, usize>,
     token_usage: Option<SessionTokenUsage>,
+    /// 已见到 `task_started`、尚未被带时长的 `task_complete` 封口的 turn。
+    open_turn: Option<OpenTurn>,
 }
 
 impl SessionSummaryBuilder {
@@ -184,10 +192,40 @@ impl SessionSummaryBuilder {
 
         match payload.get("type").and_then(Value::as_str) {
             Some("item_completed") => self.ingest_item(payload),
+            Some("task_started") => self.ingest_task_started(payload),
             Some("task_complete") => self.ingest_task_complete(payload),
             Some("token_count") => self.ingest_token_count(payload),
             _ => {}
         }
+    }
+
+    fn ingest_task_started(&mut self, payload: &Value) {
+        let Some(turn_id) = payload.get("turn_id").and_then(Value::as_str) else {
+            return;
+        };
+        let Some(started_at_ms) = payload.get("started_at").and_then(unix_timestamp_ms) else {
+            return;
+        };
+        // 同一 turn 的重复 task_started 不重置起点，避免进行中时长回跳。
+        if self
+            .open_turn
+            .as_ref()
+            .is_some_and(|open| open.turn_id == turn_id)
+        {
+            return;
+        }
+        // 上一个 turn 没有 task_complete 就被新 turn 取代时，用新起点封口。
+        if let Some(previous) = self.open_turn.take() {
+            let elapsed = started_at_ms.saturating_sub(previous.started_at_ms);
+            let turn = self.ensure_turn(&previous.turn_id);
+            if turn.duration_ms.is_none() {
+                turn.duration_ms = Some(elapsed);
+            }
+        }
+        self.open_turn = Some(OpenTurn {
+            turn_id: turn_id.to_string(),
+            started_at_ms,
+        });
     }
 
     fn ingest_item(&mut self, payload: &Value) {
@@ -226,6 +264,14 @@ impl SessionSummaryBuilder {
             .filter(|message| !message.is_empty())
             .map(str::to_string);
 
+        if duration_ms.is_some()
+            && self
+                .open_turn
+                .as_ref()
+                .is_some_and(|open| open.turn_id == turn_id)
+        {
+            self.open_turn = None;
+        }
         let turn = self.ensure_turn(turn_id);
         if duration_ms.is_some() {
             turn.duration_ms = duration_ms;
@@ -276,7 +322,22 @@ impl SessionSummaryBuilder {
     }
 
     fn processing_ms(&self) -> u64 {
+        self.completed_processing_ms()
+    }
+
+    fn completed_processing_ms(&self) -> u64 {
         self.turns.iter().filter_map(|turn| turn.duration_ms).sum()
+    }
+
+    /// 已完成时长，加上进行中 turn 到 `now_ms` 的墙钟。turn 之间的等待不计入。
+    fn processing_ms_at(&self, now_ms: u64) -> u64 {
+        let open_elapsed_ms = self
+            .open_turn
+            .as_ref()
+            .map(|open| now_ms.saturating_sub(open.started_at_ms))
+            .unwrap_or(0);
+        self.completed_processing_ms()
+            .saturating_add(open_elapsed_ms)
     }
 }
 
@@ -295,6 +356,25 @@ fn collect_text_content(item: &Value) -> String {
         })
         .filter_map(|entry| entry.get("text").and_then(Value::as_str))
         .collect()
+}
+
+fn unix_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
+}
+
+/// Codex rollout 的 `started_at` / `completed_at` 是 unix 秒。大于等于 1e12 视为毫秒。
+fn unix_timestamp_ms(value: &Value) -> Option<u64> {
+    let raw = json_f64(value)?;
+    if !raw.is_finite() || raw < 0.0 {
+        return None;
+    }
+    if raw >= 1_000_000_000_000.0 {
+        return Some(raw.round() as u64);
+    }
+    Some((raw * 1000.0).round() as u64)
 }
 
 fn timestamp_duration_ms(payload: &Value) -> Option<u64> {

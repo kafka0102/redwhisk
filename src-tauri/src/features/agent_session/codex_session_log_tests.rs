@@ -20,7 +20,7 @@ fn reads_turns_usage_and_duration_from_matching_rollout() {
             item_completed_line("AgentMessage", "turn-1", "Text", "中间旁白"),
             item_completed_line("AgentMessage", "turn-1", "Text", "第一轮结论"),
             token_count_line(1_500, 400, 50, 300, 80),
-            task_complete_line("turn-1", Some(41_989), None, Some("第一轮结论")),
+            task_complete_line("turn-1", Some(41_989), None, Some("turn one")),
             item_completed_line("UserMessage", "turn-2", "text", "第二个问题"),
             item_completed_line("AgentMessage", "turn-2", "Text", "第二轮结论"),
             token_count_line(3_000, 800, 50, 600, 100),
@@ -212,6 +212,56 @@ fn returns_none_when_file_holds_no_recognizable_event() {
 }
 
 #[test]
+fn adds_open_turn_elapsed_on_top_of_completed_duration() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let codex_home = temp_dir.path();
+    let rollout = sessions_rollout_path(codex_home, SESSION_ID);
+    // 复现 issue-1038：已完成 turn 的 duration_ms 约 3 分钟，后续 turn 只有 task_started。
+    let open_started_at = unix_now_secs().saturating_sub(3_600);
+    write_file(
+        &rollout,
+        &[
+            session_meta_line(SESSION_ID),
+            task_complete_line("turn-1", Some(178_873), None, Some("turn one")),
+            task_started_line("turn-2", open_started_at),
+        ],
+    );
+
+    let mut tail = CodexSessionLogTail::new();
+    tail.poll(codex_home, SESSION_ID);
+    let processing_ms = tail.processing_ms();
+    let open_elapsed_ms = unix_now_ms().saturating_sub(open_started_at.saturating_mul(1_000));
+    let expected = 178_873 + open_elapsed_ms;
+    assert!(
+        processing_ms + 2_000 >= expected && processing_ms <= expected + 2_000,
+        "processing_ms={processing_ms} expected≈{expected}"
+    );
+    // 一次性摘要仍只累计已完成 turn，避免历史读取绑到读取时刻的墙钟。
+    let summary = read_codex_session_summary_from_path(&rollout).expect("summary");
+    assert_eq!(summary.processing_ms, 178_873);
+}
+
+#[test]
+fn stops_open_turn_when_task_complete_has_duration() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let codex_home = temp_dir.path();
+    let rollout = sessions_rollout_path(codex_home, SESSION_ID);
+    let open_started_at = unix_now_secs().saturating_sub(3_600);
+    write_file(
+        &rollout,
+        &[
+            session_meta_line(SESSION_ID),
+            task_started_line("turn-1", open_started_at),
+            task_complete_line("turn-1", Some(2_500), None, Some("done")),
+        ],
+    );
+
+    let mut tail = CodexSessionLogTail::new();
+    tail.poll(codex_home, SESSION_ID);
+    assert_eq!(tail.processing_ms(), 2_500);
+}
+
+#[test]
 fn keeps_turns_when_task_complete_and_token_count_are_absent() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let path = temp_dir.path().join("partial.jsonl");
@@ -366,6 +416,32 @@ fn token_count_line(
             },
         },
     }))
+}
+
+fn task_started_line(turn_id: &str, started_at_secs: u64) -> String {
+    line(json!({
+        "timestamp": "2026-09-27T10:04:21.000Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "task_started",
+            "turn_id": turn_id,
+            "started_at": started_at_secs,
+        },
+    }))
+}
+
+fn unix_now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
+}
+
+fn unix_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn task_complete_line(

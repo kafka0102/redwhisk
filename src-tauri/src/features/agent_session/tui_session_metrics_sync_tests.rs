@@ -127,6 +127,44 @@ fn accumulates_metrics_across_ticks_and_waits_for_complete_lines() {
 }
 
 #[test]
+fn keeps_growing_open_turn_after_completed_duration() {
+    let connection = setup();
+    insert_session(&connection, 506, "tui", 101, Some(SESSION_ID));
+    let codex_home = tempfile::tempdir().expect("temp dir");
+    let open_started_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs()
+        .saturating_sub(3_600);
+    write_rollout(
+        &rollout_path(codex_home.path(), SESSION_ID),
+        &[
+            task_complete("turn-1", 178_873, "turn one"),
+            task_started("turn-2", open_started_at),
+        ],
+    );
+
+    let repository = AgentSessionRepository::new(&connection);
+    let mut sync = TuiSessionMetricsSync::new();
+    let first_changed = sync.sync_once(&repository, Some(codex_home.path()));
+    let first = read_metrics(&connection, 506).3;
+    assert_eq!(first_changed, vec![506]);
+    assert!(
+        first > 178_873 + 3_000_000,
+        "open turn elapsed missing: {first}"
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    let second_changed = sync.sync_once(&repository, Some(codex_home.path()));
+    let second = read_metrics(&connection, 506).3;
+    assert_eq!(second_changed, vec![506]);
+    assert!(
+        second >= first + 20,
+        "duration did not grow: {first} -> {second}"
+    );
+}
+
+#[test]
 fn silently_skips_when_no_session_log_matches() {
     let connection = setup();
     insert_session(&connection, 505, "tui", 101, Some("missing-session-id"));
@@ -268,6 +306,18 @@ fn token_count(
                     "reasoning_output_tokens": reasoning_output_tokens,
                 },
             },
+        },
+    }))
+}
+
+fn task_started(turn_id: &str, started_at_secs: u64) -> String {
+    line(json!({
+        "timestamp": "2026-09-27T10:04:21.000Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "task_started",
+            "turn_id": turn_id,
+            "started_at": started_at_secs,
         },
     }))
 }

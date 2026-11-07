@@ -34,16 +34,17 @@ impl TuiSessionMetricsSync {
     }
 
     /// 推进一轮增量同步；定位 / 解析 / IO 失败静默跳过，不中断调用方。
+    /// 返回本轮执行时长实际变大的 session id，供调用方刷新详情。
     pub(crate) fn sync_once(
         &mut self,
         repository: &AgentSessionRepository<'_>,
         codex_home: Option<&Path>,
-    ) {
+    ) -> Vec<i64> {
         let Some(codex_home) = codex_home else {
-            return;
+            return Vec::new();
         };
         let Ok(sessions) = repository.list_running_tui_sessions() else {
-            return;
+            return Vec::new();
         };
 
         // 只保留仍在运行集合中的游标，避免已结束会话的内存游标无限增长。
@@ -53,6 +54,7 @@ impl TuiSessionMetricsSync {
                 .any(|session| session.session_id == *session_id)
         });
 
+        let mut duration_changed = Vec::new();
         for session in sessions {
             // 本期只覆盖 Codex；其它 Agent 的 TUI 用量保持既有行为（横线 / 墙钟差）。
             if session.agent_type != AgentType::Codex {
@@ -67,14 +69,18 @@ impl TuiSessionMetricsSync {
                     written_processing_ms: 0,
                 });
             cursor.tail.poll(codex_home, &session.provider_session_id);
-            cursor.write_metrics(repository, session.session_id);
+            if cursor.write_metrics(repository, session.session_id) {
+                duration_changed.push(session.session_id);
+            }
         }
+        duration_changed
     }
 }
 
 impl SessionCursor {
     /// 把当前累计值按变化覆盖写入 Session，并前移已写基线（值未变则不重复写库）。
-    fn write_metrics(&mut self, repository: &AgentSessionRepository<'_>, session_id: i64) {
+    /// 执行时长变大并写库成功时返回 true。
+    fn write_metrics(&mut self, repository: &AgentSessionRepository<'_>, session_id: i64) -> bool {
         // 线程累计用量按「有则覆盖」写入，不累加；值未变时不重复写库。
         let token_usage = self.tail.token_usage();
         if token_usage != self.written_token_usage {
@@ -93,16 +99,20 @@ impl SessionCursor {
             }
         }
 
-        // 执行时长取 session log 各 turn 处理耗时之和（单调不减）；0 不回写以保留墙钟回退。
+        // 已完成 turn 的 duration_ms 之和，加上进行中 turn 到现在的墙钟。
+        // 只在变大时覆盖，避免墙钟回拨把已展示时长改小；0 不回写以保留墙钟回退。
         let processing_ms = self.tail.processing_ms();
-        if processing_ms > 0 && processing_ms != self.written_processing_ms {
+        let mut duration_changed = false;
+        if processing_ms > self.written_processing_ms {
             if repository
                 .overwrite_tui_processing_ms(session_id, to_i64(processing_ms))
                 .is_ok()
             {
                 self.written_processing_ms = processing_ms;
+                duration_changed = true;
             }
         }
+        duration_changed
     }
 }
 

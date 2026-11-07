@@ -12,7 +12,7 @@ ADR-0039 §4 规定 TUI 无结构化用量时「Session Token 消耗」留空、
 
 1. **分派条件**：仅对 `display_mode=tui`、`agent_type=codex`、已捕获 `provider_session_id` 的运行中会话同步；其余（含所有 `json`、其它 Agent 的 TUI）严格保持既有行为。
 2. **事实源与解析复用**：复用 `codex_session_log` 的定位规则（`sessions/**` 与 `profiles/*/sessions/**`）与规范化口径，不重写解析、不引入第二个数据源、不新增 DB 列 / Tauri command / event / 错误码。
-3. **写入口径**：`token_input` / `token_output` / `token_cache` 取自线程累计 `total_token_usage`，按「有则覆盖」写入（不累加）；`processing_ms` 取各 turn `duration_ms` 之和，覆盖写、单调不减。三项均复用 ADR-0039 的统一口径。
+3. **写入口径**：`token_input` / `token_output` / `token_cache` 取自线程累计 `total_token_usage`，按「有则覆盖」写入（不累加）；`processing_ms` 取已完成 turn 的 `duration_ms` 之和，再加上进行中 turn 从 `task_started.started_at` 到当前的墙钟（与 Codex 写入 `duration_ms` 的墙钟口径一致，含睡眠，不含 turn 之间的等待）。覆盖写、只升不降。进行中时长每跳心跳都会变，但 TUI 没有结构化流事件，因此时长变大时发出既有 `agent-session-list-changed`，详情才能跟着刷新。三项均复用 ADR-0039 的统一口径。
 4. **增量与幂等**：心跳在内存按会话维护字节偏移，只解析新增的完整行（末尾不完整行留待下个 tick）；进程重启后从零重读一次即可，累计值可幂等重建，避免整文件重读。
 5. **按 `display_mode` 互斥**：`processing_ms` 的写入责任两分——既有活跃时长心跳只累加 `json`（且 `is_turn_running=1`），session log 同步只覆盖 `tui`（SQL 层 `display_mode='tui'` 守卫）；TUI 无结构化 Turn 事件，两条路径不互相覆盖。
 6. **失败静默降级**：定位失败 / 文件缺失 / 解析失败 / IO 或编码错误一律静默跳过，不中断后台心跳线程、不产生用户可见报错。
@@ -21,7 +21,7 @@ ADR-0039 §4 规定 TUI 无结构化用量时「Session Token 消耗」留空、
 
 ## 后果
 
-- Codex TUI 会话在运行期即可看到与 `json` 同口径的 Token 消耗与执行时长，并随 session log 增长；应用重启后保持同一数值。
+- Codex TUI 会话在运行期即可看到与 `json` 同口径的 Token 消耗与执行时长。已完成 turn 用 session log 的 `duration_ms`；进行中 turn 从 `task_started` 起随心跳增长，不等 `task_complete`。应用重启后从 session log 重读，进行中 turn 按当前墙钟重算。
 - 依赖 Codex 本机 session log 这一非官方稳定接口（官方明确 transcript 格式可能变化）。缓解：解析器幂等、可整体降级、失败静默，且 `json` 与其它 Agent 不受影响。
 - 其它 Agent（Claude / OpenCode / Grok）的 TUI 会话仍留空用量、回退墙钟差，属本期已知边界。
 
@@ -33,6 +33,7 @@ ADR-0039 §4 规定 TUI 无结构化用量时「Session Token 消耗」留空、
 | 代码侧把 `total_token_usage` 再累加一遍 | `total` 已是线程累计快照，再加会重复计数；按「有则覆盖」写入才正确 |
 | 为 TUI 伪造 Turn 事件或做 ANSI 用量启发 | ADR-0022 已判定该路径易碎，传输能力边界改为进程级 |
 | 为 TUI 新增专用 DB 列 / 命令 | 复用既有 `processing_ms` 与 token 三列即可，无需扩表或扩契约 |
+| 只累加已完成 turn 的 `duration_ms` | 长 turn 在 `task_complete` 之前时长停住；ADR-0043 已否定「运行中不含进行中的 Turn」 |
 
 ## 代码事实来源
 
