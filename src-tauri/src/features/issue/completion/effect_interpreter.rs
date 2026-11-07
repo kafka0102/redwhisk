@@ -234,6 +234,7 @@ impl<'connection> CompletionFlow<'_, 'connection> {
                         new_state.dirty_already_skipped(),
                     )?;
                     completed_issue = Some(completed);
+                    self.write_back_completion(ctx, &new_state)?;
                 }
             }
         }

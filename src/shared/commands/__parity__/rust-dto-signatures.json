@@ -759,7 +759,9 @@
     "IssueDetailRecord": {
       "fields": {
         "linkedChangeRequest": "required",
-        "projection": "required"
+        "projection": "required",
+        "writebackError": "required",
+        "writebackPending": "required"
       }
     },
     "IssueLabelRecord": {
@@ -1438,6 +1440,12 @@
       "fields": {
         "sessionId": "required",
         "threadId": "required"
+      }
+    },
+    "RetryIssueCompletionWritebackInput": {
+      "fields": {
+        "issueId": "required",
+        "projectId": "required"
       }
     },
     "SaveAgentAttachmentInput": {

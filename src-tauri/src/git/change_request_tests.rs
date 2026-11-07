@@ -5,8 +5,8 @@ use std::path::Path;
 use tempfile::tempdir;
 
 use super::{
-    first_http_url, glab_create, is_forge_auth_failure, parse_github_pr_view, parse_gitlab_mr_view,
-    ChangeRequestInput,
+    first_http_url, glab_create, is_forge_auth_failure, link_existing_or_create,
+    parse_github_pr_view, parse_gitlab_mr_view, ChangeRequestInput,
 };
 use crate::git::command::with_interactive_path;
 use crate::git::forge::ForgeHost;
@@ -119,6 +119,21 @@ fn classifies_auth_failures_only() {
     assert!(!is_forge_auth_failure(
         "fatal: unable to access remote: Could not resolve host"
     ));
+}
+
+#[test]
+fn existing_open_pull_request_is_linked_without_a_second_create() {
+    let mut created = 0;
+    let url = link_existing_or_create(
+        Some("https://github.com/acme/redwhisk/pull/9".to_string()),
+        || {
+            created += 1;
+            Ok("https://github.com/acme/redwhisk/pull/10".to_string())
+        },
+    )
+    .expect("link");
+    assert_eq!(url, "https://github.com/acme/redwhisk/pull/9");
+    assert_eq!(created, 0);
 }
 
 fn write_fake_cli(dir: &Path, name: &str, body: &str) -> std::path::PathBuf {

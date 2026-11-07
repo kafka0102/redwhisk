@@ -8,12 +8,14 @@ mod port;
 mod sync;
 
 pub(crate) use cli::ProjectIssueForge;
+pub(crate) use cli::{close_remote_issue, comment_remote_issue};
+pub(crate) use port::RemoteIssueState;
 pub(crate) use port::{ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteIssue};
 
 #[cfg(test)]
 pub(crate) use behavior::support::{ready_github_project, seed_remote_issue, set_auth, set_mode};
 #[cfg(test)]
-pub(crate) use port::{open_issue, FixedForge, RemoteIssueState};
+pub(crate) use port::{open_issue, FixedForge};
 #[cfg(test)]
 pub(crate) use sync::sync_project_issues;
 

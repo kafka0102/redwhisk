@@ -28,10 +28,23 @@ export interface LinkedChangeRequestSummary {
 export interface IssueDetailRecord {
   projection: IssueDetailProjection | null;
   linkedChangeRequest: LinkedChangeRequestSummary | null;
+  writebackPending: boolean;
+  writebackError: string | null;
+}
+
+export interface RetryIssueCompletionWritebackInput {
+  projectId: number;
+  issueId: number;
 }
 
 export function getIssueDetail(
   input: GetIssueDetailInput,
 ): Promise<IssueDetailRecord> {
   return invokeCommand<IssueDetailRecord>("get_issue_detail", { input });
+}
+
+export function retryIssueCompletionWriteback(
+  input: RetryIssueCompletionWritebackInput,
+): Promise<void> {
+  return invokeCommand<void>("retry_issue_completion_writeback", { input });
 }

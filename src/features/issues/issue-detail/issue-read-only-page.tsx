@@ -25,6 +25,7 @@ import { IssueDescriptionMarkdown } from "./issue-detail-description";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
   getIssueDetail,
+  retryIssueCompletionWriteback,
   type IssueDetailRecord,
 } from "./issue-detail-commands";
 import { IssueDetailHeading } from "./issue-detail-heading";
@@ -193,11 +194,32 @@ export function IssueReadOnlyPage({
         </div>
         <IssueDetailSideCards
           canOpenSession={hasLinkedSession && canOpenAgentsActivity}
+          issueStatus={selectedIssue?.status ?? null}
           linkedChangeRequest={activeDetail?.linkedChangeRequest ?? null}
           linkedSessionId={linkedSessionId}
           projectId={projectId}
           projection={activeDetail?.projection ?? null}
+          writebackError={activeDetail?.writebackError ?? null}
+          writebackPending={activeDetail?.writebackPending ?? false}
           onOpenSession={onOpenLinkedSession}
+          onRetryWriteback={() => {
+            if (selectedIssue == null) {
+              return;
+            }
+            const issueId = selectedIssue.id;
+            const requestProjectId = selectedIssue.projectId;
+            void retryIssueCompletionWriteback({
+              issueId,
+              projectId: requestProjectId,
+            }).then(() =>
+              getIssueDetail({ issueId, projectId: requestProjectId }).then(
+                (next) => {
+                  setDetail(next);
+                  setDetailIssueId(issueId);
+                },
+              ),
+            );
+          }}
         />
       </div>
 

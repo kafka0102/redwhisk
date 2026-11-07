@@ -37,6 +37,7 @@ completion_attempts 保留历史完成尝试审计。
 | `issue_remote_comments`                 | 远程评论                 | `(issue_id, remote_comment_id)` 唯一。不写入 `issue_comments`，不进入本地评论唯一键 |
 | `issue_remote_events`                   | 远程系统事件             | `(issue_id, remote_event_id)` 唯一。不写入 `issue_actions`，也不进入本地评论唯一键 |
 | `issue_completion_flows`                | 完成流程状态             | 每 Issue 最多一条；phase 见状态机                                                            |
+| `issue_completion_writebacks`           | 完成写回幂等与待写回     | 每 Issue 一条。`completion_method` 为 `merge_to_base` 或 `open_pull_request`。失败把 `error_code` 留下，不改 `issues.status`。成功关闭或评论后不重复执行 |
 | `agent_profiles`                        | provider 配置            | `agent_type` 为 `codex` 或 `claude`；scope 为 `project` 或 `global`；软删除                  |
 | `issue_attachments`                     | Issue 落盘附件元数据     | 路径、种类、大小和 preview 能力；Issue 删除级联                                              |
 | `project_labels` / `saved_agent_skills` | 设置域                   | scope + 可选 `project_id`；label 不再关联 agent profile                                      |
@@ -60,5 +61,6 @@ completion_attempts 保留历史完成尝试审计。
 6. `0060_project_issue_source_settings` 给已有项目和 Issue 补默认来源，并新建 `project_forge_connections`。不修改已发布 migration。
 7. `0061_issue_external_refs` 只新增项目同步水位、最后错误和 `issue_external_refs`。不修改 `0060`，也不回写已有 Issue 的标题、状态、`del` 或 `source`。
 8. `0062_issue_remote_comments` 新增 `issue_remote_comments` 与 `issue_remote_events`。两表都不进入本地 `issue_comments` 的唯一键。重复的远程 id 不新增第二行，失败写入不清空已有行。
+9. `0063_issue_completion_writeback` 新增 `issue_completion_writebacks`。不修改已发布 migration，也不回滚已经成立的本地完成。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

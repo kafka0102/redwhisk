@@ -9,6 +9,7 @@ pub mod issue_comment_repository;
 pub mod issue_completion_flow_repository;
 pub mod issue_external_ref_repository;
 mod issue_remote_comments_migration;
+mod issue_completion_writeback_migration;
 pub mod issue_repository;
 pub mod migrations;
 pub mod project_issue_source_repository;

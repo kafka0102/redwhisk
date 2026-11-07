@@ -29,7 +29,10 @@ import {
   updateIssue,
 } from "../issue-commands";
 import type { IssueRecord } from "../issue-commands";
-import { getIssueDetail } from "./issue-detail-commands";
+import {
+  getIssueDetail,
+  retryIssueCompletionWriteback,
+} from "./issue-detail-commands";
 import {
   getIssueSyncStatus,
   syncProjectIssues,
@@ -55,6 +58,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 vi.mock("./issue-detail-commands", () => ({
   getIssueDetail: vi.fn(),
+  retryIssueCompletionWriteback: vi.fn(),
 }));
 
 vi.mock("../issue-commands", async (importOriginal) => {
@@ -163,6 +167,8 @@ interface DetailChangeRequest {
 interface DetailResponse {
   projection: DetailProjection | null;
   linkedChangeRequest: DetailChangeRequest | null;
+  writebackPending?: boolean;
+  writebackError?: string | null;
 }
 
 const bugLabel = {
@@ -314,7 +320,12 @@ function renderBoard(issue: IssueBoardRecord, detail: DetailResponse): void {
             }),
           ],
   });
-  getIssueDetailMock.mockResolvedValue(detail);
+  getIssueDetailMock.mockResolvedValue({
+    linkedChangeRequest: detail.linkedChangeRequest,
+    projection: detail.projection,
+    writebackError: detail.writebackError ?? null,
+    writebackPending: detail.writebackPending ?? false,
+  });
   render(
     <I18nProvider fixedLocale="zh">
       <IssuesActivity projectId={1} onOpenAgentsActivity={vi.fn()} />
@@ -1368,6 +1379,49 @@ describe("Issue 详情按状态与来源", () => {
     expect(chip.closest(".issue-label-chip")).toHaveStyle({
       backgroundColor: "#E11D48",
     });
+  });
+
+  it("已完成且关联 PR 为 open 时详情显示 PR 待合并，远端不是 closed", async () => {
+    const issue = boardIssue({
+      id: 70,
+      status: "completed",
+      source: "remote",
+      provider: "github",
+      externalNumber: 70,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ remoteState: "open" }),
+      linkedChangeRequest: changeRequest({ state: "open" }),
+    });
+    const host = within(root).getByRole("region", { name: "GitHub" });
+    expect(within(host).getByText("PR 待合并")).toBeInTheDocument();
+    expect(within(host).queryByText("closed")).toBeNull();
+  });
+
+  it("写回失败时详情显示待写回，并可重试", async () => {
+    const user = userEvent.setup();
+    const retry = vi.mocked(retryIssueCompletionWriteback);
+    retry.mockResolvedValue(undefined);
+    const issue = boardIssue({
+      id: 71,
+      status: "completed",
+      source: "remote",
+      provider: "github",
+      externalNumber: 71,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ remoteState: "open" }),
+      linkedChangeRequest: null,
+      writebackPending: true,
+      writebackError: "writebackOffline",
+    });
+    const host = within(root).getByRole("region", { name: "GitHub" });
+    expect(within(host).getByText("待写回")).toBeInTheDocument();
+    expect(
+      within(host).getByText("网络不可用，完成写回失败。"),
+    ).toBeInTheDocument();
+    await user.click(within(host).getByRole("button", { name: "重试写回" }));
+    expect(retry).toHaveBeenCalledWith({ issueId: 71, projectId: 1 });
   });
 });
 

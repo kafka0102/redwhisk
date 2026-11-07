@@ -23,14 +23,22 @@ pub struct ChangeRequestInput<'a> {
 pub fn publish_change_request(input: ChangeRequestInput<'_>) -> Result<String, String> {
     run_git(input.repo_path, &["push", "-u", "origin", "HEAD"])
         .map_err(|error| error.to_string())?;
-    if let Some(url) = find_open_change_request(input.repo_path, input.host, input.head) {
-        return Ok(url);
-    }
-    match input.host {
+    let existing = find_open_change_request(input.repo_path, input.host, input.head);
+    link_existing_or_create(existing, || match input.host {
         ForgeHost::Github => gh_create(input),
         ForgeHost::Gitlab => glab_create(input),
         ForgeHost::None => Err("GitHub or GitLab remote was not recognized.".to_string()),
+    })
+}
+
+pub fn link_existing_or_create(
+    existing: Option<String>,
+    create: impl FnOnce() -> Result<String, String>,
+) -> Result<String, String> {
+    if let Some(url) = existing.filter(|url| !url.trim().is_empty()) {
+        return Ok(url);
     }
+    create()
 }
 
 pub fn current_branch_name(repo_path: &Path) -> Option<String> {

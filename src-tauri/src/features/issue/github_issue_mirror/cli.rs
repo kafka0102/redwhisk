@@ -34,6 +34,63 @@ impl ProjectIssueForge {
     }
 }
 
+pub(crate) fn close_remote_issue(
+    provider: &str,
+    repo_dir: &std::path::Path,
+    number: i64,
+) -> Result<(), ForgeIssueError> {
+    let (program, args) = if provider == "gitlab" {
+        (
+            "glab",
+            vec!["issue".to_string(), "close".to_string(), number.to_string()],
+        )
+    } else {
+        (
+            "gh",
+            vec![
+                "issue".to_string(),
+                "close".to_string(),
+                number.to_string(),
+                "--reason".to_string(),
+                "completed".to_string(),
+            ],
+        )
+    };
+    super::forge_process::capture_forge_stdout(program, &args, repo_dir).map(|_| ())
+}
+
+pub(crate) fn comment_remote_issue(
+    provider: &str,
+    repo_dir: &std::path::Path,
+    number: i64,
+    body: &str,
+) -> Result<(), ForgeIssueError> {
+    let (program, args) = if provider == "gitlab" {
+        (
+            "glab",
+            vec![
+                "issue".to_string(),
+                "note".to_string(),
+                number.to_string(),
+                "-m".to_string(),
+                body.to_string(),
+            ],
+        )
+    } else {
+        (
+            "gh",
+            vec![
+                "issue".to_string(),
+                "comment".to_string(),
+                number.to_string(),
+                "--body".to_string(),
+                body.to_string(),
+            ],
+        )
+    };
+    super::forge_process::capture_forge_stdout(program, &args, repo_dir).map(|_| ())
+}
+
 impl ForgeIssuePort for ProjectIssueForge {
     fn list_issues(
         &self,

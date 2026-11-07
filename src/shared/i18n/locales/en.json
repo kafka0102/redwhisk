@@ -472,6 +472,9 @@
     "assigneeEmpty": "Unassigned",
     "detailRepo": "Repository",
     "detailRemoteState": "Remote state",
+    "pullRequestPendingMerge": "PR pending merge",
+    "retryWriteback": "Retry write-back",
+    "writebackPending": "Write-back pending",
     "detailAuthor": "Author",
     "detailAssignees": "Assignees",
     "workflowSkill": "Workflow skill",
@@ -1080,6 +1083,8 @@
       "statusUpdateFailed": "Failed to update Issue status.",
       "summaryParseFailed": "Failed to parse Issue Summary.",
       "summaryReadFailed": "Failed to read Issue summary.",
+      "writebackRetryFailed": "Failed to retry completion write-back.",
+      "writebackSaveFailed": "Failed to save completion write-back.",
       "worktreeDeleteFailed": "Failed to delete Worktree.",
       "worktreeStatusQueryFailed": "Failed to query Worktree status."
     },
@@ -1132,7 +1137,11 @@
       "remoteCreateInvalid": "The remote issue response could not be read.",
       "remoteCreateOffline": "Remote issue creation failed because the network is unavailable.",
       "remoteCreateUnauthenticated": "Sign in to GitHub or GitLab before creating a remote issue.",
-      "remoteCreateUnavailable": "Remote issue creation is unavailable."
+      "remoteCreateUnavailable": "Remote issue creation is unavailable.",
+      "writebackForbidden": "You do not have permission to update this remote issue.",
+      "writebackOffline": "Completion write-back failed because the network is unavailable.",
+      "writebackUnauthenticated": "Sign in to GitHub or GitLab before writing back the completed issue.",
+      "writebackUnavailable": "Completion write-back is unavailable."
     },
     "PROJECT_NOT_FOUND": {
       "default": "Project not found."

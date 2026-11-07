@@ -6,6 +6,7 @@ use crate::types::issue_detail::{
 };
 
 use super::archive::open_issue_database;
+use super::completion::writeback_store::detail_writeback;
 use super::validation::{issue_database_error, issue_not_found};
 
 pub(crate) fn read_issue_detail_in_data_dir(
@@ -64,9 +65,13 @@ pub(crate) fn read_issue_detail(
         .map_err(issue_database_error)?
         .map(linked_change_request_from_url);
 
+    let (writeback_pending, writeback_error) = detail_writeback(connection, input.issue_id)?;
+
     Ok(IssueDetailRecord {
         projection,
         linked_change_request,
+        writeback_pending,
+        writeback_error,
     })
 }
 

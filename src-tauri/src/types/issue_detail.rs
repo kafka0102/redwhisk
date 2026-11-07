@@ -7,11 +7,20 @@ pub struct GetIssueDetailInput {
     pub issue_id: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetryIssueCompletionWritebackInput {
+    pub project_id: i64,
+    pub issue_id: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IssueDetailRecord {
     pub projection: Option<IssueDetailProjection>,
     pub linked_change_request: Option<LinkedChangeRequestSummary>,
+    pub writeback_pending: bool,
+    pub writeback_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

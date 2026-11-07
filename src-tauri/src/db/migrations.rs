@@ -208,7 +208,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at TEXT NOT NULL
 );
 "#;
-
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MigrationStatus {
@@ -534,6 +533,7 @@ fn default_migrations() -> Vec<Migration> {
         Migration { version: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_VERSION, sql: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_SQL },
         Migration { version: ISSUE_EXTERNAL_REFS_MIGRATION_VERSION, sql: ISSUE_EXTERNAL_REFS_MIGRATION_SQL },
         Migration { version: super::issue_remote_comments_migration::VERSION, sql: super::issue_remote_comments_migration::SQL },
+        Migration { version: super::issue_completion_writeback_migration::VERSION, sql: super::issue_completion_writeback_migration::SQL },
     ]
 }
 

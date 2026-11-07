@@ -25,6 +25,7 @@ use crate::types::issue::{
 };
 use crate::types::issue_completion::{CompleteIssueFlowInput, CompleteIssueFlowResult};
 use crate::types::issue_detail::{GetIssueDetailInput, IssueDetailRecord};
+use crate::types::issue_detail::RetryIssueCompletionWritebackInput;
 use crate::types::issue_mirror::{
     IssueSyncChangedEvent, IssueSyncOutcome, IssueSyncResult, IssueSyncStatus,
     ISSUE_SYNC_CHANGED_EVENT,
@@ -565,6 +566,30 @@ pub async fn get_issue_detail(
             .with_reason("detailReadFailed")
             .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
         })?
+}
+
+#[tauri::command]
+pub async fn retry_issue_completion_writeback(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: RetryIssueCompletionWritebackInput,
+) -> Result<(), CommandError> {
+    let data_dir = prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        super::completion::writeback_store::retry_issue_completion_writeback_in_data_dir(
+            &data_dir,
+            input,
+        )
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to retry completion write-back.",
+        )
+        .with_reason("writebackRetryFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]

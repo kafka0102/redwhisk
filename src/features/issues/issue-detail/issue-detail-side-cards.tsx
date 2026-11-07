@@ -40,6 +40,10 @@ export function IssueDetailSideCards({
   projectId,
   canOpenSession,
   onOpenSession,
+  issueStatus,
+  writebackPending,
+  writebackError,
+  onRetryWriteback,
 }: {
   projection: IssueDetailProjection | null;
   linkedChangeRequest: LinkedChangeRequestSummary | null;
@@ -47,15 +51,34 @@ export function IssueDetailSideCards({
   projectId: number;
   canOpenSession: boolean;
   onOpenSession: () => void;
+  issueStatus: string | null;
+  writebackPending: boolean;
+  writebackError: string | null;
+  onRetryWriteback: () => void;
 }): JSX.Element | null {
   const { messages } = useI18n();
   const hasSession = linkedSessionId != null;
   if (projection == null && linkedChangeRequest == null && !hasSession) {
     return null;
   }
+  const pendingMerge =
+    issueStatus === "completed" &&
+    projection != null &&
+    projection.remoteState !== "closed" &&
+    linkedChangeRequest != null &&
+    (linkedChangeRequest.state == null ||
+      linkedChangeRequest.state.toLowerCase() === "open");
   return (
     <div className="issue-page__side issue-page__side--readonly">
-      {projection != null ? <IssueHostCard projection={projection} /> : null}
+      {projection != null ? (
+        <IssueHostCard
+          pendingMerge={pendingMerge}
+          projection={projection}
+          writebackError={writebackError}
+          writebackPending={writebackPending}
+          onRetryWriteback={onRetryWriteback}
+        />
+      ) : null}
       {linkedChangeRequest != null ? (
         <IssueLinkedChangeRequestCard
           provider={projection?.provider ?? null}
@@ -81,8 +104,16 @@ export function IssueDetailSideCards({
 
 function IssueHostCard({
   projection,
+  pendingMerge,
+  writebackPending,
+  writebackError,
+  onRetryWriteback,
 }: {
   projection: IssueDetailProjection;
+  pendingMerge: boolean;
+  writebackPending: boolean;
+  writebackError: string | null;
+  onRetryWriteback: () => void;
 }): JSX.Element {
   const { t } = useI18n();
   const hostName = projection.provider === "gitlab" ? "GitLab" : "GitHub";
@@ -113,12 +144,32 @@ function IssueHostCard({
         <div>
           <dt>{t("issues.detailRemoteState")}</dt>
           <dd>
-            {remoteStateLabel(
-              projection.remoteState,
-              t("issues.remoteStateUnavailable"),
-            )}
+            {pendingMerge
+              ? t("issues.pullRequestPendingMerge")
+              : remoteStateLabel(
+                  projection.remoteState,
+                  t("issues.remoteStateUnavailable"),
+                )}
           </dd>
         </div>
+        {writebackPending ? (
+          <div>
+            <dt>{t("issues.writebackPending")}</dt>
+            <dd>
+              {writebackError == null
+                ? t("issues.writebackPending")
+                : t(`errors.FORGE_UNAVAILABLE.${writebackError}`)}
+            </dd>
+            <Button
+              size="sm"
+              type="button"
+              variant="secondary"
+              onClick={onRetryWriteback}
+            >
+              {t("issues.retryWriteback")}
+            </Button>
+          </div>
+        ) : null}
         <div>
           <dt>{t("issues.detailAuthor")}</dt>
           <dd>{projection.authorLogin ?? t("issues.assigneeEmpty")}</dd>
