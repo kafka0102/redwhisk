@@ -22,6 +22,21 @@ import {
   type ProjectIssueSourceSettings,
 } from "./issue-source-commands";
 import { IssuesSettingsPanel } from "./settings-issues-panel";
+import { toast } from "../../shared/toast";
+
+vi.mock("../../shared/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+  pageCenterToastOptions: {
+    toasterId: "page-center",
+    duration: 3000,
+  },
+}));
+
+const toastSuccessMock = vi.mocked(toast.success);
+const toastErrorMock = vi.mocked(toast.error);
 
 vi.mock("./settings-commands", () => ({
   deleteAgentProfile: vi.fn(),
@@ -218,6 +233,8 @@ function exactText(text: string): RegExp {
 
 describe("Issues settings panel", () => {
   beforeEach(() => {
+    toastSuccessMock.mockReset();
+    toastErrorMock.mockReset();
     getSettingsMock.mockReset();
     updateSettingsMock.mockReset();
     inspectConnectionMock.mockReset();
@@ -1012,6 +1029,22 @@ describe("Issues settings panel", () => {
     expect(payload).not.toHaveProperty("provider");
     expect(payload).not.toHaveProperty("hostUrl");
     expect(payload).not.toHaveProperty("connection");
+    expect(toastSuccessMock).toHaveBeenCalledWith("Saved", {
+      toasterId: "page-center",
+      duration: 3000,
+    });
+  });
+
+  it("shows a centered toast for three seconds when save fails", async () => {
+    const user = userEvent.setup();
+    updateSettingsMock.mockRejectedValueOnce(new Error("save failed"));
+    renderPanel("en");
+    await user.click(await screen.findByRole("button", { name: "Save" }));
+    const alert = await screen.findByRole("alert");
+    expect(toastErrorMock).toHaveBeenCalledWith(alert.textContent, {
+      toasterId: "page-center",
+      duration: 3000,
+    });
   });
 
   it.each([

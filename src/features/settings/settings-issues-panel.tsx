@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import { Button } from "../../components/ui/button";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
+import { pageCenterToastOptions, toast } from "../../shared/toast";
 import {
   updateProjectSettings,
   type ProjectWorktreeLocation,
@@ -260,8 +261,11 @@ export function IssuesSettingsPanel({
           target: prTarget,
         });
       }
+      toast.success(t("settings.saved"), pageCenterToastOptions);
     } catch (error: unknown) {
-      setErrorMessage(getCommandErrorMessage(error, t));
+      const message = getCommandErrorMessage(error, t);
+      setErrorMessage(message);
+      toast.error(message, pageCenterToastOptions);
     } finally {
       setIsSaving(false);
     }

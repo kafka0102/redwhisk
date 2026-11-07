@@ -6,6 +6,12 @@
   right: auto !important;
 }
 
+.toaster.toaster--center {
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+}
+
 .sonner-toast {
   padding: 12px 14px;
   border-radius: var(--radius-card);

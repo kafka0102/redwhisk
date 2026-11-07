@@ -9,6 +9,13 @@ import { toast as sonnerToast, type ToastT, type ExternalToast } from "sonner";
  *   toast.warning("警告信息")
  *   toast.loading("加载中...")
  */
+export const PAGE_CENTER_TOASTER_ID = "page-center";
+
+export const pageCenterToastOptions = {
+  toasterId: PAGE_CENTER_TOASTER_ID,
+  duration: 3000,
+} as const;
+
 export const toast = {
   /**
    * 显示成功提示

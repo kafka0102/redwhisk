@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AppShell } from "./app-shell";
 import { resolveAppSurface } from "./app-surface";
 import { Toaster } from "../components/ui/sonner";
+import { PAGE_CENTER_TOASTER_ID } from "../shared/toast";
 import { LoadingDialog } from "../components/ui/loading-dialog";
 import "./app.css";
 import {
@@ -443,6 +444,11 @@ function ProjectApp() {
           openAgentSessionRequest={openAgentSessionRequest}
         />
         <Toaster />
+        <Toaster
+          id={PAGE_CENTER_TOASTER_ID}
+          className="toaster toaster--center"
+          position="top-center"
+        />
         {createProjectDraft ? (
           <CreateProjectDialog
             key={createProjectDraft.repoPath}
