@@ -58,6 +58,12 @@
   --color-danger: #b42318;
   --color-danger-border: #d6aaa4;
   --color-danger-muted: #f4ece8;
+  --color-success: #16794b;
+  --color-success-muted: #eaf6ef;
+  --color-warning: #8a5a00;
+  --color-warning-muted: #fff8e6;
+  --color-merged: #6b3fa0;
+  --color-merged-muted: #f3ecfc;
   --color-diff-added: #e7f4ea;
   --color-diff-removed: #fbeae8;
   --color-diff-line-added: rgb(36 148 71 / 12%);
@@ -127,6 +133,12 @@
   --color-danger: #f87171;
   --color-danger-border: #5c332d;
   --color-danger-muted: #2d1c18;
+  --color-success: #8fce9b;
+  --color-success-muted: #1c3326;
+  --color-warning: #e2b15a;
+  --color-warning-muted: #3a3018;
+  --color-merged: #d2b4f0;
+  --color-merged-muted: #2e2438;
   --color-diff-added: #1f3629;
   --color-diff-removed: #3a2523;
   --color-diff-line-added: rgb(63 185 80 / 14%);

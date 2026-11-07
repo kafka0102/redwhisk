@@ -8,6 +8,7 @@ pub mod agent_session_timeline;
 pub mod agent_skill;
 pub mod app_theme;
 pub mod app_update;
+pub mod change_request;
 pub mod code_language;
 pub mod completion_attempt;
 pub mod errors;

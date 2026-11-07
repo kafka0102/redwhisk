@@ -12,6 +12,7 @@ mod issue_external_ref_recovery_migration;
 pub mod issue_external_ref_repository;
 mod issue_remote_comments_migration;
 pub mod issue_repository;
+mod migration_list_tail;
 pub mod migrations;
 pub mod project_issue_source_repository;
 pub mod project_label_repository;

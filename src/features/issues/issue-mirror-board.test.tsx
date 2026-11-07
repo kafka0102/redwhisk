@@ -12,6 +12,7 @@ import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 import { getIssueTimeline, listIssues } from "./issue-commands";
 import { type IssueBoardRecord } from "./issue-mirror-commands";
+import { listProjectChangeRequests } from "./change-request-commands";
 import {
   getIssueSyncStatus,
   ISSUE_SYNC_CHANGED_EVENT,
@@ -38,6 +39,10 @@ vi.mock("./issue-mirror-commands", () => ({
   ISSUE_SYNC_CHANGED_EVENT: "issue-sync-changed",
   getIssueSyncStatus: vi.fn(),
   syncProjectIssues: vi.fn(),
+}));
+
+vi.mock("./change-request-commands", () => ({
+  listProjectChangeRequests: vi.fn(),
 }));
 
 vi.mock("../settings/issue-source-commands", () => ({
@@ -77,6 +82,7 @@ const getProjectIssueSourceSettingsMock = vi.mocked(
 );
 const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const listenMock = vi.mocked(listen);
+const listProjectChangeRequestsMock = vi.mocked(listProjectChangeRequests);
 
 function boardIssue(
   partial: Partial<IssueBoardRecord> & { id: number },
@@ -139,6 +145,18 @@ describe("GitHub issue mirror board", () => {
     getProjectIssueSourceSettingsMock.mockReset();
     getIssueTimelineMock.mockReset();
     getIssueTimelineMock.mockResolvedValue({ entries: [] });
+    listProjectChangeRequestsMock.mockReset();
+    listProjectChangeRequestsMock.mockResolvedValue({
+      rows: [],
+      tabCount: 0,
+      counts: {
+        reviewRequested: 0,
+        createdByMe: 0,
+        allOpen: 0,
+        recentlyMerged: 0,
+      },
+      pullRequestRefs: [],
+    });
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "mixed",
@@ -675,10 +693,10 @@ describe("GitHub issue mirror board", () => {
     const user = userEvent.setup();
     renderBoard();
     const tab = await screen.findByRole("tab", { name: /Pull requests/ });
-    expect(tab).toHaveTextContent("0");
+    await waitFor(() => expect(tab).toHaveTextContent("0"));
     await user.click(tab);
     expect(
-      screen.getByRole("heading", { name: "还没有 Pull request" }),
+      screen.getByText("没有需要你审阅的 Pull request"),
     ).toBeInTheDocument();
   });
 
@@ -710,7 +728,7 @@ describe("GitHub issue mirror board", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: /Pull requests/ }));
     expect(
-      screen.getByRole("heading", { name: "No pull requests yet" }),
+      screen.getByText("No pull requests need your review"),
     ).toBeInTheDocument();
   });
 

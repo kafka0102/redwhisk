@@ -22,6 +22,7 @@ const tsFiles = [
   path.join(srcDir, "features/issues/issue-timeline-commands.ts"),
   path.join(srcDir, "features/issues/issue-detail/issue-detail-commands.ts"),
   path.join(srcDir, "features/issues/issue-mirror-commands.ts"),
+  path.join(srcDir, "features/issues/change-request-commands.ts"),
   path.join(srcDir, "features/issues/issue-completion/closeout-action.ts"),
   path.join(srcDir, "features/agents/agent-session-commands.ts"),
   // agent-session DTOs 一部分定义在 agent-stream-types.ts（事件流 / timeline / 权限 /

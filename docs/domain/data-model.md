@@ -42,6 +42,10 @@ completion_attempts 保留历史完成尝试审计。
 | `issue_attachments`                     | Issue 落盘附件元数据     | 路径、种类、大小和 preview 能力；Issue 删除级联                                              |
 | `project_labels` / `saved_agent_skills` | 设置域                   | scope + 可选 `project_id`；label 不再关联 agent profile                                      |
 | 终端配置两表                            | 项目终端声明与快捷命令   | 项目删除级联                                                                                 |
+| `change_requests`                       | PR/MR 列表快照           | `0065_change_requests` 新增。`state` 为 `open` / `draft` / `merged` / `closed`。唯一键是项目、provider、host、repo、number，另有 `(provider, host, external_id)`。`host` 小写。检查计数可空，三者都空表示未知。`remote_updated_at` 是 epoch milliseconds |
+| `change_request_issue_links`            | PR/MR 与 Issue 多对多    | 主键是 `(change_request_id, issue_id)`。`link_kind` 为 `closing` / `mentioned` / `branch` / `manual` |
+| `change_request_details`                | PR/MR 详情快照           | 每个 change request 一条。文件、检查、评审、评论 JSON 默认 `[]` |
+| `issue_pull_requests.change_request_id` | 历史 URL 升级            | 可空，引用 `change_requests`。解析失败保持 null，URL 原文不变 |
 
 ## 数据约定
 
@@ -62,5 +66,6 @@ completion_attempts 保留历史完成尝试审计。
 7. `0061_issue_external_refs` 只新增项目同步水位、最后错误和 `issue_external_refs`。不修改 `0060`，也不回写已有 Issue 的标题、状态、`del` 或 `source`。
 8. `0062_issue_remote_comments` 新增 `issue_remote_comments` 与 `issue_remote_events`。两表都不进入本地 `issue_comments` 的唯一键。重复的远程 id 不新增第二行，失败写入不清空已有行。
 9. `0063_issue_completion_writeback` 新增 `issue_completion_writebacks`。不修改已发布 migration，也不回滚已经成立的本地完成。
+10. `0065_change_requests` 新增 `change_requests`、`change_request_issue_links`、`change_request_details`，并给 `issue_pull_requests` 增加可空 `change_request_id`。不修改已发布 migration。登记列表从 `0059` 起移到 `db/migration_list_tail.rs`。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

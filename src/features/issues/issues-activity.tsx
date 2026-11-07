@@ -51,12 +51,8 @@ import { useIssueDialogLifecycle } from "./use-issue-dialog-lifecycle";
 import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { issueBoardListInput } from "./issue-board-query";
-import {
-  IssueBoardHeader,
-  IssuePullRequestsEmpty,
-  type IssueBoardPane,
-} from "./issue-board-header";
-import { IssuesKanban } from "./issues-kanban";
+import { type IssueBoardPane } from "./issue-board-header";
+import { IssuesActivityBoard } from "./issues-activity-board";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
 import { toBoardIssues } from "./issue-mirror-fields";
 import type { IssueSourceFilter } from "./issue-source-filter";
@@ -614,7 +610,7 @@ export function IssuesActivity({
     >
       {dialogMode == null ? (
         <>
-          <IssueBoardHeader
+          <IssuesActivityBoard
             actions={issueSyncToolbar}
             issueCount={
               laneTotals.backlog +
@@ -623,7 +619,23 @@ export function IssuesActivity({
               laneTotals.completed
             }
             pane={boardPane}
+            projectId={projectId}
+            sourceMode={sourceMode}
+            onOpenProjectSettings={onOpenProjectSettings}
             onPaneChange={setBoardPane}
+            isLoading={isLoading}
+            lanes={lanes}
+            selectedIssueId={selectedIssueId}
+            cardRefs={cardRefs}
+            createButtonRef={createButtonRef}
+            laneLoadState={laneLoadState}
+            canRunIssue={canRunIssueFor}
+            toDescriptionExcerpt={markdownToExcerpt}
+            showCreate={sourceMode === "local" || sourceMode === "mixed"}
+            onCreateIssue={openCreateDialog}
+            onOpenIssue={openIssueDialog}
+            onRunIssue={openRunDialog}
+            onLoadMore={loadMoreIssues}
           />
           {errorMessage ? (
             <p
@@ -634,26 +646,6 @@ export function IssuesActivity({
               {errorMessage}
             </p>
           ) : null}
-          {boardPane === "pullRequests" ? (
-            <IssuePullRequestsEmpty />
-          ) : (
-            <IssuesKanban
-              isLoading={isLoading}
-              lanes={lanes}
-              selectedIssueId={selectedIssueId}
-              cardRefs={cardRefs}
-              createButtonRef={createButtonRef}
-              laneLoadState={laneLoadState}
-              canRunIssue={canRunIssueFor}
-              toDescriptionExcerpt={markdownToExcerpt}
-              sourceMode={sourceMode}
-              showCreate={sourceMode === "local" || sourceMode === "mixed"}
-              onCreateIssue={openCreateDialog}
-              onOpenIssue={openIssueDialog}
-              onRunIssue={openRunDialog}
-              onLoadMore={loadMoreIssues}
-            />
-          )}
         </>
       ) : null}
 

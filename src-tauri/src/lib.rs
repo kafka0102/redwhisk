@@ -166,6 +166,7 @@ pub fn run() {
             features::project_terminal::commands::read_project_terminal_cwd,
             features::project_terminal::commands::set_app_theme,
             features::issue::commands::list_issues,
+            features::change_request::commands::list_project_change_requests,
             features::issue::commands::sync_project_issues,
             features::issue::commands::get_issue_sync_status,
             features::issue::commands::create_issue,

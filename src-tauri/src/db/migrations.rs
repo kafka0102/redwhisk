@@ -193,15 +193,6 @@ const PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_VERSION: &str =
     "0058_project_confirm_completion_action";
 const PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_SQL: &str =
     include_str!("../../migrations/0058_project_confirm_completion_action.sql");
-const PROJECT_FORGE_HOST_MIGRATION_VERSION: &str = "0059_project_forge_host";
-const PROJECT_FORGE_HOST_MIGRATION_SQL: &str =
-    include_str!("../../migrations/0059_project_forge_host.sql");
-const PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_VERSION: &str = "0060_project_issue_source_settings";
-const PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_SQL: &str =
-    include_str!("../../migrations/0060_project_issue_source_settings.sql");
-const ISSUE_EXTERNAL_REFS_MIGRATION_VERSION: &str = "0061_issue_external_refs";
-const ISSUE_EXTERNAL_REFS_MIGRATION_SQL: &str =
-    include_str!("../../migrations/0061_issue_external_refs.sql");
 const SCHEMA_MIGRATIONS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY NOT NULL,
@@ -296,7 +287,7 @@ impl MigrationRunner {
 }
 
 fn default_migrations() -> Vec<Migration> {
-    vec![
+    let mut migrations = vec![
         Migration {
             version: CORE_MIGRATION_VERSION,
             sql: CORE_MIGRATION_SQL,
@@ -529,13 +520,9 @@ fn default_migrations() -> Vec<Migration> {
             version: PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_VERSION,
             sql: PROJECT_CONFIRM_COMPLETION_ACTION_MIGRATION_SQL,
         },
-        Migration { version: PROJECT_FORGE_HOST_MIGRATION_VERSION, sql: PROJECT_FORGE_HOST_MIGRATION_SQL },
-        Migration { version: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_VERSION, sql: PROJECT_ISSUE_SOURCE_SETTINGS_MIGRATION_SQL },
-        Migration { version: ISSUE_EXTERNAL_REFS_MIGRATION_VERSION, sql: ISSUE_EXTERNAL_REFS_MIGRATION_SQL },
-        Migration { version: super::issue_remote_comments_migration::VERSION, sql: super::issue_remote_comments_migration::SQL },
-        Migration { version: super::issue_completion_writeback_migration::VERSION, sql: super::issue_completion_writeback_migration::SQL },
-        Migration { version: super::issue_external_ref_recovery_migration::VERSION, sql: super::issue_external_ref_recovery_migration::SQL },
-    ]
+    ];
+    migrations.extend(super::migration_list_tail::migrations());
+    migrations
 }
 #[cfg(test)]
 impl MigrationRunner {
@@ -552,13 +539,17 @@ impl MigrationRunner {
 }
 
 #[derive(Clone)]
-struct Migration {
-    version: &'static str,
-    sql: &'static str,
+pub(super) struct Migration {
+    pub(super) version: &'static str,
+    pub(super) sql: &'static str,
 }
 
 fn execute_migration(connection: &Connection, migration: &Migration) -> rusqlite::Result<()> {
-    if migration.version == super::issue_external_ref_recovery_migration::VERSION && !table_has_column(connection, "issue_external_refs", "issue_id")? { return Ok(()); }
+    if migration.version == super::issue_external_ref_recovery_migration::VERSION
+        && !table_has_column(connection, "issue_external_refs", "issue_id")?
+    {
+        return Ok(());
+    }
     if migration.version == AGENT_SESSIONS_WORKFLOW_SKILL_NAME_MIGRATION_VERSION
         && (has_migration(
             connection,

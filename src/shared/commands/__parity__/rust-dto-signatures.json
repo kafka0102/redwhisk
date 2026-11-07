@@ -230,6 +230,13 @@
         "themePreference": "required"
       }
     },
+    "ApplyIssueRecoveryInput": {
+      "fields": {
+        "action": "required",
+        "issueId": "required",
+        "projectId": "required"
+      }
+    },
     "BranchSyncStatus": {
       "fields": {
         "ahead": "required",
@@ -241,6 +248,46 @@
       "fields": {
         "projectId": "required",
         "sessionId": "required"
+      }
+    },
+    "ChangeRequestFilterCounts": {
+      "fields": {
+        "allOpen": "required",
+        "createdByMe": "required",
+        "recentlyMerged": "required",
+        "reviewRequested": "required"
+      }
+    },
+    "ChangeRequestLinkedIssue": {
+      "fields": {
+        "issueId": "required",
+        "label": "required"
+      }
+    },
+    "ChangeRequestListResponse": {
+      "fields": {
+        "counts": "required",
+        "pullRequestRefs": "required",
+        "rows": "required",
+        "tabCount": "required"
+      }
+    },
+    "ChangeRequestListRow": {
+      "fields": {
+        "authorLogin": "required",
+        "checksFailed": "required",
+        "checksOk": "required",
+        "checksPending": "required",
+        "id": "required",
+        "linkedIssues": "required",
+        "number": "required",
+        "remoteUpdatedAt": "required",
+        "reviewDecision": "required",
+        "sourceBranch": "required",
+        "state": "required",
+        "targetBranch": "required",
+        "title": "required",
+        "url": "required"
       }
     },
     "CheckoutBranchItem": {
@@ -756,19 +803,6 @@
         "repo": "required"
       }
     },
-    "ApplyIssueRecoveryInput": {
-      "fields": {
-        "action": "required",
-        "issueId": "required",
-        "projectId": "required"
-      }
-    },
-    "UnavailableBanner": {
-      "fields": {
-        "actions": "required",
-        "showsDeleteConfirmation": "required"
-      }
-    },
     "IssueDetailRecord": {
       "fields": {
         "linkedChangeRequest": "required",
@@ -792,6 +826,12 @@
       "fields": {
         "issues": "required",
         "statusTotals": "optional"
+      }
+    },
+    "IssuePullRequestRef": {
+      "fields": {
+        "changeRequestId": "required",
+        "url": "required"
       }
     },
     "IssueRecord": {
@@ -1694,6 +1734,12 @@
         "text": "required"
       }
     },
+    "UnavailableBanner": {
+      "fields": {
+        "actions": "required",
+        "showsDeleteConfirmation": "required"
+      }
+    },
     "UpdateAgentSessionTitleInput": {
       "fields": {
         "projectId": "required",
@@ -1948,14 +1994,6 @@
         "word",
         "text",
         "generic"
-      ]
-    },
-    "RecoveryAction": {
-      "rename": "snake_case",
-      "variants": [
-        "keep_local",
-        "unlink",
-        "retry"
       ]
     },
     "AgentPermissionDecision": {
@@ -2374,6 +2412,14 @@
         "repo_sibling",
         "repo_internal",
         "user_home"
+      ]
+    },
+    "RecoveryAction": {
+      "rename": "snake_case",
+      "variants": [
+        "keep_local",
+        "unlink",
+        "retry"
       ]
     },
     "SearchMode": {

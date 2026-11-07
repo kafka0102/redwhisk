@@ -1,6 +1,7 @@
-import type { JSX, ReactNode } from "react";
+import { useEffect, useState, type JSX, type ReactNode } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
+import { listProjectChangeRequests } from "./change-request-commands";
 
 export type IssueBoardPane = "issues" | "pullRequests";
 
@@ -9,13 +10,18 @@ export function IssueBoardHeader({
   issueCount,
   pane,
   onPaneChange,
+  projectId,
+  sourceMode = null,
 }: {
   actions?: ReactNode;
   issueCount: number;
   pane: IssueBoardPane;
   onPaneChange: (pane: IssueBoardPane) => void;
+  projectId?: number;
+  sourceMode?: "local" | "remote" | "mixed" | null;
 }): JSX.Element {
   const { t } = useI18n();
+  const pullRequestCount = usePullRequestCount(projectId, sourceMode);
   return (
     <header className="issue-surface-header issue-surface-header--activity">
       <div
@@ -43,9 +49,11 @@ export function IssueBoardHeader({
           onClick={() => onPaneChange("pullRequests")}
         >
           {t("issues.pullRequestsTab")}
-          <span aria-hidden="true" className="issue-board-tab__count">
-            0
-          </span>
+          {pullRequestCount == null ? null : (
+            <span aria-hidden="true" className="issue-board-tab__count">
+              {pullRequestCount}
+            </span>
+          )}
         </button>
       </div>
       {actions ? (
@@ -55,14 +63,36 @@ export function IssueBoardHeader({
   );
 }
 
-export function IssuePullRequestsEmpty(): JSX.Element {
-  const { t } = useI18n();
-  return (
-    <section
-      aria-label={t("issues.pullRequestsTab")}
-      className="issue-pull-requests-empty"
-    >
-      <h3>{t("issues.pullRequestsEmptyTitle")}</h3>
-    </section>
-  );
+function usePullRequestCount(
+  projectId: number | undefined,
+  sourceMode: "local" | "remote" | "mixed" | null,
+): number | null {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (projectId == null || (sourceMode !== "remote" && sourceMode !== "mixed")) {
+      return;
+    }
+    let cancelled = false;
+    void listProjectChangeRequests({ projectId })
+      .then((response) => {
+        if (!cancelled) {
+          setCount(response.tabCount);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCount(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, sourceMode]);
+  if (sourceMode === "local") {
+    return 0;
+  }
+  if (sourceMode !== "remote" && sourceMode !== "mixed") {
+    return null;
+  }
+  return count;
 }
