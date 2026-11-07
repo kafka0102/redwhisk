@@ -169,7 +169,11 @@ export function useIssueSyncChrome(
     showFilter || showSync ? (
       <>
         {showFilter ? (
-          <IssueSourceFilter value={sourceFilter} onChange={setSourceFilter} />
+          <IssueSourceFilter
+            provider={settings?.connection.provider ?? null}
+            value={sourceFilter}
+            onChange={setSourceFilter}
+          />
         ) : null}
         {showSync ? (
           <IssueSyncToolbar

@@ -446,6 +446,11 @@ describe("GitHub issue mirror board", () => {
         .querySelector(".issue-lane__count"),
     ).toHaveTextContent("1");
 
+    expect(screen.getByRole("option", { name: "GitHub" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "GitHub 或 GitLab" }),
+    ).not.toBeInTheDocument();
+
     await user.selectOptions(
       screen.getByRole("combobox", { name: "来源" }),
       "local",
@@ -487,6 +492,24 @@ describe("GitHub issue mirror board", () => {
       perStatusLimit: ISSUE_PAGE_SIZE,
       sourceFilter: "remote",
     });
+  });
+
+  it("names the remote filter after the connected forge", async () => {
+    const gitlabSettings = sourceSettings("mixed");
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...gitlabSettings,
+      connection: {
+        ...gitlabSettings.connection,
+        provider: "gitlab",
+        hostUrl: "https://gitlab.com",
+      },
+    });
+    renderBoard();
+    await screen.findByRole("combobox", { name: "来源" });
+    expect(screen.getByRole("option", { name: "GitLab" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "GitHub" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the backlog column total when the page is shorter", async () => {

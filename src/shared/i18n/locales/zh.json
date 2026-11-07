@@ -452,7 +452,7 @@
     "sourceFilterAll": "全部",
     "sourceFilterLabel": "来源",
     "sourceFilterLocal": "仅本地",
-    "sourceFilterRemote": "GitHub 或 GitLab",
+    "sourceFilterRemoteUnknown": "远程",
     "timelineReviewMarked": "标记为待验收",
     "timelineStatusChanged": "变更了状态",
     "timelineTitle": "动态",

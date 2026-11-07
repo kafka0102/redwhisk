@@ -452,7 +452,7 @@
     "sourceFilterAll": "All",
     "sourceFilterLabel": "Source",
     "sourceFilterLocal": "Local only",
-    "sourceFilterRemote": "GitHub or GitLab",
+    "sourceFilterRemoteUnknown": "Remote",
     "timelineReviewMarked": "marked for review",
     "timelineStatusChanged": "changed the status",
     "timelineTitle": "Activity",

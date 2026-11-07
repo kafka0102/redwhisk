@@ -69,7 +69,11 @@ function syncStatusText(
     return t("issues.syncing");
   }
   const forgeName =
-    provider === "gitlab" ? t("issues.gitlabBadge") : t("issues.githubBadge");
+    provider === "gitlab"
+      ? t("issues.gitlabBadge")
+      : provider === "github"
+        ? t("issues.githubBadge")
+        : t("issues.sourceFilterRemoteUnknown");
   if (status?.syncError === "credential_expired") {
     return t("issues.credentialExpired", { provider: forgeName });
   }
