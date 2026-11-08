@@ -15,6 +15,8 @@ pub(crate) mod writeback_store;
 #[cfg(test)]
 mod confirm_saved_action_tests;
 #[cfg(test)]
+mod create_link_tests;
+#[cfg(test)]
 mod merge_writeback_tests;
 #[cfg(test)]
 mod state_machine_advance_tests;

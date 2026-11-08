@@ -1194,6 +1194,7 @@
     },
     "ISSUE_VALIDATION_FAILED": {
       "alreadyCompleted": "Completed Issues cannot be completed again.",
+      "changeRequestNumberMissing": "The pull request or merge request number could not be read.",
       "completedCanOnlyReturnToBacklog": "Completed Issues can only return to Backlog, not In Progress or Review.",
       "attachmentParamsInvalid": "Attachment preview or export parameters are invalid.",
       "attachmentPreviewUnsupported": "The selected attachment is not previewable.",
@@ -1271,6 +1272,9 @@
       "workspaceNotInProject": "The workspace does not belong to this project.",
       "forgeNotAuthenticated": "glab / gh is not signed in. Run glab auth login in a terminal first (add --hostname <host> for self-hosted GitLab; use gh auth login for GitHub), then try again.",
       "changeRequestFailed": "Failed to create or read the pull request or merge request.",
+      "changeRequestLinkMissing": "Choose an issue to link.",
+      "changeRequestLinkInvalid": "The link mode is invalid.",
+      "changeRequestNumberMissing": "The pull request or merge request number could not be read.",
       "issueSourceModeInvalid": "Issue source mode is invalid.",
       "issueSyncScopeInvalid": "Issue sync scope is invalid.",
       "issueSyncIntervalInvalid": "Issue sync interval must be an integer of at least 60 seconds.",
@@ -1408,6 +1412,10 @@
     "draft": "Create as draft",
     "draftHint": "Create it as a draft on the remote, outside formal review.",
     "sameBranchHint": "The current branch is the repository default, so there is no branch to compare.",
+    "link": "Link issue",
+    "linkNone": "Don't link",
+    "linkRemote": "Remote issue",
+    "linkLocal": "Local issue",
     "creating": "Creating…",
     "created": "Created"
   },

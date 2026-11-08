@@ -1194,6 +1194,7 @@
     },
     "ISSUE_VALIDATION_FAILED": {
       "alreadyCompleted": "已完成 Issue 不能重复完成。",
+      "changeRequestNumberMissing": "无法读取 Pull Request 或 Merge Request 的编号。",
       "completedCanOnlyReturnToBacklog": "已完成的 Issue 只能回退到待办，不能标记为进行中或待审核。",
       "attachmentParamsInvalid": "附件预览或导出参数无效。",
       "attachmentPreviewUnsupported": "当前附件不支持预览。",
@@ -1271,6 +1272,9 @@
       "workspaceNotInProject": "工作区不属于当前项目。",
       "forgeNotAuthenticated": "glab / gh 未登录：请先在终端执行 glab auth login（自建 GitLab 需加 --hostname <主机>；GitHub 用 gh auth login），完成授权后重试。",
       "changeRequestFailed": "创建或读取 Pull Request / Merge Request 失败。",
+      "changeRequestLinkMissing": "请选择要关联的 Issue。",
+      "changeRequestLinkInvalid": "关联方式无效。",
+      "changeRequestNumberMissing": "无法读取 Pull Request 或 Merge Request 的编号。",
       "issueSourceModeInvalid": "Issue 来源模式不合法。",
       "issueSyncScopeInvalid": "Issue 同步范围不合法。",
       "issueSyncIntervalInvalid": "同步间隔必须是不小于 60 秒的整数。",
@@ -1408,6 +1412,10 @@
     "draft": "创建为草稿",
     "draftHint": "在远端先以草稿创建，不进入正式评审。",
     "sameBranchHint": "当前分支就是仓库默认分支，没有对比分支。",
+    "link": "关联 Issue",
+    "linkNone": "不关联",
+    "linkRemote": "远程 Issue",
+    "linkLocal": "本地 Issue",
     "creating": "正在创建…",
     "created": "已创建"
   },

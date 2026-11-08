@@ -1573,6 +1573,22 @@ describe("Issue 详情按状态与来源", () => {
     expect(within(host).queryByText("closed")).toBeNull();
   });
 
+  it("远程 Issue 已经 closed 时不显示 PR 待合并", async () => {
+    const issue = boardIssue({
+      id: 72,
+      status: "completed",
+      source: "remote",
+      provider: "github",
+      externalNumber: 72,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ remoteState: "closed" }),
+      linkedChangeRequests: [changeRequest({ state: "open" })],
+    });
+    const host = within(root).getByRole("region", { name: "GitHub" });
+    expect(within(host).queryByText("PR 待合并")).toBeNull();
+  });
+
   it("写回失败时详情显示待写回，并可重试", async () => {
     const user = userEvent.setup();
     const retry = vi.mocked(retryIssueCompletionWriteback);

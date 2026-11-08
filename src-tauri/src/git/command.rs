@@ -109,7 +109,7 @@ impl Drop for InteractivePathGuard {
 }
 
 #[cfg(test)]
-pub(super) fn with_interactive_path<T>(path: Option<OsString>, f: impl FnOnce() -> T) -> T {
+pub(crate) fn with_interactive_path<T>(path: Option<OsString>, f: impl FnOnce() -> T) -> T {
     let _guard = TEST_INTERACTIVE_PATH.with(|slot| {
         let previous = slot.replace(Some(path));
         InteractivePathGuard { previous }

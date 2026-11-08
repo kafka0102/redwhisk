@@ -49,6 +49,12 @@ pub struct CreateChangeRequestInput {
     pub title: String,
     pub body: String,
     pub draft: bool,
+    #[serde(default)]
+    pub link_mode: Option<String>,
+    #[serde(default)]
+    pub link_issue_id: Option<i64>,
+    #[serde(default)]
+    pub remote_number: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -127,17 +133,78 @@ fn create_change_request_blocking(
     }
     let head = current_branch_name(&workspace)
         .ok_or_else(|| coded_error("branchMissing", "The current branch does not exist."))?;
+    let (body, link) = prepared_link(&input)?;
     let url = publish_change_request(ChangeRequestInput {
         repo_path: &workspace,
         host: forge.host,
         head: &head,
         base: &input.base,
         title: &input.title,
-        body: &input.body,
+        body: &body,
         draft: input.draft,
     })
     .map_err(forge_error)?;
+    let database = crate::db::connection::DatabaseConfig::new(&data_dir)
+        .open()
+        .map_err(CommandError::from)?;
+    crate::features::issue::completion::publish::record_published_link(
+        &database.connection,
+        project.id,
+        &forge,
+        &head,
+        &input.base,
+        &input.title,
+        &body,
+        input.draft,
+        &url,
+        link,
+    )
+    .map_err(command_failed)?;
     Ok(CreateChangeRequestResponse { url })
+}
+
+fn prepared_link(
+    input: &CreateChangeRequestInput,
+) -> Result<(String, Option<(i64, &'static str)>), CommandError> {
+    match input.link_mode.as_deref() {
+        Some("remote") => {
+            let number = input.remote_number.ok_or_else(|| {
+                coded_error(
+                    "changeRequestLinkMissing",
+                    "A remote issue number is required.",
+                )
+            })?;
+            let issue_id = input.link_issue_id.ok_or_else(|| {
+                coded_error("changeRequestLinkMissing", "A remote issue is required.")
+            })?;
+            Ok((
+                closing_body(&input.body, number),
+                Some((issue_id, "closing")),
+            ))
+        }
+        Some("local") => {
+            let issue_id = input.link_issue_id.ok_or_else(|| {
+                coded_error("changeRequestLinkMissing", "A local issue is required.")
+            })?;
+            Ok((input.body.clone(), Some((issue_id, "manual"))))
+        }
+        Some("none") | None => Ok((input.body.clone(), None)),
+        Some(_) => Err(coded_error(
+            "changeRequestLinkInvalid",
+            "The change request link is invalid.",
+        )),
+    }
+}
+
+fn closing_body(body: &str, number: i64) -> String {
+    let line = format!("Closes #{number}");
+    if body.contains(&line) {
+        return body.to_string();
+    }
+    if body.trim().is_empty() {
+        return line;
+    }
+    format!("{body}\n\n{line}")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -231,3 +298,7 @@ mod tests {
         assert_eq!(error.reason.as_deref(), Some("changeRequestFailed"));
     }
 }
+
+#[cfg(test)]
+#[path = "change_request_link_tests.rs"]
+mod change_request_link_tests;

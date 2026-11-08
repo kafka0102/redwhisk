@@ -36,6 +36,9 @@ export interface CreateChangeRequestInput {
   title: string;
   body: string;
   draft: boolean;
+  linkMode?: "none" | "remote" | "local";
+  linkIssueId?: number | null;
+  remoteNumber?: number | null;
 }
 
 export function inspectProjectForge(

@@ -25,11 +25,22 @@ import { useAlertDialog } from "@/components/ui/use-alert-dialog";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import { listIssues } from "../issues/issue-commands";
 import {
   createChangeRequest,
   previewChangeRequest,
   type ForgeHostName,
 } from "../project/project-forge-commands";
+
+type LinkMode = "none" | "remote" | "local";
+
+interface LinkableIssue {
+  id: number;
+  number: number;
+  title: string;
+  source: string;
+  externalNumber: number | null;
+}
 
 export interface CreateChangeRequestDialogProps {
   open: boolean;
@@ -68,6 +79,9 @@ export function CreateChangeRequestDialog({
   const [draft, setDraft] = useState(true);
   const [existingUrl, setExistingUrl] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [linkMode, setLinkMode] = useState<LinkMode>("none");
+  const [linkIssueId, setLinkIssueId] = useState("");
+  const [issues, setIssues] = useState<LinkableIssue[]>([]);
   const sameAsDefault =
     repoDefault != null &&
     sourceBranch.length > 0 &&
@@ -93,6 +107,8 @@ export function CreateChangeRequestDialog({
         setBody(preview.body);
         setDraft(preview.prDraft);
         setExistingUrl(preview.existingUrl);
+        setLinkMode("none");
+        setLinkIssueId("");
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -106,6 +122,27 @@ export function CreateChangeRequestDialog({
       cancelled = true;
     };
   }, [open, projectId, showAlert, t, workspacePath]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let cancelled = false;
+    void listIssues({ projectId, sourceFilter: "all" })
+      .then((response) => {
+        if (!cancelled) {
+          setIssues(linkableIssues(response.issues));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIssues([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectId]);
 
   function handleOpenChange(nextOpen: boolean): void {
     if (creating) {
@@ -129,6 +166,10 @@ export function CreateChangeRequestDialog({
     if (sameAsDefault) {
       return;
     }
+    const selected = issues.find((issue) => String(issue.id) === linkIssueId);
+    if (linkMode !== "none" && selected == null) {
+      return;
+    }
     setCreating(true);
     try {
       await createChangeRequest({
@@ -138,6 +179,10 @@ export function CreateChangeRequestDialog({
         title,
         body,
         draft,
+        linkMode,
+        linkIssueId: linkMode === "none" ? null : (selected?.id ?? null),
+        remoteNumber:
+          linkMode === "remote" ? (selected?.externalNumber ?? null) : null,
       });
       toast.success(t("changeRequest.created"));
       onOpenChange(false);
@@ -159,6 +204,24 @@ export function CreateChangeRequestDialog({
     value: branch,
     label: branch,
   }));
+  const linkModeItems = [
+    { value: "none", label: t("changeRequest.linkNone") },
+    { value: "remote", label: t("changeRequest.linkRemote") },
+    { value: "local", label: t("changeRequest.linkLocal") },
+  ];
+  const linkCandidates = issues.filter((issue) =>
+    linkMode === "remote"
+      ? issue.source === "remote" && issue.externalNumber != null
+      : issue.source === "local",
+  );
+  const linkIssueItems = linkCandidates.map((issue) => ({
+    value: String(issue.id),
+    label:
+      linkMode === "remote"
+        ? `#${issue.externalNumber ?? ""} ${issue.title}`
+        : `#${issue.number} ${issue.title}`,
+  }));
+  const linkBlocked = linkMode !== "none" && linkIssueId.length === 0;
 
   return (
     <>
@@ -258,6 +321,70 @@ export function CreateChangeRequestDialog({
                     onChange={(event) => setBody(event.target.value)}
                   />
                 </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="change-request-link">
+                    {t("changeRequest.link")}
+                  </Label>
+                  <Select
+                    items={linkModeItems}
+                    value={linkMode}
+                    disabled={creating || sameAsDefault}
+                    onValueChange={(value) => {
+                      if (
+                        value === "none" ||
+                        value === "remote" ||
+                        value === "local"
+                      ) {
+                        setLinkMode(value);
+                        setLinkIssueId("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="change-request-link" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {linkModeItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {linkMode === "none" ? null : (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="change-request-link-issue">
+                      {linkMode === "remote"
+                        ? t("changeRequest.linkRemote")
+                        : t("changeRequest.linkLocal")}
+                    </Label>
+                    <Select
+                      items={linkIssueItems}
+                      value={linkIssueId}
+                      disabled={creating || sameAsDefault}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setLinkIssueId(value);
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="change-request-link-issue"
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {linkIssueItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <Checkbox
                     id="change-request-draft"
@@ -286,7 +413,11 @@ export function CreateChangeRequestDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={creating || (sameAsDefault && !existingUrl)}
+                disabled={
+                  creating ||
+                  (sameAsDefault && !existingUrl) ||
+                  (!existingUrl && linkBlocked)
+                }
               >
                 {existingUrl
                   ? t("changeRequest.view")
@@ -304,4 +435,31 @@ export function CreateChangeRequestDialog({
       {alertDialog}
     </>
   );
+}
+
+function linkableIssues(value: unknown): LinkableIssue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const issues: LinkableIssue[] = [];
+  for (const item of value) {
+    if (item == null || typeof item !== "object") {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.id !== "number" || typeof record.number !== "number") {
+      continue;
+    }
+    issues.push({
+      id: record.id,
+      number: record.number,
+      title: typeof record.title === "string" ? record.title : "",
+      source: typeof record.source === "string" ? record.source : "local",
+      externalNumber:
+        typeof record.externalNumber === "number"
+          ? record.externalNumber
+          : null,
+    });
+  }
+  return issues;
 }
