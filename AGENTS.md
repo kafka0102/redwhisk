@@ -80,23 +80,20 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
 
-前端门禁的单一入口：`bash scripts/check-frontend-gates.sh`（依赖 / 构建配置 / 静态资源 / 打包代码变更时加 `--with-build`；已提交后复查文件大小用 `--from <ref>`）。脚本按下列顺序执行、逐步打印，任一步失败立即停止。下列各项是同一门禁的口径来源；手跑时照此顺序，豁免理由必须写进最终说明。
+前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。
 
-1. `pnpm format` → 复查 `git status --short`，带出的额外文件按 §8 处理。
-2. `pnpm lint`
-3. `pnpm typecheck`
-4. `pnpm test` — 改了运行时行为 / 分支 / 数据流 / 渲染 / 测试依赖实现时必跑全量；vitest 过滤只用于定位失败，不能当作通过。同文件用例有时序依赖，过滤运行会漏报。纯类型或纯样式改动可豁免，但须在最终说明写明豁免理由。
-5. `pnpm build` — 改动 `package.json` / `pnpm-lock.yaml`（新增、升级、移除依赖）、Vite/Tauri 构建配置、静态资源路径或打包相关代码时必跑；`pnpm build` 等于 `typecheck + vite build`，用于捕获仅类型检查无法发现的模块解析与打包失败。纯逻辑/样式且未动依赖与构建配置时可豁免，但须在最终说明写明豁免理由。
-6. `bash scripts/check-rust-file-size.sh` — 改动 Rust（`src-tauri/src/**/*.rs`）后先跑这一项，再跑下一条编译检查。脚本只数行，不编译。越界且未在 `scripts/rust-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/backend-large-file-splitting-rules.md` 拆分后再跑直至通过。白名单是棘轮：条目登记行数是上限，文件长过登记值即失败（先拆分，或显式下调登记值）；已回到阈值以内的文件必须删除条目。纯前端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动不会被本脚本复查。与编译检查分开跑，不要绑在 `cargo check` 后面。
-7. `bash scripts/check-rust-compile.sh` — 改动 Rust（`src-tauri/**/*.rs`、`src-tauri/Cargo.toml`、`src-tauri/build.rs`）后必跑，排在文件大小门禁之后。脚本只对库和二进制做增量 `cargo check --offline --lib --bins`（dev profile，无 `cfg(test)`），不跑测试、不链接、不打安装包。纯前端 / 纯文档改动可豁免。`cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替：它们以 `cfg(test)` 编译，仅被测试引用的 `use` / `pub use` 在正式构建里仍是未使用项，而 `warnings = "deny"` 会让其变成编译错误。改动这类重导出时先看非测试调用方，只有测试引用则给重导出加 `#[cfg(test)]`；禁止 `#[allow(unused_imports)]` / `#[allow(dead_code)]` 压掉。不要用 `pnpm build:macos`、`tauri build` 或 `cargo build --release` 充当这项门禁。`--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。
-   同一脚本在正式构建检查之后再跑 `cargo test --offline --lib --no-run`，只编译库内 `#[cfg(test)]` 模块，不执行用例。这一步不能代替前面的 `--lib --bins`。
-   另跑 `bash scripts/check-rust-user-strings.sh`（已提交的改动加 `--from <ref>`）：`src-tauri/src` 新增字符串不得含中文，注释除外。用户可见错误用英文 code，文案放 `locales`。存量中文不追溯。
-   另跑 `bash scripts/check-rust-command-failure-tests.sh`（已提交的改动加 `--from <ref>`）：diff 里每个新增 `#[tauri::command]` 都要有一个 `#[test]`，函数体同时出现命令名和 `expect_err`。`name_in_data_dir` 这种前缀算命中。存量命令不追溯。
-   另跑 `bash scripts/check-rust-event-emit.sh`（已提交的改动加 `--from <ref>`）：diff 里新增的 `app.emit` / `app_handle.emit` 必须位于函数名以 `emit_` 开头的函数中。存量直接 `emit` 不追溯。
-   另跑 `bash scripts/check-rust-command-reasons.sh`（已提交的改动加 `--from <ref>`）：diff 里新增的 `with_reason("...")`、`("reason", "...")` 和 `=> "reason"` 字面量必须出现在 `docs/architecture-design/tauri-contract.md`。存量 reason 不追溯。
-   另跑 `bash scripts/check-rust-command-dto.sh`（已提交的改动加 `--from <ref>`）：diff 里命令返回类型增删的 camelCase 字段（名字里要有大写字母）必须出现在该命令的契约段落里；删掉的字段名不得还留在同一段落。单字小写字段和存量字段不查。
-8. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。白名单是棘轮：条目登记行数是上限，文件长过登记值即失败（先拆分，或显式下调登记值）；已回到阈值以内的文件必须删除条目。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动用 `--from <ref>` 复查。
-9. `cd src-tauri && cargo test --lib agent::command_detector` — 改动交互式 `PATH` 解析或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后必跑；缓存与回退规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
+改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
+
+- `bash scripts/check-rust-file-size.sh`
+- `bash scripts/check-rust-compile.sh`
+- `bash scripts/check-rust-user-strings.sh`
+- `bash scripts/check-rust-command-failure-tests.sh`
+- `bash scripts/check-rust-event-emit.sh`
+- `bash scripts/check-rust-command-reasons.sh`
+- `bash scripts/check-rust-reason-locales.sh`
+- `bash scripts/check-rust-command-dto.sh`
+
+改了交互式 `PATH` 或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后，再跑 `cd src-tauri && cargo test --lib agent::command_detector`。规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 
 格式化单个 Rust 文件时用 `rustfmt --edition 2021 <该文件的绝对路径>`。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
 
@@ -118,7 +115,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 改动 Rust 时，`scripts/check-rust-compile.sh` 通过（正式构建口径的增量检查，不是整包构建）。
 - 改动 Rust 时，`scripts/check-rust-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 - 改动前端源码时，`scripts/check-frontend-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
-- 改动依赖或构建配置时，`pnpm build` 通过（见上条第 5 项）。
+- 改动依赖或构建配置时，`bash scripts/check-frontend-gates.sh --with-build` 通过。
 - 改动 Tauri command / event / 错误码时，复查 `docs/architecture-design/tauri-contract.md` 注册表与错误码分类是否同步。
 
 > 本门禁是 `docs/architecture-design/agent-development-rules.md`「测试与验证规则」与 `docs/standards/{coding-style,git-workflow}.md` 的执行入口；冲突时以本门禁命令顺序为准。

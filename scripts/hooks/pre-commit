@@ -10,6 +10,7 @@ bash scripts/check-unstaged-rustfmt.sh
 bash scripts/check-rust-user-strings.sh
 bash scripts/check-rust-command-failure-tests.sh
 bash scripts/check-rust-command-reasons.sh
+bash scripts/check-rust-reason-locales.sh
 bash scripts/check-rust-command-dto.sh
 bash scripts/check-rust-event-emit.sh
 bash scripts/check-rust-file-size.sh

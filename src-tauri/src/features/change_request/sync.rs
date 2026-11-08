@@ -238,6 +238,8 @@ fn insert_change_request(
     Ok(())
 }
 
+// 详情刷新会先把 state 写成 merged。不能改成只在「非 merged → merged」时写回，
+// 否则详情先落库后，列表同步看不到边沿。失败后再次进入由写回账本挡住，不再打宿主。
 fn write_back_if_merged(connection: &Connection, change_request_id: i64, state: &str) {
     if state == "merged" {
         let _ = crate::features::issue::completion::merge_writeback::write_back_merged_change_request_from_repo(

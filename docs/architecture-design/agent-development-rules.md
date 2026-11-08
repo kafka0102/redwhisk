@@ -433,7 +433,7 @@ bash scripts/check-rust-compile.sh
 
 改动 `src-tauri/src` 时再跑 `bash scripts/check-rust-user-strings.sh`。它只看本次 diff 的新增字符串，含中文即失败（注释除外）。错误用英文 code，展示文案放前端 locales。新增 `#[tauri::command]` 时再跑 `bash scripts/check-rust-command-failure-tests.sh`。它要求 diff 里每个新命令都有带 `expect_err` 的失败测试。
 新增 `app.emit` / `app_handle.emit` 时再跑 `bash scripts/check-rust-event-emit.sh`。它要求这次 diff 里的调用位于 `emit_*` 函数中，存量直接 `emit` 不追溯。
-新增 command reason 时再跑 `bash scripts/check-rust-command-reasons.sh`。它要求这次 diff 里的 `with_reason("...")`、`("reason", "...")` 和 `=> "reason"` 字面量出现在 `docs/architecture-design/tauri-contract.md`，存量 reason 不追溯。
+新增 command reason 时再跑 `bash scripts/check-rust-command-reasons.sh`。它要求这次 diff 里的 `with_reason("...")`、`("reason", "...")` 和 `=> "reason"` 字面量出现在 `docs/architecture-design/tauri-contract.md`，存量 reason 不追溯。同时跑 `bash scripts/check-rust-reason-locales.sh`：`with_reason("...")` 和 `coded_error("...")` 必须在 `errors.<CommandErrorCode>.<reason>` 的 zh/en 都有键；`features/issue/completion` 里作为失败原因返回的裸 reason 必须在 `errors.ISSUE_VALIDATION_FAILED`。存量不追溯。
 
 检查实际代码，不能只看测试能否编过：
 

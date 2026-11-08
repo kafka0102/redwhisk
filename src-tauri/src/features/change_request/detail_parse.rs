@@ -63,6 +63,7 @@ pub(crate) fn parse_gitlab_change_request_details(
         }),
         labels: labels(&value),
         reviewers: gitlab_reviewers(&value),
+        // 可合并字面量只认 detailed_merge_status。merge_status 已废弃，不能写入 mergeable。
         mergeable: optional_text(&value, "detailed_merge_status")
             .or_else(|| optional_text(&value, "mergeable")),
         merge_state_status: optional_text(&value, "detailed_merge_status")
