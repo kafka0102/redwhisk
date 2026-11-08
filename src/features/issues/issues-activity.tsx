@@ -51,8 +51,9 @@ import { useIssueDialogLifecycle } from "./use-issue-dialog-lifecycle";
 import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { issueBoardListInput } from "./issue-board-query";
-import { type IssueBoardPane } from "./issue-board-header";
 import { IssuesActivityBoard } from "./issues-activity-board";
+import { useChangeRequestNavigation } from "./use-change-request-navigation";
+import { IssuesActivityReadonlySlot } from "./issues-activity-readonly-slot";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
 import { toBoardIssues } from "./issue-mirror-fields";
 import type { IssueSourceFilter } from "./issue-source-filter";
@@ -77,11 +78,6 @@ import { type IssueOpenRequest } from "./issue-open-request";
 const IssueEditablePage = lazy(async () => {
   const module = await import("./issue-detail/issue-editable-page");
   return { default: module.IssueEditablePage };
-});
-
-const IssueReadOnlyPage = lazy(async () => {
-  const module = await import("./issue-detail/issue-read-only-page");
-  return { default: module.IssueReadOnlyPage };
 });
 
 interface IssuesActivityProps {
@@ -175,7 +171,7 @@ export function IssuesActivity({
     sourceFilter,
     toolbar: issueSyncToolbar,
   } = useIssueSyncChrome(projectId, reloadMirroredIssues);
-  const [boardPane, setBoardPane] = useState<IssueBoardPane>("issues");
+  const changeRequestNav = useChangeRequestNavigation();
   const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
     initialPageState.previousSelectedIssueId,
@@ -618,11 +614,21 @@ export function IssuesActivity({
               laneTotals.review +
               laneTotals.completed
             }
-            pane={boardPane}
+            pane={changeRequestNav.boardPane}
             projectId={projectId}
             sourceMode={sourceMode}
             onOpenProjectSettings={onOpenProjectSettings}
-            onPaneChange={setBoardPane}
+            onPaneChange={changeRequestNav.setBoardPane}
+            openChangeRequest={changeRequestNav.openDetail}
+            onOpenChangeRequestConsumed={changeRequestNav.consumeOpenDetail}
+            onOpenLinkedIssue={(issueId) => {
+              const issue = issues.find((item) => item.id === issueId);
+              if (issue == null) {
+                return;
+              }
+              changeRequestNav.setBoardPane("issues");
+              openIssueDialog(issue, null);
+            }}
             isLoading={isLoading}
             lanes={lanes}
             selectedIssueId={selectedIssueId}
@@ -693,40 +699,38 @@ export function IssuesActivity({
       ) : null}
 
       {dialogMode && !isEditablePageOpen ? (
-        <Suspense
-          fallback={
-            <p className="activity-surface__loading" role="status">
-              {messages.settings.loading}
-            </p>
+        <IssuesActivityReadonlySlot
+          form={form}
+          selectedIssue={selectedIssue}
+          isSaving={isSaving}
+          errorMessage={dialogErrorMessage}
+          hasLinkedSession={hasLinkedSession}
+          canOpenAgentsActivity={canOpenLinkedSession}
+          loadingLabel={messages.settings.loading}
+          onBack={handleBackFromReadOnlyIssue}
+          onPreviewAttachment={(attachment) =>
+            void handlePreviewAttachment(attachment)
           }
-        >
-          <IssueReadOnlyPage
-            form={form}
-            selectedIssue={selectedIssue}
-            isSaving={isSaving}
-            errorMessage={dialogErrorMessage}
-            hasLinkedSession={hasLinkedSession}
-            canOpenAgentsActivity={canOpenLinkedSession}
-            onBack={handleBackFromReadOnlyIssue}
-            onPreviewAttachment={(attachment) =>
-              void handlePreviewAttachment(attachment)
-            }
-            onDownloadAttachment={(attachment) =>
-              void handleDownloadAttachment(attachment)
-            }
-            onAdvanceStatus={(targetStatus) =>
-              void handleAdvanceStatus(targetStatus)
-            }
-            onDeleteIssue={() => void handleDeleteIssue()}
-            onEditIssue={editSelectedIssue}
-            onOpenLinkedSession={openLinkedSession}
-            onRunIssue={
-              selectedIssue && canRunIssueFor(selectedIssue)
-                ? (trigger) => void confirmRunIssueFromEditPage(trigger)
-                : undefined
-            }
-          />
-        </Suspense>
+          onDownloadAttachment={(attachment) =>
+            void handleDownloadAttachment(attachment)
+          }
+          onAdvanceStatus={(targetStatus) =>
+            void handleAdvanceStatus(targetStatus)
+          }
+          onDeleteIssue={() => void handleDeleteIssue()}
+          onEditIssue={editSelectedIssue}
+          onOpenLinkedSession={openLinkedSession}
+          onRunIssue={
+            selectedIssue && canRunIssueFor(selectedIssue)
+              ? (trigger) => void confirmRunIssueFromEditPage(trigger)
+              : undefined
+          }
+          onOpenChangeRequest={(request) => {
+            setDialogMode(null);
+            setIsReadOnlyEditRequested(false);
+            changeRequestNav.openChangeRequest(request);
+          }}
+        />
       ) : null}
 
       {runDialogIssue ? (

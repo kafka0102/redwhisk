@@ -16,10 +16,13 @@ export interface IssueDetailProjection {
 }
 
 export interface LinkedChangeRequestSummary {
+  provider: string;
   url: string;
   number: number | null;
   state: string | null;
-  checksLabel: string | null;
+  checksOk: number | null;
+  checksFailed: number | null;
+  checksPending: number | null;
   title: string | null;
   sourceBranch: string | null;
   targetBranch: string | null;
@@ -27,7 +30,7 @@ export interface LinkedChangeRequestSummary {
 
 export interface IssueDetailRecord {
   projection: IssueDetailProjection | null;
-  linkedChangeRequest: LinkedChangeRequestSummary | null;
+  linkedChangeRequests: LinkedChangeRequestSummary[];
   writebackPending: boolean;
   writebackError: string | null;
   unavailableBanner: UnavailableBanner | null;

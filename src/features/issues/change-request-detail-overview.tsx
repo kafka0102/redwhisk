@@ -7,8 +7,10 @@ import type { ChangeRequestDetail } from "./change-request-commands";
 
 export function ChangeRequestDetailOverview({
   detail,
+  onOpenIssue,
 }: {
   detail: ChangeRequestDetail;
+  onOpenIssue?: (issueId: number) => void;
 }): JSX.Element {
   const { t } = useI18n();
   return (
@@ -26,7 +28,14 @@ export function ChangeRequestDetailOverview({
           <h3>{t("issues.changeRequests.linkedIssues")}</h3>
           <ul>
             {detail.linkedIssues.map((issue) => (
-              <li key={issue.issueId}>{issue.label}</li>
+              <li key={issue.issueId}>
+                <button
+                  type="button"
+                  onClick={() => onOpenIssue?.(issue.issueId)}
+                >
+                  {issue.label}
+                </button>
+              </li>
             ))}
           </ul>
         </section>

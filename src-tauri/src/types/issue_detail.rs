@@ -26,7 +26,7 @@ pub struct ApplyIssueRecoveryInput {
 #[serde(rename_all = "camelCase")]
 pub struct IssueDetailRecord {
     pub projection: Option<IssueDetailProjection>,
-    pub linked_change_request: Option<LinkedChangeRequestSummary>,
+    pub linked_change_requests: Vec<LinkedChangeRequestSummary>,
     pub writeback_pending: bool,
     pub writeback_error: Option<String>,
     pub unavailable_banner: Option<UnavailableBanner>,
@@ -62,10 +62,13 @@ pub struct IssueDetailProjection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedChangeRequestSummary {
+    pub provider: String,
     pub url: String,
     pub number: Option<i64>,
     pub state: Option<String>,
-    pub checks_label: Option<String>,
+    pub checks_ok: Option<i64>,
+    pub checks_failed: Option<i64>,
+    pub checks_pending: Option<i64>,
     pub title: Option<String>,
     pub source_branch: Option<String>,
     pub target_branch: Option<String>,

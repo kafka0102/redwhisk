@@ -12,6 +12,9 @@ export function IssuesActivityBoard({
   projectId,
   sourceMode,
   onOpenProjectSettings,
+  openChangeRequest,
+  onOpenChangeRequestConsumed,
+  onOpenLinkedIssue,
   ...kanban
 }: {
   actions?: ReactNode;
@@ -21,6 +24,9 @@ export function IssuesActivityBoard({
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
   onOpenProjectSettings?: () => void;
+  openChangeRequest?: { provider: string; number: number } | null;
+  onOpenChangeRequestConsumed?: () => void;
+  onOpenLinkedIssue?: (issueId: number) => void;
 } & ComponentProps<typeof IssuesKanban>): JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false);
   return (
@@ -41,6 +47,9 @@ export function IssuesActivityBoard({
           sourceMode={sourceMode}
           onOpenProjectSettings={onOpenProjectSettings}
           onDetailOpenChange={setDetailOpen}
+          openDetail={openChangeRequest}
+          onOpenDetailConsumed={onOpenChangeRequestConsumed}
+          onOpenLinkedIssue={onOpenLinkedIssue}
         />
       ) : (
         <IssuesKanban {...kanban} sourceMode={sourceMode} />

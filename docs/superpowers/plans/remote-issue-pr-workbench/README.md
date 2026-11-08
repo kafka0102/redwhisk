@@ -1,6 +1,6 @@
 # 远程 Issue 与 PR/MR 工作台实施计划
 
-> 这是该项工作的唯一执行入口。任务 1、2、3、4、5、6 已完成；任务 7 依赖已解除，可开始。
+> 这是该项工作的唯一执行入口。任务 1、2、3、4、5、6、7 已完成；任务 8 依赖已解除，可开始。
 
 ## 基本信息
 
@@ -11,7 +11,7 @@
 | 产品方案 | [远程 Issue 与 PR/MR 工作台设计](../../specs/2026-10-31-remote-issue-and-pr-workbench-design.md) |
 | 静态原型 | [issue-pr-workbench.prototype.html](../../../../src/features/issues/issue-pr-workbench.prototype.html) |
 | 原始任务来源 | 归档会话 `issue-340-session-392.log`，`seq 66`、`seq 70` |
-| 最近更新 | 2026-11-07 |
+| 最近更新 | 2026-11-08 |
 
 本计划保留原始 8 个任务编号和主依赖骨架，避免已完成记录与后续提示词失联。任务边界根据当前代码重新校准：任务 2 已经吸收原任务 3 的自动同步、90 秒默认间隔、失败退避和运行锁，因此任务 3 不再重复实现这些能力。
 
@@ -25,8 +25,8 @@
 | 4 | [Issue 详情分状态与来源展示](./task-04-issue-detail-by-status-and-source.md) | 已完成 | 3（已完成，依赖已解除） | 详情布局与统一时间轴已落地。宿主评论和事件拉取未做，由下一次 Issue 同步扩展承接，不是任务 5、6、7 |
 | 5 | [远程 Issue 创建与写回](./task-05-remote-issue-create-and-writeback.md) | 已完成 | 4（已完成） | 创建 PR 后远程不关闭；写回幂等入口和待合并状态已落地。PR 合并后关闭留给任务 8。远端不可用可保留、解绑、重试 |
 | 6 | [PR/MR 一等数据与列表](./task-06-change-request-data-and-list.md) | 已完成 | 3（已完成） | 列表、同步和手动关联已落地。详情 JSON 仍是空数组 |
-| 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 进行中 | 6（已完成，依赖已解除） | 详情与双向关联实现中。详情 JSON 仍待写入 |
-| 8 | [PR/MR 操作与完成流程接入](./task-08-change-request-actions-and-completion.md) | 待开始 | 5、7 | 最后收口写操作与联动 |
+| 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 已完成 | 6（已完成） | 只读详情、双向关联和待审核完成入口已落地。写操作留给任务 8 |
+| 8 | [PR/MR 操作与完成流程接入](./task-08-change-request-actions-and-completion.md) | 可开始 | 5、7（均已完成） | 最后收口写操作与联动 |
 
 状态只使用以下值：
 
@@ -152,10 +152,10 @@ UI 任务执行时：
 
 每个任务只需要使用一句提示词，具体边界、依赖、原型和更新规则都写在任务文档中。
 
-当前下一项：任务 7（依赖已解除，可开始）。任务 6 已完成；详情 JSON 仍是空数组。PR 合并后关闭仍留给任务 8。
+当前下一项：任务 8（依赖已解除，可开始）。任务 7 已完成；合并框只读，关联关系、检查和评审字段、`get_project_change_request` 可调用。写操作和 PR 合并后关闭仍留给任务 8。
 
 ```text
-请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-07-change-request-detail-and-links.md 完成任务 7。具体任务、边界、原型页面和更新规则都在文档里。
+请根据 docs/superpowers/plans/remote-issue-pr-workbench/task-08-change-request-actions-and-completion.md 完成任务 8。具体任务、边界、原型页面和更新规则都在文档里。
 ```
 
 通用格式：
@@ -174,3 +174,4 @@ UI 任务执行时：
 | 2026-11-06 | 任务 4 完成。统一时间轴已落地。宿主评论和事件拉取未做，承接是下一次 Issue 同步扩展，不是任务 5、6、7。任务 5 改为可开始。 |
 | 2026-11-07 | 任务 5 完成。创建 PR 后远程不关闭，写回幂等入口和待合并状态已落地。PR 合并后关闭留给任务 8。f12717efe99169fc3bb62701b83eddf9b172be20。 |
 | 2026-11-08 | 任务 6 完成，未提交。任务 7 改为可开始。可复用列表、同步、手动关联命令；详情 JSON 仍是空数组。 |
+| 2026-11-08 | 任务 7 完成，提交号待补。只读详情、双向关联和待审核完成入口已落地。任务 8 改为可开始。 |

@@ -58,6 +58,7 @@ interface IssueReadOnlyPageProps {
   onEditIssue: () => void;
   onOpenLinkedSession: () => void;
   onRunIssue?: (trigger: HTMLElement | null) => void;
+  onOpenChangeRequest?: (request: { provider: string; number: number }) => void;
 }
 
 export function IssueReadOnlyPage({
@@ -75,6 +76,7 @@ export function IssueReadOnlyPage({
   onEditIssue,
   onOpenLinkedSession,
   onRunIssue,
+  onOpenChangeRequest,
 }: IssueReadOnlyPageProps) {
   const { messages, t } = useI18n();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -170,16 +172,6 @@ export function IssueReadOnlyPage({
                 {messages.issues.run}
               </Button>
             ) : null}
-            {selectedIssue?.status === "review" ? (
-              <Button
-                className="issues-button issues-button--primary"
-                disabled={isSaving}
-                type="button"
-                onClick={() => onAdvanceStatus("completed")}
-              >
-                {t("issues.complete")}
-              </Button>
-            ) : null}
             {selectedIssue?.status === "completed" ? (
               <Button
                 className="issues-button"
@@ -222,13 +214,14 @@ export function IssueReadOnlyPage({
         <IssueDetailSideCards
           canOpenSession={hasLinkedSession && canOpenAgentsActivity}
           issueStatus={selectedIssue?.status ?? null}
-          linkedChangeRequest={activeDetail?.linkedChangeRequest ?? null}
+          linkedChangeRequests={activeDetail?.linkedChangeRequests ?? []}
           linkedSessionId={linkedSessionId}
           projectId={projectId}
           projection={activeDetail?.projection ?? null}
           writebackError={activeDetail?.writebackError ?? null}
           writebackPending={activeDetail?.writebackPending ?? false}
           onOpenSession={onOpenLinkedSession}
+          onOpenChangeRequest={onOpenChangeRequest}
           onRetryWriteback={() => {
             if (selectedIssue == null) {
               return;

@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/button";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { changeRequestChecksSummary } from "../change-request-list-text";
 import { IssueReadonlySessionPanel } from "./issue-readonly-session-panel";
 import type {
   IssueDetailProjection,
@@ -35,7 +36,7 @@ export function IssueReadOnlyLabelRow({
 
 export function IssueDetailSideCards({
   projection,
-  linkedChangeRequest,
+  linkedChangeRequests,
   linkedSessionId,
   projectId,
   canOpenSession,
@@ -44,9 +45,10 @@ export function IssueDetailSideCards({
   writebackPending,
   writebackError,
   onRetryWriteback,
+  onOpenChangeRequest,
 }: {
   projection: IssueDetailProjection | null;
-  linkedChangeRequest: LinkedChangeRequestSummary | null;
+  linkedChangeRequests: LinkedChangeRequestSummary[];
   linkedSessionId: number | null;
   projectId: number;
   canOpenSession: boolean;
@@ -55,19 +57,21 @@ export function IssueDetailSideCards({
   writebackPending: boolean;
   writebackError: string | null;
   onRetryWriteback: () => void;
+  onOpenChangeRequest?: (request: { provider: string; number: number }) => void;
 }): JSX.Element | null {
   const { messages } = useI18n();
   const hasSession = linkedSessionId != null;
-  if (projection == null && linkedChangeRequest == null && !hasSession) {
+  if (projection == null && linkedChangeRequests.length === 0 && !hasSession) {
     return null;
   }
   const pendingMerge =
     issueStatus === "completed" &&
     projection != null &&
     projection.remoteState !== "closed" &&
-    linkedChangeRequest != null &&
-    (linkedChangeRequest.state == null ||
-      linkedChangeRequest.state.toLowerCase() === "open");
+    linkedChangeRequests.some(
+      (request) =>
+        request.state == null || request.state.toLowerCase() === "open",
+    );
   return (
     <div className="issue-page__side issue-page__side--readonly">
       {projection != null ? (
@@ -79,12 +83,13 @@ export function IssueDetailSideCards({
           onRetryWriteback={onRetryWriteback}
         />
       ) : null}
-      {linkedChangeRequest != null ? (
+      {linkedChangeRequests.map((request) => (
         <IssueLinkedChangeRequestCard
-          provider={projection?.provider ?? null}
-          request={linkedChangeRequest}
+          key={`${request.provider}:${request.number ?? request.url}`}
+          request={request}
+          onOpenChangeRequest={onOpenChangeRequest}
         />
-      ) : null}
+      ))}
       {hasSession ? (
         <aside
           aria-label={messages.agentsFeature.sessionInfo}
@@ -188,26 +193,52 @@ function IssueHostCard({
 }
 
 function IssueLinkedChangeRequestCard({
-  provider,
   request,
+  onOpenChangeRequest,
 }: {
-  provider: string | null;
   request: LinkedChangeRequestSummary;
+  onOpenChangeRequest?: (request: { provider: string; number: number }) => void;
 }): JSX.Element {
   const { t } = useI18n();
   const openLabel =
-    provider === "gitlab" ? t("issues.openGitlab") : t("issues.openGithub");
+    request.provider === "gitlab"
+      ? t("issues.openGitlab")
+      : t("issues.openGithub");
+  const checks = changeRequestChecksSummary(
+    request.checksOk,
+    request.checksFailed,
+    request.checksPending,
+    t,
+  );
+  const regionLabel =
+    request.number == null
+      ? t("issues.linkedChangeRequest")
+      : `${t("issues.linkedChangeRequest")} #${request.number}`;
+  const requestNumber = request.number;
   return (
-    <section
-      aria-label={t("issues.linkedChangeRequest")}
-      className="issue-detail-side-card"
-    >
+    <section aria-label={regionLabel} className="issue-detail-side-card">
       <div className="issue-detail-side-card__header">
         <h3>{t("issues.linkedChangeRequest")}</h3>
         {request.state != null && request.state.length > 0 ? (
           <span>{request.state}</span>
         ) : null}
       </div>
+      <p>{checks.text}</p>
+      {requestNumber != null ? (
+        <Button
+          size="sm"
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            onOpenChangeRequest?.({
+              number: requestNumber,
+              provider: request.provider,
+            });
+          }}
+        >
+          {t("issues.changeRequests.openInApp")}
+        </Button>
+      ) : null}
       <Button
         size="sm"
         type="button"

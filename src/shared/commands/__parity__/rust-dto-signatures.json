@@ -883,7 +883,7 @@
     },
     "IssueDetailRecord": {
       "fields": {
-        "linkedChangeRequest": "required",
+        "linkedChangeRequests": "required",
         "projection": "required",
         "unavailableBanner": "required",
         "writebackError": "required",
@@ -1023,8 +1023,11 @@
     },
     "LinkedChangeRequestSummary": {
       "fields": {
-        "checksLabel": "required",
+        "checksFailed": "required",
+        "checksOk": "required",
+        "checksPending": "required",
         "number": "required",
+        "provider": "required",
         "sourceBranch": "required",
         "state": "required",
         "targetBranch": "required",

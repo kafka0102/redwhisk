@@ -168,7 +168,9 @@ async function flush(): Promise<void> {
   });
 }
 
-function renderDetail(): ReturnType<typeof render> {
+function renderDetail(
+  onOpenIssue?: (issueId: number) => void,
+): ReturnType<typeof render> {
   return render(
     <I18nProvider fixedLocale="zh">
       <ChangeRequestDetailPage
@@ -176,6 +178,7 @@ function renderDetail(): ReturnType<typeof render> {
         projectId={4}
         provider="github"
         onBack={() => undefined}
+        onOpenIssue={onOpenIssue}
       />
     </I18nProvider>,
   );
@@ -249,6 +252,26 @@ describe("change request detail", () => {
     await flush();
     expect(screen.queryByText("审阅者")).toBeNull();
     expect(screen.queryByText("标签")).toBeNull();
+  });
+
+  it("lists every linked issue and opens the matching issue detail", async () => {
+    const onOpenIssue = vi.fn();
+    getDetailMock.mockResolvedValue(
+      detail({
+        linkedIssues: [
+          { issueId: 12, label: "#12", linkKind: "branch" },
+          { issueId: 128, label: "GH #128", linkKind: "closing" },
+        ],
+      }),
+    );
+    renderDetail(onOpenIssue);
+    await flush();
+    expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "GH #128" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "GH #128" }));
+    expect(onOpenIssue).toHaveBeenCalledWith(128);
+    fireEvent.click(screen.getByRole("button", { name: "#12" }));
+    expect(onOpenIssue).toHaveBeenCalledWith(12);
   });
 
   it("uses host blocking reasons instead of a check-failure sentence", async () => {

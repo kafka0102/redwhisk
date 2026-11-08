@@ -39,11 +39,18 @@ describe("main entry startup budget", () => {
       resolve(process.cwd(), "src/features/issues/issues-activity.tsx"),
       "utf8",
     );
+    const readonlySlotSource = readFileSync(
+      resolve(
+        process.cwd(),
+        "src/features/issues/issues-activity-readonly-slot.tsx",
+      ),
+      "utf8",
+    );
     expect(activitySource).toMatch(/lazy\(/);
     expect(activitySource).toMatch(
       /import\("\.\/issue-detail\/issue-editable-page"\)/,
     );
-    expect(activitySource).toMatch(
+    expect(readonlySlotSource).toMatch(
       /import\("\.\/issue-detail\/issue-read-only-page"\)/,
     );
     // 看板首屏不得同步拉起 Quill / react-markdown 所在详情页。
@@ -51,6 +58,9 @@ describe("main entry startup budget", () => {
       /import \{ IssueEditablePage \} from "\.\/issue-detail\/issue-editable-page"/,
     );
     expect(activitySource).not.toMatch(
+      /import \{ IssueReadOnlyPage \} from "\.\/issue-detail\/issue-read-only-page"/,
+    );
+    expect(readonlySlotSource).not.toMatch(
       /import \{ IssueReadOnlyPage \} from "\.\/issue-detail\/issue-read-only-page"/,
     );
   });

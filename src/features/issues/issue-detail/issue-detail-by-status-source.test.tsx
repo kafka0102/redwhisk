@@ -157,10 +157,13 @@ interface DetailProjection {
 }
 
 interface DetailChangeRequest {
+  provider: string;
   url: string;
   number: number | null;
   state: "open" | "closed" | "merged" | null;
-  checksLabel: string | null;
+  checksOk: number | null;
+  checksFailed: number | null;
+  checksPending: number | null;
   title: string | null;
   sourceBranch: string | null;
   targetBranch: string | null;
@@ -168,7 +171,7 @@ interface DetailChangeRequest {
 
 interface DetailResponse {
   projection: DetailProjection | null;
-  linkedChangeRequest: DetailChangeRequest | null;
+  linkedChangeRequests: DetailChangeRequest[];
   writebackPending?: boolean;
   writebackError?: string | null;
   unavailableBanner?: IssueDetailRecord["unavailableBanner"];
@@ -241,10 +244,13 @@ function changeRequest(
   partial: Partial<DetailChangeRequest> = {},
 ): DetailChangeRequest {
   return {
+    provider: "github",
     url: "https://github.com/acme/redwhisk/pull/9",
     number: 9,
     state: null,
-    checksLabel: null,
+    checksOk: null,
+    checksFailed: null,
+    checksPending: null,
     title: null,
     sourceBranch: null,
     targetBranch: null,
@@ -324,7 +330,7 @@ function renderBoard(issue: IssueBoardRecord, detail: DetailResponse): void {
           ],
   });
   getIssueDetailMock.mockResolvedValue({
-    linkedChangeRequest: detail.linkedChangeRequest,
+    linkedChangeRequests: detail.linkedChangeRequests,
     projection: detail.projection,
     writebackError: detail.writebackError ?? null,
     writebackPending: detail.writebackPending ?? false,
@@ -436,7 +442,7 @@ describe("Issue 详情按状态与来源", () => {
     {
       name: "待办本地直接编辑且没有右侧栏",
       issue: boardIssue({ id: 12, number: 12, source: "local" }),
-      detail: { projection: null, linkedChangeRequest: null },
+      detail: { projection: null, linkedChangeRequests: [] },
       actions: ["运行", "保存", "删除"],
       absent: ["打开状态选项", "更多 issue 操作", "完成", "查看回看"],
       cards: [] as Array<"host" | "pr" | "session">,
@@ -453,7 +459,7 @@ describe("Issue 详情按状态与来源", () => {
       }),
       detail: {
         projection: hostProjection(),
-        linkedChangeRequest: null,
+        linkedChangeRequests: [],
       },
       actions: ["打开状态选项", "运行", "更多 issue 操作"],
       absent: ["保存", "删除", "完成", "查看回看"],
@@ -472,7 +478,7 @@ describe("Issue 详情按状态与来源", () => {
         linkedSessionId: 301,
         linkedSessionStatus: "closed",
       }),
-      detail: { projection: hostProjection(), linkedChangeRequest: null },
+      detail: { projection: hostProjection(), linkedChangeRequests: [] },
       actions: ["打开状态选项", "更多 issue 操作"],
       absent: ["运行", "保存", "删除", "完成", "查看回看"],
       statusText: "进行中",
@@ -488,7 +494,7 @@ describe("Issue 详情按状态与来源", () => {
         linkedSessionId: 302,
         linkedSessionStatus: "closed",
       }),
-      detail: { projection: null, linkedChangeRequest: null },
+      detail: { projection: null, linkedChangeRequests: [] },
       actions: ["打开状态选项", "更多 issue 操作"],
       absent: ["运行", "保存", "完成", "查看回看", "打开 GitHub"],
       statusText: "进行中",
@@ -509,10 +515,17 @@ describe("Issue 详情按状态与来源", () => {
       }),
       detail: {
         projection: hostProjection(),
-        linkedChangeRequest: changeRequest({ state: "open" }),
+        linkedChangeRequests: [
+          changeRequest({
+            state: "open",
+            checksOk: 3,
+            checksFailed: 1,
+            checksPending: 0,
+          }),
+        ],
       },
-      actions: ["打开状态选项", "完成", "更多 issue 操作"],
-      absent: ["运行", "保存", "删除", "查看回看"],
+      actions: ["打开状态选项", "更多 issue 操作"],
+      absent: ["运行", "保存", "删除", "完成", "查看回看"],
       statusText: "待验收",
       cards: ["host", "pr", "session"] as Array<"host" | "pr" | "session">,
       prState: "open",
@@ -527,9 +540,9 @@ describe("Issue 详情按状态与来源", () => {
         linkedSessionId: 304,
         linkedSessionStatus: "closed",
       }),
-      detail: { projection: null, linkedChangeRequest: null },
-      actions: ["打开状态选项", "完成", "更多 issue 操作"],
-      absent: ["运行", "保存", "查看回看", "打开 GitHub"],
+      detail: { projection: null, linkedChangeRequests: [] },
+      actions: ["打开状态选项", "更多 issue 操作"],
+      absent: ["运行", "保存", "完成", "查看回看", "打开 GitHub"],
       statusText: "待验收",
       cards: ["session"] as Array<"host" | "pr" | "session">,
     },
@@ -551,11 +564,16 @@ describe("Issue 详情按状态与来源", () => {
       }),
       detail: {
         projection: hostProjection({ remoteState: "closed" }),
-        linkedChangeRequest: changeRequest({
-          url: "https://github.com/acme/redwhisk/pull/124",
-          number: 124,
-          state: "merged",
-        }),
+        linkedChangeRequests: [
+          changeRequest({
+            url: "https://github.com/acme/redwhisk/pull/124",
+            number: 124,
+            state: "merged",
+            checksOk: 4,
+            checksFailed: 0,
+            checksPending: 0,
+          }),
+        ],
       },
       actions: ["打开状态选项", "查看回看", "更多 issue 操作"],
       absent: ["运行", "保存", "完成", "删除"],
@@ -576,7 +594,7 @@ describe("Issue 详情按状态与来源", () => {
         linkedSessionProviderSessionId: "thread-9",
         linkedSessionAgentType: "codex",
       }),
-      detail: { projection: null, linkedChangeRequest: null },
+      detail: { projection: null, linkedChangeRequests: [] },
       actions: ["打开状态选项", "查看回看", "更多 issue 操作"],
       absent: ["运行", "保存", "完成", "打开 GitHub"],
       statusText: "已完成",
@@ -655,14 +673,17 @@ describe("Issue 详情按状态与来源", () => {
 
       if (cards.includes("pr")) {
         const pullRequest = within(root).getByRole("region", {
-          name: "关联 PR",
+          name: `关联 PR #${detail.linkedChangeRequests[0]?.number}`,
         });
         expect(
           within(pullRequest).getByText(prState ?? ""),
         ).toBeInTheDocument();
+        expect(
+          within(pullRequest).getByRole("button", { name: "查看详情" }),
+        ).toBeInTheDocument();
       } else {
         expect(
-          within(root).queryByRole("region", { name: "关联 PR" }),
+          within(root).queryByRole("region", { name: /关联 PR/ }),
         ).toBeNull();
       }
 
@@ -716,7 +737,7 @@ describe("Issue 详情按状态与来源", () => {
     for (const issue of issues) {
       const root = await openFromBoard(issue, {
         projection: null,
-        linkedChangeRequest: null,
+        linkedChangeRequests: [],
       });
       expect(
         within(root).getByRole("heading", {
@@ -743,7 +764,7 @@ describe("Issue 详情按状态与来源", () => {
         provider: "gitlab",
         externalUrl: "https://gitlab.com/acme/redwhisk/-/issues/7",
       }),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     expect(
       within(root).getByRole("heading", { level: 2, name: "GL #7 · 完成流程" }),
@@ -767,7 +788,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const emptyRoot = await openFromBoard(empty, {
       projection: hostProjection({ labels: [] }),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     expect(within(emptyRoot).queryByRole("group", { name: "标签" })).toBeNull();
     cleanupRenderedBoard();
@@ -781,7 +802,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection({ labels: ["enhancement", "sync"] }),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     const labels = await within(root).findByRole("group", { name: "标签" });
     expect(within(labels).getByText("enhancement")).toBeInTheDocument();
@@ -806,9 +827,11 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: changeRequest({ state: null, checksLabel: null }),
+      linkedChangeRequests: [changeRequest({ state: null })],
     });
-    const pullRequest = within(root).getByRole("region", { name: "关联 PR" });
+    const pullRequest = within(root).getByRole("region", {
+      name: "关联 PR #9",
+    });
     expect(within(pullRequest).queryByText("open")).toBeNull();
     expect(within(pullRequest).queryByText("merged")).toBeNull();
     expect(within(pullRequest).queryByText("closed")).toBeNull();
@@ -818,6 +841,122 @@ describe("Issue 详情按状态与来源", () => {
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/9",
     );
+  });
+
+  it("按关联创建时间展示每一条变更请求", async () => {
+    const issue = boardIssue({
+      id: 80,
+      status: "review",
+      source: "remote",
+      provider: "github",
+      externalNumber: 80,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection(),
+      linkedChangeRequests: [
+        changeRequest({
+          state: "open",
+          checksOk: 3,
+          checksFailed: 1,
+          checksPending: 0,
+        }),
+        changeRequest({
+          number: 11,
+          url: "https://github.com/acme/redwhisk/pull/11",
+          state: "merged",
+          checksOk: 4,
+          checksFailed: 0,
+          checksPending: 0,
+        }),
+      ],
+    });
+    const first = within(root).getByRole("region", { name: "关联 PR #9" });
+    const second = within(root).getByRole("region", { name: "关联 PR #11" });
+    expect(within(first).getByText("open")).toBeInTheDocument();
+    expect(within(first).getByText("3/4 通过")).toBeInTheDocument();
+    expect(within(second).getByText("merged")).toBeInTheDocument();
+    expect(within(second).getByText("4/4 通过")).toBeInTheDocument();
+    expect(
+      within(first).getByRole("button", { name: "查看详情" }),
+    ).toBeInTheDocument();
+    expect(
+      within(first).getByRole("button", { name: "打开 GitHub" }),
+    ).toBeInTheDocument();
+  });
+
+  it("关联卡片可进入应用内详情", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "list_project_change_requests") {
+        return {
+          rows: [],
+          tabCount: 0,
+          counts: {
+            reviewRequested: 0,
+            createdByMe: 0,
+            allOpen: 0,
+            recentlyMerged: 0,
+          },
+          pullRequestRefs: [],
+        };
+      }
+      if (command === "get_project_change_request") {
+        return {
+          id: 1,
+          provider: "github",
+          number: 9,
+          title: "Remote issue sync",
+          url: "https://github.com/acme/redwhisk/pull/9",
+          state: "open",
+          body: "body",
+          authorLogin: "lin",
+          sourceBranch: "feat/a",
+          targetBranch: "main",
+          commitCount: null,
+          additions: null,
+          deletions: null,
+          labels: [],
+          reviewers: [],
+          mergeable: null,
+          mergeStateStatus: null,
+          reviewDecision: null,
+          blockingReasons: [],
+          mergeMethod: null,
+          mergeCommitSha: null,
+          detailStatus: "fresh",
+          detailError: null,
+          files: [],
+          checks: [],
+          reviews: [],
+          comments: [],
+          linkedIssues: [],
+        };
+      }
+      return undefined;
+    });
+    const issue = boardIssue({
+      id: 81,
+      status: "review",
+      source: "remote",
+      provider: "github",
+      externalNumber: 81,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection(),
+      linkedChangeRequests: [
+        changeRequest({
+          state: "open",
+          checksOk: 1,
+          checksFailed: 0,
+          checksPending: 0,
+        }),
+      ],
+    });
+    await userEvent.click(
+      within(root).getByRole("button", { name: "查看详情" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /#9/ }),
+    ).toBeInTheDocument();
   });
 
   it("投影为 null 时没有宿主卡和 PR 卡", async () => {
@@ -830,12 +969,12 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await waitFor(() => expect(getIssueDetailMock).toHaveBeenCalled());
     expect(within(root).getByText("正文还在")).toBeInTheDocument();
     expect(within(root).queryByRole("region", { name: "GitHub" })).toBeNull();
-    expect(within(root).queryByRole("region", { name: "关联 PR" })).toBeNull();
+    expect(within(root).queryByRole("region", { name: /关联 PR/ })).toBeNull();
   });
 
   it("投影命令失败时标题和正文仍在，不渲染空宿主卡", async () => {
@@ -845,7 +984,7 @@ describe("Issue 详情按状态与来源", () => {
       provider: "github",
       externalNumber: 55,
     });
-    renderBoard(issue, { projection: null, linkedChangeRequest: null });
+    renderBoard(issue, { projection: null, linkedChangeRequests: [] });
     getIssueDetailMock.mockRejectedValue(new Error("detail failed"));
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: issue.title }));
@@ -872,7 +1011,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     expect(
       within(root).getByRole("heading", {
@@ -898,7 +1037,7 @@ describe("Issue 详情按状态与来源", () => {
           assignees: [],
           authorLogin: "lin",
         }),
-        linkedChangeRequest: null,
+        linkedChangeRequests: [],
       });
       const host = within(root).getByRole("region", { name: "GitHub" });
       expect(within(host).getByText("不可用")).toBeInTheDocument();
@@ -920,7 +1059,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     renderBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(await screen.findByRole("button", { name: issue.title }));
     const root = await screen.findByRole("region", { name: "Issue 详情" });
@@ -954,7 +1093,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const backlogRoot = await openFromBoard(backlog, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(backlogRoot).getByRole("button", { name: "更多 issue 操作" }),
@@ -988,7 +1127,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(running, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(root).getByRole("button", { name: "更多 issue 操作" }),
@@ -1036,7 +1175,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(root).getByRole("button", { name: "更多 issue 操作" }),
@@ -1073,7 +1212,7 @@ describe("Issue 详情按状态与来源", () => {
     );
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(root).getByRole("button", { name: "更多 issue 操作" }),
@@ -1122,7 +1261,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(root).getByRole("button", { name: "打开状态选项" }),
@@ -1178,9 +1317,12 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection(),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
-    await user.click(within(root).getByRole("button", { name: "完成" }));
+    await user.click(
+      within(root).getByRole("button", { name: "打开状态选项" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "已完成" }));
     await waitFor(() => expect(completeIssueFlowMock).toHaveBeenCalled());
     const completed =
       await completeIssueFlowMock.mock.results[
@@ -1212,7 +1354,7 @@ describe("Issue 详情按状态与来源", () => {
     );
     const runningRoot = await openFromBoard(running, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(runningRoot).getByRole("button", { name: "打开状态选项" }),
@@ -1230,7 +1372,7 @@ describe("Issue 详情按状态与来源", () => {
     advanceIssueStatusMock.mockClear();
     const backward = await openFromBoard(running, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(backward).getByRole("button", { name: "打开状态选项" }),
@@ -1264,14 +1406,43 @@ describe("Issue 详情按状态与来源", () => {
     });
     const reviewRoot = await openFromBoard(review, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
-    await user.click(within(reviewRoot).getByRole("button", { name: "完成" }));
+    await user.click(
+      within(reviewRoot).getByRole("button", { name: "打开状态选项" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "已完成" }));
     await waitFor(() => expect(completeIssueFlowMock).toHaveBeenCalled());
     expect(updateIssueMock).not.toHaveBeenCalled();
     expect(advanceIssueStatusMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ targetStatus: "completed" }),
     );
+  });
+
+  it("没有关联会话时选已完成只推进状态", async () => {
+    const user = userEvent.setup();
+    const review = boardIssue({
+      id: 73,
+      status: "review",
+      source: "local",
+    });
+    advanceIssueStatusMock.mockResolvedValue(
+      boardIssue({ ...review, status: "completed" }),
+    );
+    const root = await openFromBoard(review, {
+      projection: null,
+      linkedChangeRequests: [],
+    });
+    await user.click(
+      within(root).getByRole("button", { name: "打开状态选项" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "已完成" }));
+    await waitFor(() =>
+      expect(advanceIssueStatusMock).toHaveBeenCalledWith(
+        expect.objectContaining({ issueId: 73, targetStatus: "completed" }),
+      ),
+    );
+    expect(completeIssueFlowMock).not.toHaveBeenCalled();
   });
 
   it("已完成不能选待验收，不能续接时不能选进行中", async () => {
@@ -1288,7 +1459,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(reopenable, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(root).getByRole("button", { name: "打开状态选项" }),
@@ -1314,7 +1485,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const blockedRoot = await openFromBoard(blocked, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     await user.click(
       within(blockedRoot).getByRole("button", { name: "打开状态选项" }),
@@ -1347,7 +1518,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
     });
     expect(within(root).getByLabelText("标题").tagName).toBe("INPUT");
     for (const name of [
@@ -1395,7 +1566,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection({ remoteState: "open" }),
-      linkedChangeRequest: changeRequest({ state: "open" }),
+      linkedChangeRequests: [changeRequest({ state: "open" })],
     });
     const host = within(root).getByRole("region", { name: "GitHub" });
     expect(within(host).getByText("PR 待合并")).toBeInTheDocument();
@@ -1415,7 +1586,7 @@ describe("Issue 详情按状态与来源", () => {
     });
     const root = await openFromBoard(issue, {
       projection: hostProjection({ remoteState: "open" }),
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
       writebackPending: true,
       writebackError: "writebackOffline",
     });

@@ -24,11 +24,17 @@ export function ChangeRequestPanel({
   sourceMode,
   onOpenProjectSettings,
   onDetailOpenChange,
+  openDetail,
+  onOpenDetailConsumed,
+  onOpenLinkedIssue,
 }: {
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
   onOpenProjectSettings?: () => void;
   onDetailOpenChange?: (open: boolean) => void;
+  openDetail?: { provider: string; number: number } | null;
+  onOpenDetailConsumed?: () => void;
+  onOpenLinkedIssue?: (issueId: number) => void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [filter, setFilter] = useState<ChangeRequestFilter>("review_requested");
@@ -115,17 +121,27 @@ export function ChangeRequestPanel({
   }, [projectId, reload]);
 
   useEffect(() => {
-    onDetailOpenChange?.(selected != null);
-  }, [onDetailOpenChange, selected]);
+    onDetailOpenChange?.(selected != null || openDetail != null);
+  }, [onDetailOpenChange, openDetail, selected]);
 
-  if (selected != null) {
+  const activeDetail = selected ?? openDetail ?? null;
+
+  if (activeDetail != null) {
     return (
       <ChangeRequestDetailPage
-        key={`${selected.provider}:${selected.number}`}
-        number={selected.number}
+        key={`${activeDetail.provider}:${activeDetail.number}`}
+        number={activeDetail.number}
         projectId={projectId}
-        provider={selected.provider}
-        onBack={() => setSelected(null)}
+        provider={activeDetail.provider}
+        onBack={() => {
+          setSelected(null);
+          onOpenDetailConsumed?.();
+        }}
+        onOpenIssue={(issueId) => {
+          setSelected(null);
+          onOpenDetailConsumed?.();
+          onOpenLinkedIssue?.(issueId);
+        }}
       />
     );
   }

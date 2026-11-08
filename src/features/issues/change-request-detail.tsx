@@ -19,11 +19,13 @@ export function ChangeRequestDetailPage({
   provider,
   number,
   onBack,
+  onOpenIssue,
 }: {
   projectId: number;
   provider: string;
   number: number;
   onBack: () => void;
+  onOpenIssue?: (issueId: number) => void;
 }): JSX.Element {
   const { t } = useI18n();
   const { detail } = useChangeRequestDetail({ projectId, provider, number });
@@ -64,7 +66,10 @@ export function ChangeRequestDetailPage({
       <div className="change-request-detail__grid">
         <div>
           {tab === "overview" ? (
-            <ChangeRequestDetailOverview detail={detail} />
+            <ChangeRequestDetailOverview
+              detail={detail}
+              onOpenIssue={onOpenIssue}
+            />
           ) : null}
           {tab === "files" ? (
             <ChangeRequestDetailFiles detail={detail} />

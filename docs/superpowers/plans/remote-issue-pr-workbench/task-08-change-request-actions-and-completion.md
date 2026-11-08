@@ -4,10 +4,10 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 状态 | 待开始 |
+| 状态 | 可开始 |
 | 依赖 | 任务 5、任务 7 |
 | 直接后续 | 无 |
-| 最近更新 | 2026-11-07 |
+| 最近更新 | 2026-11-08 |
 | 总计划 | [README](./README.md) |
 
 ## 目标
@@ -17,7 +17,9 @@
 - 任务 5 已提供远程 Issue 创建、写回幂等入口和待合并状态。创建 PR 后远程不关闭。PR 合并后关闭远程 Issue 仍留给本任务。
 - 写回入口是 `apply_completion_writeback` 与 `retry_issue_completion_writeback`。同一本地完成结果最多一条远程摘要评论。详情在关联 PR 仍 open 时显示「PR 待合并」。
 - 任务 6 已提供手动关联命令 `link_change_request_issue`。同一项目、同一 change request、同一 Issue 重复调用仍是一条，`link_kind` 为 `manual`。它不修改 Issue 完成状态。
-- 任务 7 应提供 PR/MR 详情、检查、评审、关联关系和只读合并框。详情 JSON 目前仍是空数组。
+- 任务 7 已提供 PR/MR 详情、检查、评审、关联关系和只读合并框。详情命令是 `get_project_change_request`；`detailStatus` 为 `fresh` / `cached` / `unavailable`。合并方式、删除源分支和合并按钮禁用，不执行合并。
+- Issue 与 PR/MR 双向关联已落地：详情列出全部关联 Issue；Issue 侧栏按关联创建时间展示一等变更请求卡片。
+- 待审核页已去掉「完成」按钮；状态下拉选「已完成」仍走现有完成流程。
 - 现有完成 flow 已支持“合并到 base”和“提交 PR/MR”，并保存旧 `issue_pull_requests.url`。
 - 现有 `publish_change_request` 会检测同分支已存在的 PR/MR；本任务必须把复用结果升级为一等实体关联。
 - 当前没有应用内 PR/MR 合并能力。

@@ -60,15 +60,8 @@ pub(crate) fn read_issue_detail(
         .optional()
         .map_err(issue_database_error)?;
 
-    let linked_change_request = connection
-        .query_row(
-            "SELECT url FROM issue_pull_requests WHERE issue_id = ?1",
-            params![input.issue_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(issue_database_error)?
-        .map(linked_change_request_from_url);
+    let linked_change_requests =
+        load_linked_change_requests(connection, input.project_id, input.issue_id)?;
 
     let (writeback_pending, writeback_error) = detail_writeback(connection, input.issue_id)?;
     let unavailable_banner =
@@ -87,7 +80,7 @@ pub(crate) fn read_issue_detail(
 
     Ok(IssueDetailRecord {
         projection,
-        linked_change_request,
+        linked_change_requests,
         writeback_pending,
         writeback_error,
         unavailable_banner,
@@ -105,21 +98,39 @@ fn string_list(value: &str) -> Vec<String> {
     serde_json::from_str(value).unwrap_or_default()
 }
 
-fn linked_change_request_from_url(url: String) -> LinkedChangeRequestSummary {
-    let number = url
-        .split(['?', '#'])
-        .next()
-        .and_then(|path| path.rsplit('/').next())
-        .and_then(|segment| segment.parse::<i64>().ok());
-    LinkedChangeRequestSummary {
-        url,
-        number,
-        state: None,
-        checks_label: None,
-        title: None,
-        source_branch: None,
-        target_branch: None,
-    }
+fn load_linked_change_requests(
+    connection: &Connection,
+    project_id: i64,
+    issue_id: i64,
+) -> Result<Vec<LinkedChangeRequestSummary>, CommandError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT cr.provider, cr.url, cr.number, cr.state, cr.checks_ok, cr.checks_failed,
+                    cr.checks_pending, cr.title, cr.source_branch, cr.target_branch
+             FROM change_request_issue_links AS links
+             JOIN change_requests AS cr ON cr.id = links.change_request_id
+             WHERE links.issue_id = ?1 AND cr.project_id = ?2
+             ORDER BY links.created_at ASC, cr.id ASC",
+        )
+        .map_err(issue_database_error)?;
+    let rows = statement
+        .query_map(params![issue_id, project_id], |row| {
+            Ok(LinkedChangeRequestSummary {
+                provider: row.get(0)?,
+                url: row.get(1)?,
+                number: Some(row.get(2)?),
+                state: row.get(3)?,
+                checks_ok: row.get(4)?,
+                checks_failed: row.get(5)?,
+                checks_pending: row.get(6)?,
+                title: row.get(7)?,
+                source_branch: row.get(8)?,
+                target_branch: row.get(9)?,
+            })
+        })
+        .map_err(issue_database_error)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(issue_database_error)
 }
 
 #[cfg(test)]
@@ -150,10 +161,7 @@ mod tests {
         connection.last_insert_rowid()
     }
 
-    #[test]
-    fn get_issue_detail_returns_projection_and_url_without_pr_state() {
-        let connection = open_memory();
-        let project_id = insert_project(&connection);
+    fn insert_issue(connection: &Connection, project_id: i64) -> i64 {
         connection
             .execute(
                 "INSERT INTO issues (
@@ -163,7 +171,39 @@ mod tests {
                 params![project_id],
             )
             .expect("issue");
-        let issue_id = connection.last_insert_rowid();
+        connection.last_insert_rowid()
+    }
+
+    fn insert_change_request(
+        connection: &Connection,
+        project_id: i64,
+        number: i64,
+        state: &str,
+        checks: (i64, i64, i64),
+    ) -> i64 {
+        connection
+            .execute(
+                "INSERT INTO change_requests (
+                    project_id, provider, host, repo, external_id, number, url, title,
+                    state, author_login, source_branch, target_branch, review_decision,
+                    requested_reviewers_json, checks_ok, checks_failed, checks_pending,
+                    remote_updated_at, synced_at
+                 ) VALUES (
+                    ?1, 'github', 'github.com', 'acme/redwhisk', ?2, ?2,
+                    'https://github.com/acme/redwhisk/pull/' || ?2, 'Change',
+                    ?3, 'lin', 'feat/a', 'main', 'none', '[]', ?4, ?5, ?6, 40, 40
+                 )",
+                params![project_id, number, state, checks.0, checks.1, checks.2],
+            )
+            .expect("change request");
+        connection.last_insert_rowid()
+    }
+
+    #[test]
+    fn get_issue_detail_returns_projection_without_url_only_change_request() {
+        let connection = open_memory();
+        let project_id = insert_project(&connection);
+        let issue_id = insert_issue(&connection, project_id);
         connection
             .execute(
                 "INSERT INTO issue_external_refs (
@@ -208,11 +248,48 @@ mod tests {
             projection.labels,
             vec!["enhancement".to_string(), "sync".to_string()]
         );
-        let linked = detail.linked_change_request.expect("linked");
-        assert_eq!(linked.url, "https://github.com/acme/redwhisk/pull/9");
-        assert_eq!(linked.number, Some(9));
-        assert_eq!(linked.state, None);
-        assert_eq!(linked.checks_label, None);
+        assert!(detail.linked_change_requests.is_empty());
+    }
+
+    #[test]
+    fn get_issue_detail_returns_first_class_change_requests_in_link_created_order() {
+        let connection = open_memory();
+        let project_id = insert_project(&connection);
+        let issue_id = insert_issue(&connection, project_id);
+        let later = insert_change_request(&connection, project_id, 11, "merged", (4, 0, 0));
+        let earlier = insert_change_request(&connection, project_id, 9, "open", (3, 1, 0));
+        connection
+            .execute(
+                "INSERT INTO change_request_issue_links (
+                    change_request_id, issue_id, link_kind, created_at
+                 ) VALUES (?1, ?2, 'manual', 50), (?3, ?2, 'closing', 40)",
+                params![later, issue_id, earlier],
+            )
+            .expect("links");
+
+        let detail = read_issue_detail(
+            &connection,
+            &GetIssueDetailInput {
+                project_id,
+                issue_id,
+            },
+        )
+        .expect("get_issue_detail");
+        assert_eq!(detail.linked_change_requests.len(), 2);
+        assert_eq!(detail.linked_change_requests[0].number, Some(9));
+        assert_eq!(
+            detail.linked_change_requests[0].state.as_deref(),
+            Some("open")
+        );
+        assert_eq!(detail.linked_change_requests[0].checks_ok, Some(3));
+        assert_eq!(detail.linked_change_requests[0].checks_failed, Some(1));
+        assert_eq!(detail.linked_change_requests[0].checks_pending, Some(0));
+        assert_eq!(detail.linked_change_requests[0].provider, "github");
+        assert_eq!(detail.linked_change_requests[1].number, Some(11));
+        assert_eq!(
+            detail.linked_change_requests[1].state.as_deref(),
+            Some("merged")
+        );
     }
 
     #[test]

@@ -15,7 +15,20 @@ export function changeRequestCheck(
   row: ChangeRequestListRow,
   t: TFunction,
 ): { text: string; tone: ChangeRequestTone } {
-  const { checksOk, checksFailed, checksPending } = row;
+  return changeRequestChecksSummary(
+    row.checksOk,
+    row.checksFailed,
+    row.checksPending,
+    t,
+  );
+}
+
+export function changeRequestChecksSummary(
+  checksOk: number | null,
+  checksFailed: number | null,
+  checksPending: number | null,
+  t: TFunction,
+): { text: string; tone: ChangeRequestTone } {
   if (checksOk == null || checksFailed == null || checksPending == null) {
     return { text: t("issues.changeRequests.checksUnknown"), tone: "muted" };
   }

@@ -62,7 +62,7 @@ describe("unavailable issue banner", () => {
         assignees: [],
         labels: [],
       },
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
       writebackPending: false,
       writebackError: null,
       unavailableBanner: {
@@ -72,7 +72,7 @@ describe("unavailable issue banner", () => {
     });
     vi.mocked(applyIssueRecovery).mockResolvedValue({
       projection: null,
-      linkedChangeRequest: null,
+      linkedChangeRequests: [],
       writebackPending: false,
       writebackError: null,
       unavailableBanner: null,

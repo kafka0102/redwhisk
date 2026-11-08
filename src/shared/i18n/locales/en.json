@@ -517,6 +517,7 @@
       "openHostForFile": "Open on host",
       "openLogs": "Logs",
       "openOnHost": "Open on {{host}}",
+      "openInApp": "View details",
       "overviewTab": "Overview",
       "readyToMerge": "Ready to merge",
       "rebaseMerge": "Rebase and merge",
