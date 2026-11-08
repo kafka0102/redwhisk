@@ -13,7 +13,7 @@ pub(crate) use cli::{close_remote_issue, comment_remote_issue};
 pub(crate) use forge_process::capture_forge_stdout;
 pub(crate) use port::RemoteIssueState;
 pub(crate) use port::{
-    ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteChangeRequest,
+    ChangeRequestWriteError, ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteChangeRequest,
     RemoteChangeRequestDetails, RemoteIssue,
 };
 

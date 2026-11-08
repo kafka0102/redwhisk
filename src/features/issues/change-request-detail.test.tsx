@@ -1,11 +1,14 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { ChangeRequestDetailPage } from "./change-request-detail";
 import {
+  closeChangeRequest,
   getProjectChangeRequest,
+  markChangeRequestReady,
+  requestChangeRequestReview,
   type ChangeRequestDetail,
 } from "./change-request-commands";
 
@@ -37,7 +40,13 @@ vi.mock("./change-request-commands", async () => {
   const actual = await vi.importActual<
     typeof import("./change-request-commands")
   >("./change-request-commands");
-  return { ...actual, getProjectChangeRequest: vi.fn() };
+  return {
+    ...actual,
+    closeChangeRequest: vi.fn(),
+    getProjectChangeRequest: vi.fn(),
+    markChangeRequestReady: vi.fn(),
+    requestChangeRequestReview: vi.fn(),
+  };
 });
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -45,6 +54,9 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 }));
 
 const getDetailMock = vi.mocked(getProjectChangeRequest);
+const markReadyMock = vi.mocked(markChangeRequestReady);
+const requestReviewMock = vi.mocked(requestChangeRequestReview);
+const closeRequestMock = vi.mocked(closeChangeRequest);
 const openUrlMock = vi.mocked(openUrl);
 
 function detail(patch: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail {
@@ -141,6 +153,8 @@ function detail(patch: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail {
       },
     ],
     linkedIssues: [{ issueId: 128, label: "GH #128", linkKind: "closing" }],
+    readySupported: true,
+    reviewSupported: true,
     ...patch,
   };
 }
@@ -194,6 +208,9 @@ describe("change request detail", () => {
     });
     getDetailMock.mockReset();
     openUrlMock.mockReset();
+    markReadyMock.mockReset();
+    requestReviewMock.mockReset();
+    closeRequestMock.mockReset();
     getDetailMock.mockResolvedValue(detail());
   });
 
@@ -286,8 +303,13 @@ describe("change request detail", () => {
     expect(screen.getByLabelText("合并后删除源分支")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
     fireEvent.click(screen.getByRole("button", { name: "请求审阅" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
     expect(getDetailMock).toHaveBeenCalledTimes(1);
+    expect(markReadyMock).not.toHaveBeenCalled();
+    expect(requestReviewMock).not.toHaveBeenCalled();
+    expect(closeRequestMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "在 GitHub 打开" }));
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/132",
@@ -410,5 +432,122 @@ describe("change request detail", () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(getDetailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a draft ready only after the host detail comes back", async () => {
+    let resolveReady: (value: ChangeRequestDetail) => void = () => undefined;
+    markReadyMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReady = resolve;
+        }),
+    );
+    getDetailMock.mockResolvedValue(detail({ state: "draft" }));
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("draft")).toBeInTheDocument();
+    expect(markReadyMock).toHaveBeenCalledTimes(1);
+    resolveReady(detail({ state: "open", title: "Ready window" }));
+    await flush();
+    expect(screen.getByText("open")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Ready window/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the draft and does not retry when marking ready fails", async () => {
+    markReadyMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "Credentials expired.",
+      reason: "credentialExpired",
+    });
+    getDetailMock.mockResolvedValue(detail({ state: "draft" }));
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
+    await flush();
+
+    expect(markReadyMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("登录已过期");
+    expect(screen.getByText("draft")).toBeInTheDocument();
+  });
+
+  it("disables unsupported ready and review actions without calling the host", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({ state: "draft", readySupported: false, reviewSupported: false }),
+    );
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
+    fireEvent.click(screen.getByRole("button", { name: "请求审阅" }));
+
+    expect(screen.getByRole("button", { name: "标记就绪" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "请求审阅" })).toBeDisabled();
+    expect(markReadyMock).not.toHaveBeenCalled();
+    expect(requestReviewMock).not.toHaveBeenCalled();
+  });
+
+  it("requests review from a single reviewer field and ignores a blank value", async () => {
+    requestReviewMock.mockResolvedValue(
+      detail({
+        reviewers: [
+          { login: "maya", state: "approved" },
+          { login: "lin", state: "requested" },
+        ],
+      }),
+    );
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "请求审阅" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "请求审阅" }));
+    expect(requestReviewMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("请填写审阅者");
+
+    fireEvent.change(within(dialog).getByLabelText("审阅者"), {
+      target: { value: "lin" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "请求审阅" }));
+    await flush();
+
+    expect(requestReviewMock).toHaveBeenCalledTimes(1);
+    expect(requestReviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewer: "lin", number: 132 }),
+    );
+  });
+
+  it("does not close when confirmation is cancelled", async () => {
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("关闭后不会合并。");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(closeRequestMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("open")).toBeInTheDocument();
+  });
+
+  it("replaces the detail with closed, not merged, after close is confirmed", async () => {
+    closeRequestMock.mockResolvedValue(detail({ state: "closed" }));
+    renderDetail();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
+    await flush();
+
+    expect(closeRequestMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("closed")).toBeInTheDocument();
+    expect(screen.queryByText("merged")).toBeNull();
   });
 });

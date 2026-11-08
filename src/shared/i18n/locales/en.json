@@ -506,6 +506,10 @@
       "linkedIssues": "Linked issues",
       "loadingDetail": "Loading detail",
       "markReady": "Mark as ready",
+      "cancel": "Cancel",
+      "closeConfirmAction": "Confirm close",
+      "closeConfirmBody": "Closing it does not merge it.",
+      "closeConfirmTitle": "Close this change request?",
       "merge": "Merge",
       "mergeCommit": "Merge commit",
       "mergeMergeRequest": "Merge merge request",
@@ -522,6 +526,8 @@
       "readyToMerge": "Ready to merge",
       "rebaseMerge": "Rebase and merge",
       "requestReview": "Request review",
+      "requestReviewTitle": "Request review",
+      "reviewerLabel": "Reviewer",
       "reviewKind": "review",
       "reviewers": "Reviewers",
       "squashMerge": "Squash and merge",
@@ -1149,6 +1155,7 @@
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "Attachment not found.",
+      "changeRequestNotFound": "Change request not found.",
       "issueNotFound": "Issue not found.",
       "sessionNotFound": "Agent Session not found."
     },
@@ -1213,7 +1220,10 @@
       "forgeNotReady": "GitHub or GitLab is not ready.",
       "forgeCliMissing": "gh / glab was not found. Install and sign in before creating a pull request or merge request.",
       "projectNotFound": "Project not found.",
-      "branchMissing": "The current branch does not exist."
+      "branchMissing": "The current branch does not exist.",
+      "changeRequestNotDraft": "Only a draft can be marked ready.",
+      "changeRequestNotOpen": "Only an open change request can be closed.",
+      "changeRequestReviewerMissing": "Enter a reviewer."
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "A worktree with the same name is already occupied. Remove it before running."
@@ -1230,7 +1240,15 @@
       "writebackForbidden": "You do not have permission to update this remote issue.",
       "writebackOffline": "Completion write-back failed because the network is unavailable.",
       "writebackUnauthenticated": "Sign in to GitHub or GitLab before writing back the completed issue.",
-      "writebackUnavailable": "Completion write-back is unavailable."
+      "writebackUnavailable": "Completion write-back is unavailable.",
+      "changeRequestActionFailed": "The change request action failed.",
+      "changeRequestReadyUnsupported": "This host cannot mark a change request ready.",
+      "changeRequestReviewUnsupported": "This host cannot request a review.",
+      "credentialExpired": "Sign in again before retrying this change request.",
+      "forgeCliMissing": "gh / glab was not found.",
+      "forgeOffline": "The network is unavailable, so the host was not reached.",
+      "rateLimited": "The host rate limit was reached. Try again later.",
+      "writeForbidden": "Write permission is required."
     },
     "PROJECT_NOT_FOUND": {
       "default": "Project not found."

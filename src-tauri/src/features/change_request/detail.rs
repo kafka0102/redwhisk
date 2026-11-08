@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection};
 
-use crate::features::issue::{ForgeIssueError, ForgeIssuePort};
+use crate::features::issue::{ChangeRequestWriteError, ForgeIssueError, ForgeIssuePort};
 use crate::types::change_request::{ChangeRequestDetail, ChangeRequestLinkedIssue};
 use crate::types::errors::{CommandError, CommandErrorCode};
 
@@ -32,23 +32,153 @@ pub(crate) fn get_project_change_request(
             write_fresh_snapshot(connection, row.id, &details, now_ms)?;
             let row = load_row(connection, project_id, provider, number)?
                 .ok_or_else(change_request_not_found)?;
-            Ok(detail_from_fresh(row, details, linked_issues))
+            Ok(with_action_support(
+                detail_from_fresh(row, details, linked_issues),
+                forge,
+            ))
         }
         Err(error) => {
             let detail_error = detail_error_code(error).to_string();
             if has_snapshot(&row, &snapshot) {
-                Ok(detail_from_snapshot(
-                    row,
-                    snapshot,
-                    linked_issues,
-                    "cached",
-                    Some(detail_error),
+                Ok(with_action_support(
+                    detail_from_snapshot(
+                        row,
+                        snapshot,
+                        linked_issues,
+                        "cached",
+                        Some(detail_error),
+                    ),
+                    forge,
                 ))
             } else {
-                Ok(unavailable_detail(row, linked_issues, detail_error))
+                Ok(with_action_support(
+                    unavailable_detail(row, linked_issues, detail_error),
+                    forge,
+                ))
             }
         }
     }
+}
+
+pub(crate) fn mark_change_request_ready(
+    connection: &Connection,
+    project_id: i64,
+    provider: &str,
+    number: i64,
+    forge: &impl ForgeIssuePort,
+    now_ms: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    ensure_project(connection, project_id)?;
+    let provider = normalize_provider(provider)?;
+    if number < 1 {
+        return Err(invalid_detail());
+    }
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    if row.state != "draft" {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "Only a draft change request can be marked ready.",
+        )
+        .with_reason("changeRequestNotDraft"));
+    }
+    if !forge.supports_change_request_ready() {
+        return Err(CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "This host cannot mark a change request ready.",
+        )
+        .with_reason("changeRequestReadyUnsupported"));
+    }
+    let linked_issues = load_linked_issues(connection, row.id)?;
+    let details = forge
+        .mark_change_request_ready(number)
+        .map_err(|error| map_write_error(error, "changeRequestReadyUnsupported"))?;
+    write_fresh_snapshot(connection, row.id, &details, now_ms)?;
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    Ok(with_action_support(
+        detail_from_fresh(row, details, linked_issues),
+        forge,
+    ))
+}
+
+pub(crate) fn request_change_request_review(
+    connection: &Connection,
+    project_id: i64,
+    provider: &str,
+    number: i64,
+    reviewer: &str,
+    forge: &impl ForgeIssuePort,
+    now_ms: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    let reviewer = reviewer.trim();
+    if reviewer.is_empty() {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "A reviewer is required.",
+        )
+        .with_reason("changeRequestReviewerMissing"));
+    }
+    ensure_project(connection, project_id)?;
+    let provider = normalize_provider(provider)?;
+    if number < 1 {
+        return Err(invalid_detail());
+    }
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    if !forge.supports_change_request_review() {
+        return Err(CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "This host cannot request a change request review.",
+        )
+        .with_reason("changeRequestReviewUnsupported"));
+    }
+    let linked_issues = load_linked_issues(connection, row.id)?;
+    let details = forge
+        .request_change_request_review(number, reviewer)
+        .map_err(|error| map_write_error(error, "changeRequestReviewUnsupported"))?;
+    write_fresh_snapshot(connection, row.id, &details, now_ms)?;
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    Ok(with_action_support(
+        detail_from_fresh(row, details, linked_issues),
+        forge,
+    ))
+}
+
+pub(crate) fn close_change_request(
+    connection: &Connection,
+    project_id: i64,
+    provider: &str,
+    number: i64,
+    forge: &impl ForgeIssuePort,
+    now_ms: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    ensure_project(connection, project_id)?;
+    let provider = normalize_provider(provider)?;
+    if number < 1 {
+        return Err(invalid_detail());
+    }
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    if row.state != "open" {
+        return Err(CommandError::new(
+            CommandErrorCode::IssueValidationFailed,
+            "Only an open change request can be closed.",
+        )
+        .with_reason("changeRequestNotOpen"));
+    }
+    let linked_issues = load_linked_issues(connection, row.id)?;
+    let details = forge
+        .close_change_request(number)
+        .map_err(|error| map_write_error(error, "changeRequestActionFailed"))?;
+    write_fresh_snapshot(connection, row.id, &details, now_ms)?;
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    Ok(with_action_support(
+        detail_from_fresh(row, details, linked_issues),
+        forge,
+    ))
 }
 
 fn load_linked_issues(
@@ -94,6 +224,15 @@ fn normalize_provider(provider: &str) -> Result<&str, CommandError> {
     }
 }
 
+fn with_action_support(
+    mut detail: ChangeRequestDetail,
+    forge: &impl ForgeIssuePort,
+) -> ChangeRequestDetail {
+    detail.ready_supported = forge.supports_change_request_ready();
+    detail.review_supported = forge.supports_change_request_review();
+    detail
+}
+
 fn invalid_detail() -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectValidationFailed,
@@ -117,5 +256,48 @@ fn detail_error_code(error: ForgeIssueError) -> &'static str {
         | ForgeIssueError::Unparseable
         | ForgeIssueError::NotFound
         | ForgeIssueError::Gone => "cache_failed",
+    }
+}
+
+fn map_write_error(error: ChangeRequestWriteError, unsupported_reason: &str) -> CommandError {
+    match error {
+        ChangeRequestWriteError::Unsupported => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "This host does not support the change request action.",
+        )
+        .with_reason(unsupported_reason),
+        ChangeRequestWriteError::Failed(ForgeIssueError::Unauthenticated) => {
+            CommandError::new(CommandErrorCode::ForgeUnavailable, "Credentials expired.")
+                .with_reason("credentialExpired")
+        }
+        ChangeRequestWriteError::Failed(ForgeIssueError::Forbidden) => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "Write permission is required.",
+        )
+        .with_reason("writeForbidden"),
+        ChangeRequestWriteError::Failed(ForgeIssueError::RateLimited) => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "The host rate limit was reached.",
+        )
+        .with_reason("rateLimited"),
+        ChangeRequestWriteError::Failed(ForgeIssueError::NotFound | ForgeIssueError::Gone) => {
+            change_request_not_found()
+        }
+        ChangeRequestWriteError::Failed(ForgeIssueError::CliMissing) => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "The forge CLI is missing.",
+        )
+        .with_reason("forgeCliMissing"),
+        ChangeRequestWriteError::Failed(ForgeIssueError::Offline) => {
+            CommandError::new(CommandErrorCode::ForgeUnavailable, "The forge is offline.")
+                .with_reason("forgeOffline")
+        }
+        ChangeRequestWriteError::Failed(
+            ForgeIssueError::CommandFailed | ForgeIssueError::Unparseable,
+        ) => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "The change request action failed.",
+        )
+        .with_reason("changeRequestActionFailed"),
     }
 }

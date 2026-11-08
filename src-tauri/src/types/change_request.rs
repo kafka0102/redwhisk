@@ -146,4 +146,6 @@ pub struct ChangeRequestDetail {
     pub reviews: Vec<ChangeRequestDiscussionItem>,
     pub comments: Vec<ChangeRequestDiscussionItem>,
     pub linked_issues: Vec<ChangeRequestLinkedIssue>,
+    pub ready_supported: bool,
+    pub review_supported: bool,
 }

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import {
   getProjectChangeRequest,
@@ -19,6 +25,7 @@ export function useChangeRequestDetail({
   number: number;
 }): {
   detail: ChangeRequestDetail | null;
+  setDetail: Dispatch<SetStateAction<ChangeRequestDetail | null>>;
 } {
   const [detail, setDetail] = useState<ChangeRequestDetail | null>(null);
   const pageVisible = usePageVisible();
@@ -57,5 +64,5 @@ export function useChangeRequestDetail({
     };
   }, [active, number, projectId, provider]);
 
-  return { detail };
+  return { detail, setDetail };
 }

@@ -252,6 +252,8 @@ pub(super) fn detail_from_snapshot(
         reviews: parse_vec(&snapshot.reviews_json),
         comments: parse_vec(&snapshot.comments_json),
         linked_issues,
+        ready_supported: false,
+        review_supported: false,
     }
 }
 
@@ -289,6 +291,8 @@ pub(super) fn detail_from_fresh(
         reviews: details.reviews,
         comments: details.comments,
         linked_issues,
+        ready_supported: false,
+        review_supported: false,
     }
 }
 
@@ -326,6 +330,8 @@ pub(super) fn unavailable_detail(
         reviews: Vec::new(),
         comments: Vec::new(),
         linked_issues,
+        ready_supported: false,
+        review_supported: false,
     }
 }
 

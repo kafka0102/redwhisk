@@ -119,6 +119,45 @@ pub trait ForgeIssuePort {
         let _ = number;
         Err(ForgeIssueError::CommandFailed)
     }
+
+    fn mark_change_request_ready(
+        &self,
+        number: i64,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        let _ = number;
+        Err(ChangeRequestWriteError::Unsupported)
+    }
+
+    fn supports_change_request_ready(&self) -> bool {
+        false
+    }
+
+    fn request_change_request_review(
+        &self,
+        number: i64,
+        reviewer: &str,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        let _ = (number, reviewer);
+        Err(ChangeRequestWriteError::Unsupported)
+    }
+
+    fn supports_change_request_review(&self) -> bool {
+        false
+    }
+
+    fn close_change_request(
+        &self,
+        number: i64,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        let _ = number;
+        Err(ChangeRequestWriteError::Unsupported)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChangeRequestWriteError {
+    Unsupported,
+    Failed(ForgeIssueError),
 }
 
 #[cfg(test)]
@@ -132,6 +171,13 @@ pub struct FixedForge {
     pub error: Mutex<Option<ForgeIssueError>>,
     pub details: Mutex<Option<RemoteChangeRequestDetails>>,
     pub detail_error: Mutex<Option<ForgeIssueError>>,
+    pub ready_calls: Mutex<Vec<i64>>,
+    pub action_details: Mutex<Option<RemoteChangeRequestDetails>>,
+    pub action_error: Mutex<Option<ForgeIssueError>>,
+    pub ready_supported: bool,
+    pub review_calls: Mutex<Vec<(i64, String)>>,
+    pub review_supported: bool,
+    pub close_calls: Mutex<Vec<i64>>,
 }
 
 #[cfg(test)]
@@ -146,6 +192,13 @@ impl FixedForge {
             error: Mutex::new(None),
             details: Mutex::new(None),
             detail_error: Mutex::new(None),
+            ready_calls: Mutex::new(Vec::new()),
+            action_details: Mutex::new(None),
+            action_error: Mutex::new(None),
+            ready_supported: true,
+            review_calls: Mutex::new(Vec::new()),
+            review_supported: true,
+            close_calls: Mutex::new(Vec::new()),
         }
     }
 
@@ -169,6 +222,13 @@ impl FixedForge {
             error: Mutex::new(Some(error)),
             details: Mutex::new(None),
             detail_error: Mutex::new(None),
+            ready_calls: Mutex::new(Vec::new()),
+            action_details: Mutex::new(None),
+            action_error: Mutex::new(None),
+            ready_supported: true,
+            review_calls: Mutex::new(Vec::new()),
+            review_supported: true,
+            close_calls: Mutex::new(Vec::new()),
         }
     }
 
@@ -180,6 +240,38 @@ impl FixedForge {
     pub fn with_details(self, details: RemoteChangeRequestDetails) -> Self {
         *self.details.lock().expect("details") = Some(details);
         self
+    }
+
+    pub fn with_action_details(self, details: RemoteChangeRequestDetails) -> Self {
+        *self.action_details.lock().expect("action details") = Some(details);
+        self
+    }
+
+    pub fn ready_calls(&self) -> Vec<i64> {
+        self.ready_calls.lock().expect("ready calls").clone()
+    }
+
+    pub fn without_ready_support(mut self) -> Self {
+        self.ready_supported = false;
+        self
+    }
+
+    pub fn with_action_error(self, error: ForgeIssueError) -> Self {
+        *self.action_error.lock().expect("action error") = Some(error);
+        self
+    }
+
+    pub fn review_calls(&self) -> Vec<(i64, String)> {
+        self.review_calls.lock().expect("review calls").clone()
+    }
+
+    pub fn without_review_support(mut self) -> Self {
+        self.review_supported = false;
+        self
+    }
+
+    pub fn close_calls(&self) -> Vec<i64> {
+        self.close_calls.lock().expect("close calls").clone()
     }
 
     pub fn calls(&self) -> Vec<ForgeIssueListQuery> {
@@ -238,6 +330,69 @@ impl ForgeIssuePort for FixedForge {
             .expect("details")
             .clone()
             .ok_or(ForgeIssueError::CommandFailed)
+    }
+
+    fn mark_change_request_ready(
+        &self,
+        number: i64,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        self.ready_calls.lock().expect("ready calls").push(number);
+        if let Some(error) = self.action_error.lock().expect("action error").clone() {
+            return Err(ChangeRequestWriteError::Failed(error));
+        }
+        self.action_details
+            .lock()
+            .expect("action details")
+            .clone()
+            .ok_or(ChangeRequestWriteError::Failed(
+                ForgeIssueError::CommandFailed,
+            ))
+    }
+
+    fn supports_change_request_ready(&self) -> bool {
+        self.ready_supported
+    }
+
+    fn request_change_request_review(
+        &self,
+        number: i64,
+        reviewer: &str,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        self.review_calls
+            .lock()
+            .expect("review calls")
+            .push((number, reviewer.to_string()));
+        if let Some(error) = self.action_error.lock().expect("action error").clone() {
+            return Err(ChangeRequestWriteError::Failed(error));
+        }
+        self.action_details
+            .lock()
+            .expect("action details")
+            .clone()
+            .ok_or(ChangeRequestWriteError::Failed(
+                ForgeIssueError::CommandFailed,
+            ))
+    }
+
+    fn supports_change_request_review(&self) -> bool {
+        self.review_supported
+    }
+
+    fn close_change_request(
+        &self,
+        number: i64,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        self.close_calls.lock().expect("close calls").push(number);
+        if let Some(error) = self.action_error.lock().expect("action error").clone() {
+            return Err(ChangeRequestWriteError::Failed(error));
+        }
+        self.action_details
+            .lock()
+            .expect("action details")
+            .clone()
+            .ok_or(ChangeRequestWriteError::Failed(
+                ForgeIssueError::CommandFailed,
+            ))
     }
 }
 

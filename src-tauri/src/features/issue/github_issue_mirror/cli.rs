@@ -2,8 +2,8 @@ use super::forge_process::capture_forge_stdout;
 use super::gitlab::GitlabCliForge;
 use super::parse::parse_github_issue_list;
 use super::port::{
-    ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue,
-    RemoteIssueState,
+    ChangeRequestWriteError, ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort,
+    RemoteIssue, RemoteIssueState,
 };
 use crate::types::project_issue_source::ForgeProvider;
 use chrono::TimeZone;
@@ -140,6 +140,51 @@ impl ForgeIssuePort for ProjectIssueForge {
             Self::Gitlab(forge) => forge.get_change_request_details(number),
         }
     }
+
+    fn mark_change_request_ready(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        match self {
+            Self::Github(forge) => forge.mark_change_request_ready(number),
+            Self::Gitlab(forge) => forge.mark_change_request_ready(number),
+        }
+    }
+
+    fn supports_change_request_ready(&self) -> bool {
+        match self {
+            Self::Github(forge) => forge.supports_change_request_ready(),
+            Self::Gitlab(forge) => forge.supports_change_request_ready(),
+        }
+    }
+
+    fn request_change_request_review(
+        &self,
+        number: i64,
+        reviewer: &str,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        match self {
+            Self::Github(forge) => forge.request_change_request_review(number, reviewer),
+            Self::Gitlab(forge) => forge.request_change_request_review(number, reviewer),
+        }
+    }
+
+    fn supports_change_request_review(&self) -> bool {
+        match self {
+            Self::Github(forge) => forge.supports_change_request_review(),
+            Self::Gitlab(forge) => forge.supports_change_request_review(),
+        }
+    }
+
+    fn close_change_request(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        match self {
+            Self::Github(forge) => forge.close_change_request(number),
+            Self::Gitlab(forge) => forge.close_change_request(number),
+        }
+    }
 }
 
 impl ForgeIssuePort for GithubCliForge {
@@ -173,6 +218,39 @@ impl ForgeIssuePort for GithubCliForge {
         number: i64,
     ) -> Result<super::port::RemoteChangeRequestDetails, ForgeIssueError> {
         crate::features::change_request::fetch_github_change_request_details(&self.repo_dir, number)
+    }
+
+    fn mark_change_request_ready(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::mark_ready("gh", &self.repo_dir, number)
+            .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_ready(&self) -> bool {
+        true
+    }
+
+    fn request_change_request_review(
+        &self,
+        number: i64,
+        reviewer: &str,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::request_review("gh", &self.repo_dir, number, reviewer)
+            .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_review(&self) -> bool {
+        true
+    }
+
+    fn close_change_request(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::close_request("gh", &self.repo_dir, number)
+            .map_err(ChangeRequestWriteError::Failed)
     }
 }
 

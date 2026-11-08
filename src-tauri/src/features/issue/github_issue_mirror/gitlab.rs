@@ -4,8 +4,8 @@ use chrono::TimeZone;
 
 use super::forge_process::capture_forge_stdout;
 use super::port::{
-    ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort, RemoteIssue,
-    RemoteIssueState,
+    ChangeRequestWriteError, ForgeIssueDraft, ForgeIssueError, ForgeIssueListQuery, ForgeIssuePort,
+    RemoteIssue, RemoteIssueState,
 };
 
 pub struct GitlabCliForge {
@@ -49,6 +49,39 @@ impl ForgeIssuePort for GitlabCliForge {
         number: i64,
     ) -> Result<super::port::RemoteChangeRequestDetails, ForgeIssueError> {
         crate::features::change_request::fetch_gitlab_change_request_details(&self.repo_dir, number)
+    }
+
+    fn mark_change_request_ready(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::mark_ready("glab", &self.repo_dir, number)
+            .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_ready(&self) -> bool {
+        true
+    }
+
+    fn request_change_request_review(
+        &self,
+        number: i64,
+        reviewer: &str,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::request_review("glab", &self.repo_dir, number, reviewer)
+            .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_review(&self) -> bool {
+        true
+    }
+
+    fn close_change_request(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::close_request("glab", &self.repo_dir, number)
+            .map_err(ChangeRequestWriteError::Failed)
     }
 }
 

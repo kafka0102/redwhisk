@@ -3,7 +3,10 @@ use std::path::Path;
 use tauri::Emitter;
 use tauri::State;
 
+use super::detail::close_change_request as close_on_connection;
 use super::detail::get_project_change_request as get_on_connection;
+use super::detail::mark_change_request_ready as mark_ready_on_connection;
+use super::detail::request_change_request_review as request_review_on_connection;
 use super::links::link_change_request_issue as link_on_connection;
 use super::list::list_project_change_requests as list_on_connection;
 use super::sync::sync_connected_change_requests;
@@ -117,6 +120,71 @@ pub async fn get_project_change_request(
 }
 
 #[tauri::command]
+pub async fn mark_change_request_ready(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    provider: String,
+    number: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    run_action(app, state, project_id, provider, move |opened, provider| {
+        mark_ready_on_connection(
+            &opened.database.connection,
+            project_id,
+            &provider,
+            number,
+            &opened.forge,
+            now_millis(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn request_change_request_review(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    provider: String,
+    number: i64,
+    reviewer: String,
+) -> Result<ChangeRequestDetail, CommandError> {
+    run_action(app, state, project_id, provider, move |opened, provider| {
+        request_review_on_connection(
+            &opened.database.connection,
+            project_id,
+            &provider,
+            number,
+            &reviewer,
+            &opened.forge,
+            now_millis(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn close_change_request(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    provider: String,
+    number: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    run_action(app, state, project_id, provider, move |opened, provider| {
+        close_on_connection(
+            &opened.database.connection,
+            project_id,
+            &provider,
+            number,
+            &opened.forge,
+            now_millis(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn link_change_request_issue(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -136,6 +204,59 @@ pub async fn link_change_request_issue(
         )
         .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
     })?
+}
+
+struct OpenedProject {
+    database: crate::db::connection::Database,
+    forge: ProjectIssueForge,
+}
+
+async fn run_action<F>(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    provider: String,
+    action: F,
+) -> Result<ChangeRequestDetail, CommandError>
+where
+    F: FnOnce(&OpenedProject, &str) -> Result<ChangeRequestDetail, CommandError> + Send + 'static,
+{
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let opened = open_project_forge(&data_dir, project_id)?;
+        action(&opened, &provider)
+    })
+    .await
+    .map_err(action_task_failed)?
+}
+
+fn open_project_forge(data_dir: &Path, project_id: i64) -> Result<OpenedProject, CommandError> {
+    let database = open_database(data_dir)?;
+    let repo_dir = crate::db::project_repository::ProjectRepository::new(&database.connection)
+        .find_by_id(project_id)
+        .map_err(persistence)?
+        .map(|project| std::path::PathBuf::from(project.repo_path))
+        .unwrap_or_default();
+    let forge_provider =
+        crate::db::project_issue_source_repository::ProjectIssueSourceRepository::new(
+            &database.connection,
+        )
+        .get(project_id)
+        .map_err(persistence)?
+        .and_then(|settings| settings.connection.provider);
+    Ok(OpenedProject {
+        forge: ProjectIssueForge::new(forge_provider, repo_dir),
+        database,
+    })
+}
+
+fn action_task_failed(error: impl std::fmt::Display) -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssuePersistenceFailed,
+        "Change request action failed.",
+    )
+    .with_reason("changeRequestActionFailed")
+    .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
 fn emit_change_request_sync_changed(app: &tauri::AppHandle, event: &ChangeRequestSyncChangedEvent) {

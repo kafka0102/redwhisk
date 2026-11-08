@@ -10,9 +10,12 @@ import { ChangeRequestDetailHeader } from "./change-request-detail-header";
 import { ChangeRequestDetailMerge } from "./change-request-detail-merge";
 import { ChangeRequestDetailOverview } from "./change-request-detail-overview";
 import { ChangeRequestDetailTabs } from "./change-request-detail-tabs";
+import { ChangeRequestActionDialogs } from "./change-request-detail-actions";
 import type { ChangeRequestDetailTab } from "./change-request-detail-model";
 import { hostLabel } from "./change-request-detail-model";
 import { useChangeRequestDetail } from "./use-change-request-detail";
+import { useChangeRequestActions } from "./use-change-request-actions";
+import type { ChangeRequestDetail } from "./change-request-commands";
 
 export function ChangeRequestDetailPage({
   projectId,
@@ -28,8 +31,11 @@ export function ChangeRequestDetailPage({
   onOpenIssue?: (issueId: number) => void;
 }): JSX.Element {
   const { t } = useI18n();
-  const { detail } = useChangeRequestDetail({ projectId, provider, number });
-  const [tab, setTab] = useState<ChangeRequestDetailTab>("overview");
+  const { detail, setDetail } = useChangeRequestDetail({
+    projectId,
+    provider,
+    number,
+  });
   if (detail == null) {
     return (
       <section className="change-request-detail" aria-busy="true">
@@ -38,11 +44,67 @@ export function ChangeRequestDetailPage({
     );
   }
   return (
+    <ChangeRequestDetailLoaded
+      projectId={projectId}
+      provider={provider}
+      number={number}
+      detail={detail}
+      setDetail={setDetail}
+      onBack={onBack}
+      onOpenIssue={onOpenIssue}
+    />
+  );
+}
+
+function ChangeRequestDetailLoaded({
+  projectId,
+  provider,
+  number,
+  detail,
+  setDetail,
+  onBack,
+  onOpenIssue,
+}: {
+  projectId: number;
+  provider: string;
+  number: number;
+  detail: ChangeRequestDetail;
+  setDetail: (detail: ChangeRequestDetail) => void;
+  onBack: () => void;
+  onOpenIssue?: (issueId: number) => void;
+}): JSX.Element {
+  const { t } = useI18n();
+  const [tab, setTab] = useState<ChangeRequestDetailTab>("overview");
+  const actions = useChangeRequestActions({
+    projectId,
+    provider,
+    number,
+    detail,
+    setDetail,
+  });
+  return (
     <section
       className="change-request-detail"
       aria-label={t("issues.changeRequests.detailRegion")}
     >
-      <ChangeRequestDetailHeader detail={detail} onBack={onBack} />
+      <ChangeRequestDetailHeader
+        detail={detail}
+        pending={actions.pending}
+        onBack={onBack}
+        onMarkReady={actions.markReady}
+        onRequestReview={actions.openReview}
+        onClose={actions.openClose}
+      />
+      {actions.error == null ? null : <p role="alert">{actions.error}</p>}
+      <ChangeRequestActionDialogs
+        dialog={actions.dialog}
+        error={actions.dialog == null ? null : actions.error}
+        reviewer={actions.reviewer}
+        onReviewerChange={actions.setReviewer}
+        onCancel={actions.cancel}
+        onSubmitReview={actions.submitReview}
+        onConfirmClose={actions.confirmClose}
+      />
       {detail.detailStatus === "unavailable" ? (
         <p role="status">{t("issues.changeRequests.detailUnavailable")}</p>
       ) : null}

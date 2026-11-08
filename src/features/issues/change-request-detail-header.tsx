@@ -8,14 +8,26 @@ import { hostLabel, isMerged } from "./change-request-detail-model";
 
 export function ChangeRequestDetailHeader({
   detail,
+  pending,
   onBack,
+  onMarkReady,
+  onRequestReview,
+  onClose,
 }: {
   detail: ChangeRequestDetail;
+  pending: boolean;
   onBack: () => void;
+  onMarkReady: () => void;
+  onRequestReview: () => void;
+  onClose: () => void;
 }): JSX.Element {
   const { t } = useI18n();
   const host = hostLabel(detail.provider);
   const merged = isMerged(detail.state);
+  const readyDisabled =
+    pending || detail.state !== "draft" || !detail.readySupported;
+  const reviewDisabled = pending || !detail.reviewSupported;
+  const closeDisabled = pending || detail.state !== "open";
   return (
     <header className="change-request-detail__header">
       <div className="change-request-detail__heading">
@@ -67,13 +79,43 @@ export function ChangeRequestDetailHeader({
         </Button>
         {merged ? null : (
           <>
-            <Button type="button" variant="secondary" size="sm" disabled>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={readyDisabled}
+              onClick={() => {
+                if (!readyDisabled) {
+                  onMarkReady();
+                }
+              }}
+            >
               {t("issues.changeRequests.markReady")}
             </Button>
-            <Button type="button" variant="secondary" size="sm" disabled>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={reviewDisabled}
+              onClick={() => {
+                if (!reviewDisabled) {
+                  onRequestReview();
+                }
+              }}
+            >
               {t("issues.changeRequests.requestReview")}
             </Button>
-            <Button type="button" variant="ghost" size="sm" disabled>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={closeDisabled}
+              onClick={() => {
+                if (!closeDisabled) {
+                  onClose();
+                }
+              }}
+            >
               {t("issues.changeRequests.close")}
             </Button>
           </>

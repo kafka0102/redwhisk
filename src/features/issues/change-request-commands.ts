@@ -161,6 +161,8 @@ export interface ChangeRequestDetail {
   reviews: ChangeRequestDiscussionItem[];
   comments: ChangeRequestDiscussionItem[];
   linkedIssues: ChangeRequestLinkedIssue[];
+  readySupported: boolean;
+  reviewSupported: boolean;
 }
 
 export function getProjectChangeRequest(input: {
@@ -172,4 +174,32 @@ export function getProjectChangeRequest(input: {
     "get_project_change_request",
     input,
   );
+}
+
+export function markChangeRequestReady(input: {
+  projectId: number;
+  provider: string;
+  number: number;
+}): Promise<ChangeRequestDetail> {
+  return invokeCommand<ChangeRequestDetail>("mark_change_request_ready", input);
+}
+
+export function requestChangeRequestReview(input: {
+  projectId: number;
+  provider: string;
+  number: number;
+  reviewer: string;
+}): Promise<ChangeRequestDetail> {
+  return invokeCommand<ChangeRequestDetail>(
+    "request_change_request_review",
+    input,
+  );
+}
+
+export function closeChangeRequest(input: {
+  projectId: number;
+  provider: string;
+  number: number;
+}): Promise<ChangeRequestDetail> {
+  return invokeCommand<ChangeRequestDetail>("close_change_request", input);
 }

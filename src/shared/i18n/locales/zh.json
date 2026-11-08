@@ -506,6 +506,10 @@
       "linkedIssues": "关联 Issue",
       "loadingDetail": "正在加载详情",
       "markReady": "标记就绪",
+      "cancel": "取消",
+      "closeConfirmAction": "确认关闭",
+      "closeConfirmBody": "关闭后不会合并。",
+      "closeConfirmTitle": "关闭这个变更请求？",
       "merge": "合并",
       "mergeCommit": "合并提交",
       "mergeMergeRequest": "合并 Merge Request",
@@ -522,6 +526,8 @@
       "readyToMerge": "可合并",
       "rebaseMerge": "变基合并",
       "requestReview": "请求审阅",
+      "requestReviewTitle": "请求审阅",
+      "reviewerLabel": "审阅者",
       "reviewKind": "review",
       "reviewers": "审阅者",
       "squashMerge": "压缩合并",
@@ -1149,6 +1155,7 @@
     },
     "ISSUE_NOT_FOUND": {
       "attachmentNotFound": "附件不存在。",
+      "changeRequestNotFound": "找不到这条变更请求。",
       "issueNotFound": "Issue 不存在。",
       "sessionNotFound": "Agent Session 不存在。"
     },
@@ -1213,7 +1220,10 @@
       "forgeNotReady": "GitHub / GitLab 环境未就绪。",
       "forgeCliMissing": "未找到 gh / glab 命令，请先安装并登录后再创建 Pull Request / Merge Request。",
       "projectNotFound": "项目不存在。",
-      "branchMissing": "当前分支不存在。"
+      "branchMissing": "当前分支不存在。",
+      "changeRequestNotDraft": "只有草稿可以标记就绪。",
+      "changeRequestNotOpen": "只有打开的变更请求可以关闭。",
+      "changeRequestReviewerMissing": "请填写审阅者。"
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "同名 worktree 已被占用，请删除后再运行。"
@@ -1230,7 +1240,15 @@
       "writebackForbidden": "没有权限更新这个远程 Issue。",
       "writebackOffline": "网络不可用，完成写回失败。",
       "writebackUnauthenticated": "请先登录 GitHub 或 GitLab，再写回已完成的 Issue。",
-      "writebackUnavailable": "暂时不能写回完成结果。"
+      "writebackUnavailable": "暂时不能写回完成结果。",
+      "changeRequestActionFailed": "变更请求操作失败。",
+      "changeRequestReadyUnsupported": "这个宿主不能标记就绪。",
+      "changeRequestReviewUnsupported": "这个宿主不能请求审阅。",
+      "credentialExpired": "登录已过期，请重新登录后再试。",
+      "forgeCliMissing": "未找到 gh / glab。",
+      "forgeOffline": "网络不可用，没有连上宿主。",
+      "rateLimited": "宿主限流了，请稍后再试。",
+      "writeForbidden": "没有写权限。"
     },
     "PROJECT_NOT_FOUND": {
       "default": "Project 不存在。"

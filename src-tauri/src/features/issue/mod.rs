@@ -21,6 +21,7 @@ pub(crate) use remote_create::create_in_data_dir_with_forge;
 pub use service::IssueService;
 
 pub(crate) use github_issue_mirror::capture_forge_stdout;
+pub(crate) use github_issue_mirror::ChangeRequestWriteError;
 pub(crate) use github_issue_mirror::ForgeIssueError;
 pub(crate) use github_issue_mirror::ProjectIssueForge;
 #[cfg(test)]
