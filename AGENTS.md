@@ -94,6 +94,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
    另跑 `bash scripts/check-rust-command-failure-tests.sh`（已提交的改动加 `--from <ref>`）：diff 里每个新增 `#[tauri::command]` 都要有一个 `#[test]`，函数体同时出现命令名和 `expect_err`。`name_in_data_dir` 这种前缀算命中。存量命令不追溯。
    另跑 `bash scripts/check-rust-event-emit.sh`（已提交的改动加 `--from <ref>`）：diff 里新增的 `app.emit` / `app_handle.emit` 必须位于函数名以 `emit_` 开头的函数中。存量直接 `emit` 不追溯。
    另跑 `bash scripts/check-rust-command-reasons.sh`（已提交的改动加 `--from <ref>`）：diff 里新增的 `with_reason("...")`、`("reason", "...")` 和 `=> "reason"` 字面量必须出现在 `docs/architecture-design/tauri-contract.md`。存量 reason 不追溯。
+   另跑 `bash scripts/check-rust-command-dto.sh`（已提交的改动加 `--from <ref>`）：diff 里命令返回类型增删的 camelCase 字段（名字里要有大写字母）必须出现在该命令的契约段落里；删掉的字段名不得还留在同一段落。单字小写字段和存量字段不查。
 8. `bash scripts/check-frontend-file-size.sh` — 改动前端源码（`src/**/*.ts(x)`，不含测试文件与 `src/test/`）后必跑；越界且未在 `scripts/frontend-file-size-allowlist.txt` 登记则非零退出，须按 `docs/architecture-design/frontend-large-component-splitting-rules.md` 拆分后再跑直至通过。白名单是棘轮：条目登记行数是上限，文件长过登记值即失败（先拆分，或显式下调登记值）；已回到阈值以内的文件必须删除条目。纯后端 / 纯文档改动可豁免。在 `git commit` 之前运行；已提交的改动用 `--from <ref>` 复查。
 9. `cd src-tauri && cargo test --lib agent::command_detector` — 改动交互式 `PATH` 解析或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后必跑；缓存与回退规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 

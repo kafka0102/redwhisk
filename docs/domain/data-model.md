@@ -44,7 +44,7 @@ completion_attempts 保留历史完成尝试审计。
 | 终端配置两表                            | 项目终端声明与快捷命令   | 项目删除级联                                                                                 |
 | `change_requests`                       | PR/MR 列表快照           | `0065_change_requests` 新增。`state` 为 `open` / `draft` / `merged` / `closed`。唯一键是项目、provider、host、repo、number，另有 `(provider, host, external_id)`。`host` 小写。检查计数可空，三者都空表示未知。`remote_updated_at` 是 epoch milliseconds |
 | `change_request_issue_links`            | PR/MR 与 Issue 多对多    | 主键是 `(change_request_id, issue_id)`。`link_kind` 为 `closing` / `mentioned` / `branch` / `manual` |
-| `change_request_details`                | PR/MR 详情快照           | 每个 change request 一条。文件、检查、评审、评论 JSON 默认 `[]` |
+| `change_request_details`                | PR/MR 详情快照           | 每个 change request 一条。未拉详情时四个 JSON 列是 `[]`。拉过详情后 `files_json` 是快照对象，含 `files`、`labels`、`commitCount`、`additions`、`deletions`、`blockingReasons`、`reviewers`、`mergeMethod`、`mergeCommitSha`，不是裸文件数组。`checks_json`、`reviews_json`、`comments_json` 仍是数组 |
 | `projects.last_change_request_synced_at` / `last_change_request_sync_error` | PR/MR 同步水位 | `0066_change_request_sync_status` 新增。错误码为 `credential_expired`、`cli_missing`、`offline`、`rate_limited`、`cache_failed` |
 | `issue_pull_requests.change_request_id` | 历史 URL 升级            | 可空，引用 `change_requests`。解析失败保持 null，URL 原文不变 |
 

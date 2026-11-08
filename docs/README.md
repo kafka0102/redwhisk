@@ -45,6 +45,7 @@
 - [领域上下文布局](./agents/domain.md)
 - [Issue tracker 技能](./agents/issue-tracker.md)
 - [Triage 标签](./agents/triage-labels.md)
+- [审查必读](./agents/review-standards.md)
 
 ## 业务知识类
 
