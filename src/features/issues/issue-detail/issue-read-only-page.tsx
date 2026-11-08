@@ -54,6 +54,7 @@ interface IssueReadOnlyPageProps {
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
+  onReopenIssue?: () => void;
   onDeleteIssue: () => void;
   onEditIssue: () => void;
   onOpenLinkedSession: () => void;
@@ -72,6 +73,7 @@ export function IssueReadOnlyPage({
   onPreviewAttachment,
   onDownloadAttachment,
   onAdvanceStatus,
+  onReopenIssue,
   onDeleteIssue,
   onEditIssue,
   onOpenLinkedSession,
@@ -222,6 +224,7 @@ export function IssueReadOnlyPage({
           writebackPending={activeDetail?.writebackPending ?? false}
           onOpenSession={onOpenLinkedSession}
           onOpenChangeRequest={onOpenChangeRequest}
+          onReopenIssue={onReopenIssue}
           onRetryWriteback={() => {
             if (selectedIssue == null) {
               return;

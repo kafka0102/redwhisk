@@ -67,6 +67,25 @@ fn closing_running_keeps_running_and_marks_remote_closed() {
 }
 
 #[test]
+fn already_open_remote_keeps_completed_without_a_session() {
+    let harness = ready_github_project("all", None);
+    let completed = seed_remote_issue(
+        &harness.connection,
+        harness.project_id,
+        "completed",
+        "issue-7b",
+        17,
+        "open",
+        false,
+    );
+    sync_with(
+        &harness,
+        vec![remote_issue(17, RemoteIssueState::Open, "Still open")],
+    );
+    assert_eq!(issue_status(&harness.connection, completed), "completed");
+}
+
+#[test]
 fn closing_completed_does_not_add_another_status_action() {
     let harness = ready_github_project("all", None);
     let completed = seed_remote_issue(

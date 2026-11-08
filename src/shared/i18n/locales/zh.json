@@ -571,6 +571,8 @@
     "detailRepo": "仓库",
     "detailRemoteState": "远端状态",
     "pullRequestPendingMerge": "PR 待合并",
+    "changeRequestClosedUnmerged": "PR/MR 已关闭未合并",
+    "reopenIssue": "重新打开 Issue",
     "retryWriteback": "重试写回",
     "writebackPending": "待写回",
     "unavailableBanner": "这条远程 Issue 目前不可用，本地副本还在。",

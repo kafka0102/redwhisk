@@ -134,6 +134,21 @@ fn link_change_request_issue_rejects_missing_project() {
     assert_eq!(error.message, "Project not found.");
 }
 
+#[test]
+fn syncing_closed_unmerged_request_keeps_completed_issue_and_open_remote() {
+    let connection = open_linked_project();
+    let project_id = project_id(&connection);
+    let issue_id = insert_issue(&connection, project_id, 128, "remote", "completed");
+    insert_external_ref(&connection, issue_id, project_id, "github", 128);
+    let mut closed = request(12, "Closes #128", "feat/closed-unmerged");
+    closed.state = "closed".to_string();
+
+    sync_requests(&connection, project_id, vec![closed]);
+
+    assert_eq!(issue_status(&connection, issue_id), "completed");
+    assert_eq!(remote_state(&connection, issue_id), "open");
+}
+
 fn open_linked_project() -> Connection {
     let connection = Connection::open_in_memory().expect("memory db");
     connection
@@ -208,6 +223,16 @@ fn issue_status(connection: &Connection, issue_id: i64) -> String {
             |row| row.get(0),
         )
         .expect("status")
+}
+
+fn remote_state(connection: &Connection, issue_id: i64) -> String {
+    connection
+        .query_row(
+            "SELECT remote_state FROM issue_external_refs WHERE issue_id = ?1",
+            params![issue_id],
+            |row| row.get(0),
+        )
+        .expect("remote state")
 }
 
 fn insert_issue(

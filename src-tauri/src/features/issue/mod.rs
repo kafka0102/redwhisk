@@ -15,6 +15,9 @@ mod validation;
 #[cfg(test)]
 mod remote_create_test;
 
+#[cfg(test)]
+mod closed_unmerged_reopen_tests;
+
 pub(crate) use attachment::{analyze_attachment, sanitize_attachment_file_name};
 #[cfg(test)]
 pub(crate) use remote_create::create_in_data_dir_with_forge;

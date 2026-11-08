@@ -344,6 +344,45 @@ export function useIssueCompletionFlow({
     }
   }
 
+  async function handleReopenClosedUnmergedIssue(): Promise<void> {
+    if (!selectedIssue || isSaving || selectedIssue.status !== "completed") {
+      return;
+    }
+    const currentIssue = selectedIssue;
+    const requestProjectId = projectId;
+    setDialogErrorMessage(null);
+    setIsSaving(true);
+    setIsAdvancingStatus(true);
+    try {
+      const updatedIssue = await advanceIssueStatus({
+        projectId: requestProjectId,
+        issueId: currentIssue.id,
+        targetStatus: "backlog",
+      });
+      if (activeProjectIdRef.current !== requestProjectId) {
+        return;
+      }
+      setIssues((currentIssues) => mergeIssue(currentIssues, updatedIssue));
+      setLaneTotals((prev) =>
+        shiftLaneTotals(prev, currentIssue, updatedIssue),
+      );
+      setSelectedIssueId(updatedIssue.id);
+      setDialogMode(null);
+      setIsReadOnlyEditRequested(false);
+      setRunDialogIssue(null);
+      setForm(EMPTY_FORM);
+    } catch (error) {
+      if (activeProjectIdRef.current === requestProjectId) {
+        showCommandErrorAlert(error);
+      }
+    } finally {
+      if (activeProjectIdRef.current === requestProjectId) {
+        setIsSaving(false);
+      }
+      setIsAdvancingStatus(false);
+    }
+  }
+
   async function handleDeleteIssue() {
     if (!selectedIssue || isSaving) {
       return;
@@ -397,6 +436,7 @@ export function useIssueCompletionFlow({
 
   return {
     handleAdvanceStatus,
+    handleReopenClosedUnmergedIssue,
     handleDeleteIssue,
     resolveDirtyWorkspaceDecision,
     closeoutDialog,

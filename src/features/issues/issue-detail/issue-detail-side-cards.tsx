@@ -46,6 +46,7 @@ export function IssueDetailSideCards({
   writebackError,
   onRetryWriteback,
   onOpenChangeRequest,
+  onReopenIssue,
 }: {
   projection: IssueDetailProjection | null;
   linkedChangeRequests: LinkedChangeRequestSummary[];
@@ -58,6 +59,7 @@ export function IssueDetailSideCards({
   writebackError: string | null;
   onRetryWriteback: () => void;
   onOpenChangeRequest?: (request: { provider: string; number: number }) => void;
+  onReopenIssue?: () => void;
 }): JSX.Element | null {
   const { messages } = useI18n();
   const hasSession = linkedSessionId != null;
@@ -86,8 +88,12 @@ export function IssueDetailSideCards({
       {linkedChangeRequests.map((request) => (
         <IssueLinkedChangeRequestCard
           key={`${request.provider}:${request.number ?? request.url}`}
+          closedUnmerged={
+            issueStatus === "completed" && isClosedWithoutMerge(request.state)
+          }
           request={request}
           onOpenChangeRequest={onOpenChangeRequest}
+          onReopenIssue={onReopenIssue}
         />
       ))}
       {hasSession ? (
@@ -193,11 +199,15 @@ function IssueHostCard({
 }
 
 function IssueLinkedChangeRequestCard({
+  closedUnmerged,
   request,
   onOpenChangeRequest,
+  onReopenIssue,
 }: {
+  closedUnmerged: boolean;
   request: LinkedChangeRequestSummary;
   onOpenChangeRequest?: (request: { provider: string; number: number }) => void;
+  onReopenIssue?: () => void;
 }): JSX.Element {
   const { t } = useI18n();
   const openLabel =
@@ -224,6 +234,7 @@ function IssueLinkedChangeRequestCard({
         ) : null}
       </div>
       <p>{checks.text}</p>
+      {closedUnmerged ? <p>{t("issues.changeRequestClosedUnmerged")}</p> : null}
       {requestNumber != null ? (
         <Button
           size="sm"
@@ -237,6 +248,16 @@ function IssueLinkedChangeRequestCard({
           }}
         >
           {t("issues.changeRequests.openInApp")}
+        </Button>
+      ) : null}
+      {closedUnmerged ? (
+        <Button
+          size="sm"
+          type="button"
+          variant="secondary"
+          onClick={onReopenIssue}
+        >
+          {t("issues.reopenIssue")}
         </Button>
       ) : null}
       <Button
@@ -258,4 +279,8 @@ function remoteStateLabel(state: string, unavailable: string): string {
     return state;
   }
   return unavailable;
+}
+
+function isClosedWithoutMerge(state: string | null): boolean {
+  return state?.toLowerCase() === "closed";
 }

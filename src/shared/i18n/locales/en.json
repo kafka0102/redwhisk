@@ -571,6 +571,8 @@
     "detailRepo": "Repository",
     "detailRemoteState": "Remote state",
     "pullRequestPendingMerge": "PR pending merge",
+    "changeRequestClosedUnmerged": "PR/MR closed without merge",
+    "reopenIssue": "Reopen issue",
     "retryWriteback": "Retry write-back",
     "writebackPending": "Write-back pending",
     "unavailableBanner": "This remote issue is unavailable. The local copy is still here.",

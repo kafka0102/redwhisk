@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::db::issue_external_ref_repository::{
     normalize_forge_host, IssueExternalRefRepository, NewIssueExternalRef,
@@ -254,6 +254,7 @@ fn insert_new(
         IssueStatus::Backlog,
         remote.state == RemoteIssueState::Open,
         false,
+        false,
     );
     if decision.next != IssueStatus::Backlog {
         IssueRepository::update_status_in_transaction(&tx, project_id, created.id, decision.next)
@@ -301,7 +302,13 @@ fn update_existing(
         .linked_session_count(project_id, issue_id)
         .map_err(persistence)?
         > 0;
-    let decision = decide(local, remote.state == RemoteIssueState::Open, has_session);
+    let previously_closed = previously_remote_closed(connection, issue_id)?;
+    let decision = decide(
+        local,
+        remote.state == RemoteIssueState::Open,
+        has_session,
+        previously_closed,
+    );
     let tx = connection.unchecked_transaction().map_err(persistence)?;
     refs.update_visible_text(issue_id, remote.title.trim(), &remote.body)
         .map_err(persistence)?;
@@ -345,9 +352,26 @@ struct StatusDecision {
     remote_reopened: bool,
 }
 
-fn decide(local: IssueStatus, remote_open: bool, has_session: bool) -> StatusDecision {
+fn previously_remote_closed(connection: &Connection, issue_id: i64) -> Result<bool, CommandError> {
+    let state = connection
+        .query_row(
+            "SELECT remote_state FROM issue_external_refs WHERE issue_id = ?1",
+            params![issue_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(persistence)?;
+    Ok(state.as_deref() == Some("closed"))
+}
+
+fn decide(
+    local: IssueStatus,
+    remote_open: bool,
+    has_session: bool,
+    previously_closed: bool,
+) -> StatusDecision {
     if remote_open {
-        if local == IssueStatus::Completed && !has_session {
+        if local == IssueStatus::Completed && !has_session && previously_closed {
             return StatusDecision {
                 next: IssueStatus::Backlog,
                 write_action: true,

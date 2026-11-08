@@ -561,6 +561,7 @@ export function IssuesActivity({
 
   const {
     handleAdvanceStatus,
+    handleReopenClosedUnmergedIssue,
     handleDeleteIssue,
     resolveDirtyWorkspaceDecision,
     closeoutDialog,
@@ -717,6 +718,7 @@ export function IssuesActivity({
           onAdvanceStatus={(targetStatus) =>
             void handleAdvanceStatus(targetStatus)
           }
+          onReopenIssue={() => void handleReopenClosedUnmergedIssue()}
           onDeleteIssue={() => void handleDeleteIssue()}
           onEditIssue={editSelectedIssue}
           onOpenLinkedSession={openLinkedSession}
