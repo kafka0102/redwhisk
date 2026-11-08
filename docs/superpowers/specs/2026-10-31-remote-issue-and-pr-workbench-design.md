@@ -566,7 +566,11 @@ PR 的 files / checks / reviews / comments 是宿主快照，形状差异大、�
 
 ### 7.1 新模块
 
-连接探测复用 `src-tauri/src/git/forge.rs` 的 `inspect_forge`、`parse_forge_url`、`cli_is_installed`。下面的 `forge/` 目录要等同步落地再建。
+连接探测复用 `src-tauri/src/git/forge.rs` 的 `inspect_forge`、`parse_forge_url`、`cli_is_installed`。
+
+Issue 与 PR/MR 的同步已经落在 `src-tauri/src/features/issue/github_issue_mirror`（`ForgeIssuePort`、GitHub/GitLab CLI 与解析）和 `src-tauri/src/features/change_request`（列表、同步、关联）。不要新建 `src-tauri/src/forge/`。
+
+下面的树是当时拟定、尚未采用的形状。HTTP 适配仍未开工，开工前也不要把现有代码搬进这棵树。
 
 ```text
 src-tauri/src/forge/
@@ -586,7 +590,7 @@ src-tauri/src/forge/
   commands.rs         // Tauri commands
 ```
 
-`forge/` 是跨 feature 横切模块，和 `git/` 同级；`features/issue/` 与新的 `features/change_request/` 只依赖 `ForgePort` 与 sync service，不直接拼 CLI 参数。
+现有调用走 `github_issue_mirror` 里的 `ForgeIssuePort`。`features/issue/` 与 `features/change_request/` 不直接拼 CLI 参数。上面的 `forge/` 树不是当前代码。
 
 ### 7.2 Port
 
