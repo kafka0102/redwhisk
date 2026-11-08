@@ -168,6 +168,7 @@ pub fn run() {
             features::issue::commands::list_issues,
             features::change_request::commands::list_project_change_requests,
             features::change_request::commands::sync_project_change_requests,
+            features::change_request::commands::get_project_change_request,
             features::change_request::commands::link_change_request_issue,
             features::issue::commands::sync_project_issues,
             features::issue::commands::get_issue_sync_status,

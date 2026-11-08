@@ -10,9 +10,11 @@ mod sync;
 pub(crate) use cli::view_remote_issue;
 pub(crate) use cli::ProjectIssueForge;
 pub(crate) use cli::{close_remote_issue, comment_remote_issue};
+pub(crate) use forge_process::capture_forge_stdout;
 pub(crate) use port::RemoteIssueState;
 pub(crate) use port::{
-    ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteChangeRequest, RemoteIssue,
+    ForgeIssueDraft, ForgeIssueError, ForgeIssuePort, RemoteChangeRequest,
+    RemoteChangeRequestDetails, RemoteIssue,
 };
 
 #[cfg(test)]

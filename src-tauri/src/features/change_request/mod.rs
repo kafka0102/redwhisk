@@ -10,7 +10,14 @@ mod sync_command_tests;
 #[cfg(test)]
 mod link_command_tests;
 
+#[cfg(test)]
+mod detail_command_tests;
+
 pub mod commands;
+mod detail;
+mod detail_cli;
+mod detail_parse;
+mod detail_snapshot;
 mod links;
 mod list;
 mod parse;
@@ -19,6 +26,15 @@ mod sync;
 
 #[cfg(test)]
 pub(crate) use crate::types::change_request::ChangeRequestSyncOutcome;
+#[cfg(test)]
+pub(crate) use detail::get_project_change_request;
+pub(crate) use detail_cli::{
+    fetch_github_change_request_details, fetch_gitlab_change_request_details,
+};
+#[cfg(test)]
+pub(crate) use detail_parse::{
+    parse_github_change_request_details, parse_gitlab_change_request_details,
+};
 #[cfg(test)]
 pub(crate) use links::link_change_request_issue;
 #[cfg(test)]

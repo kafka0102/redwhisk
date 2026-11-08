@@ -130,6 +130,16 @@ impl ForgeIssuePort for ProjectIssueForge {
             Self::Gitlab(forge) => forge.create_issue(draft),
         }
     }
+
+    fn get_change_request_details(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ForgeIssueError> {
+        match self {
+            Self::Github(forge) => forge.get_change_request_details(number),
+            Self::Gitlab(forge) => forge.get_change_request_details(number),
+        }
+    }
 }
 
 impl ForgeIssuePort for GithubCliForge {
@@ -156,6 +166,13 @@ impl ForgeIssuePort for GithubCliForge {
             super::create_cli::github_issue_view_args,
             super::create_cli::parse_github_issue_view,
         )
+    }
+
+    fn get_change_request_details(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ForgeIssueError> {
+        crate::features::change_request::fetch_github_change_request_details(&self.repo_dir, number)
     }
 }
 

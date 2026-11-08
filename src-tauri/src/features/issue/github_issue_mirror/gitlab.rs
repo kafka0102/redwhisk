@@ -43,6 +43,13 @@ impl ForgeIssuePort for GitlabCliForge {
             super::create_cli::parse_gitlab_issue_view,
         )
     }
+
+    fn get_change_request_details(
+        &self,
+        number: i64,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ForgeIssueError> {
+        crate::features::change_request::fetch_gitlab_change_request_details(&self.repo_dir, number)
+    }
 }
 
 pub(crate) fn retain_issues_since(

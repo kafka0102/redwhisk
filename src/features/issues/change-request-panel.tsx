@@ -8,6 +8,7 @@ import {
   type ChangeRequestListResponse,
   type ChangeRequestSyncChangedEvent,
 } from "./change-request-commands";
+import { ChangeRequestDetailPage } from "./change-request-detail";
 import { ChangeRequestList } from "./change-request-list";
 import {
   useIssueAutoSync,
@@ -22,13 +23,19 @@ export function ChangeRequestPanel({
   projectId,
   sourceMode,
   onOpenProjectSettings,
+  onDetailOpenChange,
 }: {
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
   onOpenProjectSettings?: () => void;
+  onDetailOpenChange?: (open: boolean) => void;
 }): JSX.Element | null {
   const { t } = useI18n();
   const [filter, setFilter] = useState<ChangeRequestFilter>("review_requested");
+  const [selected, setSelected] = useState<{
+    provider: string;
+    number: number;
+  } | null>(null);
   const [response, setResponse] = useState<ChangeRequestListResponse | null>(
     null,
   );
@@ -50,8 +57,7 @@ export function ChangeRequestPanel({
           setResponse(next);
         }
       })
-      .catch(() => {
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -108,6 +114,22 @@ export function ChangeRequestPanel({
     );
   }, [projectId, reload]);
 
+  useEffect(() => {
+    onDetailOpenChange?.(selected != null);
+  }, [onDetailOpenChange, selected]);
+
+  if (selected != null) {
+    return (
+      <ChangeRequestDetailPage
+        key={`${selected.provider}:${selected.number}`}
+        number={selected.number}
+        projectId={projectId}
+        provider={selected.provider}
+        onBack={() => setSelected(null)}
+      />
+    );
+  }
+
   return (
     <ChangeRequestList
       filter={filter}
@@ -120,6 +142,9 @@ export function ChangeRequestPanel({
         )
       }
       onFilterChange={setFilter}
+      onOpenDetail={(row) =>
+        setSelected({ provider: row.provider, number: row.number })
+      }
       onOpenProjectSettings={onOpenProjectSettings}
     />
   );

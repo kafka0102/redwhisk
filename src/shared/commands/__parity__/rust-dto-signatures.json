@@ -250,6 +250,64 @@
         "sessionId": "required"
       }
     },
+    "ChangeRequestCheckRun": {
+      "fields": {
+        "durationMs": "required",
+        "logUrl": "required",
+        "name": "required",
+        "status": "required"
+      }
+    },
+    "ChangeRequestDetail": {
+      "fields": {
+        "additions": "required",
+        "authorLogin": "required",
+        "blockingReasons": "required",
+        "body": "required",
+        "checks": "required",
+        "comments": "required",
+        "commitCount": "required",
+        "deletions": "required",
+        "detailError": "required",
+        "detailStatus": "required",
+        "files": "required",
+        "id": "required",
+        "labels": "required",
+        "linkedIssues": "required",
+        "mergeCommitSha": "required",
+        "mergeMethod": "required",
+        "mergeStateStatus": "required",
+        "mergeable": "required",
+        "number": "required",
+        "provider": "required",
+        "reviewDecision": "required",
+        "reviewers": "required",
+        "reviews": "required",
+        "sourceBranch": "required",
+        "state": "required",
+        "targetBranch": "required",
+        "title": "required",
+        "url": "required"
+      }
+    },
+    "ChangeRequestDiscussionItem": {
+      "fields": {
+        "author": "required",
+        "body": "required",
+        "createdAt": "required",
+        "kind": "required",
+        "state": "required"
+      }
+    },
+    "ChangeRequestFileChange": {
+      "fields": {
+        "additions": "required",
+        "deletions": "required",
+        "patch": "required",
+        "patchStatus": "required",
+        "path": "required"
+      }
+    },
     "ChangeRequestFilterCounts": {
       "fields": {
         "allOpen": "required",
@@ -282,6 +340,7 @@
         "id": "required",
         "linkedIssues": "required",
         "number": "required",
+        "provider": "required",
         "remoteUpdatedAt": "required",
         "reviewDecision": "required",
         "sourceBranch": "required",
@@ -289,6 +348,12 @@
         "targetBranch": "required",
         "title": "required",
         "url": "required"
+      }
+    },
+    "ChangeRequestReviewer": {
+      "fields": {
+        "login": "required",
+        "state": "required"
       }
     },
     "ChangeRequestSyncChangedEvent": {

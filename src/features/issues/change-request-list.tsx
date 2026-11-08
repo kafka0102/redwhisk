@@ -29,6 +29,7 @@ export function ChangeRequestList({
   onFilterChange,
   onOpenProjectSettings,
   onOpenUrl,
+  onOpenDetail,
 }: {
   sourceMode: "local" | "remote" | "mixed" | null;
   response: ChangeRequestListResponse | null;
@@ -38,6 +39,7 @@ export function ChangeRequestList({
   onFilterChange?: (filter: ChangeRequestFilter) => void;
   onOpenProjectSettings?: () => void;
   onOpenUrl?: (url: string) => void;
+  onOpenDetail?: (row: ChangeRequestListRow) => void;
 }): JSX.Element | null {
   const { t } = useI18n();
   if (sourceMode == null) {
@@ -93,6 +95,7 @@ export function ChangeRequestList({
             now={now}
             row={row}
             onOpenUrl={onOpenUrl}
+            onOpenDetail={onOpenDetail}
           />
         ))
       )}
@@ -104,10 +107,12 @@ function ChangeRequestRow({
   row,
   now,
   onOpenUrl,
+  onOpenDetail,
 }: {
   row: ChangeRequestListRow;
   now: number;
   onOpenUrl?: (url: string) => void;
+  onOpenDetail?: (row: ChangeRequestListRow) => void;
 }): JSX.Element {
   const { t } = useI18n();
   const check = changeRequestCheck(row, t);
@@ -115,7 +120,11 @@ function ChangeRequestRow({
   const reviewTone = review.tone === "muted" ? "neutral" : review.tone;
   const author = row.authorLogin ?? "";
   return (
-    <div className="change-request-row" role="row">
+    <div
+      className="change-request-row"
+      role="row"
+      onClick={() => onOpenDetail?.(row)}
+    >
       <div className="change-request-title">
         <span
           className={`change-request-state change-request-state--${row.state}`}
@@ -154,7 +163,10 @@ function ChangeRequestRow({
         href={row.url}
         rel="noreferrer"
         target="_blank"
-        onClick={() => onOpenUrl?.(row.url)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenUrl?.(row.url);
+        }}
       >
         {t("issues.changeRequests.open")}
       </a>

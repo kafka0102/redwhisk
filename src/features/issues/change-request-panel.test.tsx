@@ -55,6 +55,7 @@ function response(): ChangeRequestListResponse {
         number: 132,
         title: "Kept",
         url: "https://github.com/acme/redwhisk/pull/132",
+        provider: "github",
         state: "open",
         authorLogin: "lin",
         sourceBranch: "feat/kept",

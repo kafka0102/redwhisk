@@ -118,6 +118,7 @@ function row(
 ): ChangeRequestListResponse["rows"][number] {
   return {
     url: `https://github.com/acme/redwhisk/pull/${patch.number}`,
+    provider: "github",
     state: "open",
     authorLogin: "yujianjia",
     sourceBranch: "feat/remote-issue",
@@ -135,6 +136,7 @@ function row(
 describe("change request list", () => {
   it("shows review copy, wrapped links, and does not navigate the row", () => {
     const onOpenUrl = vi.fn();
+    const onOpenDetail = vi.fn();
     renderList(
       "zh",
       <ChangeRequestList
@@ -144,6 +146,7 @@ describe("change request list", () => {
         sourceMode="remote"
         syncSlot={<span>slot</span>}
         onOpenUrl={onOpenUrl}
+        onOpenDetail={onOpenDetail}
       />,
     );
 
@@ -189,6 +192,9 @@ describe("change request list", () => {
     );
     fireEvent.click(screen.getAllByRole("row")[0]);
     expect(onOpenUrl).not.toHaveBeenCalled();
+    expect(onOpenDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ number: 132, provider: "github" }),
+    );
     fireEvent.click(screen.getAllByRole("link", { name: "打开" })[0]);
     expect(onOpenUrl).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/132",

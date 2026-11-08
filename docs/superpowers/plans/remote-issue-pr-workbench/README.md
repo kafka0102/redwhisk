@@ -25,7 +25,7 @@
 | 4 | [Issue 详情分状态与来源展示](./task-04-issue-detail-by-status-and-source.md) | 已完成 | 3（已完成，依赖已解除） | 详情布局与统一时间轴已落地。宿主评论和事件拉取未做，由下一次 Issue 同步扩展承接，不是任务 5、6、7 |
 | 5 | [远程 Issue 创建与写回](./task-05-remote-issue-create-and-writeback.md) | 已完成 | 4（已完成） | 创建 PR 后远程不关闭；写回幂等入口和待合并状态已落地。PR 合并后关闭留给任务 8。远端不可用可保留、解绑、重试 |
 | 6 | [PR/MR 一等数据与列表](./task-06-change-request-data-and-list.md) | 已完成 | 3（已完成） | 列表、同步和手动关联已落地。详情 JSON 仍是空数组 |
-| 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 可开始 | 6（已完成，依赖已解除） | 可复用 `list_project_change_requests`、`sync_project_change_requests`、`link_change_request_issue`。详情 JSON 仍是空数组 |
+| 7 | [PR/MR 详情与双向关联](./task-07-change-request-detail-and-links.md) | 进行中 | 6（已完成，依赖已解除） | 详情与双向关联实现中。详情 JSON 仍待写入 |
 | 8 | [PR/MR 操作与完成流程接入](./task-08-change-request-actions-and-completion.md) | 待开始 | 5、7 | 最后收口写操作与联动 |
 
 状态只使用以下值：

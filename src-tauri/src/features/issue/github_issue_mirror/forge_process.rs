@@ -5,7 +5,7 @@ use crate::git::command::apply_interactive_path;
 
 use super::port::ForgeIssueError;
 
-pub(super) fn capture_forge_stdout(
+pub(crate) fn capture_forge_stdout(
     program: &str,
     args: &[String],
     repo_dir: &Path,

@@ -11,6 +11,7 @@ use crate::types::errors::{CommandError, CommandErrorCode};
 
 struct StoredChangeRequest {
     id: i64,
+    provider: String,
     number: i64,
     title: String,
     url: String,
@@ -69,6 +70,7 @@ fn to_row(
 ) -> ChangeRequestListRow {
     ChangeRequestListRow {
         id: row.id,
+        provider: row.provider.clone(),
         number: row.number,
         title: row.title.clone(),
         url: row.url.clone(),
@@ -85,7 +87,7 @@ fn to_row(
     }
 }
 
-fn ensure_project(connection: &Connection, project_id: i64) -> Result<(), CommandError> {
+pub(super) fn ensure_project(connection: &Connection, project_id: i64) -> Result<(), CommandError> {
     let found: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM projects WHERE id = ?1",
@@ -140,7 +142,7 @@ fn load_change_requests(
 ) -> Result<Vec<StoredChangeRequest>, CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT id, number, title, url, state, author_login, source_branch, target_branch,
+            "SELECT id, provider, number, title, url, state, author_login, source_branch, target_branch,
                     review_decision, requested_reviewers_json, checks_ok, checks_failed,
                     checks_pending, remote_updated_at
              FROM change_requests
@@ -152,19 +154,20 @@ fn load_change_requests(
         .query_map(params![project_id], |row| {
             Ok(StoredChangeRequest {
                 id: row.get(0)?,
-                title: row.get(2)?,
-                number: row.get(1)?,
-                url: row.get(3)?,
-                state: row.get(4)?,
-                author_login: row.get(5)?,
-                source_branch: row.get(6)?,
-                target_branch: row.get(7)?,
-                review_decision: row.get(8)?,
-                requested_reviewers_json: row.get(9)?,
-                checks_ok: row.get(10)?,
-                checks_failed: row.get(11)?,
-                checks_pending: row.get(12)?,
-                remote_updated_at: row.get(13)?,
+                provider: row.get(1)?,
+                number: row.get(2)?,
+                title: row.get(3)?,
+                url: row.get(4)?,
+                state: row.get(5)?,
+                author_login: row.get(6)?,
+                source_branch: row.get(7)?,
+                target_branch: row.get(8)?,
+                review_decision: row.get(9)?,
+                requested_reviewers_json: row.get(10)?,
+                checks_ok: row.get(11)?,
+                checks_failed: row.get(12)?,
+                checks_pending: row.get(13)?,
+                remote_updated_at: row.get(14)?,
             })
         })
         .map_err(query_failed)?;
