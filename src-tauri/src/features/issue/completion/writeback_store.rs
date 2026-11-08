@@ -98,6 +98,7 @@ pub(crate) fn after_local_completion(
         local_completed: true,
         summary: load_summary(connection, issue_id)?,
         existing_open_pull_request: existing,
+        merged_change_request: false,
     };
     let forge = CliForge {
         provider: &remote.provider,
@@ -145,6 +146,57 @@ pub(crate) fn apply_persisted_writeback(
     })
 }
 
+pub(crate) fn apply_change_request_merge_writeback(
+    connection: &Connection,
+    issue_id: i64,
+    forge: &impl CompletionForge,
+) -> Result<(), CommandError> {
+    let existing = load_book(connection, issue_id)?;
+    if existing.pending_error.is_some() {
+        return Ok(());
+    }
+    if !issue_is_completed(connection, issue_id)? {
+        let method =
+            load_method(connection, issue_id)?.unwrap_or(CompletionMethod::OpenPullRequest);
+        let mut waiting = existing;
+        waiting.pending_error = Some("writebackUnavailable".to_string());
+        save_book(connection, issue_id, method, &waiting)?;
+        return Ok(());
+    }
+    let Some(remote) = load_remote(connection, issue_id)? else {
+        return Ok(());
+    };
+    let method = load_method(connection, issue_id)?.unwrap_or(CompletionMethod::OpenPullRequest);
+    let (close_switch, comment_switch) = load_switches(connection, remote.project_id)?;
+    let request = CompletionWriteback {
+        remote_state: parse_remote_state(&remote.remote_state),
+        close_remote_after_completion: close_switch,
+        comment_summary: comment_switch,
+        completion: method,
+        local_completed: true,
+        summary: load_summary(connection, issue_id)?,
+        existing_open_pull_request: load_pull_request(connection, issue_id)?,
+        merged_change_request: true,
+    };
+    apply_persisted_writeback(connection, forge, issue_id, method, &request)
+}
+
+pub(crate) fn apply_change_request_merge_writeback_with_cli(
+    connection: &Connection,
+    issue_id: i64,
+    repo_dir: &Path,
+) -> Result<(), CommandError> {
+    let Some(remote) = load_remote(connection, issue_id)? else {
+        return Ok(());
+    };
+    let forge = CliForge {
+        provider: &remote.provider,
+        repo_dir,
+        number: remote.number,
+    };
+    apply_change_request_merge_writeback(connection, issue_id, &forge)
+}
+
 pub(crate) fn retry_issue_completion_writeback_in_data_dir(
     data_dir: &Path,
     input: RetryIssueCompletionWritebackInput,
@@ -179,8 +231,6 @@ pub(crate) fn retry_issue_completion_writeback_on(
     let Some(remote) = load_remote(connection, issue_id)? else {
         return Ok(());
     };
-    let method = load_method(connection, issue_id)?.unwrap_or(CompletionMethod::MergeToBase);
-    let (close_switch, comment_switch) = load_switches(connection, remote.project_id)?;
     let repo_path = connection
         .query_row(
             "SELECT repo_path FROM projects WHERE id = ?1",
@@ -188,6 +238,62 @@ pub(crate) fn retry_issue_completion_writeback_on(
             |row| row.get::<_, String>(0),
         )
         .map_err(persistence)?;
+    let forge = CliForge {
+        provider: &remote.provider,
+        repo_dir: Path::new(&repo_path),
+        number: remote.number,
+    };
+    apply_retry_request(connection, issue_id, &remote, &forge)
+}
+
+#[cfg(test)]
+pub(crate) fn retry_issue_completion_writeback_with(
+    connection: &Connection,
+    project_id: i64,
+    issue_id: i64,
+    forge: &impl CompletionForge,
+) -> Result<(), CommandError> {
+    let Some(remote) = prepare_retry(connection, project_id, issue_id)? else {
+        return Ok(());
+    };
+    apply_retry_request(connection, issue_id, &remote, forge)
+}
+
+#[cfg(test)]
+fn prepare_retry(
+    connection: &Connection,
+    project_id: i64,
+    issue_id: i64,
+) -> Result<Option<RemoteRef>, CommandError> {
+    let status = connection
+        .query_row(
+            "SELECT status FROM issues WHERE id = ?1 AND project_id = ?2 AND del = 0",
+            params![issue_id, project_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(persistence)?;
+    let Some(status) = status else {
+        return Err(
+            CommandError::new(CommandErrorCode::IssueNotFound, "Issue not found.")
+                .with_reason("issueNotFound")
+                .with_detail(ErrorDetail::new("Issue").with_value("issueId", issue_id)),
+        );
+    };
+    if status != "completed" {
+        return Ok(None);
+    }
+    load_remote(connection, issue_id)
+}
+
+fn apply_retry_request(
+    connection: &Connection,
+    issue_id: i64,
+    remote: &RemoteRef,
+    forge: &impl CompletionForge,
+) -> Result<(), CommandError> {
+    let method = load_method(connection, issue_id)?.unwrap_or(CompletionMethod::MergeToBase);
+    let (close_switch, comment_switch) = load_switches(connection, remote.project_id)?;
     let request = CompletionWriteback {
         remote_state: parse_remote_state(&remote.remote_state),
         close_remote_after_completion: close_switch,
@@ -196,13 +302,28 @@ pub(crate) fn retry_issue_completion_writeback_on(
         local_completed: true,
         summary: load_summary(connection, issue_id)?,
         existing_open_pull_request: load_pull_request(connection, issue_id)?,
+        merged_change_request: linked_change_request_is_merged(connection, issue_id)?,
     };
-    let forge = CliForge {
-        provider: &remote.provider,
-        repo_dir: Path::new(&repo_path),
-        number: remote.number,
-    };
-    apply_persisted_writeback(connection, &forge, issue_id, method, &request)
+    apply_persisted_writeback(connection, forge, issue_id, method, &request)
+}
+
+fn linked_change_request_is_merged(
+    connection: &Connection,
+    issue_id: i64,
+) -> Result<bool, CommandError> {
+    let merged = connection
+        .query_row(
+            "SELECT 1
+             FROM change_request_issue_links AS links
+             JOIN change_requests AS requests ON requests.id = links.change_request_id
+             WHERE links.issue_id = ?1 AND requests.state = 'merged'
+             LIMIT 1",
+            params![issue_id],
+            |_| Ok(1_i64),
+        )
+        .optional()
+        .map_err(persistence)?;
+    Ok(merged.is_some())
 }
 
 pub(crate) fn detail_writeback(

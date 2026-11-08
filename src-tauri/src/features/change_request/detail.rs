@@ -30,6 +30,12 @@ pub(crate) fn get_project_change_request(
     match forge.get_change_request_details(number) {
         Ok(details) => {
             write_fresh_snapshot(connection, row.id, &details, now_ms)?;
+            if details.state == "merged" {
+                let _ = crate::features::issue::completion::merge_writeback::write_back_merged_change_request_from_repo(
+                    connection,
+                    row.id,
+                );
+            }
             let row = load_row(connection, project_id, provider, number)?
                 .ok_or_else(change_request_not_found)?;
             Ok(with_action_support(
@@ -224,6 +230,12 @@ pub(crate) fn merge_change_request(
     write_fresh_snapshot(connection, row.id, &merged, now_ms)?;
     let row =
         load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    if row.state == "merged" {
+        let _ = crate::features::issue::completion::merge_writeback::write_back_merged_change_request_from_repo(
+            connection,
+            row.id,
+        );
+    }
     Ok(with_action_support(
         detail_from_fresh(row, merged, linked_issues),
         forge,

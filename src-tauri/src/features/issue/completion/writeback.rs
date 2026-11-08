@@ -34,6 +34,7 @@ pub(crate) struct CompletionWriteback {
     pub local_completed: bool,
     pub summary: String,
     pub existing_open_pull_request: Option<String>,
+    pub merged_change_request: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -85,7 +86,7 @@ pub(crate) fn apply_completion_writeback(
 fn should_close(request: &CompletionWriteback) -> bool {
     request.local_completed
         && request.close_remote_after_completion
-        && request.completion == CompletionMethod::MergeToBase
+        && (request.completion == CompletionMethod::MergeToBase || request.merged_change_request)
 }
 
 fn nonempty(value: Option<String>) -> Option<String> {
@@ -177,6 +178,7 @@ pub(crate) fn merge_request(close: bool, comment: bool) -> CompletionWriteback {
         local_completed: true,
         summary: "Shipped the flow".to_string(),
         existing_open_pull_request: None,
+        merged_change_request: false,
     }
 }
 

@@ -189,6 +189,7 @@ fn insert_change_request(
             request,
             now_ms,
         )?;
+        write_back_if_merged(connection, change_request_id, &request.state);
         return Ok(());
     }
     connection
@@ -233,7 +234,17 @@ fn insert_change_request(
         request,
         now_ms,
     )?;
+    write_back_if_merged(connection, change_request_id, &request.state);
     Ok(())
+}
+
+fn write_back_if_merged(connection: &Connection, change_request_id: i64, state: &str) {
+    if state == "merged" {
+        let _ = crate::features::issue::completion::merge_writeback::write_back_merged_change_request_from_repo(
+            connection,
+            change_request_id,
+        );
+    }
 }
 
 fn provider_name(provider: Option<ForgeProvider>) -> Result<&'static str, CommandError> {

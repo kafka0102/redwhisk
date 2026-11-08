@@ -321,6 +321,7 @@ fn open_pull_request_does_not_use_close_on_merge() {
         local_completed: true,
         summary: String::new(),
         existing_open_pull_request: None,
+        merged_change_request: false,
     };
     apply_completion_writeback(&forge, &mut book, &request).expect("writeback");
     assert_eq!(forge.close_count(), 0);
