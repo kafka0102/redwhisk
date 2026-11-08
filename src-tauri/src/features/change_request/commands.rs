@@ -6,6 +6,7 @@ use tauri::State;
 use super::detail::close_change_request as close_on_connection;
 use super::detail::get_project_change_request as get_on_connection;
 use super::detail::mark_change_request_ready as mark_ready_on_connection;
+use super::detail::merge_change_request as merge_on_connection;
 use super::detail::request_change_request_review as request_review_on_connection;
 use super::links::link_change_request_issue as link_on_connection;
 use super::list::list_project_change_requests as list_on_connection;
@@ -177,6 +178,31 @@ pub async fn close_change_request(
             project_id,
             &provider,
             number,
+            &opened.forge,
+            now_millis(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn merge_change_request(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+    provider: String,
+    number: i64,
+    method: String,
+    delete_source_branch: bool,
+) -> Result<ChangeRequestDetail, CommandError> {
+    run_action(app, state, project_id, provider, move |opened, provider| {
+        merge_on_connection(
+            &opened.database.connection,
+            project_id,
+            &provider,
+            number,
+            &method,
+            delete_source_branch,
             &opened.forge,
             now_millis(),
         )

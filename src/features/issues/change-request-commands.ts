@@ -163,6 +163,8 @@ export interface ChangeRequestDetail {
   linkedIssues: ChangeRequestLinkedIssue[];
   readySupported: boolean;
   reviewSupported: boolean;
+  supportedMergeMethods: string[];
+  sourceBranchDeleted: boolean | null;
 }
 
 export function getProjectChangeRequest(input: {
@@ -202,4 +204,14 @@ export function closeChangeRequest(input: {
   number: number;
 }): Promise<ChangeRequestDetail> {
   return invokeCommand<ChangeRequestDetail>("close_change_request", input);
+}
+
+export function mergeChangeRequest(input: {
+  projectId: number;
+  provider: string;
+  number: number;
+  method: string;
+  deleteSourceBranch: boolean;
+}): Promise<ChangeRequestDetail> {
+  return invokeCommand<ChangeRequestDetail>("merge_change_request", input);
 }

@@ -8,6 +8,7 @@ import {
   closeChangeRequest,
   getProjectChangeRequest,
   markChangeRequestReady,
+  mergeChangeRequest,
   requestChangeRequestReview,
   type ChangeRequestDetail,
 } from "./change-request-commands";
@@ -45,6 +46,7 @@ vi.mock("./change-request-commands", async () => {
     closeChangeRequest: vi.fn(),
     getProjectChangeRequest: vi.fn(),
     markChangeRequestReady: vi.fn(),
+    mergeChangeRequest: vi.fn(),
     requestChangeRequestReview: vi.fn(),
   };
 });
@@ -57,6 +59,7 @@ const getDetailMock = vi.mocked(getProjectChangeRequest);
 const markReadyMock = vi.mocked(markChangeRequestReady);
 const requestReviewMock = vi.mocked(requestChangeRequestReview);
 const closeRequestMock = vi.mocked(closeChangeRequest);
+const mergeRequestMock = vi.mocked(mergeChangeRequest);
 const openUrlMock = vi.mocked(openUrl);
 
 function detail(patch: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail {
@@ -155,6 +158,8 @@ function detail(patch: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail {
     linkedIssues: [{ issueId: 128, label: "GH #128", linkKind: "closing" }],
     readySupported: true,
     reviewSupported: true,
+    supportedMergeMethods: ["squash", "merge", "rebase"],
+    sourceBranchDeleted: null,
     ...patch,
   };
 }
@@ -211,6 +216,7 @@ describe("change request detail", () => {
     markReadyMock.mockReset();
     requestReviewMock.mockReset();
     closeRequestMock.mockReset();
+    mergeRequestMock.mockReset();
     getDetailMock.mockResolvedValue(detail());
   });
 
@@ -300,7 +306,7 @@ describe("change request detail", () => {
     expect(
       screen.getByRole("button", { name: "合并 Pull Request" }),
     ).toBeDisabled();
-    expect(screen.getByLabelText("合并后删除源分支")).toBeDisabled();
+    expect(screen.queryByLabelText("合并后删除源分支")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
     fireEvent.click(screen.getByRole("button", { name: "请求审阅" }));
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
@@ -549,5 +555,285 @@ describe("change request detail", () => {
     expect(closeRequestMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("closed")).toBeInTheDocument();
     expect(screen.queryByText("merged")).toBeNull();
+  });
+
+  it("shows that mergeability is still being calculated", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: null, blockingReasons: [], checks: [] }),
+    );
+    renderDetail();
+    await flush();
+    expect(screen.getAllByText("正在计算").length).toBeGreaterThan(0);
+    expect(screen.queryByText("不可合并")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "合并 Pull Request" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mergeRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a blank or unknown mergeable value as still calculating", async () => {
+    for (const mergeable of ["", "UNKNOWN"]) {
+      getDetailMock.mockResolvedValue(
+        detail({ mergeable, blockingReasons: [], checks: [] }),
+      );
+      const view = renderDetail();
+      await flush();
+      expect(screen.getAllByText("正在计算").length).toBeGreaterThan(0);
+      expect(screen.queryByText("不可合并")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "合并 Pull Request" }),
+      ).toBeDisabled();
+      view.unmount();
+    }
+  });
+
+  it("lists every blocking reason and keeps merge disabled", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        mergeable: "MERGEABLE",
+        blockingReasons: ["test (ubuntu-latest) 失败", "需要 1 个批准"],
+      }),
+    );
+    renderDetail();
+    await flush();
+    expect(screen.getByText("test (ubuntu-latest) 失败")).toBeInTheDocument();
+    expect(screen.getByText("需要 1 个批准")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "合并 Pull Request" }),
+    ).toBeDisabled();
+  });
+
+  it("lets a MERGEABLE request open the merge dialog even when checks failed", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: "MERGEABLE", blockingReasons: [] }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByRole("radio", { name: "压缩合并" }),
+    ).toBeChecked();
+    expect(
+      within(dialog).getByRole("checkbox", { name: "合并后删除源分支" }),
+    ).toBeChecked();
+    expect(
+      within(dialog).queryByText("把 2 个提交压成 1 个，历史更干净。"),
+    ).toBeNull();
+    expect(within(dialog).queryByText("保留分支拓扑。")).toBeNull();
+    expect(
+      within(dialog).queryByText("线性历史，不产生 merge commit。"),
+    ).toBeNull();
+    expect(dialog.textContent ?? "").not.toMatch(/admin|auto|force/i);
+  });
+
+  it("shows only the clicked merge option help", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: "MERGEABLE", blockingReasons: [], commitCount: 2 }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "压缩合并 的说明" }),
+    );
+    expect(
+      within(dialog).getByText("把 2 个提交压成 1 个，历史更干净。"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText("保留分支拓扑。")).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "创建合并提交 的说明" }),
+    );
+    expect(within(dialog).getByText("保留分支拓扑。")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("把 2 个提交压成 1 个，历史更干净。"),
+    ).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "变基合并 的说明" }),
+    );
+    expect(
+      within(dialog).getByText("线性历史，不产生 merge commit。"),
+    ).toBeInTheDocument();
+  });
+
+  it("uses a generic squash help sentence when the commit count is missing", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        mergeable: "MERGEABLE",
+        blockingReasons: [],
+        commitCount: null,
+      }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "压缩合并 的说明" }));
+    expect(
+      screen.getByText("把多个提交压成 1 个，历史更干净。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/2 个/)).toBeNull();
+  });
+
+  it("disables a merge method the host does not support", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        mergeable: "MERGEABLE",
+        blockingReasons: [],
+        supportedMergeMethods: ["squash", "merge"],
+      }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    expect(screen.getByRole("radio", { name: "变基合并" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "压缩合并" })).toBeEnabled();
+  });
+
+  it("enables GitLab merge only when the host says mergeable", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        provider: "gitlab",
+        mergeable: "mergeable",
+        blockingReasons: [],
+        checks: [],
+      }),
+    );
+    renderDetail();
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "合并 Merge Request" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps merge disabled when the host reports a conflict", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        mergeable: "CONFLICTING",
+        blockingReasons: [],
+        checks: [
+          {
+            name: "lint",
+            status: "passed",
+            durationMs: 1,
+            logUrl: null,
+          },
+        ],
+      }),
+    );
+    renderDetail();
+    await flush();
+    expect(
+      screen.getByRole("button", { name: "合并 Pull Request" }),
+    ).toBeDisabled();
+    expect(mergeRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("merges with squash and deletes the source branch by default", async () => {
+    mergeRequestMock.mockResolvedValue(
+      detail({
+        state: "merged",
+        mergeable: "MERGEABLE",
+        blockingReasons: [],
+        mergeMethod: "squash",
+        mergeCommitSha: "9f3c2a1",
+        targetBranch: "main",
+        sourceBranchDeleted: false,
+      }),
+    );
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: "MERGEABLE", blockingReasons: [] }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "合并" }));
+    await flush();
+    expect(mergeRequestMock).toHaveBeenCalledTimes(1);
+    expect(mergeRequestMock).toHaveBeenCalledWith({
+      projectId: 4,
+      provider: "github",
+      number: 132,
+      method: "squash",
+      deleteSourceBranch: true,
+    });
+    expect(screen.getByText("已合并到 main")).toBeInTheDocument();
+    expect(screen.getByText("Squash and merge")).toBeInTheDocument();
+    expect(screen.getByText("9f3c2a1")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByLabelText("合并后删除源分支")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "合并 Pull Request" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "标记就绪" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "请求审阅" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "关闭" })).toBeNull();
+    expect(screen.queryByText("源分支已删除")).toBeNull();
+  });
+
+  it("omits source branch deletion when the box is unchecked", async () => {
+    mergeRequestMock.mockResolvedValue(
+      detail({ state: "merged", mergeable: "MERGEABLE", blockingReasons: [] }),
+    );
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: "MERGEABLE", blockingReasons: [] }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    fireEvent.click(screen.getByLabelText("合并后删除源分支"));
+    fireEvent.click(screen.getByRole("button", { name: "合并" }));
+    await flush();
+    expect(mergeRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ deleteSourceBranch: false }),
+    );
+  });
+
+  it("shows the host merge error and does not mark the request merged", async () => {
+    mergeRequestMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "The change request action failed.",
+      reason: "changeRequestActionFailed",
+    });
+    getDetailMock.mockResolvedValue(
+      detail({ mergeable: "MERGEABLE", blockingReasons: [] }),
+    );
+    renderDetail();
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "合并 Pull Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "合并" }));
+    await flush();
+    expect(screen.getByRole("alert")).toHaveTextContent("变更请求操作失败。");
+    expect(screen.getByText("open")).toBeInTheDocument();
+    expect(screen.queryByText("merged")).toBeNull();
+    expect(mergeRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows that the source branch was deleted only when the host says so", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        state: "merged",
+        mergeMethod: "squash",
+        mergeCommitSha: "9f3c2a1",
+        blockingReasons: [],
+        sourceBranchDeleted: true,
+      }),
+    );
+    renderDetail();
+    await flush();
+    expect(screen.getByText("源分支已删除")).toBeInTheDocument();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "合并 Pull Request" }),
+    ).toBeNull();
+  });
+
+  it("does not render the merge dialog before the detail arrives", async () => {
+    getDetailMock.mockImplementation(() => new Promise(() => undefined));
+    renderDetail();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText("正在计算")).toBeNull();
   });
 });

@@ -148,4 +148,6 @@ pub struct ChangeRequestDetail {
     pub linked_issues: Vec<ChangeRequestLinkedIssue>,
     pub ready_supported: bool,
     pub review_supported: bool,
+    pub supported_merge_methods: Vec<String>,
+    pub source_branch_deleted: Option<bool>,
 }

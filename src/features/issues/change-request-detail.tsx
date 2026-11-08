@@ -144,7 +144,11 @@ function ChangeRequestDetailLoaded({
           ) : null}
         </div>
         <aside>
-          <ChangeRequestDetailMerge detail={detail} />
+          <ChangeRequestDetailMerge
+            projectId={projectId}
+            detail={detail}
+            onDetail={setDetail}
+          />
         </aside>
       </div>
     </section>

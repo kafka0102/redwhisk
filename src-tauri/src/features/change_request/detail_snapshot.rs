@@ -30,6 +30,8 @@ struct SnapshotMeta {
     merge_method: Option<String>,
     #[serde(default)]
     merge_commit_sha: Option<String>,
+    #[serde(default)]
+    source_branch_deleted: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +145,7 @@ pub(super) fn write_fresh_snapshot(
         reviewers: details.reviewers.clone(),
         merge_method: details.merge_method.clone(),
         merge_commit_sha: details.merge_commit_sha.clone(),
+        source_branch_deleted: details.source_branch_deleted,
     };
     let files_json = serde_json::to_string(&meta).map_err(json_failed)?;
     let checks_json = serde_json::to_string(&details.checks).map_err(json_failed)?;
@@ -254,6 +257,8 @@ pub(super) fn detail_from_snapshot(
         linked_issues,
         ready_supported: false,
         review_supported: false,
+        supported_merge_methods: Vec::new(),
+        source_branch_deleted: meta.source_branch_deleted,
     }
 }
 
@@ -293,6 +298,8 @@ pub(super) fn detail_from_fresh(
         linked_issues,
         ready_supported: false,
         review_supported: false,
+        supported_merge_methods: Vec::new(),
+        source_branch_deleted: details.source_branch_deleted,
     }
 }
 
@@ -332,6 +339,8 @@ pub(super) fn unavailable_detail(
         linked_issues,
         ready_supported: false,
         review_supported: false,
+        supported_merge_methods: Vec::new(),
+        source_branch_deleted: None,
     }
 }
 

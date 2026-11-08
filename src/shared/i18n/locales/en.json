@@ -531,6 +531,14 @@
       "reviewKind": "review",
       "reviewers": "Reviewers",
       "squashMerge": "Squash and merge",
+      "squashHelpCount": "Squash {{count}} commits into 1. The history stays cleaner.",
+      "squashHelpMany": "Squash the commits into 1. The history stays cleaner.",
+      "mergeHelp": "Keep the branch topology.",
+      "rebaseHelp": "Linear history, with no merge commit.",
+      "mergeOptionHelp": "About {{method}}",
+      "computingMerge": "Calculating",
+      "sourceBranchDeleted": "Source branch deleted",
+      "mergedSquashMethod": "Squash and merge",
       "tooLargeDiff": "This diff is too large to show here.",
       "viewOnHost": "View on {{host}}"
     },
@@ -1223,7 +1231,8 @@
       "branchMissing": "The current branch does not exist.",
       "changeRequestNotDraft": "Only a draft can be marked ready.",
       "changeRequestNotOpen": "Only an open change request can be closed.",
-      "changeRequestReviewerMissing": "Enter a reviewer."
+      "changeRequestReviewerMissing": "Enter a reviewer.",
+      "changeRequestNotMergeable": "The host does not allow this merge yet."
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "A worktree with the same name is already occupied. Remove it before running."
@@ -1242,6 +1251,7 @@
       "writebackUnauthenticated": "Sign in to GitHub or GitLab before writing back the completed issue.",
       "writebackUnavailable": "Completion write-back is unavailable.",
       "changeRequestActionFailed": "The change request action failed.",
+      "changeRequestMergeMethodUnsupported": "This host does not support that merge method.",
       "changeRequestReadyUnsupported": "This host cannot mark a change request ready.",
       "changeRequestReviewUnsupported": "This host cannot request a review.",
       "credentialExpired": "Sign in again before retrying this change request.",

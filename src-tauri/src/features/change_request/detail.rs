@@ -181,6 +181,86 @@ pub(crate) fn close_change_request(
     ))
 }
 
+pub(crate) fn merge_change_request(
+    connection: &Connection,
+    project_id: i64,
+    provider: &str,
+    number: i64,
+    method: &str,
+    delete_source_branch: bool,
+    forge: &impl ForgeIssuePort,
+    now_ms: i64,
+) -> Result<ChangeRequestDetail, CommandError> {
+    ensure_project(connection, project_id)?;
+    let provider = normalize_provider(provider)?;
+    if number < 1 {
+        return Err(invalid_detail());
+    }
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    let details = forge.get_change_request_details(number).map_err(|error| {
+        map_write_error(
+            ChangeRequestWriteError::Failed(error),
+            "changeRequestActionFailed",
+        )
+    })?;
+    if !host_allows_merge(
+        provider,
+        details.mergeable.as_deref(),
+        &details.blocking_reasons,
+    ) {
+        return Err(not_mergeable());
+    }
+    if !known_merge_method(method) || !forge.supports_change_request_merge_method(method) {
+        return Err(merge_method_unsupported());
+    }
+    let linked_issues = load_linked_issues(connection, row.id)?;
+    let mut merged = forge
+        .merge_change_request(number, method, delete_source_branch)
+        .map_err(|error| map_write_error(error, "changeRequestMergeMethodUnsupported"))?;
+    if merged.state == "merged" && merged.merge_method.is_none() {
+        merged.merge_method = Some(method.to_string());
+    }
+    write_fresh_snapshot(connection, row.id, &merged, now_ms)?;
+    let row =
+        load_row(connection, project_id, provider, number)?.ok_or_else(change_request_not_found)?;
+    Ok(with_action_support(
+        detail_from_fresh(row, merged, linked_issues),
+        forge,
+    ))
+}
+
+fn not_mergeable() -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssueValidationFailed,
+        "The change request is not mergeable.",
+    )
+    .with_reason("changeRequestNotMergeable")
+}
+
+fn explicitly_mergeable(provider: &str, mergeable: Option<&str>) -> bool {
+    match (provider, mergeable) {
+        ("github", Some("MERGEABLE")) | ("gitlab", Some("mergeable")) => true,
+        _ => false,
+    }
+}
+
+fn host_allows_merge(provider: &str, mergeable: Option<&str>, blocking_reasons: &[String]) -> bool {
+    blocking_reasons.is_empty() && explicitly_mergeable(provider, mergeable)
+}
+
+fn known_merge_method(method: &str) -> bool {
+    matches!(method, "squash" | "merge" | "rebase")
+}
+
+fn merge_method_unsupported() -> CommandError {
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "This host cannot merge with that method.",
+    )
+    .with_reason("changeRequestMergeMethodUnsupported")
+}
+
 fn load_linked_issues(
     connection: &Connection,
     change_request_id: i64,
@@ -230,7 +310,16 @@ fn with_action_support(
 ) -> ChangeRequestDetail {
     detail.ready_supported = forge.supports_change_request_ready();
     detail.review_supported = forge.supports_change_request_review();
+    detail.supported_merge_methods = supported_merge_methods(forge);
     detail
+}
+
+fn supported_merge_methods(forge: &impl ForgeIssuePort) -> Vec<String> {
+    ["squash", "merge", "rebase"]
+        .into_iter()
+        .filter(|method| forge.supports_change_request_merge_method(method))
+        .map(str::to_string)
+        .collect()
 }
 
 fn invalid_detail() -> CommandError {

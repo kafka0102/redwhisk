@@ -83,6 +83,26 @@ impl ForgeIssuePort for GitlabCliForge {
         crate::features::change_request::close_request("glab", &self.repo_dir, number)
             .map_err(ChangeRequestWriteError::Failed)
     }
+
+    fn merge_change_request(
+        &self,
+        number: i64,
+        method: &str,
+        delete_source_branch: bool,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::merge_request(
+            "glab",
+            &self.repo_dir,
+            number,
+            method,
+            delete_source_branch,
+        )
+        .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_merge_method(&self, method: &str) -> bool {
+        matches!(method, "squash" | "merge" | "rebase")
+    }
 }
 
 pub(crate) fn retain_issues_since(

@@ -74,6 +74,54 @@ pub(crate) fn close_request(
     refresh(program, repo_dir, number)
 }
 
+pub(crate) fn merge_request(
+    program: &str,
+    repo_dir: &Path,
+    number: i64,
+    method: &str,
+    delete_source_branch: bool,
+) -> Result<RemoteChangeRequestDetails, ForgeIssueError> {
+    let args = merge_args(program, number, method, delete_source_branch)?;
+    capture_forge_stdout(program, &args, repo_dir)?;
+    refresh(program, repo_dir, number)
+}
+
+fn merge_args(
+    program: &str,
+    number: i64,
+    method: &str,
+    delete_source_branch: bool,
+) -> Result<Vec<String>, ForgeIssueError> {
+    let number_text = number.to_string();
+    let mut args = if program == "glab" {
+        // glab enables auto-merge unless this is explicitly false.
+        vec![
+            "mr".to_string(),
+            "merge".to_string(),
+            number_text,
+            "--yes".to_string(),
+            "--auto-merge=false".to_string(),
+        ]
+    } else {
+        vec!["pr".to_string(), "merge".to_string(), number_text]
+    };
+    match (program == "glab", method) {
+        (_, "squash") => args.push("--squash".to_string()),
+        (false, "merge") => args.push("--merge".to_string()),
+        (true, "merge") => {}
+        (_, "rebase") => args.push("--rebase".to_string()),
+        _ => return Err(ForgeIssueError::CommandFailed),
+    }
+    if delete_source_branch {
+        args.push(if program == "glab" {
+            "--remove-source-branch".to_string()
+        } else {
+            "--delete-branch".to_string()
+        });
+    }
+    Ok(args)
+}
+
 fn refresh(
     program: &str,
     repo_dir: &Path,

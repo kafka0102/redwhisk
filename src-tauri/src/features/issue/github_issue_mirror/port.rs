@@ -93,6 +93,7 @@ pub struct RemoteChangeRequestDetails {
     pub blocking_reasons: Vec<String>,
     pub merge_method: Option<String>,
     pub merge_commit_sha: Option<String>,
+    pub source_branch_deleted: Option<bool>,
     pub files: Vec<crate::types::change_request::ChangeRequestFileChange>,
     pub checks: Vec<crate::types::change_request::ChangeRequestCheckRun>,
     pub reviews: Vec<crate::types::change_request::ChangeRequestDiscussionItem>,
@@ -152,6 +153,21 @@ pub trait ForgeIssuePort {
         let _ = number;
         Err(ChangeRequestWriteError::Unsupported)
     }
+
+    fn merge_change_request(
+        &self,
+        number: i64,
+        method: &str,
+        delete_source_branch: bool,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        let _ = (number, method, delete_source_branch);
+        Err(ChangeRequestWriteError::Unsupported)
+    }
+
+    fn supports_change_request_merge_method(&self, method: &str) -> bool {
+        let _ = method;
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,6 +194,8 @@ pub struct FixedForge {
     pub review_calls: Mutex<Vec<(i64, String)>>,
     pub review_supported: bool,
     pub close_calls: Mutex<Vec<i64>>,
+    pub merge_calls: Mutex<Vec<(i64, String, bool)>>,
+    pub merge_methods: Vec<String>,
 }
 
 #[cfg(test)]
@@ -199,6 +217,8 @@ impl FixedForge {
             review_calls: Mutex::new(Vec::new()),
             review_supported: true,
             close_calls: Mutex::new(Vec::new()),
+            merge_calls: Mutex::new(Vec::new()),
+            merge_methods: default_merge_methods(),
         }
     }
 
@@ -229,6 +249,8 @@ impl FixedForge {
             review_calls: Mutex::new(Vec::new()),
             review_supported: true,
             close_calls: Mutex::new(Vec::new()),
+            merge_calls: Mutex::new(Vec::new()),
+            merge_methods: default_merge_methods(),
         }
     }
 
@@ -272,6 +294,15 @@ impl FixedForge {
 
     pub fn close_calls(&self) -> Vec<i64> {
         self.close_calls.lock().expect("close calls").clone()
+    }
+
+    pub fn merge_calls(&self) -> Vec<(i64, String, bool)> {
+        self.merge_calls.lock().expect("merge calls").clone()
+    }
+
+    pub fn without_merge_method(mut self, method: &str) -> Self {
+        self.merge_methods.retain(|item| item != method);
+        self
     }
 
     pub fn calls(&self) -> Vec<ForgeIssueListQuery> {
@@ -394,6 +425,33 @@ impl ForgeIssuePort for FixedForge {
                 ForgeIssueError::CommandFailed,
             ))
     }
+
+    fn merge_change_request(
+        &self,
+        number: i64,
+        method: &str,
+        delete_source_branch: bool,
+    ) -> Result<RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        self.merge_calls.lock().expect("merge calls").push((
+            number,
+            method.to_string(),
+            delete_source_branch,
+        ));
+        if let Some(error) = self.action_error.lock().expect("action error").clone() {
+            return Err(ChangeRequestWriteError::Failed(error));
+        }
+        self.action_details
+            .lock()
+            .expect("action details")
+            .clone()
+            .ok_or(ChangeRequestWriteError::Failed(
+                ForgeIssueError::CommandFailed,
+            ))
+    }
+
+    fn supports_change_request_merge_method(&self, method: &str) -> bool {
+        self.merge_methods.iter().any(|item| item == method)
+    }
 }
 
 #[cfg(test)]
@@ -411,4 +469,12 @@ pub fn open_issue(number: i64, title: &str) -> RemoteIssue {
         labels: Vec::new(),
         updated_at: 1,
     }
+}
+
+#[cfg(test)]
+fn default_merge_methods() -> Vec<String> {
+    ["squash", "merge", "rebase"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }

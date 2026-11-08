@@ -185,6 +185,25 @@ impl ForgeIssuePort for ProjectIssueForge {
             Self::Gitlab(forge) => forge.close_change_request(number),
         }
     }
+
+    fn merge_change_request(
+        &self,
+        number: i64,
+        method: &str,
+        delete_source_branch: bool,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        match self {
+            Self::Github(forge) => forge.merge_change_request(number, method, delete_source_branch),
+            Self::Gitlab(forge) => forge.merge_change_request(number, method, delete_source_branch),
+        }
+    }
+
+    fn supports_change_request_merge_method(&self, method: &str) -> bool {
+        match self {
+            Self::Github(forge) => forge.supports_change_request_merge_method(method),
+            Self::Gitlab(forge) => forge.supports_change_request_merge_method(method),
+        }
+    }
 }
 
 impl ForgeIssuePort for GithubCliForge {
@@ -251,6 +270,26 @@ impl ForgeIssuePort for GithubCliForge {
     ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
         crate::features::change_request::close_request("gh", &self.repo_dir, number)
             .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn merge_change_request(
+        &self,
+        number: i64,
+        method: &str,
+        delete_source_branch: bool,
+    ) -> Result<super::port::RemoteChangeRequestDetails, ChangeRequestWriteError> {
+        crate::features::change_request::merge_request(
+            "gh",
+            &self.repo_dir,
+            number,
+            method,
+            delete_source_branch,
+        )
+        .map_err(ChangeRequestWriteError::Failed)
+    }
+
+    fn supports_change_request_merge_method(&self, method: &str) -> bool {
+        matches!(method, "squash" | "merge" | "rebase")
     }
 }
 

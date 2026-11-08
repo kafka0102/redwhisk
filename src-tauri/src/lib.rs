@@ -172,6 +172,7 @@ pub fn run() {
             features::change_request::commands::mark_change_request_ready,
             features::change_request::commands::request_change_request_review,
             features::change_request::commands::close_change_request,
+            features::change_request::commands::merge_change_request,
             features::change_request::commands::link_change_request_issue,
             features::issue::commands::sync_project_issues,
             features::issue::commands::get_issue_sync_status,

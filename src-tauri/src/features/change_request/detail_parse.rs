@@ -29,6 +29,7 @@ pub(crate) fn parse_github_change_request_details(
         blocking_reasons: blocking_reasons(&value),
         merge_method: optional_text(&value, "mergeMethod"),
         merge_commit_sha: merge_commit_sha(&value),
+        source_branch_deleted: source_branch_deleted(&value),
         files: files(&value),
         checks: checks(&value),
         reviews: discussions(&value, "reviews", "review"),
@@ -62,7 +63,7 @@ pub(crate) fn parse_gitlab_change_request_details(
         }),
         labels: labels(&value),
         reviewers: gitlab_reviewers(&value),
-        mergeable: optional_text(&value, "merge_status")
+        mergeable: optional_text(&value, "detailed_merge_status")
             .or_else(|| optional_text(&value, "mergeable")),
         merge_state_status: optional_text(&value, "detailed_merge_status")
             .or_else(|| optional_text(&value, "mergeStateStatus")),
@@ -72,6 +73,7 @@ pub(crate) fn parse_gitlab_change_request_details(
             .or_else(|| optional_text(&value, "mergeMethod")),
         merge_commit_sha: optional_text(&value, "merge_commit_sha")
             .or_else(|| merge_commit_sha(&value)),
+        source_branch_deleted: source_branch_deleted(&value),
         files: files(&value),
         checks: checks(&value),
         reviews: discussions(&value, "reviews", "review"),
@@ -342,6 +344,15 @@ fn optional_text(value: &serde_json::Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_string)
+}
+
+fn source_branch_deleted(value: &serde_json::Value) -> Option<bool> {
+    for field in ["sourceBranchDeleted", "source_branch_deleted"] {
+        if let Some(flag) = value.get(field).and_then(serde_json::Value::as_bool) {
+            return Some(flag);
+        }
+    }
+    None
 }
 
 fn first_text(value: &serde_json::Value, fields: &[&str]) -> Option<String> {
