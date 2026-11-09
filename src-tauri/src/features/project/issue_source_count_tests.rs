@@ -10,7 +10,8 @@ use crate::features::project::issue_source::get_project_issue_source_settings_in
 use crate::features::project::ProjectService;
 use crate::types::issue::CreateIssueInput;
 use crate::types::project::{
-    CreateProjectInput, ProjectCompletionAction, ProjectPrTarget, ProjectWorktreeLocation,
+    CreateProjectInput, CreateProjectIssueSourceInput, ProjectCompletionAction, ProjectPrTarget,
+    ProjectWorktreeLocation,
 };
 
 #[test]
@@ -110,6 +111,7 @@ fn create_project(data_dir: &std::path::Path, repo_path: String) -> i64 {
             pr_target: Some(ProjectPrTarget::RepoDefault),
             pr_draft: Some(true),
             confirm_completion_action: Some(false),
+            issue_source: CreateProjectIssueSourceInput::default(),
         },
     )
     .expect("create project")

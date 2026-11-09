@@ -510,6 +510,22 @@ describe("Issues settings panel", () => {
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
+  it("取消来源模式确认后保持原来的模式", async () => {
+    const user = userEvent.setup();
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(await screen.findByRole("radio", { name: "仅本地" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "仅远程" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /切换到「仅远程」？/,
+    });
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+
+    expect(screen.getByRole("radio", { name: "仅本地" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "仅远程" })).not.toBeChecked();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("confirms a mode switch with the saved scope instead of the dirty scope", async () => {
     const user = userEvent.setup();
     renderWith("zh", {

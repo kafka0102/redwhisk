@@ -41,6 +41,7 @@ interface ProjectDetailsFormProps {
   worktreeSetupCommandLabel?: string;
   worktreeSetupCommandPlaceholder?: string;
   afterWorktreeLocation?: ReactNode;
+  fieldsDisabled?: boolean;
 }
 
 export function ProjectDetailsForm({
@@ -71,8 +72,10 @@ export function ProjectDetailsForm({
   worktreeSetupCommandLabel,
   worktreeSetupCommandPlaceholder = "",
   afterWorktreeLocation,
+  fieldsDisabled = false,
 }: ProjectDetailsFormProps) {
   const worktreeOptions = buildWorktreeLocationOptions(repoPath);
+  const fieldDisabled = isSubmitting || fieldsDisabled;
 
   return (
     <form className={className} onSubmit={onSubmit}>
@@ -83,7 +86,7 @@ export function ProjectDetailsForm({
         <Input
           id="project-name"
           aria-label={projectNameLabel}
-          disabled={isSubmitting}
+          disabled={fieldDisabled}
           value={projectName}
           onChange={(event) => onNameChange(event.target.value)}
         />
@@ -99,13 +102,13 @@ export function ProjectDetailsForm({
           <Input
             id="project-repo-path"
             aria-label={repoPathLabel}
-            disabled={isSubmitting || isChoosingRepoPath}
+            disabled={fieldDisabled || isChoosingRepoPath}
             readOnly
             value={repoPath}
           />
           <Button
             className="settings-field__repo-button"
-            disabled={isSubmitting || isChoosingRepoPath}
+            disabled={fieldDisabled || isChoosingRepoPath}
             type="button"
             variant="outline"
             onClick={onChooseRepoPath}
@@ -136,7 +139,7 @@ export function ProjectDetailsForm({
               id="project-worktree-location"
               aria-label={worktreeLocationLabel}
               className="w-full"
-              disabled={isSubmitting}
+              disabled={fieldDisabled}
             >
               <SelectValue />
             </SelectTrigger>
@@ -164,7 +167,7 @@ export function ProjectDetailsForm({
             aria-label={worktreeSetupCommandLabel}
             autoCapitalize="none"
             className="min-h-[78px] w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isSubmitting}
+            disabled={fieldDisabled}
             placeholder={worktreeSetupCommandPlaceholder}
             rows={3}
             spellCheck={false}

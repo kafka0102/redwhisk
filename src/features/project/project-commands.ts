@@ -1,4 +1,9 @@
 import { invokeCommand } from "../../shared/commands/command-client";
+import type {
+  IssueSourceMode,
+  IssueSyncScope,
+  ProjectIssueConnection,
+} from "../settings/issue-source-commands";
 
 export interface LocalDataStatus {
   databaseExists: boolean;
@@ -15,10 +20,19 @@ export interface CreateProjectInput {
   prTarget?: "issue_base" | "repo_default";
   prDraft?: boolean;
   confirmCompletionAction?: boolean;
+  issueSourceMode?: IssueSourceMode;
+  issueSyncScope?: IssueSyncScope;
+  issueSyncLabel?: string;
+  issueSyncEnabled?: boolean;
+  issueSyncIntervalSeconds?: number;
+  issueWritebackCloseOnComplete?: boolean;
+  issueWritebackCloseOnPrMerge?: boolean;
+  issueWritebackComment?: boolean;
 }
 
 export interface ValidateProjectRepoPathInput {
   repoPath: string;
+  probeConnection?: boolean;
 }
 
 export interface ValidateProjectRepoPathResponse {
@@ -26,6 +40,29 @@ export interface ValidateProjectRepoPathResponse {
   suggestedName: string;
   host: "github" | "gitlab" | "none";
   completionAction: "merge_to_base" | "open_pull_request";
+  confirmCompletionAction: boolean;
+  existingProject?: ValidatedExistingProject;
+  connection?: ProjectIssueConnection;
+  repoDefaultBranch?: string;
+}
+
+export interface ValidatedExistingProject {
+  id: number;
+  removed: boolean;
+  name: string;
+  worktreeLocation: ProjectWorktreeLocation;
+  worktreeSetupCommand: string;
+  issueSourceMode: IssueSourceMode;
+  issueSyncScope: IssueSyncScope;
+  issueSyncLabel: string | null;
+  issueSyncEnabled: boolean;
+  issueSyncIntervalSeconds: number;
+  issueWritebackCloseOnComplete: boolean;
+  issueWritebackCloseOnPrMerge: boolean;
+  issueWritebackComment: boolean;
+  completionAction: "merge_to_base" | "open_pull_request";
+  prTarget: "issue_base" | "repo_default";
+  prDraft: boolean;
   confirmCompletionAction: boolean;
 }
 

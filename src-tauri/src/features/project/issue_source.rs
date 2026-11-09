@@ -87,7 +87,20 @@ fn inspect_connection(
         .find_by_id(project_id)
         .map_err(database_error)?
         .ok_or_else(|| project_not_found(project_id))?;
-    let remote = inspect_forge_remote(Path::new(&project.repo_path));
+    let connection = inspect_repo_connection(Path::new(&project.repo_path), sample);
+    save_connection(&database.connection, project_id, &connection)?;
+    ProjectIssueSourceRepository::new(&database.connection)
+        .get(project_id)
+        .map_err(database_error)?
+        .ok_or_else(|| project_not_found(project_id))
+}
+
+/// 只根据仓库路径探测连接，不读也不写 `project_forge_connections`。
+pub(crate) fn inspect_repo_connection(
+    repo_path: &Path,
+    sample: Option<CliAuthSample>,
+) -> ProjectIssueConnection {
+    let remote = inspect_forge_remote(repo_path);
     let identity = match remote.host {
         ForgeHost::Github | ForgeHost::Gitlab => remote
             .remote_label
@@ -95,7 +108,7 @@ fn inspect_connection(
             .and_then(|label| forge_identity(remote.host, label)),
         ForgeHost::None => None,
     };
-    let connection = match identity {
+    match identity {
         None => ProjectIssueConnection {
             provider: None,
             host_url: None,
@@ -112,12 +125,7 @@ fn inspect_connection(
             repo_path,
             sample.unwrap_or_else(|| probe_cli(provider)),
         ),
-    };
-    save_connection(&database.connection, project_id, &connection)?;
-    ProjectIssueSourceRepository::new(&database.connection)
-        .get(project_id)
-        .map_err(database_error)?
-        .ok_or_else(|| project_not_found(project_id))
+    }
 }
 
 fn forge_identity(host: ForgeHost, label: &str) -> Option<(ForgeProvider, String, String)> {
@@ -394,12 +402,12 @@ fn bool_to_int(value: bool) -> i64 {
     }
 }
 
-fn project_not_found(project_id: i64) -> CommandError {
+pub(crate) fn project_not_found(project_id: i64) -> CommandError {
     CommandError::new(CommandErrorCode::ProjectNotFound, "Project not found.")
         .with_detail(ErrorDetail::new("Project").with_value("projectId", project_id))
 }
 
-fn validation_error(reason: &'static str) -> CommandError {
+pub(crate) fn validation_error(reason: &'static str) -> CommandError {
     let message = match reason {
         "issueSourceModeInvalid" => "Issue source mode is invalid.",
         "issueSyncScopeInvalid" => "Issue sync scope is invalid.",
@@ -412,7 +420,7 @@ fn validation_error(reason: &'static str) -> CommandError {
     CommandError::new(CommandErrorCode::ProjectValidationFailed, message).with_reason(reason)
 }
 
-fn database_error(error: rusqlite::Error) -> CommandError {
+pub(crate) fn database_error(error: rusqlite::Error) -> CommandError {
     CommandError::new(
         CommandErrorCode::ProjectPersistenceFailed,
         "Failed to save issue source settings.",

@@ -248,6 +248,8 @@ function ProjectApp() {
               : "none",
           completionAction: validatedProject.completionAction,
           confirmCompletionAction: validatedProject.confirmCompletionAction,
+          existingProject: validatedProject.existingProject ?? null,
+          repoDefaultBranch: validatedProject.repoDefaultBranch ?? null,
         });
       } catch (error) {
         setProjectCreationError(getCommandErrorMessage(error, translate));

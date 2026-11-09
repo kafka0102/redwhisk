@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::db::connection::DatabaseConfig;
 use crate::db::migrations::MigrationRunner;
 use crate::db::project_repository::ProjectRepository;
+use crate::git::forge::repo_default_branch;
 use crate::git::forge::{detect_forge_host, ForgeHost};
 use crate::git::repository::is_git_repository;
 use crate::git::worktree::list_code_workspaces;
@@ -15,6 +16,10 @@ use crate::types::project::{
 };
 
 use super::completion_defaults::completion_suggestion;
+use super::create_issue_source::{
+    ensure_issue_source_accepted, matched_project, write_issue_source,
+};
+use super::issue_source::{inspect_repo_connection, CliAuthSample};
 
 pub struct ProjectService<'connection> {
     repository: ProjectRepository<'connection>,
@@ -34,35 +39,52 @@ impl<'connection> ProjectService<'connection> {
         validate_worktree_location(&validated_repo.repo_path, input.worktree_location)?;
         let repo_path = validated_repo.repo_path.to_string_lossy().to_string();
         let setup_command = input.worktree_setup_command.trim();
+        let forge_host = detect_forge_host(&validated_repo.repo_path).stored_class();
 
         if let Some(existing) = self
             .repository
             .find_by_repo_path_including_removed(&repo_path)
             .map_err(project_database_error)?
         {
-            if existing.removed_at.is_some() {
-                let project = self
-                    .repository
-                    .restore_removed_with_settings(
-                        existing.id,
-                        &name,
-                        &repo_path,
-                        input.worktree_location,
-                        setup_command,
-                        input.completion_action,
-                        input.pr_target,
-                        input.pr_draft,
-                        input.confirm_completion_action,
-                        detect_forge_host(&validated_repo.repo_path).stored_class(),
-                    )
-                    .map_err(project_database_error)?;
-                return Ok(populate_code_workspaces(project));
+            if existing.removed_at.is_none() {
+                return Ok(populate_code_workspaces(existing));
             }
-            return Ok(populate_code_workspaces(existing));
+            ensure_issue_source_accepted(
+                self.repository.connection(),
+                Some(existing.id),
+                &input.issue_source,
+            )?;
+            let transaction = self
+                .repository
+                .connection()
+                .unchecked_transaction()
+                .map_err(project_database_error)?;
+            let project = ProjectRepository::new(&transaction)
+                .restore_removed_with_settings(
+                    existing.id,
+                    &name,
+                    &repo_path,
+                    input.worktree_location,
+                    setup_command,
+                    input.completion_action,
+                    input.pr_target,
+                    input.pr_draft,
+                    input.confirm_completion_action,
+                    forge_host,
+                )
+                .map_err(project_database_error)?;
+            write_issue_source(&transaction, project.id, &input.issue_source)?;
+            transaction.commit().map_err(project_database_error)?;
+            return Ok(populate_code_workspaces(project));
         }
 
-        let project = self
+        ensure_issue_source_accepted(self.repository.connection(), None, &input.issue_source)?;
+        let transaction = self
             .repository
+            .connection()
+            .unchecked_transaction()
+            .map_err(project_database_error)?;
+        let project = ProjectRepository::new(&transaction)
             .insert_or_get_existing_with_settings(
                 &name,
                 &repo_path,
@@ -72,9 +94,13 @@ impl<'connection> ProjectService<'connection> {
                 input.pr_target,
                 input.pr_draft,
                 input.confirm_completion_action,
-                detect_forge_host(&validated_repo.repo_path).stored_class(),
+                forge_host,
             )
             .map_err(project_database_error)?;
+        if transaction.changes() > 0 {
+            write_issue_source(&transaction, project.id, &input.issue_source)?;
+        }
+        transaction.commit().map_err(project_database_error)?;
         Ok(populate_code_workspaces(project))
     }
 
@@ -165,12 +191,24 @@ impl<'connection> ProjectService<'connection> {
             host: suggestion.host,
             completion_action: suggestion.completion_action,
             confirm_completion_action: suggestion.confirm_completion_action,
+            existing_project: None,
+            connection: None,
+            repo_default_branch: repo_default_branch(&validated_repo.repo_path),
         })
     }
 
     pub fn validate_project_repo_path_in_data_dir(
         data_dir: impl AsRef<Path>,
         repo_path: &str,
+    ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
+        Self::validate_project_repo_path_in_data_dir_with_probe(data_dir, repo_path, false, None)
+    }
+
+    pub(crate) fn validate_project_repo_path_in_data_dir_with_probe(
+        data_dir: impl AsRef<Path>,
+        repo_path: &str,
+        probe_connection: bool,
+        sample: Option<CliAuthSample>,
     ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
         let validated_repo = validate_repo_path(repo_path)?;
         let database = open_project_database(data_dir)?;
@@ -184,6 +222,18 @@ impl<'connection> ProjectService<'connection> {
                 .map_err(project_database_error)?
         };
         let suggestion = completion_suggestion(host, saved);
+        let existing = ProjectRepository::new(&database.connection)
+            .find_by_repo_path_including_removed(canonical.as_ref())
+            .map_err(project_database_error)?;
+        let existing_project = existing
+            .as_ref()
+            .map(|project| matched_project(&database.connection, project))
+            .transpose()?;
+        let connection = if probe_connection {
+            Some(inspect_repo_connection(&validated_repo.repo_path, sample))
+        } else {
+            None
+        };
 
         Ok(ValidateProjectRepoPathResponse {
             repo_path: validated_repo.repo_path.to_string_lossy().to_string(),
@@ -191,6 +241,9 @@ impl<'connection> ProjectService<'connection> {
             host: suggestion.host,
             completion_action: suggestion.completion_action,
             confirm_completion_action: suggestion.confirm_completion_action,
+            existing_project,
+            connection,
+            repo_default_branch: repo_default_branch(&validated_repo.repo_path),
         })
     }
 

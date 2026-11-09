@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::types::project_issue_source::{IssueSourceMode, IssueSyncScope, ProjectIssueConnection};
 use crate::types::session_workspace::CodeWorkspaceRoot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,6 +41,38 @@ pub struct CreateProjectInput {
     pub pr_draft: Option<bool>,
     #[serde(default)]
     pub confirm_completion_action: Option<bool>,
+    /// 扁平进创建入参。缺省字段沿用列默认，不单独成嵌套对象。
+    #[serde(flatten, default)]
+    pub issue_source: CreateProjectIssueSourceInput,
+}
+
+impl Default for CreateProjectInput {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            repo_path: String::new(),
+            worktree_location: ProjectWorktreeLocation::RepoSibling,
+            worktree_setup_command: String::new(),
+            completion_action: None,
+            pr_target: None,
+            pr_draft: None,
+            confirm_completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CreateProjectIssueSourceInput {
+    pub issue_source_mode: Option<IssueSourceMode>,
+    pub issue_sync_scope: Option<IssueSyncScope>,
+    pub issue_sync_label: Option<String>,
+    pub issue_sync_enabled: Option<bool>,
+    pub issue_sync_interval_seconds: Option<i64>,
+    pub issue_writeback_close_on_complete: Option<bool>,
+    pub issue_writeback_close_on_pr_merge: Option<bool>,
+    pub issue_writeback_comment: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -84,6 +117,9 @@ pub struct UpdateProjectSettingsInput {
 #[serde(rename_all = "camelCase")]
 pub struct ValidateProjectRepoPathInput {
     pub repo_path: String,
+    /// 打开后才探测连接，并且不写项目 Forge 连接。
+    #[serde(default)]
+    pub probe_connection: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -93,6 +129,34 @@ pub struct ValidateProjectRepoPathResponse {
     pub suggested_name: String,
     pub host: String,
     pub completion_action: ProjectCompletionAction,
+    pub confirm_completion_action: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing_project: Option<ValidatedExistingProject>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection: Option<ProjectIssueConnection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_default_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidatedExistingProject {
+    pub id: i64,
+    pub removed: bool,
+    pub name: String,
+    pub worktree_location: ProjectWorktreeLocation,
+    pub worktree_setup_command: String,
+    pub issue_source_mode: IssueSourceMode,
+    pub issue_sync_scope: IssueSyncScope,
+    pub issue_sync_label: Option<String>,
+    pub issue_sync_enabled: bool,
+    pub issue_sync_interval_seconds: i64,
+    pub issue_writeback_close_on_complete: bool,
+    pub issue_writeback_close_on_pr_merge: bool,
+    pub issue_writeback_comment: bool,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
     pub confirm_completion_action: bool,
 }
 

@@ -6,8 +6,8 @@ use redwhisk_lib::features::project::ProjectService;
 use redwhisk_lib::features::project_terminal::{ProjectTerminalRegistry, ProjectTerminalService};
 use redwhisk_lib::types::errors::CommandErrorCode;
 use redwhisk_lib::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectCompletionAction, ProjectPathStatus,
-    ProjectPrTarget, ProjectWorktreeLocation, UpdateProjectSettingsInput,
+    CreateProjectInput, CreateProjectIssueSourceInput, OpenProjectInput, ProjectCompletionAction,
+    ProjectPathStatus, ProjectPrTarget, ProjectWorktreeLocation, UpdateProjectSettingsInput,
 };
 use redwhisk_lib::types::project_terminal::{
     CreateProjectTerminalInput, ListProjectTerminalsInput, ReadProjectTerminalInput,
@@ -461,6 +461,7 @@ fn create_project_persists_git_repo_with_confirmed_name() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("created project");
 
@@ -507,6 +508,7 @@ fn create_project_persists_worktree_settings() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("created project");
 
@@ -538,6 +540,7 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("direct project");
     let equivalent_project = service
@@ -551,6 +554,7 @@ fn create_project_canonicalizes_equivalent_repo_paths() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("equivalent project");
 
@@ -593,6 +597,7 @@ fn create_project_rejects_non_git_directory_without_insert() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect_err("non git repo should be rejected");
 
@@ -627,6 +632,7 @@ fn create_project_reports_missing_path_as_invalid_without_insert() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect_err("missing path should be rejected");
 
@@ -660,6 +666,7 @@ fn create_project_returns_existing_project_for_duplicate_repo_path() {
         pr_target: None,
         pr_draft: None,
         completion_action: None,
+        issue_source: CreateProjectIssueSourceInput::default(),
     };
 
     let first_project = service
@@ -698,6 +705,7 @@ fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updat
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("create project");
 
@@ -725,6 +733,7 @@ fn remove_project_from_list_hides_project_and_create_restores_same_id_with_updat
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("restore project");
 
@@ -1327,6 +1336,7 @@ fn update_project_settings_updates_repo_path_when_new_path_is_git_repository() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("created project");
 
@@ -1387,6 +1397,7 @@ fn update_project_settings_rejects_repo_internal_worktrees_without_gitignore_ent
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("created project");
 
@@ -1433,6 +1444,7 @@ fn update_project_settings_rejects_non_git_repo_path() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("created project");
 
@@ -1612,6 +1624,7 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("create project");
 
@@ -1722,6 +1735,7 @@ fn delete_project_removes_row_and_labels_and_create_gets_new_id() {
             pr_target: None,
             pr_draft: None,
             completion_action: None,
+            issue_source: CreateProjectIssueSourceInput::default(),
         })
         .expect("create after hard delete");
 

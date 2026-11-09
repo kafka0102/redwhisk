@@ -48,6 +48,7 @@ interface IssueSourceConnectionCardProps {
   scope: IssueSyncScope;
   syncEnabled: boolean;
   writebackComment: boolean;
+  disabled?: boolean;
 }
 
 export function IssueSourceConnectionCard({
@@ -69,6 +70,7 @@ export function IssueSourceConnectionCard({
   scope,
   syncEnabled,
   writebackComment,
+  disabled = false,
 }: IssueSourceConnectionCardProps): ReactElement {
   const { t } = useI18n();
   const titleId = useId();
@@ -101,6 +103,7 @@ export function IssueSourceConnectionCard({
             <SelectTrigger
               aria-label={t("settings.issueSource.host")}
               className="w-full"
+              disabled={disabled}
             >
               <SelectValue />
             </SelectTrigger>
@@ -120,6 +123,7 @@ export function IssueSourceConnectionCard({
           <Input
             id="issue-source-repository"
             readOnly
+            disabled={disabled}
             value={connection?.repoPath ?? ""}
           />
         </div>
@@ -134,6 +138,7 @@ export function IssueSourceConnectionCard({
             className="min-w-0 flex-1"
             id="issue-source-account"
             readOnly
+            disabled={disabled}
             value={connection?.login ?? ""}
           />
           {connection && tone ? (
@@ -151,7 +156,7 @@ export function IssueSourceConnectionCard({
             </Badge>
           ) : null}
           <Button
-            disabled={isInspecting || isLoading}
+            disabled={disabled || isInspecting || isLoading}
             type="button"
             variant="outline"
             onClick={onRelogin}
@@ -175,6 +180,7 @@ export function IssueSourceConnectionCard({
           <SelectTrigger
             aria-label={t("settings.issueSource.scope")}
             className="w-full"
+            disabled={disabled}
           >
             <SelectValue />
           </SelectTrigger>
@@ -189,6 +195,7 @@ export function IssueSourceConnectionCard({
         {scope === "label" ? (
           <Input
             aria-label={t("settings.issueSource.label")}
+            disabled={disabled}
             value={label}
             onChange={(event) => onLabelChange(event.target.value)}
           />
@@ -204,6 +211,7 @@ export function IssueSourceConnectionCard({
             <Checkbox
               checked={syncEnabled}
               id="issue-source-sync"
+              disabled={disabled}
               onCheckedChange={(checked) =>
                 onSyncEnabledChange(checked === true)
               }
@@ -229,6 +237,7 @@ export function IssueSourceConnectionCard({
             <SelectTrigger
               aria-label={t("settings.issueSource.interval")}
               className="w-full"
+              disabled={disabled}
             >
               <SelectValue />
             </SelectTrigger>
@@ -251,6 +260,7 @@ export function IssueSourceConnectionCard({
           <Checkbox
             checked={closeOnComplete}
             id="issue-source-close-complete"
+            disabled={disabled}
             onCheckedChange={(checked) =>
               onCloseOnCompleteChange(checked === true)
             }
@@ -263,6 +273,7 @@ export function IssueSourceConnectionCard({
           <Checkbox
             checked={closeOnMerge}
             id="issue-source-close-merge"
+            disabled={disabled}
             onCheckedChange={(checked) =>
               onCloseOnMergeChange(checked === true)
             }
@@ -279,6 +290,7 @@ export function IssueSourceConnectionCard({
           <Checkbox
             checked={writebackComment}
             id="issue-source-writeback-comment"
+            disabled={disabled}
             onCheckedChange={(checked) =>
               onWritebackCommentChange(checked === true)
             }

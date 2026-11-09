@@ -1116,6 +1116,9 @@ describe("App project entry", () => {
       within(projectDialog).getByLabelText("创建工作树后的初始化命令"),
     ).toHaveAttribute("placeholder", "请输入创建工作树后的初始化命令");
     await user.click(
+      within(projectDialog).getByRole("button", { name: "下一步" }),
+    );
+    await user.click(
       within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
     expect(createProjectMock).toHaveBeenCalledWith({
@@ -1127,6 +1130,13 @@ describe("App project entry", () => {
       confirmCompletionAction: false,
       prTarget: "issue_base",
       prDraft: false,
+      issueSourceMode: "local",
+      issueSyncScope: "assigned_to_me",
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: true,
+      issueWritebackCloseOnPrMerge: true,
+      issueWritebackComment: true,
     });
     expect(
       await screen.findByRole("tab", { name: "Issues" }),
@@ -1222,6 +1232,9 @@ describe("App project entry", () => {
     const projectDialog = await screen.findByRole("dialog", {
       name: "新建项目",
     });
+    await user.click(
+      within(projectDialog).getByRole("button", { name: "下一步" }),
+    );
     await user.click(
       within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
@@ -1386,6 +1399,9 @@ describe("App project entry", () => {
     );
 
     await user.click(
+      within(projectDialog).getByRole("button", { name: "下一步" }),
+    );
+    await user.click(
       within(projectDialog).getByRole("button", { name: "创建项目" }),
     );
 
@@ -1398,6 +1414,13 @@ describe("App project entry", () => {
       confirmCompletionAction: false,
       prTarget: "issue_base",
       prDraft: false,
+      issueSourceMode: "local",
+      issueSyncScope: "assigned_to_me",
+      issueSyncEnabled: true,
+      issueSyncIntervalSeconds: 90,
+      issueWritebackCloseOnComplete: true,
+      issueWritebackCloseOnPrMerge: true,
+      issueWritebackComment: true,
     });
     expect(openProjectWindowMock).toHaveBeenCalledWith({
       projectId: 4,

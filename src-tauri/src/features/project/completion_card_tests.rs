@@ -7,7 +7,8 @@ use crate::db::connection::DATABASE_FILE_NAME;
 use crate::features::project::ProjectService;
 use crate::types::errors::CommandErrorCode;
 use crate::types::project::{
-    CreateProjectInput, ProjectCompletionAction, ProjectPrTarget, ProjectWorktreeLocation,
+    CreateProjectInput, CreateProjectIssueSourceInput, ProjectCompletionAction, ProjectPrTarget,
+    ProjectWorktreeLocation,
 };
 
 fn git_repo(root: &TempDir, name: &str) -> String {
@@ -64,6 +65,7 @@ fn create_project(
             pr_target: Some(target),
             pr_draft: Some(draft),
             confirm_completion_action: Some(confirm),
+            issue_source: CreateProjectIssueSourceInput::default(),
         },
     )
     .expect("create project")

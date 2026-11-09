@@ -177,7 +177,7 @@ fn bool_to_int(value: bool) -> i64 {
     }
 }
 
-fn resolve_settings(
+pub(crate) fn resolve_settings(
     current: &ProjectIssueSourceSettings,
     input: &UpdateProjectIssueSourceSettings,
 ) -> Result<ProjectIssueSourceSettings, ProjectIssueSourceError> {

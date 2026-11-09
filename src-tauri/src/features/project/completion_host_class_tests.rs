@@ -7,8 +7,8 @@ use crate::db::connection::DATABASE_FILE_NAME;
 use crate::db::migrations::MigrationRunner;
 use crate::features::project::ProjectService;
 use crate::types::project::{
-    CreateProjectInput, ProjectCompletionAction, ProjectPrTarget, ProjectWorktreeLocation,
-    UpdateProjectSettingsInput,
+    CreateProjectInput, CreateProjectIssueSourceInput, ProjectCompletionAction, ProjectPrTarget,
+    ProjectWorktreeLocation, UpdateProjectSettingsInput,
 };
 
 fn git_repo(root: &TempDir, name: &str) -> String {
@@ -74,6 +74,7 @@ fn create_named_project(
             pr_target: Some(ProjectPrTarget::RepoDefault),
             pr_draft: Some(true),
             confirm_completion_action: Some(confirm_completion_action),
+            issue_source: CreateProjectIssueSourceInput::default(),
         },
     )
     .expect("create named project")

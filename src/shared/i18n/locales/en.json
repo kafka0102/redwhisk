@@ -332,6 +332,8 @@
     "dialogTitle": "New Project",
     "selectGitRepository": "Select Git Repository",
     "status": "Project creation status",
+    "next": "Next",
+    "back": "Back",
     "worktreeSetupPlaceholder": "Enter initialization steps to run after creating the worktree"
   },
   "issues": {

@@ -27,6 +27,7 @@ interface IssueSourceCompletionCardProps {
   onConfirmCompletionActionChange: (value: boolean) => void;
   onDraftChange: (value: boolean) => void;
   onTargetChange: (value: ProjectPrTarget) => void;
+  disabled?: boolean;
 }
 
 export function IssueSourceCompletionCard({
@@ -40,6 +41,7 @@ export function IssueSourceCompletionCard({
   onConfirmCompletionActionChange,
   onDraftChange,
   onTargetChange,
+  disabled = false,
 }: IssueSourceCompletionCardProps): ReactElement | null {
   const { t } = useI18n();
   const titleId = useId();
@@ -87,6 +89,7 @@ export function IssueSourceCompletionCard({
           <SelectTrigger
             aria-label={t("settings.issueSource.completionAction")}
             className="w-full"
+            disabled={disabled}
             id="issue-source-completion-action"
           >
             <SelectValue />
@@ -128,6 +131,7 @@ export function IssueSourceCompletionCard({
                 )}
                 className="w-full"
                 id="issue-source-pr-target"
+                disabled={disabled}
               >
                 <SelectValue />
               </SelectTrigger>
@@ -145,6 +149,7 @@ export function IssueSourceCompletionCard({
             <Checkbox
               checked={draft}
               id="issue-source-pr-draft"
+              disabled={disabled}
               onCheckedChange={(checked) => onDraftChange(checked === true)}
             />
             <Label htmlFor="issue-source-pr-draft">
@@ -157,6 +162,7 @@ export function IssueSourceCompletionCard({
         <Checkbox
           checked={confirmCompletionAction}
           id="issue-source-confirm-again"
+          disabled={disabled}
           onCheckedChange={(checked) =>
             onConfirmCompletionActionChange(checked === true)
           }

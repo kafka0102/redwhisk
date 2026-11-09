@@ -9,11 +9,13 @@ const MODE_OPTIONS: IssueSourceMode[] = ["local", "remote", "mixed"];
 interface IssueSourceModeCardProps {
   mode: IssueSourceMode;
   onModeChange: (mode: IssueSourceMode) => void;
+  disabled?: boolean;
 }
 
 export function IssueSourceModeCard({
   mode,
   onModeChange,
+  disabled = false,
 }: IssueSourceModeCardProps): ReactElement {
   const { t } = useI18n();
   const titleId = useId();
@@ -45,6 +47,7 @@ export function IssueSourceModeCard({
               <input
                 checked={selected}
                 className="size-3.5 shrink-0"
+                disabled={disabled}
                 name="issue-source-mode"
                 type="radio"
                 onClick={(event) => {

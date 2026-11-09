@@ -286,7 +286,9 @@
         "reviewers": "required",
         "reviews": "required",
         "sourceBranch": "required",
+        "sourceBranchDeleted": "required",
         "state": "required",
+        "supportedMergeMethods": "required",
         "targetBranch": "required",
         "title": "required",
         "url": "required"
@@ -559,12 +561,32 @@
       "fields": {
         "completionAction": "optional",
         "confirmCompletionAction": "optional",
+        "issueSourceMode": "optional",
+        "issueSyncEnabled": "optional",
+        "issueSyncIntervalSeconds": "optional",
+        "issueSyncLabel": "optional",
+        "issueSyncScope": "optional",
+        "issueWritebackCloseOnComplete": "optional",
+        "issueWritebackCloseOnPrMerge": "optional",
+        "issueWritebackComment": "optional",
         "name": "required",
         "prDraft": "optional",
         "prTarget": "optional",
         "repoPath": "required",
         "worktreeLocation": "required",
         "worktreeSetupCommand": "required"
+      }
+    },
+    "CreateProjectIssueSourceInput": {
+      "fields": {
+        "issueSourceMode": "optional",
+        "issueSyncEnabled": "optional",
+        "issueSyncIntervalSeconds": "optional",
+        "issueSyncLabel": "optional",
+        "issueSyncScope": "optional",
+        "issueWritebackCloseOnComplete": "optional",
+        "issueWritebackCloseOnPrMerge": "optional",
+        "issueWritebackComment": "optional"
       }
     },
     "CreateProjectTerminalInput": {
@@ -1203,6 +1225,16 @@
         "hasUncommittedChanges": "required",
         "localBranches": "required",
         "remoteBranches": "required"
+      }
+    },
+    "ProjectCompletionCard": {
+      "fields": {
+        "completionAction": "required",
+        "confirmCompletionAction": "required",
+        "host": "required",
+        "prDraft": "required",
+        "prTarget": "required",
+        "repoDefaultBranch": "required"
       }
     },
     "ProjectCreateBranchInput": {
@@ -1915,6 +1947,7 @@
     },
     "ValidateProjectRepoPathInput": {
       "fields": {
+        "probeConnection": "optional",
         "repoPath": "required"
       }
     },
@@ -1922,9 +1955,33 @@
       "fields": {
         "completionAction": "required",
         "confirmCompletionAction": "required",
+        "connection": "optional",
+        "existingProject": "optional",
         "host": "required",
+        "repoDefaultBranch": "optional",
         "repoPath": "required",
         "suggestedName": "required"
+      }
+    },
+    "ValidatedExistingProject": {
+      "fields": {
+        "completionAction": "required",
+        "confirmCompletionAction": "required",
+        "id": "required",
+        "issueSourceMode": "required",
+        "issueSyncEnabled": "required",
+        "issueSyncIntervalSeconds": "required",
+        "issueSyncLabel": "required",
+        "issueSyncScope": "required",
+        "issueWritebackCloseOnComplete": "required",
+        "issueWritebackCloseOnPrMerge": "required",
+        "issueWritebackComment": "required",
+        "name": "required",
+        "prDraft": "required",
+        "prTarget": "required",
+        "removed": "required",
+        "worktreeLocation": "required",
+        "worktreeSetupCommand": "required"
       }
     },
     "WorkspaceChangedFile": {

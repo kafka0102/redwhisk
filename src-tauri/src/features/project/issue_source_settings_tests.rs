@@ -17,7 +17,8 @@ use crate::features::project::ProjectService;
 use crate::types::errors::CommandErrorCode;
 use crate::types::issue::CreateIssueInput;
 use crate::types::project::{
-    CreateProjectInput, ProjectCompletionAction, ProjectPrTarget, ProjectWorktreeLocation,
+    CreateProjectInput, CreateProjectIssueSourceInput, ProjectCompletionAction, ProjectPrTarget,
+    ProjectWorktreeLocation,
 };
 use crate::types::project_issue_source::{
     ForgeAuthStatus, ForgeProvider, IssueSourceMode, UpdateProjectIssueSourceSettingsInput,
@@ -61,6 +62,7 @@ fn create_project(data_dir: &std::path::Path, repo_path: String) -> i64 {
             pr_target: Some(ProjectPrTarget::RepoDefault),
             pr_draft: Some(true),
             confirm_completion_action: Some(false),
+            issue_source: CreateProjectIssueSourceInput::default(),
         },
     )
     .expect("create project")

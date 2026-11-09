@@ -190,9 +190,15 @@ pub async fn validate_project_repo_path(
     input: ValidateProjectRepoPathInput,
 ) -> Result<ValidateProjectRepoPathResponse, CommandError> {
     let data_dir = project_data_dir(&app)?;
+    let probe_connection = input.probe_connection;
     let repo_path = input.repo_path;
     tauri::async_runtime::spawn_blocking(move || {
-        ProjectService::validate_project_repo_path_in_data_dir(data_dir, &repo_path)
+        ProjectService::validate_project_repo_path_in_data_dir_with_probe(
+            data_dir,
+            &repo_path,
+            probe_connection,
+            None,
+        )
     })
     .await
     .map_err(project_join_error)?

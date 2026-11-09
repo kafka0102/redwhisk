@@ -79,6 +79,10 @@ export const rustOnlyAllowlist: ReadonlySet<string> = new Set<string>([
   // 工具中表达，登记 allowlist 跳过。
   "ErrorDetail",
 
+  // CreateProjectIssueSourceInput 用 `#[serde(flatten)]` 摊进 CreateProjectInput。
+  // 线上字段已经在 CreateProjectInput 上 mirror，单独的结构体没有对应 TS interface。
+  "CreateProjectIssueSourceInput",
+
   // ===== session_workspace 域 =====
   // WorkspaceFileTreeNode.kind 用内联字面量 `"directory" | "file"`，未抽成具名 union；
   // parity 工具看不到内联字面量集合，登记 allowlist 跳过（前端已正确表达契约）。
