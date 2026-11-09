@@ -132,6 +132,17 @@ pub struct ProjectForgeInspection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectCompletionCard {
+    pub host: String,
+    pub repo_default_branch: Option<String>,
+    pub completion_action: ProjectCompletionAction,
+    pub pr_target: ProjectPrTarget,
+    pub pr_draft: bool,
+    pub confirm_completion_action: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectListResponse {
     pub projects: Vec<ProjectListItem>,
 }

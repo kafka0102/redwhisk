@@ -143,6 +143,7 @@ pub fn run() {
             features::project::issue_source_commands::update_project_issue_source_settings,
             features::project::issue_source_commands::inspect_project_issue_connection,
             features::project::commands::inspect_project_forge,
+            features::project::commands::get_project_completion_card,
             features::project::change_request_commands::preview_change_request,
             features::project::change_request_commands::create_change_request,
             features::project::change_request_commands::view_project_change_request,

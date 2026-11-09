@@ -16,6 +16,15 @@ export interface ProjectForgeInspection {
   confirmCompletionAction: boolean;
 }
 
+export interface ProjectCompletionCard {
+  host: ForgeHostName;
+  repoDefaultBranch: string | null;
+  completionAction: ProjectCompletionAction;
+  prTarget: ProjectPrTarget;
+  prDraft: boolean;
+  confirmCompletionAction: boolean;
+}
+
 export interface ChangeRequestPreview {
   host: ForgeHostName;
   currentBranch: string | null;
@@ -45,6 +54,14 @@ export function inspectProjectForge(
   projectId: number,
 ): Promise<ProjectForgeInspection> {
   return invokeCommand<ProjectForgeInspection>("inspect_project_forge", {
+    projectId,
+  });
+}
+
+export function getProjectCompletionCard(
+  projectId: number,
+): Promise<ProjectCompletionCard> {
+  return invokeCommand<ProjectCompletionCard>("get_project_completion_card", {
     projectId,
   });
 }

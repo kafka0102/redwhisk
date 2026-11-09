@@ -9,7 +9,7 @@ import {
   type ProjectWorktreeLocation,
 } from "../project/project-commands";
 import {
-  inspectProjectForge,
+  getProjectCompletionCard,
   type ForgeHostName,
   type ProjectCompletionAction,
   type ProjectPrTarget,
@@ -75,6 +75,9 @@ export function IssuesSettingsPanel({
   const [confirmCompletionAction, setConfirmCompletionAction] = useState(false);
   const [completionBaseline, setCompletionBaseline] =
     useState<CompletionBaseline | null>(null);
+  const [completionProjectId, setCompletionProjectId] = useState<number | null>(
+    null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -100,6 +103,9 @@ export function IssuesSettingsPanel({
           setConnection,
         });
         setSourceBaseline(settings);
+        if (settings.issueSourceMode === "local") {
+          return;
+        }
         const inspected = await inspectProjectIssueConnection(projectId);
         if (cancelled) return;
         setConnection(inspected.connection);
@@ -117,28 +123,30 @@ export function IssuesSettingsPanel({
 
   useEffect(() => {
     let cancelled = false;
-    void inspectProjectForge(projectId)
-      .then((inspection) => {
+    void getProjectCompletionCard(projectId)
+      .then((card) => {
         if (cancelled) return;
         const nextHost =
-          inspection.host === "github" || inspection.host === "gitlab"
-            ? inspection.host
-            : "none";
+          card.host === "github" || card.host === "gitlab" ? card.host : "none";
         setHost(nextHost);
-        setRepoDefaultBranch(inspection.repoDefaultBranch);
-        setCompletionAction(inspection.completionAction);
-        setPrTarget(inspection.prTarget);
-        setPrDraft(inspection.prDraft);
-        setConfirmCompletionAction(inspection.confirmCompletionAction);
+        setRepoDefaultBranch(card.repoDefaultBranch);
+        setCompletionAction(card.completionAction);
+        setPrTarget(card.prTarget);
+        setPrDraft(card.prDraft);
+        setConfirmCompletionAction(card.confirmCompletionAction);
         setCompletionBaseline({
-          action: inspection.completionAction,
-          confirm: inspection.confirmCompletionAction,
-          draft: inspection.prDraft,
-          target: inspection.prTarget,
+          action: card.completionAction,
+          confirm: card.confirmCompletionAction,
+          draft: card.prDraft,
+          target: card.prTarget,
         });
+        setCompletionProjectId(projectId);
       })
       .catch(() => {
-        if (!cancelled) setHost("none");
+        if (cancelled) return;
+        setHost("none");
+        setCompletionBaseline(null);
+        setCompletionProjectId(projectId);
       });
     return () => {
       cancelled = true;
@@ -146,7 +154,9 @@ export function IssuesSettingsPanel({
   }, [projectId]);
 
   const showRemote = mode !== "local";
-  const showCompletion = host === "github" || host === "gitlab";
+  const showCompletion =
+    completionProjectId === projectId &&
+    (host === "github" || host === "gitlab");
   const labelRequired =
     showRemote && scope === "label" && label.trim().length === 0;
   const completionDirty =

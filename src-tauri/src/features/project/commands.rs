@@ -171,6 +171,20 @@ pub async fn inspect_project_forge(
 }
 
 #[tauri::command]
+pub async fn get_project_completion_card(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: i64,
+) -> Result<crate::types::project::ProjectCompletionCard, CommandError> {
+    let data_dir = prepare_project_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        ProjectService::get_project_completion_card_in_data_dir(data_dir, project_id)
+    })
+    .await
+    .map_err(project_join_error)?
+}
+
+#[tauri::command]
 pub async fn validate_project_repo_path(
     app: tauri::AppHandle,
     input: ValidateProjectRepoPathInput,

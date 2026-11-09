@@ -9,9 +9,9 @@ use crate::git::worktree::list_code_workspaces;
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project::ProjectForgeInspection;
 use crate::types::project::{
-    CreateProjectInput, OpenProjectInput, ProjectListItem, ProjectListResponse, ProjectPathStatus,
-    ProjectSummary, ProjectWorktreeLocation, UpdateProjectSettingsInput,
-    ValidateProjectRepoPathResponse,
+    CreateProjectInput, OpenProjectInput, ProjectCompletionCard, ProjectListItem,
+    ProjectListResponse, ProjectPathStatus, ProjectSummary, ProjectWorktreeLocation,
+    UpdateProjectSettingsInput, ValidateProjectRepoPathResponse,
 };
 
 use super::completion_defaults::completion_suggestion;
@@ -296,6 +296,24 @@ impl<'connection> ProjectService<'connection> {
             cli_installed: status.cli_installed,
             cli_authenticated: status.cli_authenticated,
             repo_default_branch: status.repo_default_branch,
+            completion_action: project.completion_action,
+            pr_target: project.pr_target,
+            pr_draft: project.pr_draft,
+            confirm_completion_action: project.confirm_completion_action,
+        })
+    }
+
+    pub fn get_project_completion_card_in_data_dir(
+        data_dir: impl AsRef<Path>,
+        project_id: i64,
+    ) -> Result<ProjectCompletionCard, CommandError> {
+        let database = open_project_database(data_dir)?;
+        let repository = ProjectRepository::new(&database.connection);
+        let project = ProjectService::new(repository).project_by_id(project_id)?;
+        let remote = crate::git::forge::inspect_forge_remote(Path::new(&project.repo_path));
+        Ok(ProjectCompletionCard {
+            host: remote.host.as_str().to_string(),
+            repo_default_branch: remote.repo_default_branch,
             completion_action: project.completion_action,
             pr_target: project.pr_target,
             pr_draft: project.pr_draft,

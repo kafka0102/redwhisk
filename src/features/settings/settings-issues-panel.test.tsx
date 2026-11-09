@@ -70,7 +70,10 @@ vi.mock("../project/project-commands", () => ({
   validateProjectRepoPath: vi.fn(),
 }));
 
+const getProjectCompletionCardMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../project/project-forge-commands", () => ({
+  getProjectCompletionCard: getProjectCompletionCardMock,
   inspectProjectForge: vi.fn(async () => ({
     host: "github",
     remoteLabel: "acme/app",
@@ -109,6 +112,28 @@ function forgeInspection(
     prTarget: "issue_base" as const,
     prDraft: true,
     confirmCompletionAction: true,
+    ...overrides,
+  };
+}
+
+function completionCard(
+  overrides: Partial<{
+    host: "github" | "gitlab" | "none";
+    repoDefaultBranch: string | null;
+    completionAction: "merge_to_base" | "open_pull_request";
+    prTarget: "issue_base" | "repo_default";
+    prDraft: boolean;
+    confirmCompletionAction: boolean;
+  }> = {},
+) {
+  const inspection = forgeInspection();
+  return {
+    host: inspection.host,
+    repoDefaultBranch: inspection.repoDefaultBranch,
+    completionAction: inspection.completionAction,
+    prTarget: inspection.prTarget,
+    prDraft: inspection.prDraft,
+    confirmCompletionAction: inspection.confirmCompletionAction,
     ...overrides,
   };
 }
@@ -239,8 +264,10 @@ describe("Issues settings panel", () => {
     updateSettingsMock.mockReset();
     inspectConnectionMock.mockReset();
     inspectForgeMock.mockReset();
+    getProjectCompletionCardMock.mockReset();
     updateProjectMock.mockReset();
     inspectForgeMock.mockResolvedValue(forgeInspection());
+    getProjectCompletionCardMock.mockResolvedValue(completionCard());
     getSettingsMock.mockResolvedValue(settings());
     inspectConnectionMock.mockResolvedValue(settings());
     updateSettingsMock.mockImplementation(async (input) =>
@@ -1147,8 +1174,8 @@ describe("Issues settings panel", () => {
 
   it("saves the migrated completion fields when the action opens a pull request", async () => {
     const user = userEvent.setup();
-    inspectForgeMock.mockResolvedValue(
-      forgeInspection({
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
         completionAction: "open_pull_request",
         confirmCompletionAction: false,
       }),
@@ -1188,8 +1215,8 @@ describe("Issues settings panel", () => {
   });
 
   it("uses the merge request target label for GitLab", async () => {
-    inspectForgeMock.mockResolvedValue(
-      forgeInspection({
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
         host: "gitlab",
         completionAction: "open_pull_request",
       }),
@@ -1208,12 +1235,9 @@ describe("Issues settings panel", () => {
   });
 
   it("hides completion when the repository is not GitHub or GitLab", async () => {
-    inspectForgeMock.mockResolvedValue(
-      forgeInspection({
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
         host: "none",
-        remoteLabel: null,
-        cliInstalled: false,
-        cliAuthenticated: false,
         repoDefaultBranch: null,
       }),
     );
@@ -1224,6 +1248,174 @@ describe("Issues settings panel", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("完成后")).not.toBeInTheDocument();
     expect(screen.queryByText("完成后动作")).not.toBeInTheDocument();
+    expect(inspectForgeMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the completion card before forge auth returns", async () => {
+    getProjectCompletionCardMock.mockResolvedValue({
+      host: "github",
+      repoDefaultBranch: null,
+      completionAction: "merge_to_base",
+      prTarget: "issue_base",
+      prDraft: true,
+      confirmCompletionAction: false,
+    });
+    inspectForgeMock.mockImplementation(() => new Promise(() => {}));
+    inspectConnectionMock.mockImplementation(() => new Promise(() => {}));
+    getSettingsMock.mockResolvedValue(settings({ issueSourceMode: "local" }));
+    renderPanel("zh");
+
+    expect(
+      await screen.findByRole("region", { name: "完成后" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("合并到 base 分支");
+    expect(
+      screen.getByRole("checkbox", { name: "完成时再次确认动作" }),
+    ).not.toBeChecked();
+    expect(inspectForgeMock).not.toHaveBeenCalled();
+  });
+
+  it("hides the completion card while the completion read is pending", async () => {
+    getProjectCompletionCardMock.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(await screen.findByRole("radio", { name: "仅本地" })).toBeChecked();
+    expect(
+      screen.queryByRole("region", { name: "完成后" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the plain merge request target before the default branch is known", async () => {
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
+        host: "gitlab",
+        completionAction: "open_pull_request",
+        prTarget: "issue_base",
+        repoDefaultBranch: null,
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(
+      await screen.findByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("提交 Merge Request");
+    expect(
+      screen.queryByRole("combobox", { name: "完成后动作" }),
+    ).not.toHaveTextContent("提交 Pull Request");
+    expect(screen.getByRole("combobox", { name: "MR 目标" })).toHaveTextContent(
+      "Issue 的 base 分支",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "MR 目标" }),
+    ).not.toHaveTextContent("（main）");
+  });
+
+  it("shows the GitLab default branch on the merge request target", async () => {
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
+        host: "gitlab",
+        completionAction: "open_pull_request",
+        prTarget: "issue_base",
+        repoDefaultBranch: "main",
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(
+      await screen.findByRole("region", { name: "完成后" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "MR 目标" })).toHaveTextContent(
+      "Issue 的 base 分支（main）",
+    );
+  });
+
+  it("keeps source choices when the completion read fails", async () => {
+    getProjectCompletionCardMock.mockRejectedValue(new Error("git failed"));
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(await screen.findByRole("radio", { name: "仅本地" })).toBeChecked();
+    expect(
+      screen.queryByRole("region", { name: "完成后" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not inspect the connection in local mode", async () => {
+    renderWith("zh", { issueSourceMode: "local" });
+
+    expect(
+      await screen.findByRole("region", { name: "完成后" }),
+    ).toBeInTheDocument();
+    expect(inspectConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the completion card while the remote connection check is pending", async () => {
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
+        host: "github",
+        completionAction: "merge_to_base",
+        confirmCompletionAction: false,
+        repoDefaultBranch: null,
+      }),
+    );
+    inspectConnectionMock.mockImplementation(() => new Promise(() => {}));
+    getSettingsMock.mockResolvedValue(settings({ issueSourceMode: "mixed" }));
+    renderPanel("zh");
+
+    expect(
+      await screen.findByRole("region", { name: "完成后" }),
+    ).toBeInTheDocument();
+    expect(inspectConnectionMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("combobox", { name: "完成后动作" }),
+    ).toHaveTextContent("合并到 base 分支");
+  });
+
+  it("uses the plain English issue base label before the default branch is known", async () => {
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
+        host: "github",
+        completionAction: "open_pull_request",
+        prTarget: "issue_base",
+        repoDefaultBranch: null,
+      }),
+    );
+    renderWith("en", { issueSourceMode: "local" });
+
+    expect(
+      await screen.findByRole("combobox", { name: "PR target" }),
+    ).toHaveTextContent("Issue base");
+    expect(
+      screen.getByRole("combobox", { name: "PR target" }),
+    ).not.toHaveTextContent("(main)");
+    expect(screen.queryByText("Issue 的 base 分支")).not.toBeInTheDocument();
+  });
+
+  it("cancels a completion confirmation change", async () => {
+    const user = userEvent.setup();
+    getProjectCompletionCardMock.mockResolvedValue(
+      completionCard({
+        completionAction: "open_pull_request",
+        prTarget: "issue_base",
+        prDraft: true,
+        confirmCompletionAction: false,
+      }),
+    );
+    renderWith("zh", { issueSourceMode: "local" });
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "完成时再次确认动作",
+    });
+    expect(checkbox).not.toBeChecked();
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(checkbox).not.toBeChecked();
+    expect(updateProjectMock).not.toHaveBeenCalled();
   });
 
   it("keeps the issue source locale key trees aligned", () => {

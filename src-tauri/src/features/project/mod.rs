@@ -6,6 +6,8 @@ pub mod issue_source_commands;
 mod service;
 
 #[cfg(test)]
+mod completion_card_tests;
+#[cfg(test)]
 mod completion_host_class_tests;
 #[cfg(test)]
 mod completion_settings_tests;
