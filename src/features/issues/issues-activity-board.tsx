@@ -3,6 +3,7 @@ import { useState, type ComponentProps, type JSX, type ReactNode } from "react";
 import { IssueBoardHeader, type IssueBoardPane } from "./issue-board-header";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { IssuesKanban } from "./issues-kanban";
+import type { ForgeProvider } from "../settings/issue-source-commands";
 
 export function IssuesActivityBoard({
   actions,
@@ -11,6 +12,7 @@ export function IssuesActivityBoard({
   onPaneChange,
   projectId,
   sourceMode,
+  provider = null,
   onOpenProjectSettings,
   openChangeRequest,
   onOpenChangeRequestConsumed,
@@ -23,6 +25,7 @@ export function IssuesActivityBoard({
   onPaneChange: (pane: IssueBoardPane) => void;
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
+  provider?: ForgeProvider | null;
   onOpenProjectSettings?: () => void;
   openChangeRequest?: { provider: string; number: number } | null;
   onOpenChangeRequestConsumed?: () => void;
@@ -38,6 +41,7 @@ export function IssuesActivityBoard({
           pane={pane}
           projectId={projectId}
           sourceMode={sourceMode}
+          provider={provider}
           onPaneChange={onPaneChange}
         />
       )}
@@ -45,6 +49,7 @@ export function IssuesActivityBoard({
         <ChangeRequestPanel
           projectId={projectId}
           sourceMode={sourceMode}
+          provider={provider}
           onOpenProjectSettings={onOpenProjectSettings}
           onDetailOpenChange={setDetailOpen}
           openDetail={openChangeRequest}

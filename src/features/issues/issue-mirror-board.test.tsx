@@ -20,6 +20,8 @@ import {
   type IssueSyncChangedEvent,
 } from "./issue-mirror-commands";
 
+import "../../shared/styles/issues-board.css";
+
 const eventHandlers = vi.hoisted(
   () => new Map<string, (event: { payload: unknown }) => void>(),
 );
@@ -939,6 +941,98 @@ describe("GitHub issue mirror board", () => {
     );
     expect(toolbar).not.toContain("githubCredentialExpired");
     expect(toolbar).toContain('t("issues.credentialExpired"');
+  });
+
+  it("uses Merge requests for a GitLab project and keeps Pull requests for GitHub", async () => {
+    const user = userEvent.setup();
+    const gitlabSettings = sourceSettings("mixed");
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...gitlabSettings,
+      connection: { ...gitlabSettings.connection, provider: "gitlab" },
+    });
+    const view = renderBoard();
+    const gitlabTab = await screen.findByRole("tab", {
+      name: "Merge requests",
+    });
+    await user.click(gitlabTab);
+    expect(
+      screen.getByText("没有需要你审阅的 Merge request"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Merge requests" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Merge request 筛选")).toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("mixed"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    const githubTab = await screen.findByRole("tab", {
+      name: "Pull requests",
+    });
+    await user.click(githubTab);
+    expect(
+      screen.getByText("没有需要你审阅的 Pull request"),
+    ).toBeInTheDocument();
+  });
+
+  it("centers the local connection button in the kanban area without a title", async () => {
+    const user = userEvent.setup();
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("local"),
+    );
+    renderBoard();
+    await user.click(await screen.findByRole("tab", { name: "Pull requests" }));
+    expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
+    const empty = screen
+      .getByRole("button", { name: "去设置连接" })
+      .closest("section");
+    expect(empty?.querySelector("h3")).toBeNull();
+    expect(window.getComputedStyle(empty!).gridArea).toBe("kanban");
+    expect(window.getComputedStyle(empty!).placeItems).toBe("center");
+  });
+
+  it("does not render the connection empty state before source mode is known", async () => {
+    const user = userEvent.setup();
+    getProjectIssueSourceSettingsMock.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    renderBoard();
+    const tab = await screen.findByRole("tab", { name: "Pull requests" });
+    expect(tab.querySelector(".issue-board-tab__count")).toBeNull();
+    await user.click(tab);
+    expect(screen.queryByRole("button", { name: "去设置连接" })).toBeNull();
+    expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
+  });
+
+  it("keeps runnable card meta full width and parks the run button at the bottom right", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const run = await screen.findByRole("button", {
+      name: "运行 Local issue",
+    });
+    const shell = run.closest(".issue-card__shell");
+    const contentRow = shell?.querySelector(".issue-card__content-row");
+    const metaRow = shell?.querySelector(".issue-card__meta-row");
+    expect(shell).not.toBeNull();
+    expect(contentRow).not.toBeNull();
+    expect(metaRow).not.toBeNull();
+    expect(contentRow?.contains(run)).toBe(false);
+    expect(metaRow?.closest(".issue-card__content-row")).toBe(contentRow);
+    expect(run.parentElement).toBe(shell);
+    expect(window.getComputedStyle(run).position).toBe("absolute");
+    expect(window.getComputedStyle(run).right).not.toBe("auto");
+    expect(window.getComputedStyle(run).bottom).not.toBe("auto");
+    await user.click(run);
+
+    const runningShell = screen
+      .getByRole("button", { name: "Running remote" })
+      .closest(".issue-card__shell");
+    expect(runningShell?.querySelector(".issue-card__run")).toBeNull();
   });
 });
 

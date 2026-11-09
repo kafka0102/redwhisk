@@ -9,6 +9,8 @@ import { ChangeRequestList } from "./change-request-list";
 import type { ChangeRequestListResponse } from "./change-request-commands";
 import { listProjectChangeRequests } from "./change-request-commands";
 
+import "../../shared/styles/issues-board.css";
+
 vi.mock("./change-request-commands", async () => {
   const actual = await vi.importActual<
     typeof import("./change-request-commands")
@@ -130,6 +132,20 @@ function row(
     remoteUpdatedAt: NOW,
     linkedIssues: [],
     ...patch,
+  };
+}
+
+function emptyResponse(): ChangeRequestListResponse {
+  return {
+    tabCount: 0,
+    counts: {
+      reviewRequested: 0,
+      createdByMe: 0,
+      allOpen: 0,
+      recentlyMerged: 0,
+    },
+    pullRequestRefs: [],
+    rows: [],
   };
 }
 
@@ -259,6 +275,31 @@ describe("change request list", () => {
     expect(screen.queryByText("Remote issue sync")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "去设置连接" }));
     expect(onOpenProjectSettings).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
+    expect(screen.queryByRole("heading")).toBeNull();
+    const empty = screen
+      .getByRole("button", { name: "去设置连接" })
+      .closest("section");
+    expect(empty?.querySelector("h3")).toBeNull();
+    expect(empty?.querySelectorAll("button")).toHaveLength(1);
+    expect(window.getComputedStyle(empty!).gridArea).toBe("kanban");
+    expect(window.getComputedStyle(empty!).placeItems).toBe("center");
+  });
+
+  it("uses english connection button copy without a disconnected title", () => {
+    renderList(
+      "en",
+      <ChangeRequestList
+        now={NOW}
+        response={response()}
+        sourceMode="local"
+        onOpenProjectSettings={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Pull requests are not connected")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Set up connection" }),
+    ).toBeInTheDocument();
   });
 
   it("hides a zero tab count until the source mode is known", async () => {
@@ -308,5 +349,276 @@ describe("change request list", () => {
       </I18nProvider>,
     );
     expect(await screen.findByText("8")).toBeInTheDocument();
+  });
+
+  it("uses Merge requests for GitLab tabs and keeps Pull requests otherwise", () => {
+    const { rerender } = renderList(
+      "zh",
+      <IssueBoardHeader
+        issueCount={4}
+        pane="issues"
+        projectId={1}
+        provider="gitlab"
+        sourceMode="remote"
+        onPaneChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("tab", { name: "Merge requests" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <IssueBoardHeader
+          issueCount={4}
+          pane="issues"
+          projectId={1}
+          provider="gitlab"
+          sourceMode="local"
+          onPaneChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByRole("tab", { name: "Merge requests" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <IssueBoardHeader
+          issueCount={4}
+          pane="issues"
+          projectId={1}
+          provider="github"
+          sourceMode="remote"
+          onPaneChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByRole("tab", { name: "Pull requests" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <>
+          <IssueBoardHeader
+            issueCount={4}
+            pane="pullRequests"
+            projectId={1}
+            provider={null}
+            sourceMode={null}
+            onPaneChange={vi.fn()}
+          />
+          <ChangeRequestList
+            now={NOW}
+            provider={null}
+            response={response()}
+            sourceMode={null}
+            onOpenProjectSettings={vi.fn()}
+          />
+        </>
+      </I18nProvider>,
+    );
+    const tab = screen.getByRole("tab", { name: "Pull requests" });
+    expect(tab.querySelector(".issue-board-tab__count")).toBeNull();
+    expect(screen.queryByText("0")).toBeNull();
+    expect(screen.queryByRole("button", { name: "去设置连接" })).toBeNull();
+    expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
+  });
+
+  it("shows GitLab empty copy and region names in Chinese", () => {
+    const { rerender } = renderList(
+      "zh",
+      <ChangeRequestList
+        filter="review_requested"
+        now={NOW}
+        provider="gitlab"
+        response={emptyResponse()}
+        sourceMode="remote"
+      />,
+    );
+    expect(
+      screen.getByRole("region", { name: "Merge requests" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Merge request 筛选")).toBeInTheDocument();
+    expect(
+      screen.getByText("没有需要你审阅的 Merge request"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="all_open"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("没有打开的 Merge request")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="created_by_me"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("没有你创建的 Merge request")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="recently_merged"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByText("没有最近合并的 Merge request"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="review_requested"
+          now={NOW}
+          provider="github"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByRole("region", { name: "Pull requests" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Pull request 筛选")).toBeInTheDocument();
+    expect(
+      screen.getByText("没有需要你审阅的 Pull request"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="all_open"
+          now={NOW}
+          provider="github"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="created_by_me"
+          now={NOW}
+          provider="github"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("没有你创建的 Pull request")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="recently_merged"
+          now={NOW}
+          provider="github"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("没有最近合并的 Pull request")).toBeInTheDocument();
+  });
+
+  it("shows GitLab empty copy and filter name in English", () => {
+    const { rerender } = renderList(
+      "en",
+      <ChangeRequestList
+        filter="review_requested"
+        now={NOW}
+        provider="gitlab"
+        response={emptyResponse()}
+        sourceMode="remote"
+      />,
+    );
+    expect(screen.getByLabelText("Merge request filters")).toBeInTheDocument();
+    expect(
+      screen.getByText("No merge requests need your review"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <ChangeRequestList
+          filter="all_open"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("No open merge requests")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <ChangeRequestList
+          filter="created_by_me"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByText("You have no open merge requests"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <ChangeRequestList
+          filter="recently_merged"
+          now={NOW}
+          provider="gitlab"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByText("No recently merged merge requests"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider initialLocale="en">
+        <ChangeRequestList
+          filter="review_requested"
+          now={NOW}
+          provider="github"
+          response={emptyResponse()}
+          sourceMode="remote"
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByLabelText("Pull request filters")).toBeInTheDocument();
+    expect(
+      screen.getByText("No pull requests need your review"),
+    ).toBeInTheDocument();
   });
 });

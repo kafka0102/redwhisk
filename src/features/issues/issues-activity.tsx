@@ -169,6 +169,7 @@ export function IssuesActivity({
   const {
     sourceMode,
     sourceFilter,
+    provider,
     toolbar: issueSyncToolbar,
   } = useIssueSyncChrome(projectId, reloadMirroredIssues);
   const changeRequestNav = useChangeRequestNavigation();
@@ -618,6 +619,7 @@ export function IssuesActivity({
             pane={changeRequestNav.boardPane}
             projectId={projectId}
             sourceMode={sourceMode}
+            provider={provider}
             onOpenProjectSettings={onOpenProjectSettings}
             onPaneChange={changeRequestNav.setBoardPane}
             openChangeRequest={changeRequestNav.openDetail}

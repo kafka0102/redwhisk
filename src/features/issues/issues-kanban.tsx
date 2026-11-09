@@ -282,19 +282,19 @@ function IssueCard({
               </span>
             ) : null}
           </button>
-          {isRunnable ? (
-            <button
-              aria-label={`${messages.issues.run} ${issue.title}`}
-              className="issue-card__run"
-              type="button"
-              onClick={(event) => {
-                onRunIssue(issue, event.currentTarget);
-              }}
-            >
-              <Play aria-hidden="true" size={14} strokeWidth={2} />
-            </button>
-          ) : null}
         </div>
+        {isRunnable ? (
+          <button
+            aria-label={`${messages.issues.run} ${issue.title}`}
+            className="issue-card__run"
+            type="button"
+            onClick={(event) => {
+              onRunIssue(issue, event.currentTarget);
+            }}
+          >
+            <Play aria-hidden="true" size={14} strokeWidth={2} />
+          </button>
+        ) : null}
         {hasLabels ? (
           <span id={labelsId} className="issue-card__labels">
             <span className="sr-only">

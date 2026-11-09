@@ -12,6 +12,7 @@ import {
   changeRequestReview,
   changeRequestTime,
 } from "./change-request-list-text";
+import type { ForgeProvider } from "../settings/issue-source-commands";
 
 const FILTERS: ChangeRequestFilter[] = [
   "review_requested",
@@ -22,6 +23,7 @@ const FILTERS: ChangeRequestFilter[] = [
 
 export function ChangeRequestList({
   sourceMode,
+  provider = null,
   response,
   filter = "review_requested",
   now,
@@ -32,6 +34,7 @@ export function ChangeRequestList({
   onOpenDetail,
 }: {
   sourceMode: "local" | "remote" | "mixed" | null;
+  provider?: ForgeProvider | null;
   response: ChangeRequestListResponse | null;
   filter?: ChangeRequestFilter;
   now: number;
@@ -48,7 +51,6 @@ export function ChangeRequestList({
   if (sourceMode === "local") {
     return (
       <section className="change-request-list change-request-empty">
-        <h3>{t("issues.changeRequests.disconnectedTitle")}</h3>
         <button type="button" onClick={onOpenProjectSettings}>
           {t("issues.changeRequests.connectSettings")}
         </button>
@@ -60,12 +62,20 @@ export function ChangeRequestList({
   return (
     <section
       className="change-request-list"
-      aria-label={t("issues.pullRequestsTab")}
+      aria-label={t(
+        provider === "gitlab"
+          ? "issues.mergeRequestsTab"
+          : "issues.pullRequestsTab",
+      )}
     >
       <div className="change-request-toolbar">
         <div
           className="change-request-filters"
-          aria-label={t("issues.changeRequests.filters")}
+          aria-label={t(
+            provider === "gitlab"
+              ? "issues.changeRequests.mergeFilters"
+              : "issues.changeRequests.filters",
+          )}
         >
           {FILTERS.map((item) => (
             <button
@@ -87,7 +97,7 @@ export function ChangeRequestList({
         <span>{t("issues.changeRequests.columnLinks")}</span>
       </div>
       {rows.length === 0 ? (
-        <p>{t(emptyLabel(filter))}</p>
+        <p>{t(emptyLabel(filter, provider))}</p>
       ) : (
         rows.map((row) => (
           <ChangeRequestRow
@@ -187,16 +197,28 @@ function filterLabel(filter: ChangeRequestFilter): string {
   }
 }
 
-function emptyLabel(filter: ChangeRequestFilter): string {
+function emptyLabel(
+  filter: ChangeRequestFilter,
+  provider: ForgeProvider | null,
+): string {
+  const gitlab = provider === "gitlab";
   switch (filter) {
     case "created_by_me":
-      return "issues.changeRequests.emptyCreatedByMe";
+      return gitlab
+        ? "issues.changeRequests.emptyMergeCreatedByMe"
+        : "issues.changeRequests.emptyCreatedByMe";
     case "all_open":
-      return "issues.changeRequests.emptyAllOpen";
+      return gitlab
+        ? "issues.changeRequests.emptyMergeAllOpen"
+        : "issues.changeRequests.emptyAllOpen";
     case "recently_merged":
-      return "issues.changeRequests.emptyRecentlyMerged";
+      return gitlab
+        ? "issues.changeRequests.emptyMergeRecentlyMerged"
+        : "issues.changeRequests.emptyRecentlyMerged";
     default:
-      return "issues.changeRequests.emptyReviewRequested";
+      return gitlab
+        ? "issues.changeRequests.emptyMergeReviewRequested"
+        : "issues.changeRequests.emptyReviewRequested";
   }
 }
 

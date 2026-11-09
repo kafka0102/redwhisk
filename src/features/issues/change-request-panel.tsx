@@ -18,10 +18,12 @@ import {
 import { useI18n } from "../../shared/i18n/i18n";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import { useWindowFocus } from "../../shared/window/use-window-focus";
+import type { ForgeProvider } from "../settings/issue-source-commands";
 
 export function ChangeRequestPanel({
   projectId,
   sourceMode,
+  provider = null,
   onOpenProjectSettings,
   onDetailOpenChange,
   openDetail,
@@ -30,6 +32,7 @@ export function ChangeRequestPanel({
 }: {
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
+  provider?: ForgeProvider | null;
   onOpenProjectSettings?: () => void;
   onDetailOpenChange?: (open: boolean) => void;
   openDetail?: { provider: string; number: number } | null;
@@ -152,6 +155,7 @@ export function ChangeRequestPanel({
       now={now}
       response={response}
       sourceMode={sourceMode}
+      provider={provider}
       syncSlot={
         syncError == null ? null : (
           <p role="status">{t("issues.syncCacheFailed")}</p>

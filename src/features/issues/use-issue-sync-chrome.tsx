@@ -10,6 +10,7 @@ import { useWindowFocus } from "../../shared/window/use-window-focus";
 import { subscribeTauriEvent } from "../../shared/tauri-event/use-tauri-event";
 import {
   getProjectIssueSourceSettings,
+  type ForgeProvider,
   type IssueSourceMode,
   type ProjectIssueSourceSettings,
 } from "../settings/issue-source-commands";
@@ -37,6 +38,7 @@ export function useIssueSyncChrome(
 ): {
   sourceMode: IssueSourceMode | null;
   sourceFilter: SourceFilter;
+  provider: ForgeProvider | null;
   toolbar: ReactNode;
 } {
   const [sourceMode, setSourceMode] = useState<IssueSourceMode | null>(null);
@@ -186,5 +188,10 @@ export function useIssueSyncChrome(
       </>
     ) : null;
 
-  return { sourceMode, sourceFilter, toolbar };
+  return {
+    sourceMode,
+    sourceFilter,
+    provider: settings?.connection.provider ?? null,
+    toolbar,
+  };
 }

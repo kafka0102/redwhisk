@@ -452,7 +452,7 @@ _Avoid_: 一次 404 就删除、自动判定已删除
 _Avoid_: token、个人访问令牌、交互式登录会话
 
 **变更请求**：
-项目里的一条 GitHub Pull Request 或 GitLab Merge Request。它有自己的列表和详情，并可以关联一个或多个 Issue。
+项目里的一条 GitHub Pull Request 或 GitLab Merge Request。GitHub 项目里，页签和列表空态对用户写作 Pull requests / Pull request；GitLab 项目里写作 Merge requests / Merge request。它有自己的列表和详情，并可以关联一个或多个 Issue。
 _Avoid_: Issue、本地合并分支、完成流程里的合并到 base
 
 **宿主合并方式**：

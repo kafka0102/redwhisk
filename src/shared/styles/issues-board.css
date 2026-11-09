@@ -188,6 +188,7 @@
 
 .issue-card__shell {
   display: grid;
+  position: relative;
   gap: 8px;
   padding: 12px 10px;
   border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
@@ -198,7 +199,7 @@
 
 .issue-card__content-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: end;
   gap: 10px;
 }
@@ -282,6 +283,10 @@
 
 .issue-card__run {
   display: grid;
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  z-index: 1;
   place-items: center;
   width: 24px;
   height: 24px;
@@ -295,6 +300,14 @@
 .issue-card__run:hover {
   border-color: var(--color-border-strong);
   color: var(--color-text);
+}
+
+.issue-card__shell:has(.issue-card__run) .issue-card__title,
+.issue-card__shell:has(.issue-card__run) .issue-card__description,
+.issue-card__shell:has(.issue-card__run) .issue-card__remote-note,
+.issue-card__shell:has(.issue-card__run) .issue-card__attention,
+.issue-card__shell:has(.issue-card__run) .issue-card__labels {
+  padding-right: 34px;
 }
 
 .attention-marker {
@@ -906,6 +919,7 @@
 .change-request-list {
   display: flex;
   flex-direction: column;
+  grid-area: kanban;
   gap: 12px;
   min-height: 0;
   padding: 8px 16px 20px;
@@ -1057,9 +1071,9 @@
   color: var(--color-text);
 }
 
-.change-request-empty h3 {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 16px;
-  font-weight: 600;
+.change-request-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 0;
 }
