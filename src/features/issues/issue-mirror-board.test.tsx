@@ -6,6 +6,10 @@ import { resolve } from "node:path";
 
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
+import {
+  openShadcnSelect,
+  selectShadcnOption,
+} from "../../test/select-helpers";
 import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
@@ -133,6 +137,22 @@ function renderBoard(projectId = 1) {
       <IssuesActivity projectId={projectId} />
     </I18nProvider>,
   );
+}
+
+async function expectSyncToolbar(
+  text: string,
+  tone?: "success" | "error",
+): Promise<void> {
+  await waitFor(() => {
+    expect(
+      document.querySelector(".issue-sync-status__text")?.textContent,
+    ).toBe(text);
+    if (tone) {
+      expect(
+        document.querySelector(`.issue-sync-status__dot[data-tone="${tone}"]`),
+      ).not.toBeNull();
+    }
+  });
 }
 
 describe("GitHub issue mirror board", () => {
@@ -270,10 +290,7 @@ describe("GitHub issue mirror board", () => {
       syncError: null,
     });
     const view = renderBoard();
-    expect(await screen.findByText("已同步 2 分钟前")).toBeInTheDocument();
-    expect(
-      document.querySelector('.issue-sync-status__dot[data-tone="success"]'),
-    ).not.toBeNull();
+    await expectSyncToolbar("已同步 2 分钟前", "success");
     const refresh = screen.getByRole("button", { name: "刷新" });
     expect(refresh.textContent?.trim()).toBe("");
 
@@ -286,7 +303,7 @@ describe("GitHub issue mirror board", () => {
         <IssuesActivity projectId={2} />
       </I18nProvider>,
     );
-    expect(await screen.findByText("已同步 2 小时前")).toBeInTheDocument();
+    await expectSyncToolbar("已同步 2 小时前", "success");
   });
 
   it("shows credential and cache failures without painting every card", async () => {
@@ -295,10 +312,7 @@ describe("GitHub issue mirror board", () => {
       syncError: "credential_expired",
     });
     const view = renderBoard();
-    expect(await screen.findByText("GitHub 凭据已过期")).toBeInTheDocument();
-    expect(
-      document.querySelector('.issue-sync-status__dot[data-tone="error"]'),
-    ).not.toBeNull();
+    await expectSyncToolbar("GitHub 凭据已过期", "error");
     expect(
       document.querySelector('.issue-card__shell[data-tone="error"]'),
     ).toBeNull();
@@ -312,7 +326,7 @@ describe("GitHub issue mirror board", () => {
         <IssuesActivity projectId={3} />
       </I18nProvider>,
     );
-    expect(await screen.findByText("同步失败，已保留缓存")).toBeInTheDocument();
+    await expectSyncToolbar("同步失败，已保留缓存", "error");
   });
 
   it("marks only the failed card and keeps cards while syncing", async () => {
@@ -472,15 +486,14 @@ describe("GitHub issue mirror board", () => {
         .querySelector(".issue-lane__count"),
     ).toHaveTextContent("1");
 
-    expect(screen.getByRole("option", { name: "GitHub" })).toBeInTheDocument();
+    await openShadcnSelect(user, screen, "来源");
+    expect(
+      await screen.findByRole("option", { name: "GitHub" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: "GitHub 或 GitLab" }),
     ).not.toBeInTheDocument();
-
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "来源" }),
-      "local",
-    );
+    await user.click(screen.getByRole("option", { name: "仅本地" }));
     expect(
       await screen.findByRole("tab", { name: "Issues" }),
     ).toHaveTextContent("1");
@@ -503,10 +516,7 @@ describe("GitHub issue mirror board", () => {
       sourceFilter: "local",
     });
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "来源" }),
-      "remote",
-    );
+    await selectShadcnOption(user, screen, "来源", "GitHub");
     expect(
       await screen.findByRole("tab", { name: "Issues" }),
     ).toHaveTextContent("2");
@@ -530,9 +540,13 @@ describe("GitHub issue mirror board", () => {
         hostUrl: "https://gitlab.com",
       },
     });
+    const user = userEvent.setup();
     renderBoard();
     await screen.findByRole("combobox", { name: "来源" });
-    expect(screen.getByRole("option", { name: "GitLab" })).toBeInTheDocument();
+    await openShadcnSelect(user, screen, "来源");
+    expect(
+      await screen.findByRole("option", { name: "GitLab" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: "GitHub" }),
     ).not.toBeInTheDocument();
@@ -636,7 +650,11 @@ describe("GitHub issue mirror board", () => {
       await screen.findByRole("combobox", { name: "来源" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
-    expect(screen.getByText(/已同步/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/已同步/, {
+        selector: ".issue-sync-status__text",
+      }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "新建 Issue" }));
     expect(
       await screen.findByRole("form", { name: "新建 Issue" }),
@@ -877,10 +895,7 @@ describe("GitHub issue mirror board", () => {
       githubRow?.innerHTML.indexOf("issue-card__forge") ?? -1,
     );
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "来源" }),
-      "remote",
-    );
+    await selectShadcnOption(user, screen, "来源", "GitHub");
     await waitFor(() => {
       expect(screen.queryByText("Local card")).not.toBeInTheDocument();
     });
@@ -902,10 +917,7 @@ describe("GitHub issue mirror board", () => {
       syncError: "credential_expired",
     });
     const view = renderBoard();
-    expect(await screen.findByText("GitLab 凭据已过期")).toBeInTheDocument();
-    expect(
-      document.querySelector('.issue-sync-status__dot[data-tone="error"]'),
-    ).not.toBeNull();
+    await expectSyncToolbar("GitLab 凭据已过期", "error");
     expect(screen.getByText("GH #128")).toBeInTheDocument();
 
     getIssueSyncStatusMock.mockResolvedValue({

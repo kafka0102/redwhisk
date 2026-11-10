@@ -139,6 +139,7 @@ diff 行底色使用 `--color-diff-line-added` / `--color-diff-line-removed`，�
 ### 使用原则
 
 - 默认使用 `src/components/ui/` 下的 shadcn 组件搭建页面。
+- 选项下拉使用 `Select` / `SelectTrigger` / `SelectContent` / `SelectItem`，与项目设置「工作树路径」同一套。不要使用原生 `<select>`，系统原生菜单样式不属于本设计系统。
 - 不为每个页面重新手写按钮、输入框、选择器、菜单、对话框、空态等基础控件样式。
 - 当 shadcn 默认元素与 RedWhisk 设计差异不大时，优先接受默认样式，避免为了微小差异新增局部 CSS。
 - 当差异影响信息密度、焦点状态、圆角、颜色或可访问性时，优先在 `src/shared/styles/tokens.css`、全局样式或 `src/components/ui/` 组件层统一覆盖，不在 feature 内分散覆盖。
@@ -228,6 +229,7 @@ import { Badge } from "@/components/ui";
 - 过度动画
 - 玻璃态效果
 - 营销页面风格的设计
+- 原生 `<select>` 下拉（系统菜单样式）
 
 ✅ **应该使用**：
 

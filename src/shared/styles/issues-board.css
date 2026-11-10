@@ -866,16 +866,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.issue-source-filter {
-  height: 28px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 0 10px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 12px;
-}
-
 .issue-pull-requests-empty {
   display: grid;
   place-items: center;

@@ -263,6 +263,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 - Settings 页面外层布局遵守 [Settings 页面布局规范](./settings-page-layout.md)。
 - 基础视觉使用 `src/shared/styles/tokens.css` 的 token；不要局部重新发明字体、圆角、焦点和色板体系。
 - 前端交互控件默认使用 `src/components/ui/` 下的 shadcn 组件；除非存在明确的语义、可访问性或第三方集成需要，不新增手写基础按钮、输入框、选择器、菜单、对话框等控件。
+- 选项下拉必须使用 `src/components/ui/select.tsx` 的 shadcn `Select`（与项目设置「工作树路径」同一组件）。触发器和弹出层都走该组件，不要用原生 `<select>` / `<option>`，避免系统原生菜单样式。
 - 页面和 feature 代码应组合 shadcn 组件完成界面，不在单个页面里为基础控件重复编写大量局部样式。若 shadcn 默认样式与 RedWhisk 设计差异较小，优先接受默认样式；若差异较大，应在主题 token、全局样式或 `src/components/ui/` 组件层统一覆盖。
 - 图标优先使用已有 `lucide-react`。
 - 核心状态不能只靠颜色表达，必须有文本或可访问 label。
@@ -277,6 +278,7 @@ RedWhisk 是本地桌面开发工具，不是 SaaS 管理后台或营销页面�
 
 - 新增营销式 hero、渐变装饰、大圆角卡片墙、彩色阶段柱或管理后台式重型组件库。
 - 在 feature 页面中绕过 shadcn 组件，直接用原生标签和散落 class 重做通用控件。
+- 用原生 `<select>` 做选项下拉。已知例外只有 Quill 工具栏：`src/components/ui/rich-text-editor.tsx` 的 `select.ql-header`，Quill 只认这个原生 select。新增例外必须在规则和调用处同时说明原因。
 - 在 **json** 快照会话上另起 xterm 或独立输入框绕过 composer；json session 的输入必须经底部 composer 与 `send_agent_message`。也禁止在 **tui** 快照会话上叠 structured 权限卡 / composer 双轨。
 - Header 无关联 Issue 时显示 `No linked issue`。
 - Inspector/Dialog 打开关闭导致 xterm 或结构化消息流重建。

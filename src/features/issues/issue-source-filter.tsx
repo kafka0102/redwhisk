@@ -1,5 +1,12 @@
 import type { JSX } from "react";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
 import type { ForgeProvider } from "../settings/issue-source-commands";
 
@@ -21,18 +28,31 @@ export function IssueSourceFilter({
       : provider === "github"
         ? t("issues.githubBadge")
         : t("issues.sourceFilterRemoteUnknown");
+  const options: Array<{ value: IssueSourceFilter; label: string }> = [
+    { value: "all", label: t("issues.sourceFilterAll") },
+    { value: "local", label: t("issues.sourceFilterLocal") },
+    { value: "remote", label: remoteLabel },
+  ];
   return (
-    <select
-      aria-label={t("issues.sourceFilterLabel")}
-      className="issue-source-filter"
+    <Select
+      items={options}
       value={value}
-      onChange={(event) => {
-        onChange(event.target.value as IssueSourceFilter);
+      onValueChange={(next) => {
+        if (next === "all" || next === "local" || next === "remote") {
+          onChange(next);
+        }
       }}
     >
-      <option value="all">{t("issues.sourceFilterAll")}</option>
-      <option value="local">{t("issues.sourceFilterLocal")}</option>
-      <option value="remote">{remoteLabel}</option>
-    </select>
+      <SelectTrigger aria-label={t("issues.sourceFilterLabel")}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
