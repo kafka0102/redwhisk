@@ -1,5 +1,12 @@
 import { useEffect, useState, type JSX } from "react";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
   getProjectIssueSourceSettings,
@@ -15,6 +22,7 @@ interface IssueCreateSourceProps {
   onOpenSettings: () => void;
   onBlockedChange: (blocked: boolean) => void;
   onChoiceChange: (choice: IssueCreateSource | null) => void;
+  children: (sourceControl: JSX.Element | null) => JSX.Element;
 }
 
 function knownProvider(
@@ -32,12 +40,25 @@ export function IssueCreateSource({
   onOpenSettings,
   onBlockedChange,
   onChoiceChange,
-}: IssueCreateSourceProps): JSX.Element | null {
+  children,
+}: IssueCreateSourceProps): JSX.Element {
   const { t } = useI18n();
   const [settings, setSettings] = useState<ProjectIssueSourceSettings | null>(
     null,
   );
   const [choice, setChoice] = useState<IssueCreateSource>("local");
+
+  function layout(
+    sourceControl: JSX.Element | null,
+    status: JSX.Element | null = null,
+  ): JSX.Element {
+    return (
+      <>
+        {status}
+        {children(sourceControl)}
+      </>
+    );
+  }
 
   // active 关闭时在渲染期清空。未返回或已关闭都不渲染来源，且不在 effect 里 setState。
   if (!active && settings !== null) {
@@ -97,13 +118,14 @@ export function IssueCreateSource({
   }, [active, choice, onBlockedChange, onChoiceChange, settings]);
 
   if (!active || settings === null) {
-    return null;
+    return layout(null);
   }
   if (
     settings.issueSourceMode === "remote" &&
     !isIssueConnectionReady(settings)
   ) {
-    return (
+    return layout(
+      null,
       <div
         className="issue-page__status"
         role="status"
@@ -116,11 +138,11 @@ export function IssueCreateSource({
         >
           {t("issues.createSourceOpenSettings")}
         </button>
-      </div>
+      </div>,
     );
   }
   if (settings.issueSourceMode !== "mixed") {
-    return null;
+    return layout(null);
   }
 
   const provider = knownProvider(settings.connection.provider);
@@ -129,6 +151,12 @@ export function IssueCreateSource({
     provider === "gitlab"
       ? t("issues.createSourceGitlab")
       : t("issues.createSourceGithub");
+  const items: Array<{ value: IssueCreateSource; label: string }> = [
+    { value: "local", label: t("issues.createSourceLocal") },
+  ];
+  if (provider !== null) {
+    items.push({ value: "remote", label: remoteLabel });
+  }
 
   async function select(next: IssueCreateSource): Promise<void> {
     if (next === "remote" && (provider === null || remoteDisabled)) {
@@ -146,49 +174,35 @@ export function IssueCreateSource({
     }
   }
 
-  return (
+  return layout(
     <div className="issue-create-source">
-      <span className="issue-create-source__label">
-        {t("issues.createSourceLabel")}
-      </span>
-      <div
-        className="issue-create-source__cards"
-        role="group"
-        aria-label={t("issues.createSourceLabel")}
+      <Select
+        items={items}
+        value={choice}
+        onValueChange={(next) => {
+          if (next === "local" || next === "remote") {
+            void select(next);
+          }
+        }}
       >
-        <button
-          type="button"
-          className="issue-create-source__card"
-          aria-pressed={choice === "local"}
-          onClick={() => {
-            void select("local");
-          }}
+        <SelectTrigger
+          aria-label={t("issues.createSourceLabel")}
+          className="issue-create-source__trigger"
         >
-          {t("issues.createSourceLocal")}
-        </button>
-        {provider !== null ? (
-          <button
-            type="button"
-            className="issue-create-source__card"
-            aria-pressed={choice === "remote"}
-            disabled={remoteDisabled}
-            onClick={() => {
-              void select("remote");
-            }}
-          >
-            {remoteLabel}
-          </button>
-        ) : null}
-      </div>
-      {provider !== null && remoteDisabled ? (
-        <button
-          type="button"
-          className="issue-create-source__settings"
-          onClick={onOpenSettings}
-        >
-          {t("issues.createSourceOpenSettings")}
-        </button>
-      ) : null}
-    </div>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem
+              key={item.value}
+              disabled={item.value === "remote" && remoteDisabled}
+              value={item.value}
+            >
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>,
   );
 }

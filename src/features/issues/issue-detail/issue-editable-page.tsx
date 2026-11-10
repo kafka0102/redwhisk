@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
   type RefObject,
   type SetStateAction,
 } from "react";
@@ -178,21 +179,25 @@ export function IssueEditablePage({
               onChoiceChange={setCreateChoice}
               onOpenSettings={onOpenProjectSettings}
               projectId={projectId}
-            />
-            <IssueEditableFields
-              availableLabels={availableLabels}
-              form={form}
-              titleError={titleError}
-              isLoadingLabels={isLoadingLabels}
-              labelsErrorMessage={labelsErrorMessage}
-              titleInputRef={titleInputRef}
-              onFormChange={onFormChange}
-              onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
-              onSelectAttachment={onSelectAttachment}
-              onDownloadAttachment={onDownloadAttachment}
-              onPreviewAttachment={onPreviewAttachment}
-              onRemoveAttachment={onRemoveAttachment}
-            />
+            >
+              {(sourceControl) => (
+                <IssueEditableFields
+                  sourceControl={sourceControl}
+                  availableLabels={availableLabels}
+                  form={form}
+                  titleError={titleError}
+                  isLoadingLabels={isLoadingLabels}
+                  labelsErrorMessage={labelsErrorMessage}
+                  titleInputRef={titleInputRef}
+                  onFormChange={onFormChange}
+                  onOpenProjectLabelsSettings={onOpenProjectLabelsSettings}
+                  onSelectAttachment={onSelectAttachment}
+                  onDownloadAttachment={onDownloadAttachment}
+                  onPreviewAttachment={onPreviewAttachment}
+                  onRemoveAttachment={onRemoveAttachment}
+                />
+              )}
+            </IssueCreateSource>
             <p
               className="issue-dialog__status issue-page__status issue-page__status--fullscreen"
               role="status"
@@ -230,6 +235,7 @@ function IssueEditableFields({
   isLoadingLabels,
   labelsErrorMessage,
   titleInputRef,
+  sourceControl,
   onFormChange,
   onOpenProjectLabelsSettings,
   onSelectAttachment,
@@ -243,6 +249,7 @@ function IssueEditableFields({
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   titleInputRef: RefObject<HTMLInputElement | null>;
+  sourceControl: ReactNode;
   onFormChange: (form: SetStateAction<IssueFormState>) => void;
   onOpenProjectLabelsSettings: () => void;
   onSelectAttachment: () => Promise<IssueAttachmentDraft | null>;
@@ -260,23 +267,26 @@ function IssueEditableFields({
   return (
     <div className="issue-page__main issue-page__main--fullscreen">
       <div className="issue-field issue-field--title">
-        <Input
-          ref={titleInputRef}
-          id="issue-title"
-          aria-label={messages.issues.titleField}
-          autoCapitalize="none"
-          autoCorrect="off"
-          name="title"
-          placeholder={messages.issues.titlePlaceholder}
-          spellCheck={false}
-          value={form.title}
-          onChange={(event) =>
-            onFormChange((current) => ({
-              ...current,
-              title: event.target.value,
-            }))
-          }
-        />
+        <div className="issue-create-title-row">
+          {sourceControl}
+          <Input
+            ref={titleInputRef}
+            id="issue-title"
+            aria-label={messages.issues.titleField}
+            autoCapitalize="none"
+            autoCorrect="off"
+            name="title"
+            placeholder={messages.issues.titlePlaceholder}
+            spellCheck={false}
+            value={form.title}
+            onChange={(event) =>
+              onFormChange((current) => ({
+                ...current,
+                title: event.target.value,
+              }))
+            }
+          />
+        </div>
         {titleError ? (
           <p className="issue-field__error" role="alert">
             {titleError}

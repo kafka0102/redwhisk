@@ -913,6 +913,9 @@
 
 .issue-field--title input {
   height: 44px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   padding: 0 14px;
   font-size: 18px;
   font-weight: 600;
@@ -968,39 +971,22 @@
   color: var(--color-text);
 }
 
+.issue-create-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
 .issue-create-source {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
+  flex: 0 0 auto;
 }
 
-.issue-create-source__label {
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.issue-create-source__cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.issue-create-source__card {
+.issue-create-title-row
+  .issue-create-source__trigger[data-slot="select-trigger"] {
+  height: 44px;
   min-height: 44px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-}
-
-.issue-create-source__card[aria-pressed="true"] {
-  border-color: var(--color-text);
-}
-
-.issue-create-source__card:disabled {
-  color: var(--color-text-muted);
-  cursor: not-allowed;
 }
 
 .issue-create-source__settings {
