@@ -84,7 +84,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
 
-- `bash scripts/check-rust-file-size.sh`
+- `bash scripts/check-rust-file-size.sh`（按 `rustfmt --edition 2021` 之后的行数，不按挤行前的原文）
 - `bash scripts/check-rust-compile.sh`
 - `bash scripts/check-rust-user-strings.sh`
 - `bash scripts/check-rust-command-failure-tests.sh`

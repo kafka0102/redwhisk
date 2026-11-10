@@ -58,4 +58,24 @@ if output="$(run_gate "${allowlisted_file}")"; then
 fi
 [[ "${output}" == *"缺少可解析的登记行数"* ]] || fail "缺少格式违规提示：${output}"
 
+echo "==> 挤在一行、格式化后超过 500 行时失败"
+squeezed="${tmp_dir}/squeezed.rs"
+{
+  printf 'struct Squeezed {'
+  i=1
+  while [[ "$i" -le 520 ]]; do
+    printf ' f%s: i32,' "$i"
+    i=$((i + 1))
+  done
+  printf '}\n'
+} >"${squeezed}"
+raw_lines="$(wc -l <"${squeezed}" | tr -d '[:space:]')"
+[[ "${raw_lines}" -lt 500 ]] || fail "夹具原文应低于 500 行，实际 ${raw_lines}"
+write_allowlist ""
+if output="$(run_gate "${squeezed}")"; then
+  fail "格式化后超阈值时应失败：${output}"
+fi
+[[ "${output}" == *"rustfmt 后"* ]] || fail "应报告 rustfmt 后的行数：${output}"
+[[ "${output}" == *"阈值"* ]] || fail "应指出超过阈值：${output}"
+
 echo "PASS: Rust 文件大小白名单棘轮行为符合预期"

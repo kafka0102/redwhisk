@@ -3,6 +3,8 @@
 # 规范: docs/architecture-design/backend-large-file-splitting-rules.md
 # 阈值（沿用 ADR 0013）: 常规 500 / 编排主文件 800 / 硬上限 1000
 # 白名单是棘轮：条目登记行数是上限，长过登记值即违规。
+# 默认、--from、--files 按 rustfmt --edition 2021 之后的行数计。挤在同一行不能压低行数。
+# --all 只数原文，供维护白名单，不作为提交门禁。
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,14 +82,43 @@ is_allowlisted() {
   return 1
 }
 
-# 判定单个文件是否超阈值；超阈值则 stdout 打印 "<kind>|<threshold>"
-# kind=hard 表示超硬上限，kind=over 表示超类型阈值
-classify() {
-  local f="$1" rel lines thr
-  rel="$(relpath "$f")"
-  [[ "$rel" == *.rs ]] || return 0
-  [[ -f "$f" ]] || return 0
-  lines="$(wc -l < "$f" | tr -d '[:space:]')"
+# git / --files 门禁按 rustfmt 后的行数计。--all 只扫原文，避免全仓格式化。
+FORMAT_COUNTS=0
+
+# 把副本格式化后再数行。失败时返回非零，调用方不得退回原文行数。
+measured_lines() {
+  local src="$1" tmp base formatted
+  if ! command -v rustfmt >/dev/null 2>&1; then
+    echo "未找到 rustfmt，无法按格式化后的行数计算。" >&2
+    return 1
+  fi
+  tmp="$(mktemp -d)"
+  base="$(basename "$src")"
+  cp "$src" "$tmp/$base"
+  if ! rustfmt --edition 2021 --config skip_children=true "$tmp/$base" >/dev/null 2>"$tmp/rustfmt.err"; then
+    cat "$tmp/rustfmt.err" >&2
+    rm -f "$tmp/$base" "$tmp/rustfmt.err"
+    rmdir "$tmp"
+    return 1
+  fi
+  formatted="$(wc -l < "$tmp/$base" | tr -d '[:space:]')"
+  rm -f "$tmp/$base" "$tmp/rustfmt.err"
+  rmdir "$tmp"
+  printf '%s\n' "$formatted"
+}
+
+file_lines() {
+  local f="$1"
+  if [[ "$FORMAT_COUNTS" == 1 ]]; then
+    measured_lines "$f"
+  else
+    wc -l < "$f" | tr -d '[:space:]'
+  fi
+}
+
+# 判定已数好的行数是否超阈值；超阈值则 stdout 打印 "<kind>|<threshold>"
+classify_lines() {
+  local rel="$1" lines="$2" thr
   thr="$(threshold_for "$rel")"
   if (( lines > LIMIT_HARD )); then
     printf 'hard|%s\n' "$LIMIT_HARD"
@@ -97,15 +128,39 @@ classify() {
   return 0
 }
 
-VIOL=0
-
-# 检查单个文件并打印报告；违规则 VIOL++
-report_file() {
-  local f="$1" rel lines cls registered thr
+# --all 仍按原文。门禁路径不要用这个函数。
+classify() {
+  local f="$1" rel lines
   rel="$(relpath "$f")"
   [[ "$rel" == *.rs ]] || return 0
   [[ -f "$f" ]] || return 0
   lines="$(wc -l < "$f" | tr -d '[:space:]')"
+  classify_lines "$rel" "$lines"
+}
+
+VIOL=0
+
+# 检查单个文件并打印报告；违规则 VIOL++
+report_file() {
+  local f="$1" rel lines raw cls registered thr note
+  rel="$(relpath "$f")"
+  [[ "$rel" == *.rs ]] || return 0
+  [[ -f "$f" ]] || return 0
+  raw="$(wc -l < "$f" | tr -d '[:space:]')"
+  if [[ "$FORMAT_COUNTS" == 1 ]]; then
+    if ! lines="$(file_lines "$f")"; then
+      printf '  [VIOLATION] %s: rustfmt --edition 2021 失败，不能用原文行数通过\n' "$rel"
+      VIOL=$((VIOL+1))
+      return 0
+    fi
+  else
+    lines="$raw"
+  fi
+  if [[ "$lines" == "$raw" ]]; then
+    note="$lines"
+  else
+    note="rustfmt 后 ${lines} (原文 ${raw})"
+  fi
   if is_allowlisted "$rel"; then
     # 白名单是棘轮：登记行数只允许下调。已登记文件长过登记值 → 违规，
     # 迫使「本次增长」显式出现在 diff 里（调登记值或先拆分），而不是静默漂移。
@@ -116,7 +171,7 @@ report_file() {
     fi
     if (( lines > registered )); then
       printf '  [VIOLATION] %s: %s lines > 登记行数 %s（白名单只允许缩小；先拆分或先下调登记值）\n' \
-        "$rel" "$lines" "$registered"
+        "$rel" "$note" "$registered"
       VIOL=$((VIOL+1))
       return 0
     fi
@@ -129,13 +184,13 @@ report_file() {
     printf '  [allowlisted] %s (%s lines ≤ 登记 %s，存量待拆分)\n' "$rel" "$lines" "$registered"
     return 0
   fi
-  cls="$(classify "$f")"
+  cls="$(classify_lines "$rel" "$lines")"
   if [[ -n "$cls" ]]; then
     local kind="${cls%%|*}" thr="${cls##*|}"
     if [[ "$kind" == hard ]]; then
-      printf '  [VIOLATION] %s: %s lines > 硬上限 %s\n' "$rel" "$lines" "$thr"
+      printf '  [VIOLATION] %s: %s lines > 硬上限 %s\n' "$rel" "$note" "$thr"
     else
-      printf '  [VIOLATION] %s: %s lines > 阈值 %s\n' "$rel" "$lines" "$thr"
+      printf '  [VIOLATION] %s: %s lines > 阈值 %s\n' "$rel" "$note" "$thr"
     fi
     VIOL=$((VIOL+1))
   fi
@@ -206,8 +261,9 @@ usage() {
   check-rust-file-size.sh                     检查本次 git 改动触及的 .rs 文件（门禁默认）
   check-rust-file-size.sh --from <ref>        检查 <ref>..HEAD 之间改动触及的 .rs 文件
   check-rust-file-size.sh --files f1 f2 ..    检查指定文件（测试用）
-  check-rust-file-size.sh --all               扫描全仓，打印报告（不阻断）
+  check-rust-file-size.sh --all               扫描全仓原文行数，打印报告（不阻断，不跑 rustfmt）
   check-rust-file-size.sh --all --names-only  仅打印超阈值路径（维护白名单用）
+  默认、--from、--files 按 rustfmt --edition 2021 之后的行数计。挤在同一行不能压低行数。
 环境变量:
   RFS_ROOT       仓库根路径（默认脚本上级目录）
   RFS_ALLOWLIST  白名单路径（默认 scripts/rust-file-size-allowlist.txt）
@@ -254,6 +310,7 @@ case "$mode" in
     ;;
   files)
     echo "检查指定文件 (--files):"
+    FORMAT_COUNTS=1
     for f in "${files[@]+"${files[@]}"}"; do report_file "$f"; done
     check_allowlist_no_new_files
     ;;
@@ -264,6 +321,7 @@ case "$mode" in
       echo "检查本次 git 改动触及的 Rust 文件:"
     fi
     changed="$(collect_changed_rust_files | sort -u)"
+    FORMAT_COUNTS=1
     if [[ -z "$changed" ]]; then
       warn_gate_noop
     else

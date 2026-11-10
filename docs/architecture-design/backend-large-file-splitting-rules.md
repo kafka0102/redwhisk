@@ -12,7 +12,7 @@
 - 编排主文件 ≤ **800 行**：相对仓库根路径匹配 `src-tauri/src/features/*/service.rs` 或 `src-tauri/src/features/*/commands.rs`。
 - 硬上限 ≤ **1000 行**：任何文件不得超过，含编排主文件。
 
-阈值由 `scripts/check-rust-file-size.sh` 强制执行，`AGENTS.md` §5 质量门禁在每次改动 Rust 后调用。
+阈值由 `scripts/check-rust-file-size.sh` 强制执行，`AGENTS.md` §5 质量门禁在每次改动 Rust 后调用。默认、`--from` 和 `--files` 先对受检文件跑 `rustfmt --edition 2021`，再数格式化结果的行。挤在同一行不能压低行数。`--all` 只数原文，用来维护白名单，不是提交门禁。
 
 ## 门禁触发模型
 
