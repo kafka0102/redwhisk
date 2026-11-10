@@ -7,6 +7,7 @@ import {
   type IssueCreateSource,
   type ProjectIssueSourceSettings,
 } from "../../settings/issue-source-commands";
+import { isIssueConnectionReady } from "../issue-connection";
 
 interface IssueCreateSourceProps {
   projectId: number;
@@ -23,17 +24,6 @@ function knownProvider(
     return provider;
   }
   return null;
-}
-
-function connectionReady(settings: ProjectIssueSourceSettings): boolean {
-  const host = settings.connection.hostUrl?.trim() ?? "";
-  const repo = settings.connection.repoPath?.trim() ?? "";
-  return (
-    settings.connection.authStatus === "ready" &&
-    knownProvider(settings.connection.provider) !== null &&
-    host.length > 0 &&
-    repo.length > 0
-  );
 }
 
 export function IssueCreateSource({
@@ -68,7 +58,7 @@ export function IssueCreateSource({
         const remoteSelectable =
           loaded.issueSourceMode === "mixed" &&
           knownProvider(loaded.connection.provider) !== null &&
-          connectionReady(loaded);
+          isIssueConnectionReady(loaded);
         setChoice(
           loaded.issueCreateSource === "remote" && remoteSelectable
             ? "remote"
@@ -91,7 +81,7 @@ export function IssueCreateSource({
       onChoiceChange(null);
       return;
     }
-    const ready = connectionReady(settings);
+    const ready = isIssueConnectionReady(settings);
     if (settings.issueSourceMode === "remote") {
       onBlockedChange(!ready);
       onChoiceChange(ready ? "remote" : null);
@@ -109,7 +99,10 @@ export function IssueCreateSource({
   if (!active || settings === null) {
     return null;
   }
-  if (settings.issueSourceMode === "remote" && !connectionReady(settings)) {
+  if (
+    settings.issueSourceMode === "remote" &&
+    !isIssueConnectionReady(settings)
+  ) {
     return (
       <div
         className="issue-page__status"
@@ -131,7 +124,7 @@ export function IssueCreateSource({
   }
 
   const provider = knownProvider(settings.connection.provider);
-  const remoteDisabled = !connectionReady(settings);
+  const remoteDisabled = !isIssueConnectionReady(settings);
   const remoteLabel =
     provider === "gitlab"
       ? t("issues.createSourceGitlab")

@@ -21,6 +21,7 @@ import {
   type IssueSyncChangedEvent,
   type IssueSyncStatus,
 } from "./issue-mirror-commands";
+import { canCreateIssueFromBoard } from "./issue-connection";
 import {
   IssueSourceFilter,
   type IssueSourceFilter as SourceFilter,
@@ -39,6 +40,7 @@ export function useIssueSyncChrome(
   sourceMode: IssueSourceMode | null;
   sourceFilter: SourceFilter;
   provider: ForgeProvider | null;
+  showCreate: boolean;
   toolbar: ReactNode;
 } {
   const [sourceMode, setSourceMode] = useState<IssueSourceMode | null>(null);
@@ -192,6 +194,7 @@ export function useIssueSyncChrome(
     sourceMode,
     sourceFilter,
     provider: settings?.connection.provider ?? null,
+    showCreate: canCreateIssueFromBoard(settings),
     toolbar,
   };
 }

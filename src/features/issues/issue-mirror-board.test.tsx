@@ -621,8 +621,8 @@ describe("GitHub issue mirror board", () => {
       screen.queryByRole("combobox", { name: "来源" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "新建 Issue" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
 
     getProjectIssueSourceSettingsMock.mockResolvedValue(
       sourceSettings("mixed"),
@@ -675,8 +675,8 @@ describe("GitHub issue mirror board", () => {
       screen.queryByRole("combobox", { name: "来源" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "新建 Issue" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
 
     getProjectIssueSourceSettingsMock.mockResolvedValue(
       await sourceSettings("mixed"),
@@ -694,6 +694,44 @@ describe("GitHub issue mirror board", () => {
     expect(
       await screen.findByPlaceholderText("Issue 标题"),
     ).toBeInTheDocument();
+  });
+
+  it("opens a remote create form without a source picker when the connection is ready", async () => {
+    const user = userEvent.setup();
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...sourceSettings("remote"),
+      connection: {
+        ...sourceSettings("remote").connection,
+        authStatus: "expired",
+        cliAuthenticated: false,
+      },
+    });
+    const view = renderBoard();
+    expect(
+      await screen.findByRole("button", { name: "刷新" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      sourceSettings("remote"),
+    );
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "新建 Issue" }));
+    expect(
+      await screen.findByRole("form", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "来源" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "创建 Issue" }),
+    ).toBeEnabled();
   });
 
   it("keeps the pull request tab empty", async () => {

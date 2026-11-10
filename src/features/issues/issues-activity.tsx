@@ -170,6 +170,7 @@ export function IssuesActivity({
     sourceMode,
     sourceFilter,
     provider,
+    showCreate,
     toolbar: issueSyncToolbar,
   } = useIssueSyncChrome(projectId, reloadMirroredIssues);
   const changeRequestNav = useChangeRequestNavigation();
@@ -640,7 +641,7 @@ export function IssuesActivity({
             laneLoadState={laneLoadState}
             canRunIssue={canRunIssueFor}
             toDescriptionExcerpt={markdownToExcerpt}
-            showCreate={sourceMode === "local" || sourceMode === "mixed"}
+            showCreate={showCreate}
             onCreateIssue={openCreateDialog}
             onOpenIssue={openIssueDialog}
             onRunIssue={openRunDialog}
