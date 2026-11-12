@@ -133,10 +133,14 @@ function IssueHostCard({
       ? t("issues.openGitlab")
       : t("issues.openGithub");
   return (
-    <section aria-label={hostName} className="issue-detail-side-card">
-      <div className="issue-detail-side-card__header">
-        <h3>{hostName}</h3>
+    <section
+      aria-label={hostName}
+      className="issue-detail-side-card session-issue-panel__card"
+    >
+      <div className="session-issue-panel__header">
+        <h3 className="issue-detail__title">{hostName}</h3>
         <Button
+          className="session-issue-panel__action"
           size="sm"
           type="button"
           variant="secondary"
@@ -147,12 +151,13 @@ function IssueHostCard({
           {openLabel}
         </Button>
       </div>
-      <dl>
-        <div>
+      <div aria-hidden="true" className="issue-detail__divider" />
+      <dl className="session-issue-panel__meta-list">
+        <div className="session-issue-panel__meta-row">
           <dt>{t("issues.detailRepo")}</dt>
           <dd>{projection.repo}</dd>
         </div>
-        <div>
+        <div className="session-issue-panel__meta-row">
           <dt>{t("issues.detailRemoteState")}</dt>
           <dd>
             {pendingMerge
@@ -164,28 +169,32 @@ function IssueHostCard({
           </dd>
         </div>
         {writebackPending ? (
-          <div>
+          <div className="session-issue-panel__meta-row">
             <dt>{t("issues.writebackPending")}</dt>
             <dd>
-              {writebackError == null
-                ? t("issues.writebackPending")
-                : t(`errors.FORGE_UNAVAILABLE.${writebackError}`)}
+              <span>
+                {writebackError == null
+                  ? t("issues.writebackPending")
+                  : t(`errors.FORGE_UNAVAILABLE.${writebackError}`)}
+              </span>
+              <div>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                  onClick={onRetryWriteback}
+                >
+                  {t("issues.retryWriteback")}
+                </Button>
+              </div>
             </dd>
-            <Button
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={onRetryWriteback}
-            >
-              {t("issues.retryWriteback")}
-            </Button>
           </div>
         ) : null}
-        <div>
+        <div className="session-issue-panel__meta-row">
           <dt>{t("issues.detailAuthor")}</dt>
           <dd>{projection.authorLogin ?? t("issues.assigneeEmpty")}</dd>
         </div>
-        <div>
+        <div className="session-issue-panel__meta-row">
           <dt>{t("issues.detailAssignees")}</dt>
           <dd>
             {projection.assignees.length === 0
