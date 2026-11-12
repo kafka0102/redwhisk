@@ -337,7 +337,11 @@ export function CreateProjectDialog({
       <div
         aria-label={messages.createProject.dialogTitle}
         aria-modal="true"
-        className="issue-dialog issue-dialog--compact"
+        className={
+          step === 2
+            ? "issue-dialog issue-dialog--compact issue-dialog--create-issues"
+            : "issue-dialog issue-dialog--compact"
+        }
         role="dialog"
         onKeyDown={handleKeyDown}
       >

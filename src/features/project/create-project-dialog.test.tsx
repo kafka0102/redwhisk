@@ -183,6 +183,27 @@ describe("CreateProjectDialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("混合模式第二步把来源内容放进滚动区，底部按钮留在滚动区外", async () => {
+    const user = userEvent.setup();
+    renderDialog(draft({ name: "app", repoPath: "/tmp/app", host: "github" }));
+    await goNext(user);
+    await user.click(screen.getByRole("radio", { name: "混合" }));
+
+    const dialog = screen.getByRole("dialog", { name: "新建项目" });
+    const scroller = dialog.querySelector(
+      ".create-project-issues-step__content",
+    );
+    expect(scroller).not.toBeNull();
+    expect(scroller).toContainElement(screen.getByText("来源模式"));
+    expect(scroller).toContainElement(screen.getByText("远程连接"));
+    expect(scroller).toContainElement(screen.getByText("完成后"));
+    for (const name of ["上一步", "取消", "创建项目"]) {
+      const button = screen.getByRole("button", { name });
+      expect(dialog).toContainElement(button);
+      expect(scroller).not.toContainElement(button);
+    }
+  });
+
   it("连接探测未返回时远程连接显示尚未检查且重新登录可用", async () => {
     const user = userEvent.setup();
     validateProjectRepoPathMock.mockImplementation(

@@ -314,6 +314,33 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.issue-dialog--create-issues .issue-dialog__body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.create-project-issues-step {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.create-project-issues-step__content {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.create-project-issues-step__actions {
+  flex: 0 0 auto;
+}
+
 .issue-dialog--progress {
   width: min(420px, calc(100vw - 56px));
   min-height: auto;

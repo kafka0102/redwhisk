@@ -68,66 +68,68 @@ export function CreateProjectIssuesStep({
   const shownConnection = connection ?? unknownConnection(provider);
 
   return (
-    <form className="grid gap-3" onSubmit={onSubmit}>
-      {showCards ? (
-        <IssueSourceModeCard
-          disabled={locked}
-          mode={form.mode}
-          onModeChange={(mode) => onFormChange({ mode })}
-        />
-      ) : null}
-      {showRemote ? (
-        <IssueSourceConnectionCard
-          closeOnComplete={form.closeOnComplete}
-          closeOnMerge={form.closeOnMerge}
-          connection={shownConnection}
-          disabled={locked}
-          intervalSeconds={form.intervalSeconds}
-          isInspecting={isInspecting}
-          isLoading={false}
-          label={form.label}
-          scope={form.scope}
-          syncEnabled={form.syncEnabled}
-          writebackComment={form.writebackComment}
-          onCloseOnCompleteChange={(closeOnComplete) =>
-            onFormChange({ closeOnComplete })
-          }
-          onCloseOnMergeChange={(closeOnMerge) =>
-            onFormChange({ closeOnMerge })
-          }
-          onIntervalChange={(intervalSeconds) =>
-            onFormChange({ intervalSeconds })
-          }
-          onLabelChange={(label) => onFormChange({ label })}
-          onRelogin={onRelogin}
-          onScopeChange={(scope) => onFormChange({ scope })}
-          onSyncEnabledChange={(syncEnabled) => onFormChange({ syncEnabled })}
-          onWritebackCommentChange={(writebackComment) =>
-            onFormChange({ writebackComment })
-          }
-        />
-      ) : null}
-      {showCompletion ? (
-        <IssueSourceCompletionCard
-          action={completionAction}
-          confirmCompletionAction={confirmCompletionAction}
-          disabled={locked}
-          draft={form.prDraft}
-          host={host}
-          repoDefaultBranch={repoDefaultBranch}
-          target={form.prTarget}
-          onActionChange={onCompletionActionChange}
-          onConfirmCompletionActionChange={onConfirmCompletionActionChange}
-          onDraftChange={(prDraft) => onFormChange({ prDraft })}
-          onTargetChange={(prTarget) => onFormChange({ prTarget })}
-        />
-      ) : null}
-      {errorMessage ? (
-        <p aria-label={statusLabel} className="settings-status" role="status">
-          {errorMessage}
-        </p>
-      ) : null}
-      <div className="settings-form__actions-row settings-form__actions-row--footer">
+    <form className="create-project-issues-step" onSubmit={onSubmit}>
+      <div className="create-project-issues-step__content">
+        {showCards ? (
+          <IssueSourceModeCard
+            disabled={locked}
+            mode={form.mode}
+            onModeChange={(mode) => onFormChange({ mode })}
+          />
+        ) : null}
+        {showRemote ? (
+          <IssueSourceConnectionCard
+            closeOnComplete={form.closeOnComplete}
+            closeOnMerge={form.closeOnMerge}
+            connection={shownConnection}
+            disabled={locked}
+            intervalSeconds={form.intervalSeconds}
+            isInspecting={isInspecting}
+            isLoading={false}
+            label={form.label}
+            scope={form.scope}
+            syncEnabled={form.syncEnabled}
+            writebackComment={form.writebackComment}
+            onCloseOnCompleteChange={(closeOnComplete) =>
+              onFormChange({ closeOnComplete })
+            }
+            onCloseOnMergeChange={(closeOnMerge) =>
+              onFormChange({ closeOnMerge })
+            }
+            onIntervalChange={(intervalSeconds) =>
+              onFormChange({ intervalSeconds })
+            }
+            onLabelChange={(label) => onFormChange({ label })}
+            onRelogin={onRelogin}
+            onScopeChange={(scope) => onFormChange({ scope })}
+            onSyncEnabledChange={(syncEnabled) => onFormChange({ syncEnabled })}
+            onWritebackCommentChange={(writebackComment) =>
+              onFormChange({ writebackComment })
+            }
+          />
+        ) : null}
+        {showCompletion ? (
+          <IssueSourceCompletionCard
+            action={completionAction}
+            confirmCompletionAction={confirmCompletionAction}
+            disabled={locked}
+            draft={form.prDraft}
+            host={host}
+            repoDefaultBranch={repoDefaultBranch}
+            target={form.prTarget}
+            onActionChange={onCompletionActionChange}
+            onConfirmCompletionActionChange={onConfirmCompletionActionChange}
+            onDraftChange={(prDraft) => onFormChange({ prDraft })}
+            onTargetChange={(prTarget) => onFormChange({ prTarget })}
+          />
+        ) : null}
+        {errorMessage ? (
+          <p aria-label={statusLabel} className="settings-status" role="status">
+            {errorMessage}
+          </p>
+        ) : null}
+      </div>
+      <div className="settings-form__actions-row settings-form__actions-row--footer create-project-issues-step__actions">
         <Button type="button" variant="outline" onClick={onBack}>
           {t("createProject.back")}
         </Button>
