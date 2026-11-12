@@ -24,6 +24,7 @@ import type { AgentTimelineItem } from "../agent-stream-types";
 import type { AgentType } from "../agent-session-commands";
 import { isCleanStopReason } from "./message-stream-reducer";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { useWindowFocus } from "../../../shared/window/use-window-focus";
 import { useAgentMessageStream } from "./use-agent-message-stream";
 import { useExpandTimelineEntry } from "./use-expand-timeline-entry";
 import { AgentMessageCards } from "./agent-message-cards";
@@ -176,26 +177,106 @@ export const AgentMessageStreamView = memo(function AgentMessageStreamView({
     turnInterrupted,
     subagentInterrupted,
   ]);
-  // 切换到本 session（isActive 由 false 变 true）时，若 Turn 正在运行且消息流可见，
-  // 定位到底部，便于查看正在执行的输出或待确认项。
-  // - 非运行态（autoScrollOnActivate=false）保持原样，不强行改写滚动位置；
-  // - 消息流被其他子 tab 遮蔽（clientHeight 为 0，等价 display:none）时跳过，
-  //   避免在隐藏状态下因 scrollHeight 为 0 把 scrollTop 置 0 反而破坏位置。
-  // 用 useLayoutEffect 在 paint 前定位，避免切回时先闪现旧位置再跳底。
+  // 切换到本 session（isActive 由 false 变 true）时，消息流可见才改滚动位置。
+  // - Turn 正在运行：定位到底部，便于查看正在执行的输出。
+  // - Turn 不在运行：宿主 hidden 会把 scrollTop 清成 0，恢复离开前记录的位置。
+  // - 被其他子 tab 遮蔽（clientHeight 为 0，等价 display:none）时跳过，
+  //   避免在隐藏状态下把 scrollTop 写成 0。
+  // 用 useLayoutEffect 在 paint 前定位，避免切回时先闪一下再跳。
   const prevIsActiveRef = useRef(isActive);
+  const windowFocused = useWindowFocus();
+  const wasWindowFocusedRef = useRef(windowFocused);
   useLayoutEffect(() => {
     const wasActive = prevIsActiveRef.current;
     prevIsActiveRef.current = isActive;
-    if (!isActive || wasActive || !autoScrollOnActivate) {
+    if (!isActive || wasActive) {
       return;
     }
     const node = scrollRef.current;
     if (!node || node.clientHeight === 0) {
       return;
     }
-    node.scrollTop = node.scrollHeight;
-    isPinnedRef.current = true;
-  }, [isActive, autoScrollOnActivate]);
+    if (autoScrollOnActivate) {
+      node.scrollTop = node.scrollHeight;
+      isPinnedRef.current = true;
+      return;
+    }
+    if (sessionId === undefined) {
+      return;
+    }
+    const savedOffset = readMessageStreamScrollOffset(sessionId);
+    if (savedOffset === null) {
+      return;
+    }
+    node.scrollTop = savedOffset;
+    isPinnedRef.current =
+      node.scrollHeight - node.scrollTop - node.clientHeight <=
+      PIN_TO_BOTTOM_THRESHOLD_PX;
+  }, [autoScrollOnActivate, isActive, sessionId]);
+  // 窗口失焦再聚焦时视图不卸载。失焦期间 scrollTop 可能被清成 0。
+  // Turn 正在运行就到最底；不在运行则回到离开前的位置。高度为 0 时不写。
+  useLayoutEffect(() => {
+    const wasFocused = wasWindowFocusedRef.current;
+    wasWindowFocusedRef.current = windowFocused;
+    if (!windowFocused || wasFocused) {
+      return;
+    }
+    const node = scrollRef.current;
+    if (!node || node.clientHeight === 0) {
+      return;
+    }
+    if (autoScrollOnActivate) {
+      node.scrollTop = node.scrollHeight;
+      isPinnedRef.current = true;
+      return;
+    }
+    if (sessionId === undefined) {
+      return;
+    }
+    const savedOffset = readMessageStreamScrollOffset(sessionId);
+    if (savedOffset === null) {
+      return;
+    }
+    node.scrollTop = savedOffset;
+    isPinnedRef.current =
+      node.scrollHeight - node.scrollTop - node.clientHeight <=
+      PIN_TO_BOTTOM_THRESHOLD_PX;
+  }, [autoScrollOnActivate, sessionId, windowFocused]);
+  // 同一 Session 切到其它标签时日志容器高度变为 0，再回来时高度恢复。
+  // Turn 正在运行就到最底；不在运行则回到离开前的位置。高度仍为 0 时不改写。
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    let previousHeight = node.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const nextHeight = node.clientHeight;
+      const becameVisible = previousHeight === 0 && nextHeight > 0;
+      previousHeight = nextHeight;
+      if (!becameVisible) {
+        return;
+      }
+      if (autoScrollOnActivate) {
+        node.scrollTop = node.scrollHeight;
+        isPinnedRef.current = true;
+        return;
+      }
+      if (sessionId === undefined) {
+        return;
+      }
+      const savedOffset = readMessageStreamScrollOffset(sessionId);
+      if (savedOffset === null) {
+        return;
+      }
+      node.scrollTop = savedOffset;
+      isPinnedRef.current =
+        node.scrollHeight - node.scrollTop - node.clientHeight <=
+        PIN_TO_BOTTOM_THRESHOLD_PX;
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [autoScrollOnActivate, sessionId]);
   // 非运行态 session 重挂载后恢复记录的滚动位置。
   // 内容（缓存预览 / 历史 timeline）异步分帧填充，因此每次内容提交后的 layout 阶段
   // 尝试定位：layout 阶段在 paint 前执行，避免先闪到顶部再跳；位置尚不可达

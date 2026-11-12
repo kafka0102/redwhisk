@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +27,12 @@ const mocks = vi.hoisted(() => ({
   unlisten: vi.fn(),
 }));
 
+const windowMocks = vi.hoisted(() => ({
+  focusListener: null as ((event: { payload: boolean }) => void) | null,
+  isFocused: vi.fn(async () => true),
+  unlisten: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(
     (
@@ -31,6 +43,16 @@ vi.mock("@tauri-apps/api/event", () => ({
       return Promise.resolve(mocks.unlisten);
     },
   ),
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    isFocused: windowMocks.isFocused,
+    onFocusChanged: (handler: (event: { payload: boolean }) => void) => {
+      windowMocks.focusListener = handler;
+      return Promise.resolve(windowMocks.unlisten);
+    },
+  }),
 }));
 
 vi.mock("../agent-session-commands", () => ({
@@ -135,8 +157,78 @@ function mockScrollBox(
   });
 }
 
+function withScrollLayout(
+  metrics: { clientHeight: number; scrollHeight: number },
+  run: () => void,
+): void {
+  const host = HTMLElement.prototype;
+  const previousClientHeight = Object.getOwnPropertyDescriptor(
+    host,
+    "clientHeight",
+  );
+  const previousScrollHeight = Object.getOwnPropertyDescriptor(
+    host,
+    "scrollHeight",
+  );
+  const previousScrollTop = Object.getOwnPropertyDescriptor(host, "scrollTop");
+  const scrollTops = new WeakMap<Element, number>();
+  Object.defineProperty(host, "clientHeight", {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+  Object.defineProperty(host, "scrollHeight", {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  Object.defineProperty(host, "scrollTop", {
+    configurable: true,
+    get() {
+      return scrollTops.get(this) ?? 0;
+    },
+    set(value: number) {
+      const maxOffset = Math.max(
+        0,
+        metrics.scrollHeight - metrics.clientHeight,
+      );
+      const box = {
+        value: Math.min(Math.max(value, 0), maxOffset),
+      };
+      Object.defineProperty(this, "scrollTop", {
+        configurable: true,
+        get: () => box.value,
+        set: (next: number) => {
+          box.value = Math.min(Math.max(next, 0), maxOffset);
+        },
+      });
+    },
+  });
+  try {
+    run();
+  } finally {
+    if (previousClientHeight) {
+      Object.defineProperty(host, "clientHeight", previousClientHeight);
+    } else {
+      delete (host as { clientHeight?: number }).clientHeight;
+    }
+    if (previousScrollHeight) {
+      Object.defineProperty(host, "scrollHeight", previousScrollHeight);
+    } else {
+      delete (host as { scrollHeight?: number }).scrollHeight;
+    }
+    if (previousScrollTop) {
+      Object.defineProperty(host, "scrollTop", previousScrollTop);
+    } else {
+      delete (host as { scrollTop?: number }).scrollTop;
+    }
+  }
+}
+
 beforeEach(() => {
   clearAgentMessageStreamCacheForTest();
+  windowMocks.focusListener = null;
+  windowMocks.isFocused.mockReset();
+  windowMocks.isFocused.mockResolvedValue(true);
+  windowMocks.unlisten.mockClear();
 });
 
 afterEach(() => {
@@ -584,6 +676,744 @@ describe("AgentSessionView", () => {
     );
 
     expect(scroll.scrollTop).toBe(400);
+  });
+
+  it("不在运行的 Session 切回时停在离开前的位置", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "停在中间的结论",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: false,
+    };
+
+    const { container, rerender } = render(
+      <AgentSessionView {...viewProps} isActive />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("停在中间的结论")).toBeInTheDocument();
+    });
+
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    // 切到别的 Session 时视图不卸载，宿主 hidden 使滚动盒高度变为 0，
+    // 浏览器把 scrollTop 读成 0。切回后高度恢复，位置必须回到离开前。
+    metrics.clientHeight = 0;
+    scroll.scrollTop = 0;
+    rerender(<AgentSessionView {...viewProps} isActive={false} />);
+    metrics.clientHeight = 100;
+    rerender(<AgentSessionView {...viewProps} isActive />);
+
+    expect(scroll.scrollTop).toBe(200);
+    expect(scroll.scrollTop).not.toBe(0);
+    expect(scroll.scrollTop).not.toBe(400);
+  });
+
+  it("不在运行的 Session 卸载再挂上时停在离开前的位置", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "切走前的结论",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: false,
+    };
+
+    const first = render(<AgentSessionView {...viewProps} isActive />);
+    const firstScroll = first.container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(firstScroll, { clientHeight: 100, scrollHeight: 500 });
+
+    await waitFor(() => {
+      expect(screen.getByText("切走前的结论")).toBeInTheDocument();
+    });
+
+    firstScroll.scrollTop = 200;
+    fireEvent.scroll(firstScroll);
+    expect(firstScroll.scrollTop).toBe(200);
+
+    first.unmount();
+
+    let second: ReturnType<typeof render> | undefined;
+    withScrollLayout({ clientHeight: 100, scrollHeight: 500 }, () => {
+      second = render(<AgentSessionView {...viewProps} isActive />);
+    });
+    if (!second) {
+      throw new Error("remount did not render");
+    }
+    const secondScroll = second.container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+
+    await waitFor(() => {
+      expect(screen.getByText("切走前的结论")).toBeInTheDocument();
+    });
+
+    expect(secondScroll.scrollTop).toBe(200);
+    expect(secondScroll.scrollTop).not.toBe(0);
+    expect(secondScroll.scrollTop).not.toBe(400);
+  });
+
+  it("不在运行的 Session 窗口失焦再聚焦时停在离开前的位置", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "失焦前的结论",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const { container } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning={false}
+        isActive
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("失焦前的结论")).toBeInTheDocument();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    metrics.clientHeight = 0;
+    scroll.scrollTop = 0;
+    act(() => {
+      windowMocks.focusListener?.({ payload: false });
+    });
+    metrics.clientHeight = 100;
+    act(() => {
+      windowMocks.focusListener?.({ payload: true });
+    });
+
+    expect(scroll.scrollTop).toBe(200);
+    expect(scroll.scrollTop).not.toBe(0);
+  });
+
+  it("不在运行的 Session 切到其它标签再回到日志时停在离开前的位置", async () => {
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+    }
+    globalThis.ResizeObserver =
+      MockResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      setupTimeline([
+        {
+          type: "assistant_message",
+          text: "切标签前的结论",
+          messageId: "a1",
+        } as never,
+      ]);
+
+      const { container } = render(
+        <AgentSessionView
+          projectId={1}
+          sessionId={10}
+          agentType="codex"
+          sessionStatus="running"
+          issueStatus="review"
+          isTurnRunning={false}
+          isActive
+        />,
+      );
+      const scroll = container.querySelector(
+        ".agents-message-stream__scroll",
+      ) as HTMLElement;
+      const metrics = { clientHeight: 100, scrollHeight: 500 };
+      mockScrollBox(scroll, metrics);
+
+      await waitFor(() => {
+        expect(screen.getByText("切标签前的结论")).toBeInTheDocument();
+      });
+
+      scroll.scrollTop = 200;
+      fireEvent.scroll(scroll);
+      expect(scroll.scrollTop).toBe(200);
+
+      metrics.clientHeight = 0;
+      scroll.scrollTop = 0;
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      metrics.clientHeight = 100;
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+
+      expect(scroll.scrollTop).toBe(200);
+      expect(scroll.scrollTop).not.toBe(0);
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it("正在运行的 Session 切到别的 Session 再回来时定位到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "运行中的输出",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: true,
+    };
+
+    const { container, rerender } = render(
+      <AgentSessionView {...viewProps} isActive />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    metrics.clientHeight = 0;
+    scroll.scrollTop = 0;
+    rerender(<AgentSessionView {...viewProps} isActive={false} />);
+    metrics.clientHeight = 100;
+    rerender(<AgentSessionView {...viewProps} isActive />);
+
+    expect(scroll.scrollTop).toBe(400);
+    expect(scroll.scrollTop).not.toBe(200);
+  });
+
+  it("正在运行的 Session 卸载再挂上时定位到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "运行中的输出",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: true,
+    };
+
+    const first = render(<AgentSessionView {...viewProps} isActive />);
+    const firstScroll = first.container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(firstScroll, { clientHeight: 100, scrollHeight: 500 });
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+    firstScroll.scrollTop = 200;
+    fireEvent.scroll(firstScroll);
+    expect(firstScroll.scrollTop).toBe(200);
+    first.unmount();
+
+    let second: ReturnType<typeof render> | undefined;
+    withScrollLayout({ clientHeight: 100, scrollHeight: 500 }, () => {
+      second = render(<AgentSessionView {...viewProps} isActive />);
+    });
+    if (!second) {
+      throw new Error("remount did not render");
+    }
+    const secondScroll = second.container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+
+    expect(secondScroll.scrollTop).toBe(400);
+    expect(secondScroll.scrollTop).not.toBe(200);
+  });
+
+  it("正在运行的 Session 窗口失焦再聚焦时定位到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "运行中的输出",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const { container } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning
+        isActive
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    metrics.clientHeight = 0;
+    scroll.scrollTop = 0;
+    act(() => {
+      windowMocks.focusListener?.({ payload: false });
+    });
+    metrics.clientHeight = 100;
+    act(() => {
+      windowMocks.focusListener?.({ payload: true });
+    });
+
+    expect(scroll.scrollTop).toBe(400);
+    expect(scroll.scrollTop).not.toBe(200);
+  });
+
+  it("正在运行的 Session 切到其它标签再回到日志时定位到底部", async () => {
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+    }
+    globalThis.ResizeObserver =
+      MockResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      setupTimeline([
+        {
+          type: "assistant_message",
+          text: "运行中的输出",
+          messageId: "a1",
+        } as never,
+      ]);
+
+      const { container } = render(
+        <AgentSessionView
+          projectId={1}
+          sessionId={10}
+          agentType="codex"
+          sessionStatus="running"
+          issueStatus="review"
+          isTurnRunning
+          isActive
+        />,
+      );
+      const scroll = container.querySelector(
+        ".agents-message-stream__scroll",
+      ) as HTMLElement;
+      const metrics = { clientHeight: 100, scrollHeight: 500 };
+      mockScrollBox(scroll, metrics);
+
+      await waitFor(() => {
+        expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+      });
+
+      scroll.scrollTop = 200;
+      fireEvent.scroll(scroll);
+      expect(scroll.scrollTop).toBe(200);
+
+      metrics.clientHeight = 0;
+      scroll.scrollTop = 0;
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      metrics.clientHeight = 100;
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+
+      expect(scroll.scrollTop).toBe(400);
+      expect(scroll.scrollTop).not.toBe(200);
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it("人还停在页面上时，不在运行的重渲染仍停在离开前的位置", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "停在中间的结论",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: false,
+    };
+    const { container, rerender } = render(
+      <AgentSessionView {...viewProps} isActive />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    mockScrollBox(scroll, { clientHeight: 100, scrollHeight: 500 });
+
+    await waitFor(() => {
+      expect(screen.getByText("停在中间的结论")).toBeInTheDocument();
+    });
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+
+    rerender(
+      <AgentSessionView {...viewProps} isActive workspacePath="/tmp/repo" />,
+    );
+
+    expect(scroll.scrollTop).toBe(200);
+    expect(scroll.scrollTop).not.toBe(0);
+    expect(scroll.scrollTop).not.toBe(400);
+  });
+
+  it("人还停在页面上时，正在运行的新内容不把阅读位置拽到底部", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "运行中的输出",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const { container } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning
+        isActive
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("运行中的输出")).toBeInTheDocument();
+    });
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    metrics.scrollHeight = 800;
+    emitEvent({
+      projectId: 1,
+      sessionId: 10,
+      seq: 2,
+      epoch: "epoch-1",
+      event: {
+        type: "timeline",
+        seq: 2,
+        timestamp: 2,
+        item: {
+          type: "assistant_message",
+          text: "新的一行",
+          messageId: "a2",
+        },
+      } as never,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("新的一行")).toBeInTheDocument();
+    });
+    expect(scroll.scrollTop).toBe(200);
+    expect(scroll.scrollTop).not.toBe(400);
+  });
+
+  it("不在运行时，容器高度为 0 的滚动不覆盖离开前的位置", async () => {
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class MockResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe(): void {}
+
+      unobserve(): void {}
+
+      disconnect(): void {}
+    }
+    globalThis.ResizeObserver =
+      MockResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      setupTimeline([
+        {
+          type: "assistant_message",
+          text: "停在中间的结论",
+          messageId: "a1",
+        } as never,
+      ]);
+
+      const { container } = render(
+        <AgentSessionView
+          projectId={1}
+          sessionId={10}
+          agentType="codex"
+          sessionStatus="running"
+          issueStatus="review"
+          isTurnRunning={false}
+          isActive
+        />,
+      );
+      const scroll = container.querySelector(
+        ".agents-message-stream__scroll",
+      ) as HTMLElement;
+      const metrics = { clientHeight: 100, scrollHeight: 500 };
+      mockScrollBox(scroll, metrics);
+
+      await waitFor(() => {
+        expect(screen.getByText("停在中间的结论")).toBeInTheDocument();
+      });
+      scroll.scrollTop = 200;
+      fireEvent.scroll(scroll);
+      expect(scroll.scrollTop).toBe(200);
+
+      metrics.clientHeight = 0;
+      scroll.scrollTop = 0;
+      fireEvent.scroll(scroll);
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+      metrics.clientHeight = 100;
+      act(() => {
+        for (const callback of resizeCallbacks) {
+          callback([], {} as ResizeObserver);
+        }
+      });
+
+      expect(scroll.scrollTop).toBe(200);
+      expect(scroll.scrollTop).not.toBe(0);
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it("不在运行时，内容增高后回到尚未到达的记录位置", async () => {
+    writeMessageStreamScrollOffset(10, 900);
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "先到的一段",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const { container } = render(
+      <AgentSessionView
+        projectId={1}
+        sessionId={10}
+        agentType="codex"
+        sessionStatus="running"
+        issueStatus="review"
+        isTurnRunning={false}
+        isActive
+      />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("先到的一段")).toBeInTheDocument();
+    });
+    expect(scroll.scrollTop).toBe(400);
+
+    metrics.scrollHeight = 2000;
+    emitEvent({
+      projectId: 1,
+      sessionId: 10,
+      seq: 2,
+      epoch: "epoch-1",
+      event: {
+        type: "timeline",
+        seq: 2,
+        timestamp: 2,
+        item: {
+          type: "assistant_message",
+          text: "随后增高的正文",
+          messageId: "a2",
+        },
+      } as never,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("随后增高的正文")).toBeInTheDocument();
+    });
+    expect(scroll.scrollTop).toBe(900);
+    expect(scroll.scrollTop).not.toBe(400);
+    expect(scroll.scrollTop).not.toBe(0);
+  });
+
+  it("不在运行时，离开期间补上的正文不改变回来后的位置", async () => {
+    setupTimeline([
+      {
+        type: "assistant_message",
+        text: "离开前的正文",
+        messageId: "a1",
+      } as never,
+    ]);
+
+    const viewProps = {
+      projectId: 1 as const,
+      sessionId: 10,
+      agentType: "codex" as const,
+      sessionStatus: "running" as const,
+      issueStatus: "review" as const,
+      isTurnRunning: false,
+    };
+    const { container, rerender } = render(
+      <AgentSessionView {...viewProps} isActive />,
+    );
+    const scroll = container.querySelector(
+      ".agents-message-stream__scroll",
+    ) as HTMLElement;
+    const metrics = { clientHeight: 100, scrollHeight: 500 };
+    mockScrollBox(scroll, metrics);
+
+    await waitFor(() => {
+      expect(screen.getByText("离开前的正文")).toBeInTheDocument();
+    });
+    scroll.scrollTop = 200;
+    fireEvent.scroll(scroll);
+    expect(scroll.scrollTop).toBe(200);
+
+    metrics.clientHeight = 0;
+    scroll.scrollTop = 0;
+    rerender(<AgentSessionView {...viewProps} isActive={false} />);
+
+    metrics.scrollHeight = 800;
+    emitEvent({
+      projectId: 1,
+      sessionId: 10,
+      seq: 2,
+      epoch: "epoch-1",
+      event: {
+        type: "timeline",
+        seq: 2,
+        timestamp: 2,
+        item: {
+          type: "assistant_message",
+          text: "离开期间的正文",
+          messageId: "a2",
+        },
+      } as never,
+    });
+    await waitFor(() => {
+      expect(screen.getByText("离开期间的正文")).toBeInTheDocument();
+    });
+
+    metrics.clientHeight = 100;
+    rerender(<AgentSessionView {...viewProps} isActive />);
+
+    expect(scroll.scrollTop).toBe(200);
+    expect(scroll.scrollTop).not.toBe(0);
+    expect(scroll.scrollTop).not.toBe(700);
   });
 
   it("切换 session 后不沿用上一个 session 的输入错误", async () => {
