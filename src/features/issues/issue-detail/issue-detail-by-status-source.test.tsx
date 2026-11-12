@@ -184,6 +184,7 @@ const bugLabel = {
   projectId: 1,
   color: "#E11D48",
   workflowSkill: null,
+  del: 0,
 };
 
 function boardIssue(
@@ -264,6 +265,13 @@ function detailTitle(issue: IssueBoardRecord): string {
     return `${prefix} #${issue.externalNumber} · ${issue.title}`;
   }
   return `#${issue.number} · ${issue.title}`;
+}
+
+function opensBacklogEditor(issue: IssueBoardRecord): boolean {
+  return (
+    issue.status === "backlog" &&
+    (issue.source === "local" || issue.source === "remote")
+  );
 }
 
 function issueRecordWithoutMirror(
@@ -350,7 +358,7 @@ async function openFromBoard(
   const user = userEvent.setup();
   renderBoard(issue, detail);
   await user.click(await screen.findByRole("button", { name: issue.title }));
-  if (issue.source === "local" && issue.status === "backlog") {
+  if (opensBacklogEditor(issue)) {
     return screen.findByRole("form", { name: "编辑 Issue" });
   }
   return screen.findByRole("region", { name: "Issue 详情" });
@@ -448,7 +456,7 @@ describe("Issue 详情按状态与来源", () => {
       cards: [] as Array<"host" | "pr" | "session">,
     },
     {
-      name: "待办远程只读且只有宿主卡",
+      name: "待办远程直接编辑且没有右侧栏",
       issue: boardIssue({
         id: 43,
         number: 43,
@@ -461,10 +469,9 @@ describe("Issue 详情按状态与来源", () => {
         projection: hostProjection(),
         linkedChangeRequests: [],
       },
-      actions: ["打开状态选项", "运行", "更多 issue 操作"],
-      absent: ["保存", "删除", "完成", "查看回看"],
-      statusText: "待办",
-      cards: ["host"] as Array<"host" | "pr" | "session">,
+      actions: ["运行", "保存", "删除"],
+      absent: ["打开状态选项", "更多 issue 操作", "完成", "查看回看"],
+      cards: [] as Array<"host" | "pr" | "session">,
     },
     {
       name: "进行中远程有宿主、会话和运行参数，没有 PR 卡",
@@ -575,8 +582,8 @@ describe("Issue 详情按状态与来源", () => {
           }),
         ],
       },
-      actions: ["打开状态选项", "查看回看", "更多 issue 操作"],
-      absent: ["运行", "保存", "完成", "删除"],
+      actions: ["打开状态选项", "更多 issue 操作"],
+      absent: ["运行", "保存", "完成", "删除", "查看回看"],
       statusText: "已完成",
       cards: ["host", "pr", "session"] as Array<"host" | "pr" | "session">,
       prState: "merged",
@@ -595,8 +602,8 @@ describe("Issue 详情按状态与来源", () => {
         linkedSessionAgentType: "codex",
       }),
       detail: { projection: null, linkedChangeRequests: [] },
-      actions: ["打开状态选项", "查看回看", "更多 issue 操作"],
-      absent: ["运行", "保存", "完成", "打开 GitHub"],
+      actions: ["打开状态选项", "更多 issue 操作"],
+      absent: ["运行", "保存", "完成", "打开 GitHub", "查看回看"],
       statusText: "已完成",
       cards: ["session"] as Array<"host" | "pr" | "session">,
     },
@@ -623,7 +630,7 @@ describe("Issue 详情按状态与来源", () => {
       expect(screen.queryByRole("button", { name: "刷新" })).toBeNull();
       expect(screen.queryByText(/已同步/)).toBeNull();
 
-      if (issue.source === "local" && issue.status === "backlog") {
+      if (opensBacklogEditor(issue)) {
         const titleInput = within(root).getByLabelText("标题");
         expect(titleInput.tagName).toBe("INPUT");
         expect(titleInput).toHaveValue(issue.title);
@@ -711,6 +718,69 @@ describe("Issue 详情按状态与来源", () => {
     },
   );
 
+  it("远程待办点击直接进入编辑表单且没有只读详情", async () => {
+    const user = userEvent.setup();
+    const issue = boardIssue({
+      id: 43,
+      number: 43,
+      status: "backlog",
+      source: "remote",
+      provider: "github",
+      externalNumber: 128,
+    });
+    renderBoard(issue, {
+      projection: hostProjection(),
+      linkedChangeRequests: [],
+    });
+
+    await user.click(await screen.findByRole("button", { name: issue.title }));
+
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    expect(screen.queryByRole("region", { name: "Issue 详情" })).toBeNull();
+    for (const name of ["运行", "保存", "删除"]) {
+      expect(within(form).getByRole("button", { name })).toBeInTheDocument();
+    }
+    for (const name of [
+      "打开状态选项",
+      "更多 issue 操作",
+      "完成",
+      "查看回看",
+    ]) {
+      expect(within(form).queryByRole("button", { name })).toBeNull();
+    }
+  });
+
+  it("仅本地、仅远程和混合来源下，待办本地与远程都直接进入编辑", async () => {
+    for (const issueSourceMode of ["local", "remote", "mixed"] as const) {
+      const settings = await getProjectIssueSourceSettingsMock(1);
+      getProjectIssueSourceSettingsMock.mockResolvedValue({
+        ...settings,
+        issueSourceMode,
+      });
+      for (const source of ["local", "remote"] as const) {
+        const issue = boardIssue({
+          id: 91,
+          title: `${issueSourceMode}-${source}`,
+          source,
+          provider: source === "remote" ? "github" : null,
+          externalNumber: source === "remote" ? 91 : null,
+        });
+        const form = await openFromBoard(issue, {
+          projection: source === "remote" ? hostProjection() : null,
+          linkedChangeRequests: [],
+        });
+        expect(screen.queryByRole("region", { name: "Issue 详情" })).toBeNull();
+        expect(
+          within(form).getByRole("button", { name: "保存" }),
+        ).toBeInTheDocument();
+        expect(
+          within(form).queryByRole("region", { name: "GitHub" }),
+        ).toBeNull();
+        cleanupRenderedBoard();
+      }
+    }
+  });
+
   it("来源为空或 null 时不进入编辑表单", async () => {
     const missingSource = boardIssue({
       id: 4,
@@ -755,6 +825,7 @@ describe("Issue 详情按状态与来源", () => {
     const issue = boardIssue({
       id: 7,
       number: 7,
+      status: "running",
       source: "remote",
       provider: "gitlab",
       externalNumber: 7,
@@ -782,6 +853,7 @@ describe("Issue 详情按状态与来源", () => {
   it("只读标签在正文上方，零个标签没有标签行", async () => {
     const empty = boardIssue({
       id: 51,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 51,
@@ -795,6 +867,7 @@ describe("Issue 详情按状态与来源", () => {
 
     const issue = boardIssue({
       id: 52,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 52,
@@ -812,6 +885,257 @@ describe("Issue 详情按状态与来源", () => {
       labels.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(labels.querySelector("[style*='background']")).toBeNull();
+  });
+
+  it("只读详情先显示 Issue 自己的彩色标签，再追加对不上目录的宿主标签", async () => {
+    listProjectLabelsMock.mockImplementation(async (input) => {
+      if (input.scope === "global") {
+        return { labels: [] };
+      }
+      return {
+        labels: [{ ...bugLabel, id: 8, color: "#111111" }],
+      };
+    });
+    const issue = boardIssue({
+      id: 82,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 82,
+      description: "正文还在",
+      labels: [
+        {
+          id: 1,
+          name: "bug",
+          scope: "project",
+          projectId: 1,
+          color: "#E11D48",
+          workflowSkill: null,
+        },
+        {
+          id: 2,
+          name: "feature",
+          scope: "project",
+          projectId: 1,
+          color: "#2563EB",
+          workflowSkill: null,
+        },
+      ],
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({
+        labels: ["bug", "sync", "sync", "  "],
+      }),
+      linkedChangeRequests: [],
+    });
+    const labelGroup = await within(root).findByRole("group", { name: "标签" });
+    await waitFor(() => {
+      const chips = [
+        ...labelGroup.querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips.map((chip) => chip.textContent)).toEqual([
+        "bug",
+        "feature",
+        "sync",
+      ]);
+      expect(chips[0]).toHaveStyle({ backgroundColor: "#E11D48" });
+      expect(chips[1]).toHaveStyle({ backgroundColor: "#2563EB" });
+      expect(chips[2]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+    const body = within(root).getByText("正文还在");
+    expect(
+      labelGroup.compareDocumentPosition(body) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("目录加载失败时保留 Issue 彩色标签，对不上的宿主标签没有行内背景", async () => {
+    listProjectLabelsMock.mockRejectedValue(new Error("labels down"));
+    const issue = boardIssue({
+      id: 83,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 83,
+      labels: [{ ...bugLabel, color: "#E11D48" }],
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ labels: ["sync"] }),
+      linkedChangeRequests: [],
+    });
+    const labelGroup = await within(root).findByRole("group", { name: "标签" });
+    await waitFor(() => {
+      const chips = [
+        ...labelGroup.querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips.map((chip) => chip.textContent)).toEqual(["bug", "sync"]);
+      expect(chips[0]).toHaveStyle({ backgroundColor: "#E11D48" });
+      expect(chips[1]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+  });
+
+  it("目录加载成功后，对得上的宿主标签改用目录颜色", async () => {
+    let resolveProjectLabels: (value: {
+      labels: Array<typeof bugLabel>;
+    }) => void = () => undefined;
+    listProjectLabelsMock.mockImplementation((input) => {
+      if (input.scope === "global") {
+        return Promise.resolve({ labels: [] });
+      }
+      return new Promise((resolve) => {
+        resolveProjectLabels = resolve;
+      });
+    });
+    const issue = boardIssue({
+      id: 84,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 84,
+      labels: [{ ...bugLabel, color: "#E11D48" }],
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ labels: ["feature", "sync"] }),
+      linkedChangeRequests: [],
+    });
+    const labelGroup = await within(root).findByRole("group", { name: "标签" });
+    await waitFor(() => {
+      const chips = [
+        ...labelGroup.querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips.map((chip) => chip.textContent)).toEqual([
+        "bug",
+        "feature",
+        "sync",
+      ]);
+      expect(chips[1]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+      expect(chips[2]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+    resolveProjectLabels({
+      labels: [{ ...bugLabel, id: 9, name: "feature", color: "#2563EB" }],
+    });
+    await waitFor(() => {
+      const chips = [
+        ...labelGroup.querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips[0]).toHaveStyle({ backgroundColor: "#E11D48" });
+      expect(chips[1]).toHaveStyle({ backgroundColor: "#2563EB" });
+      expect(chips[2]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+  });
+
+  it("项目标签颜色覆盖同名全局标签", async () => {
+    listProjectLabelsMock.mockImplementation(async (input) => {
+      if (input.scope === "global") {
+        return {
+          labels: [
+            {
+              ...bugLabel,
+              id: 3,
+              scope: "global" as const,
+              projectId: null,
+              color: "#00FF00",
+            },
+          ],
+        };
+      }
+      return {
+        labels: [{ ...bugLabel, color: "#E11D48" }],
+      };
+    });
+    const issue = boardIssue({
+      id: 85,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 85,
+      labels: [],
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ labels: ["bug", "sync"] }),
+      linkedChangeRequests: [],
+    });
+    const labelGroup = await within(root).findByRole("group", { name: "标签" });
+    await waitFor(() => {
+      const chips = [
+        ...labelGroup.querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips.map((chip) => chip.textContent)).toEqual(["bug", "sync"]);
+      expect(chips[0]).toHaveStyle({ backgroundColor: "#E11D48" });
+      expect(chips[0]).not.toHaveStyle({ backgroundColor: "#00FF00" });
+      expect(chips[1]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+  });
+
+  it("宿主标签按忽略大小写对上目录，空颜色不设置行内背景", async () => {
+    listProjectLabelsMock.mockImplementation(async (input) => {
+      if (input.scope === "global") {
+        return { labels: [] };
+      }
+      return {
+        labels: [
+          { ...bugLabel, name: "bug", color: "#E11D48" },
+          { ...bugLabel, id: 10, name: "blank", color: "   " },
+        ],
+      };
+    });
+    const matched = boardIssue({
+      id: 86,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 86,
+      labels: [],
+    });
+    const matchedRoot = await openFromBoard(matched, {
+      projection: hostProjection({ labels: ["Bug"] }),
+      linkedChangeRequests: [],
+    });
+    await waitFor(() => {
+      const chip = within(matchedRoot).getByText("Bug");
+      expect(chip).toHaveStyle({ backgroundColor: "#E11D48" });
+    });
+    cleanupRenderedBoard();
+
+    const blank = boardIssue({
+      id: 87,
+      status: "review",
+      source: "remote",
+      provider: "github",
+      externalNumber: 87,
+      labels: [{ ...bugLabel, color: "   " }],
+    });
+    const blankRoot = await openFromBoard(blank, {
+      projection: hostProjection({ labels: ["blank"] }),
+      linkedChangeRequests: [],
+    });
+    await waitFor(() => {
+      const chips = [
+        ...within(blankRoot)
+          .getByRole("group", { name: "标签" })
+          .querySelectorAll(".issue-detail__readonly-label"),
+      ];
+      expect(chips.map((chip) => chip.textContent)).toEqual(["bug", "blank"]);
+      expect(chips[0]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+      expect(chips[1]?.getAttribute("style") ?? "").not.toMatch(/background/i);
+    });
+  });
+
+  it("宿主没有标签时仍显示 Issue 自己的彩色标签", async () => {
+    const issue = boardIssue({
+      id: 88,
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 88,
+      labels: [{ ...bugLabel, color: "#E11D48" }],
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection({ labels: [] }),
+      linkedChangeRequests: [],
+    });
+    const chip = await within(root).findByText("bug");
+    expect(chip).toHaveStyle({ backgroundColor: "#E11D48" });
   });
 
   it("只有 PR URL 时仍可打开宿主，且没有状态胶囊", async () => {
@@ -962,6 +1286,7 @@ describe("Issue 详情按状态与来源", () => {
   it("投影为 null 时没有宿主卡和 PR 卡", async () => {
     const issue = boardIssue({
       id: 54,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 54,
@@ -980,6 +1305,7 @@ describe("Issue 详情按状态与来源", () => {
   it("投影命令失败时标题和正文仍在，不渲染空宿主卡", async () => {
     const issue = boardIssue({
       id: 55,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 55,
@@ -1004,6 +1330,7 @@ describe("Issue 详情按状态与来源", () => {
     getIssueTimelineMock.mockRejectedValue(new Error("timeline failed"));
     const issue = boardIssue({
       id: 59,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 59,
@@ -1027,6 +1354,7 @@ describe("Issue 详情按状态与来源", () => {
     for (const remoteState of ["", "bogus"]) {
       const issue = boardIssue({
         id: 56,
+        status: "running",
         source: "remote",
         provider: "github",
         externalNumber: 56,
@@ -1053,6 +1381,7 @@ describe("Issue 详情按状态与来源", () => {
     const user = userEvent.setup();
     const issue = boardIssue({
       id: 57,
+      status: "running",
       source: "remote",
       provider: "github",
       externalNumber: 57,
@@ -1095,13 +1424,7 @@ describe("Issue 详情按状态与来源", () => {
       projection: hostProjection(),
       linkedChangeRequests: [],
     });
-    await user.click(
-      within(backlogRoot).getByRole("button", { name: "更多 issue 操作" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "编辑 Issue" }),
-    );
-    const editForm = await screen.findByRole("form", { name: "编辑 Issue" });
+    const editForm = backlogRoot;
     expect(
       within(editForm).getByRole("button", { name: "运行" }),
     ).toBeInTheDocument();
@@ -1194,50 +1517,73 @@ describe("Issue 详情按状态与来源", () => {
     ).toBeInTheDocument();
   });
 
-  it("远程待办编辑本地副本保存后仍只读，标题保持 GH #128", async () => {
-    const user = userEvent.setup();
-    const issue = boardIssue({
-      id: 128,
-      number: 12,
-      title: "原标题",
-      source: "remote",
-      provider: "github",
-      externalNumber: 128,
-    });
-    updateIssueMock.mockImplementation(async (input) =>
-      issueRecordWithoutMirror(issue, {
-        title: input.title,
-        description: input.description,
-      }),
-    );
-    const root = await openFromBoard(issue, {
-      projection: hostProjection(),
-      linkedChangeRequests: [],
-    });
-    await user.click(
-      within(root).getByRole("button", { name: "更多 issue 操作" }),
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: "编辑 Issue" }),
-    );
-    const form = await screen.findByRole("form", { name: "编辑 Issue" });
-    await user.click(within(form).getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(updateIssueMock).toHaveBeenCalled());
-    const saved =
-      await updateIssueMock.mock.results[
-        updateIssueMock.mock.results.length - 1
-      ]?.value;
-    expect(saved).not.toHaveProperty("source");
-    expect(saved).not.toHaveProperty("provider");
-    expect(saved).not.toHaveProperty("externalNumber");
-    expect(
-      screen.getByRole("heading", { level: 2, name: "GH #128 · 原标题" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("form", { name: "编辑 Issue" })).toBeNull();
-    expect(
-      screen.queryByRole("heading", { level: 2, name: "#12 · 原标题" }),
-    ).toBeNull();
-  });
+  it.each([
+    { provider: "github" as const, prefix: "GH" },
+    { provider: "gitlab" as const, prefix: "GL" },
+  ])(
+    "远程待办保存本地副本后回到看板，再打开仍是 $prefix #128",
+    async ({ provider, prefix }) => {
+      const user = userEvent.setup();
+      const issue = boardIssue({
+        id: 128,
+        number: 12,
+        title: "原标题",
+        source: "remote",
+        provider,
+        externalNumber: 128,
+      });
+      updateIssueMock.mockImplementation(async (input) =>
+        issueRecordWithoutMirror(issue, {
+          title: input.title,
+          description: input.description,
+        }),
+      );
+      const form = await openFromBoard(issue, {
+        projection: hostProjection({ provider }),
+        linkedChangeRequests: [],
+      });
+      fireEvent.change(within(form).getByLabelText("标题"), {
+        target: { value: "新标题" },
+      });
+      invokeMock.mockClear();
+      await user.click(within(form).getByRole("button", { name: "保存" }));
+      await waitFor(() =>
+        expect(updateIssueMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            projectId: 1,
+            issueId: 128,
+            title: "新标题",
+          }),
+        ),
+      );
+      expectNoHostMutation(/update|write|edit|close|delete/);
+      const saved =
+        await updateIssueMock.mock.results[
+          updateIssueMock.mock.results.length - 1
+        ]?.value;
+      expect(saved).not.toHaveProperty("source");
+      expect(saved).not.toHaveProperty("provider");
+      expect(saved).not.toHaveProperty("externalNumber");
+      expect(screen.queryByRole("form", { name: "编辑 Issue" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Issue 详情" })).toBeNull();
+
+      await user.click(await screen.findByRole("button", { name: "新标题" }));
+      const reopened = await screen.findByRole("form", { name: "编辑 Issue" });
+      expect(
+        within(reopened).getByRole("heading", {
+          level: 2,
+          name: `${prefix} #128 · 新标题`,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { level: 2, name: "#12 · 原标题" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("heading", { level: 2, name: "#12 · 新标题" }),
+      ).toBeNull();
+      cleanupRenderedBoard();
+    },
+  );
 
   it("推进状态后仍保留 GH 编号，不退回项目内编号", async () => {
     const user = userEvent.setup();
@@ -1467,9 +1813,10 @@ describe("Issue 详情按状态与来源", () => {
     expect(screen.getByRole("menuitem", { name: "待验收" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "进行中" })).toBeEnabled();
     await user.keyboard("{Escape}");
-    await user.click(within(root).getByRole("button", { name: "查看回看" }));
+    expect(within(root).queryByRole("button", { name: "查看回看" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Issue 总结" })).toBeNull();
     expect(
-      await screen.findByRole("dialog", { name: "Issue 总结" }),
+      within(root).getByRole("button", { name: "查看会话" }),
     ).toBeInTheDocument();
     cleanupRenderedBoard();
 

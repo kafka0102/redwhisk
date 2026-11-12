@@ -6,11 +6,12 @@ import {
   toBoardRecord,
 } from "../issue-mirror-fields";
 
-export function isDirectLocalBacklog(issue: IssueRecord | null): boolean {
+export function isDirectEditableBacklog(issue: IssueRecord | null): boolean {
   if (issue == null || issue.status !== "backlog") {
     return false;
   }
-  return (issue as { source?: string | null }).source === "local";
+  const source = (issue as { source?: string | null }).source;
+  return source === "local" || source === "remote";
 }
 
 export function isIssueEditorOpen(input: {
@@ -27,7 +28,7 @@ export function isIssueEditorOpen(input: {
   if (input.readOnlyEditRequested) {
     return true;
   }
-  return isDirectLocalBacklog(input.issue);
+  return isDirectEditableBacklog(input.issue);
 }
 
 export function issueDetailTitleParts(issue: IssueRecord): {

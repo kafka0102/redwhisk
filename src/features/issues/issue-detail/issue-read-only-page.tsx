@@ -1,5 +1,5 @@
 import { Ellipsis, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmContent } from "@/components/ui/confirm-dialog";
@@ -33,11 +33,12 @@ import {
 import { IssueUnavailableBanner } from "./issue-unavailable-banner";
 import { IssueDetailHeading } from "./issue-detail-heading";
 import { issueDetailTitleParts } from "./issue-detail-mode";
+import { readOnlyDetailLabels } from "./issue-readonly-labels";
+import { useIssueLabelCatalog } from "../use-issue-label-catalog";
 import {
   IssueDetailSideCards,
   IssueReadOnlyLabelRow,
 } from "./issue-detail-side-cards";
-import { IssueSummaryDialog } from "./issue-summary-dialog";
 
 interface IssueReadOnlyPageProps {
   form: IssueFormState;
@@ -82,7 +83,6 @@ export function IssueReadOnlyPage({
 }: IssueReadOnlyPageProps) {
   const { messages, t } = useI18n();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [detail, setDetail] = useState<IssueDetailRecord | null>(null);
   const [detailIssueId, setDetailIssueId] = useState<number | null>(null);
   const titleParts = selectedIssue
@@ -91,12 +91,22 @@ export function IssueReadOnlyPage({
   const rawDescription = selectedIssue?.description ?? form.description;
   const linkedSessionId = selectedIssue?.linkedSessionId ?? null;
   const projectId = selectedIssue?.projectId ?? 0;
+  const labelCatalogProjectIdRef = useRef(projectId);
+  useEffect(() => {
+    labelCatalogProjectIdRef.current = projectId;
+  }, [projectId]);
+  const { availableLabels } = useIssueLabelCatalog(
+    projectId,
+    labelCatalogProjectIdRef,
+    t,
+  );
   const activeDetail =
     selectedIssue != null && detailIssueId === selectedIssue.id ? detail : null;
-  const readonlyLabels =
-    activeDetail?.projection != null
-      ? activeDetail.projection.labels
-      : (selectedIssue?.labels ?? []).map((label) => label.name);
+  const readonlyLabels = readOnlyDetailLabels({
+    issueLabels: selectedIssue?.labels ?? [],
+    hostLabels: activeDetail?.projection?.labels ?? [],
+    catalog: availableLabels,
+  });
   const unavailableBanner = activeDetail?.unavailableBanner ?? null;
 
   function runRecovery(action: RecoveryAction): void {
@@ -172,17 +182,6 @@ export function IssueReadOnlyPage({
                 onClick={(event) => onRunIssue(event.currentTarget)}
               >
                 {messages.issues.run}
-              </Button>
-            ) : null}
-            {selectedIssue?.status === "completed" ? (
-              <Button
-                className="issues-button"
-                disabled={isSaving}
-                type="button"
-                variant="secondary"
-                onClick={() => setIsSummaryOpen(true)}
-              >
-                {t("issues.viewReplay")}
               </Button>
             ) : null}
             <IssueMoreMenu
@@ -269,13 +268,6 @@ export function IssueReadOnlyPage({
           }}
         />
       </Dialog>
-      {isSummaryOpen && selectedIssue != null ? (
-        <IssueSummaryDialog
-          issueId={selectedIssue.id}
-          projectId={selectedIssue.projectId}
-          onClose={() => setIsSummaryOpen(false)}
-        />
-      ) : null}
     </section>
   );
 }
@@ -292,7 +284,7 @@ function IssueReadOnlyDetails({
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
   description: string;
   issueId: number | null;
-  labels: string[];
+  labels: ReturnType<typeof readOnlyDetailLabels>;
   projectId: number | null;
   onPreviewAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,

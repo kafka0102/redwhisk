@@ -376,20 +376,15 @@ describe("GitHub issue mirror board", () => {
     );
   });
 
-  it("opens a remote backlog card read-only and edits the local copy", async () => {
+  it("opens a remote backlog card in the edit form", async () => {
     const user = userEvent.setup();
     renderBoard();
     await user.click(
       await screen.findByRole("button", { name: "Remote issue" }),
     );
     expect(
-      await screen.findByRole("region", { name: "Issue 详情" }),
+      await screen.findByRole("form", { name: "编辑 Issue" }),
     ).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Issue 标题")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "更多 issue 操作" }));
-    await user.click(
-      await screen.findByRole("menuitem", { name: "编辑 Issue" }),
-    );
     expect(
       await screen.findByPlaceholderText("Issue 标题"),
     ).toBeInTheDocument();

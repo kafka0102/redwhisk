@@ -9,11 +9,12 @@ import type {
   IssueDetailProjection,
   LinkedChangeRequestSummary,
 } from "./issue-detail-commands";
+import type { ReadOnlyDetailLabel } from "./issue-readonly-labels";
 
 export function IssueReadOnlyLabelRow({
   labels,
 }: {
-  labels: string[];
+  labels: readonly ReadOnlyDetailLabel[];
 }): JSX.Element | null {
   const { messages } = useI18n();
   if (labels.length === 0) {
@@ -26,8 +27,14 @@ export function IssueReadOnlyLabelRow({
       role="group"
     >
       {labels.map((label) => (
-        <span className="issue-detail__readonly-label" key={label}>
-          {label}
+        <span
+          className="issue-detail__readonly-label"
+          key={label.name.toLowerCase()}
+          style={
+            label.color == null ? undefined : { backgroundColor: label.color }
+          }
+        >
+          {label.name}
         </span>
       ))}
     </div>
