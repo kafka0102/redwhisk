@@ -25,8 +25,8 @@ import type { TerminalTransport } from "./terminal-types";
  * - 隐藏 / 卸载时记录 viewportY 与 sequence（terminal-surface.tsx 的 persistViewState）；
  * - 再次可见时若 sequence 未变则跳过整段回放，xterm 缓冲区与滚动位置原样保留；
  * - 卸载后重新挂载（sequence 归零）回放历史，并按缓存 viewport 恢复；
- * - 隐藏期间有新输出（sequence 前进）按既有约定滚到最新。
- * - 当前 Turn 不在运行时，隐藏期间即使 sequence 前进，也不 reset 再灌整段，viewport 停在离开前。
+ * - 项目终端：隐藏期间 sequence 前进则滚到最新；
+ * - Agent 会话终端看当前 Turn：正在运行则切回滚到底（序号未变仍不重写）；不在运行且序号前进时只追加 tail、不 reset，viewport 停在离开前。
  */
 const VIEW_KEY = "terminal:42";
 const HISTORY = "prompt$ ls\r\nsrc\r\n";
