@@ -22,12 +22,16 @@ import {
 } from "./terminal-fit-inset";
 import { installTerminalImeInputGuard } from "./terminal-ime-input-guard";
 import { createTerminalInputWriter } from "./terminal-input-writer";
-import { persistTerminalViewPosition } from "./terminal-history-writer";
+import { persistMeasuredTerminalViewport } from "./terminal-history-writer";
 import { createTerminalShiftWheelScrollHandler } from "./terminal-shift-wheel-scroll";
 import {
   createTerminalSurfaceLiveHandlers,
   healTerminalViewport,
 } from "./terminal-surface-live-handlers";
+import {
+  shouldFitTerminalHost,
+  syncTerminalSurfaceSize,
+} from "./terminal-surface-size";
 import { createTerminalStatusPoll } from "./terminal-status-poll";
 import { createTerminalWebglSession } from "./terminal-webgl-session";
 import { createTerminalXtermOptions } from "./terminal-xterm-options";
@@ -65,6 +69,8 @@ interface TerminalSurfaceProps {
   terminalClassName?: string;
   transport: TerminalTransport;
   transportKey: string | number;
+  /** 未传时按输出序号决定。true 切回滚到底，false 停在离开前的视口。 */
+  scrollToBottomOnReturn?: boolean;
 }
 
 export function TerminalSurface({
@@ -73,6 +79,7 @@ export function TerminalSurface({
   ref,
   shellClassName = "terminal-surface-shell",
   terminalClassName = "terminal-surface",
+  scrollToBottomOnReturn,
   transport,
   transportKey,
 }: TerminalSurfaceProps) {
@@ -81,6 +88,7 @@ export function TerminalSurface({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const transportRef = useRef(transport);
+  const scrollToBottomOnReturnRef = useRef(scrollToBottomOnReturn);
   const statusSourceRef = useRef<TerminalStatusSource | null>(null);
   const themeRef = useRef(theme);
   const contentFontSizeRef = useRef(contentFontSize);
@@ -102,6 +110,10 @@ export function TerminalSurface({
   useEffect(() => {
     transportRef.current = transport;
   }, [transport]);
+
+  useEffect(() => {
+    scrollToBottomOnReturnRef.current = scrollToBottomOnReturn;
+  }, [scrollToBottomOnReturn]);
 
   useEffect(() => {
     themeRef.current = theme;
@@ -204,39 +216,17 @@ export function TerminalSurface({
     fitAddonRef.current = fitAddon;
 
     const syncSize = () => {
-      // 宿主被 hidden（切到其他 workspace tab 时 pane 变为 display:none，
-      // ResizeObserver 仍会以 0×0 尺寸回调）时跳过重算：否则 FitAddon 会用残留
-      // cell 尺寸 + 0 容器算出退化值（cols=2/rows=1），既触发 xterm 重排，又把
-      // PTY 缩成 1×2 引发 SIGWINCH 让 shell 重绘，逐次覆盖掉最后一行输出。
-      if (host.offsetWidth === 0 || host.offsetHeight === 0) {
-        return;
-      }
-
-      try {
-        clearTerminalBottomInset(terminal);
-        fitAddon.fit();
-        applyTerminalBottomInset(terminal, host);
-      } catch (error) {
-        const message = getCommandErrorMessage(error, t);
-        window.setTimeout(() => {
-          if (!terminalRef.current) {
-            return;
-          }
+      syncTerminalSurfaceSize({
+        host,
+        terminal,
+        fitAddon,
+        isStillMounted: () => terminalRef.current !== null,
+        showResizeError: (message) => {
           showStatusMessage("resize", message);
-        }, 0);
-        return;
-      }
-
-      const dimensions = fitAddon.proposeDimensions();
-      if (!dimensions) {
-        return;
-      }
-
-      void transportRef.current
-        .resize(dimensions.rows, dimensions.cols)
-        .catch(() => {
-          // Resize failures should not tear down terminal rendering.
-        });
+        },
+        resize: (rows, cols) => transportRef.current.resize(rows, cols),
+        t,
+      });
     };
 
     syncSize();
@@ -320,10 +310,13 @@ export function TerminalSurface({
         terminal,
         transportKey,
       }),
+      {
+        readTurnRunning: () => scrollToBottomOnReturnRef.current,
+      },
     );
 
     const isLayoutVisible = (): boolean =>
-      host.offsetWidth > 0 && host.offsetHeight > 0;
+      shouldFitTerminalHost(host.offsetWidth, host.offsetHeight);
 
     const isDocumentVisible = (): boolean =>
       typeof document === "undefined" || document.visibilityState === "visible";
@@ -332,11 +325,13 @@ export function TerminalSurface({
       isLayoutVisible() && isDocumentVisible();
 
     const persistViewState = () => {
-      persistTerminalViewPosition(
-        String(transportKey),
-        pipeline.getLatestSequence(),
-        terminal.buffer.active.viewportY,
-      );
+      persistMeasuredTerminalViewport({
+        viewKey: String(transportKey),
+        sequence: pipeline.getLatestSequence(),
+        reportedViewportY: terminal.buffer.active.viewportY,
+        hostWidth: host.offsetWidth,
+        hostHeight: host.offsetHeight,
+      });
     };
 
     const refreshLiveVisibility = async () => {

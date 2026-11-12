@@ -9,6 +9,7 @@ import {
   peekTerminalViewState,
   resolveHistoryScrollViewportY,
   saveTerminalViewState,
+  viewportYToPersist,
 } from "./terminal-view-state";
 
 export interface WriteTerminalHistoryOptions {
@@ -81,8 +82,8 @@ export async function writeTerminalHistory(
 
 /**
  * 回放历史并按缓存的 view state 决定滚动：
- * - sequence 未变 → 恢复原 viewport
- * - 首次 / sequence 前进 → 滚到底部
+ * - 未指定 scrollToBottom：sequence 未变恢复原 viewport，否则滚到底部
+ * - scrollToBottom 为 true / false 时覆盖序号规则
  * 写完后更新缓存。
  */
 export async function writeTerminalHistoryPreservingView(
@@ -91,11 +92,14 @@ export async function writeTerminalHistoryPreservingView(
   setInputSuppressed: (suppressed: boolean) => void,
   viewKey: string,
   restoreSequence: number,
-  options?: { preserveBuffer?: boolean },
+  options?: { preserveBuffer?: boolean; scrollToBottom?: boolean },
 ): Promise<void> {
   const restoreViewportY = resolveHistoryScrollViewportY(
     peekTerminalViewState(viewKey),
     restoreSequence,
+    options?.scrollToBottom === undefined
+      ? undefined
+      : { scrollToBottom: options.scrollToBottom },
   );
   await writeTerminalHistory(terminal, text, setInputSuppressed, {
     restoreViewportY,
@@ -116,4 +120,24 @@ export function persistTerminalViewPosition(
   viewportY: number,
 ): void {
   saveTerminalViewState(viewKey, { sequence, viewportY });
+}
+
+/** 零高度上报的 viewport 0 不覆盖已记录位置。 */
+export function persistMeasuredTerminalViewport(input: {
+  viewKey: string;
+  sequence: number;
+  reportedViewportY: number;
+  hostWidth: number;
+  hostHeight: number;
+}): void {
+  const viewportY = viewportYToPersist(
+    input.reportedViewportY,
+    input.hostWidth,
+    input.hostHeight,
+    peekTerminalViewState(input.viewKey)?.viewportY ?? null,
+  );
+  if (viewportY === null) {
+    return;
+  }
+  persistTerminalViewPosition(input.viewKey, input.sequence, viewportY);
 }

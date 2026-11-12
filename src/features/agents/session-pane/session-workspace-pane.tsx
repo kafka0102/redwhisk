@@ -135,6 +135,7 @@ function sessionView(
       <AgentTuiSessionView
         isActive={isCurrent}
         issueStatus={workspace.issueStatus}
+        isTurnRunning={workspace.isTurnRunning}
         logPath={workspace.logPath}
         projectId={projectId}
         sessionId={workspace.sessionId}

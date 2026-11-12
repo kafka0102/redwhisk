@@ -29,6 +29,8 @@ interface AgentTuiSessionViewProps {
   logPath?: string | null;
   /** 已完成回看里的终端：只回放，不接收输入。 */
   readOnly?: boolean;
+  /** 当前 Turn 是否正在运行。为真时切回滚到终端底部。 */
+  isTurnRunning?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function AgentTuiSessionView({
   isActive = true,
   logPath = null,
   readOnly = false,
+  isTurnRunning = false,
 }: AgentTuiSessionViewProps) {
   const { messages } = useI18n();
   const isArchiveReplay = isTuiArchiveLogPath(logPath);
@@ -140,6 +143,7 @@ export function AgentTuiSessionView({
       <TerminalSurface
         ariaLabel={messages.agentsFeature.tuiSessionView}
         disableInput={readOnly}
+        scrollToBottomOnReturn={isTurnRunning}
         transport={transport}
         transportKey={`agent-tui:${projectId}:${sessionId}:${surfaceEpoch}`}
       />

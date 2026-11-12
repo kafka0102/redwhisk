@@ -3,8 +3,8 @@
  *
  * 用于在 workspace tab / Activity 切换后恢复滚动位置：
  * - 隐藏或卸载时记录 viewportY 与 sequence
- * - 再次可见时若 sequence 未变（期间无新输出），恢复原滚动位置
- * - 若 sequence 前进（期间有输出），则滚到最新底部
+ * - 项目终端：sequence 未变则恢复原滚动位置；sequence 前进则滚到最新底部
+ * - Agent 会话终端可另传「切回是否滚到底」，覆盖序号规则
  */
 export interface TerminalViewState {
   sequence: number;
@@ -31,15 +31,44 @@ export function clearTerminalViewStatesForTests(): void {
 
 /**
  * 历史回放后的滚动策略：
- * - 隐藏期间 sequence 未变 → 恢复原 viewportY
- * - 首次展示或期间有新输出 → 返回 null（调用方滚到底部）
+ * - `scrollToBottom === true` → 返回 null（调用方滚到底部）
+ * - `scrollToBottom === false` 且有记录 → 恢复原 viewportY，即使 sequence 已前进
+ * - 未指定时：sequence 未变恢复原 viewportY；否则返回 null（滚到底部）
  */
 export function resolveHistoryScrollViewportY(
   saved: TerminalViewState | null,
   restoreSequence: number,
+  options?: { scrollToBottom?: boolean },
 ): number | null {
+  if (options?.scrollToBottom === true) {
+    return null;
+  }
+  if (options?.scrollToBottom === false) {
+    return saved === null ? null : saved.viewportY;
+  }
   if (saved !== null && saved.sequence === restoreSequence) {
     return saved.viewportY;
   }
   return null;
+}
+
+/**
+ * 零高度时 xterm 可能把 viewport 报成 0。
+ * 已记录的非 0 位置不得被写成 0；没有可保留的位置时跳过本次写入。
+ * 返回 null 表示不要覆盖缓存。
+ */
+export function viewportYToPersist(
+  reportedViewportY: number,
+  hostWidth: number,
+  hostHeight: number,
+  savedViewportY: number | null,
+): number | null {
+  const collapsed = hostWidth === 0 || hostHeight === 0;
+  if (collapsed && reportedViewportY === 0) {
+    if (savedViewportY !== null && savedViewportY !== 0) {
+      return savedViewportY;
+    }
+    return null;
+  }
+  return reportedViewportY;
 }

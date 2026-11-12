@@ -16,6 +16,11 @@ export interface WriteTerminalHistoryMeta {
    * reset 后再灌会留下近乎空白的一屏。
    */
   preserveBuffer?: boolean;
+  /**
+   * 未设置：按序号决定是否滚到底（项目终端）。
+   * true：切回滚到底。false：停在离开前的 viewport。
+   */
+  scrollToBottom?: boolean;
 }
 
 export interface TerminalLivePipelineCallbacks {
@@ -28,6 +33,15 @@ export interface TerminalLivePipelineCallbacks {
   onInactive: () => void;
   onLiveReady: () => void;
   onPendingDropped: () => void;
+  /** 跳过整段回放时，仍要把视口滚到底。 */
+  scrollToBottom?: () => void;
+}
+
+export interface TerminalLivePipelineOptions {
+  /** 构造时的 Turn 状态。项目终端不传。 */
+  isTurnRunning?: boolean;
+  /** 每次切回时读取。Agent 表面用它跟上后来的 Turn 变化，且不在可见期间改视口。 */
+  readTurnRunning?: () => boolean | undefined;
 }
 
 /**
@@ -46,11 +60,16 @@ export class TerminalLivePipeline {
   private rafId: number | null = null;
   private readonly rafChunks: Uint8Array[] = [];
   private rafBytes = 0;
+  private readonly readTurnRunning: () => boolean | undefined;
 
   constructor(
     private readonly transport: TerminalTransport,
     private readonly callbacks: TerminalLivePipelineCallbacks,
-  ) {}
+    options?: TerminalLivePipelineOptions,
+  ) {
+    this.readTurnRunning =
+      options?.readTurnRunning ?? (() => options?.isTurnRunning);
+  }
 
   getPhase(): TerminalLivePhase {
     return this.phase;
@@ -103,10 +122,14 @@ export class TerminalLivePipeline {
       }
 
       const hasExistingBuffer = previousSequence > 0;
-      const viewUnchanged =
+      const turnRunning = this.readTurnRunning();
+      const sequenceUnchanged =
         hasExistingBuffer && restoreResult.sequence === previousSequence;
+      // 序号未变才跳过回放。序号前进且已有 buffer 时仍 writeHistory：
+      // preserveBuffer 禁止 reset，只追加 tail。不在运行时 scrollToBottom 为 false，视口停在离开前。
+      const skipRewrite = sequenceUnchanged;
 
-      if (!viewUnchanged) {
+      if (!skipRewrite) {
         const snapshotResult = await this.transport.readSnapshot(
           TERMINAL_HISTORY_MAX_BYTES,
         );
@@ -118,6 +141,7 @@ export class TerminalLivePipeline {
           await this.callbacks.writeHistory(snapshotResult.snapshot, {
             restoreSequence: restoreResult.sequence,
             preserveBuffer: hasExistingBuffer,
+            scrollToBottom: turnRunning,
           });
           if (!this.isCurrentGeneration(generation)) {
             return;
@@ -139,6 +163,9 @@ export class TerminalLivePipeline {
       // 历史一律从磁盘 log 回放；restore.isComplete 只表示内存缓冲是否自 session
       // 起点完整，不影响可见内容与 live sequence 对齐，故不向用户展示噪音提示。
       // view 未变时也走 onLiveReady：用于 WebGL 在 display:none 后强制重绘。
+      if (skipRewrite && turnRunning === true) {
+        this.callbacks.scrollToBottom?.();
+      }
       this.callbacks.onLiveReady();
       this.phase = "live";
       this.flushPendingEvents();

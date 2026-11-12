@@ -62,10 +62,16 @@ export function createTerminalSurfaceLiveHandlers(
         deps.setInputSuppressed,
         String(deps.transportKey),
         meta.restoreSequence,
-        { preserveBuffer: meta.preserveBuffer },
+        {
+          preserveBuffer: meta.preserveBuffer,
+          scrollToBottom: meta.scrollToBottom,
+        },
       );
       liveBytesSinceHeal = 0;
       healTerminalViewport(deps.terminal);
+    },
+    scrollToBottom: () => {
+      deps.terminal.scrollToBottom();
     },
     onRestoreError: (error) => {
       deps.showStatusMessage("restore", getCommandErrorMessage(error, deps.t));

@@ -10,6 +10,7 @@ const terminalSurfaceMock = vi.hoisted(() => ({
   lastTransport: null as TerminalTransport | null,
   lastTransportKey: null as string | number | null,
   lastAriaLabel: null as string | null,
+  lastScrollToBottomOnReturn: undefined as boolean | undefined,
   remountCount: 0,
 }));
 
@@ -41,14 +42,17 @@ vi.mock("../../terminals/terminal-surface", () => ({
     ariaLabel,
     transport,
     transportKey,
+    scrollToBottomOnReturn,
   }: {
     ariaLabel: string;
     transport: TerminalTransport;
     transportKey: string | number;
+    scrollToBottomOnReturn?: boolean;
   }) => {
     terminalSurfaceMock.lastAriaLabel = ariaLabel;
     terminalSurfaceMock.lastTransport = transport;
     terminalSurfaceMock.lastTransportKey = transportKey;
+    terminalSurfaceMock.lastScrollToBottomOnReturn = scrollToBottomOnReturn;
     terminalSurfaceMock.remountCount += 1;
     return createElement("div", {
       "aria-label": ariaLabel,
@@ -118,6 +122,7 @@ describe("AgentTuiSessionView", () => {
     terminalSurfaceMock.lastTransport = null;
     terminalSurfaceMock.lastTransportKey = null;
     terminalSurfaceMock.lastAriaLabel = null;
+    terminalSurfaceMock.lastScrollToBottomOnReturn = undefined;
     terminalSurfaceMock.remountCount = 0;
     eventMocks.handler = null;
     commandMocks.listAgentModels.mockReset();
@@ -532,5 +537,23 @@ describe("AgentTuiSessionView", () => {
     });
     expect(commandMocks.listAgentModels).not.toHaveBeenCalled();
     expect(commandMocks.resumeAgentSession).not.toHaveBeenCalled();
+  });
+
+  it("isTurnRunning 为真时把切回滚到底传给终端表面", () => {
+    render(<AgentTuiSessionView projectId={7} sessionId={42} isTurnRunning />);
+
+    expect(terminalSurfaceMock.lastScrollToBottomOnReturn).toBe(true);
+  });
+
+  it("isTurnRunning 为假时切回不滚到底", () => {
+    render(
+      <AgentTuiSessionView
+        projectId={7}
+        sessionId={42}
+        isTurnRunning={false}
+      />,
+    );
+
+    expect(terminalSurfaceMock.lastScrollToBottomOnReturn).toBe(false);
   });
 });
