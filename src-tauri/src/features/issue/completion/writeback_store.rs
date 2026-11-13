@@ -100,9 +100,11 @@ pub(crate) fn after_local_completion(
         existing_open_pull_request: existing,
         merged_change_request: false,
     };
+    // 合并完成会先删除 RedWhisk worktree。写回必须用仍在的项目仓库，不能用已删除的会话目录。
+    let repo_path = project_repo_path(connection, remote.project_id)?;
     let forge = CliForge {
         provider: &remote.provider,
-        repo_dir: Path::new(working_dir),
+        repo_dir: Path::new(&repo_path),
         number: remote.number,
     };
     apply_persisted_writeback(connection, &forge, issue_id, method, &request)
@@ -231,13 +233,7 @@ pub(crate) fn retry_issue_completion_writeback_on(
     let Some(remote) = load_remote(connection, issue_id)? else {
         return Ok(());
     };
-    let repo_path = connection
-        .query_row(
-            "SELECT repo_path FROM projects WHERE id = ?1",
-            params![remote.project_id],
-            |row| row.get::<_, String>(0),
-        )
-        .map_err(persistence)?;
+    let repo_path = project_repo_path(connection, remote.project_id)?;
     let forge = CliForge {
         provider: &remote.provider,
         repo_dir: Path::new(&repo_path),
@@ -358,6 +354,16 @@ fn load_remote(connection: &Connection, issue_id: i64) -> Result<Option<RemoteRe
             },
         )
         .optional()
+        .map_err(persistence)
+}
+
+fn project_repo_path(connection: &Connection, project_id: i64) -> Result<String, CommandError> {
+    connection
+        .query_row(
+            "SELECT repo_path FROM projects WHERE id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
         .map_err(persistence)
 }
 

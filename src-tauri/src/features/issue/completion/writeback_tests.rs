@@ -5,12 +5,16 @@ use super::writeback::{
     WritebackBook,
 };
 use super::writeback_store::{
-    apply_persisted_writeback, detail_writeback, retry_issue_completion_writeback_on,
+    after_local_completion, apply_persisted_writeback, detail_writeback,
+    retry_issue_completion_writeback_on,
 };
 use crate::db::migrations::MigrationRunner;
 use crate::features::issue::detail_read::read_issue_detail;
-use crate::features::issue::github_issue_mirror::{ForgeIssueError, RemoteIssueState};
+use crate::features::issue::github_issue_mirror::{
+    with_captured_forge_dirs, ForgeIssueError, RemoteIssueState,
+};
 use crate::types::errors::CommandErrorCode;
+use crate::types::issue_completion::CloseoutAction;
 use crate::types::issue_detail::GetIssueDetailInput;
 
 fn memory() -> Connection {
@@ -325,4 +329,38 @@ fn open_pull_request_does_not_use_close_on_merge() {
     };
     apply_completion_writeback(&forge, &mut book, &request).expect("writeback");
     assert_eq!(forge.close_count(), 0);
+}
+
+#[test]
+fn completion_writeback_uses_project_repo_after_worktree_removal() {
+    let connection = memory();
+    let project_id = insert_project(&connection);
+    let repo = tempfile::tempdir().expect("project repo");
+    connection
+        .execute(
+            "UPDATE projects SET repo_path = ?2 WHERE id = ?1",
+            params![project_id, repo.path().to_str().expect("repo path")],
+        )
+        .expect("repo path");
+    let issue_id = insert_completed(&connection, project_id);
+    set_switches(&connection, project_id, true, false);
+    let removed_worktree = repo.path().join("removed-worktree");
+
+    let (result, dirs) = with_captured_forge_dirs(|| {
+        after_local_completion(
+            &connection,
+            issue_id,
+            removed_worktree.to_str().expect("worktree path"),
+            None,
+            Some(CloseoutAction::MergeToBase),
+        )
+    });
+
+    result.expect("writeback after worktree removal");
+    assert_eq!(dirs, vec![repo.path().to_path_buf()]);
+    assert_eq!(status_of(&connection, issue_id), "completed");
+    assert_eq!(remote_state_of(&connection, issue_id), "closed");
+    let (pending, code) = detail_writeback(&connection, issue_id).expect("pending");
+    assert!(!pending);
+    assert_eq!(code, None);
 }

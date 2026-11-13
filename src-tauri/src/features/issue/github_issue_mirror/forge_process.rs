@@ -10,6 +10,10 @@ pub(crate) fn capture_forge_stdout(
     args: &[String],
     repo_dir: &Path,
 ) -> Result<String, ForgeIssueError> {
+    #[cfg(test)]
+    if let Some(result) = simulated_forge_result(repo_dir) {
+        return result;
+    }
     let mut command = forge_command(program, args, repo_dir);
     let output = match command.output() {
         Ok(output) => output,
@@ -83,6 +87,50 @@ pub(super) fn classify_stderr(stderr: &str) -> ForgeIssueError {
         return ForgeIssueError::NotFound;
     }
     ForgeIssueError::CommandFailed
+}
+
+#[cfg(test)]
+thread_local! {
+    static CAPTURED_FORGE_DIRS: std::cell::RefCell<Option<Vec<std::path::PathBuf>>> =
+        std::cell::RefCell::new(None);
+}
+
+#[cfg(test)]
+fn simulated_forge_result(repo_dir: &Path) -> Option<Result<String, ForgeIssueError>> {
+    CAPTURED_FORGE_DIRS.with(|slot| {
+        let mut guard = slot.borrow_mut();
+        let Some(dirs) = guard.as_mut() else {
+            return None;
+        };
+        dirs.push(repo_dir.to_path_buf());
+        // 目录不存在时，真实 spawn 是 ErrorKind::NotFound，会被收成 CliMissing。
+        Some(if repo_dir.is_dir() {
+            Ok(String::new())
+        } else {
+            Err(ForgeIssueError::CliMissing)
+        })
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn with_captured_forge_dirs<T>(f: impl FnOnce() -> T) -> (T, Vec<std::path::PathBuf>) {
+    struct Guard {
+        previous: Option<Vec<std::path::PathBuf>>,
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            CAPTURED_FORGE_DIRS.with(|slot| {
+                *slot.borrow_mut() = self.previous.take();
+            });
+        }
+    }
+
+    let previous = CAPTURED_FORGE_DIRS.with(|slot| slot.replace(Some(Vec::new())));
+    let _guard = Guard { previous };
+    let result = f();
+    let dirs = CAPTURED_FORGE_DIRS.with(|slot| slot.borrow().clone().unwrap_or_default());
+    (result, dirs)
 }
 
 #[cfg(test)]

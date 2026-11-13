@@ -20,6 +20,8 @@ pub(crate) use port::{
 #[cfg(test)]
 pub(crate) use behavior::support::{ready_github_project, seed_remote_issue, set_auth, set_mode};
 #[cfg(test)]
+pub(crate) use forge_process::with_captured_forge_dirs;
+#[cfg(test)]
 pub(crate) use port::{open_issue, FixedForge};
 #[cfg(test)]
 pub(crate) use sync::sync_project_issues;
