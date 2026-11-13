@@ -11,7 +11,7 @@ pub(crate) fn capture_forge_stdout(
     repo_dir: &Path,
 ) -> Result<String, ForgeIssueError> {
     #[cfg(test)]
-    if let Some(result) = simulated_forge_result(repo_dir) {
+    if let Some(result) = simulated_forge_result(program, args, repo_dir) {
         return result;
     }
     let mut command = forge_command(program, args, repo_dir);
@@ -90,19 +90,44 @@ pub(super) fn classify_stderr(stderr: &str) -> ForgeIssueError {
 }
 
 #[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ForgeInvocation {
+    pub program: String,
+    pub args: Vec<String>,
+    pub dir: std::path::PathBuf,
+}
+
+#[cfg(test)]
+struct ForgeSimulation {
+    invocations: Vec<ForgeInvocation>,
+    failure: Option<ForgeIssueError>,
+}
+
+#[cfg(test)]
 thread_local! {
-    static CAPTURED_FORGE_DIRS: std::cell::RefCell<Option<Vec<std::path::PathBuf>>> =
+    static FORGE_SIMULATION: std::cell::RefCell<Option<ForgeSimulation>> =
         std::cell::RefCell::new(None);
 }
 
 #[cfg(test)]
-fn simulated_forge_result(repo_dir: &Path) -> Option<Result<String, ForgeIssueError>> {
-    CAPTURED_FORGE_DIRS.with(|slot| {
+fn simulated_forge_result(
+    program: &str,
+    args: &[String],
+    repo_dir: &Path,
+) -> Option<Result<String, ForgeIssueError>> {
+    FORGE_SIMULATION.with(|slot| {
         let mut guard = slot.borrow_mut();
-        let Some(dirs) = guard.as_mut() else {
+        let Some(simulation) = guard.as_mut() else {
             return None;
         };
-        dirs.push(repo_dir.to_path_buf());
+        simulation.invocations.push(ForgeInvocation {
+            program: program.to_string(),
+            args: args.to_vec(),
+            dir: repo_dir.to_path_buf(),
+        });
+        if let Some(failure) = simulation.failure.clone() {
+            return Some(Err(failure));
+        }
         // 目录不存在时，真实 spawn 是 ErrorKind::NotFound，会被收成 CliMissing。
         Some(if repo_dir.is_dir() {
             Ok(String::new())
@@ -113,24 +138,62 @@ fn simulated_forge_result(repo_dir: &Path) -> Option<Result<String, ForgeIssueEr
 }
 
 #[cfg(test)]
-pub(crate) fn with_captured_forge_dirs<T>(f: impl FnOnce() -> T) -> (T, Vec<std::path::PathBuf>) {
+fn with_simulation<T>(
+    failure: Option<ForgeIssueError>,
+    f: impl FnOnce() -> T,
+) -> (T, Vec<ForgeInvocation>) {
     struct Guard {
-        previous: Option<Vec<std::path::PathBuf>>,
+        previous: Option<ForgeSimulation>,
     }
 
     impl Drop for Guard {
         fn drop(&mut self) {
-            CAPTURED_FORGE_DIRS.with(|slot| {
+            FORGE_SIMULATION.with(|slot| {
                 *slot.borrow_mut() = self.previous.take();
             });
         }
     }
 
-    let previous = CAPTURED_FORGE_DIRS.with(|slot| slot.replace(Some(Vec::new())));
+    let previous = FORGE_SIMULATION.with(|slot| {
+        slot.replace(Some(ForgeSimulation {
+            invocations: Vec::new(),
+            failure,
+        }))
+    });
     let _guard = Guard { previous };
     let result = f();
-    let dirs = CAPTURED_FORGE_DIRS.with(|slot| slot.borrow().clone().unwrap_or_default());
+    let invocations = FORGE_SIMULATION.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|simulation| simulation.invocations.clone())
+            .unwrap_or_default()
+    });
+    (result, invocations)
+}
+
+#[cfg(test)]
+pub(crate) fn with_captured_forge_dirs<T>(f: impl FnOnce() -> T) -> (T, Vec<std::path::PathBuf>) {
+    let (result, invocations) = with_simulation(None, f);
+    let dirs = invocations
+        .into_iter()
+        .map(|invocation| invocation.dir)
+        .collect();
     (result, dirs)
+}
+
+#[cfg(test)]
+pub(crate) fn with_captured_forge_invocations<T>(
+    f: impl FnOnce() -> T,
+) -> (T, Vec<ForgeInvocation>) {
+    with_simulation(None, f)
+}
+
+#[cfg(test)]
+pub(crate) fn with_simulated_forge_failure<T>(
+    failure: ForgeIssueError,
+    f: impl FnOnce() -> T,
+) -> (T, Vec<ForgeInvocation>) {
+    with_simulation(Some(failure), f)
 }
 
 #[cfg(test)]

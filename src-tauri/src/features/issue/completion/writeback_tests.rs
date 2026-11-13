@@ -11,7 +11,8 @@ use super::writeback_store::{
 use crate::db::migrations::MigrationRunner;
 use crate::features::issue::detail_read::read_issue_detail;
 use crate::features::issue::github_issue_mirror::{
-    with_captured_forge_dirs, ForgeIssueError, RemoteIssueState,
+    with_captured_forge_dirs, with_captured_forge_invocations, ForgeInvocation, ForgeIssueError,
+    RemoteIssueState,
 };
 use crate::types::errors::CommandErrorCode;
 use crate::types::issue_completion::CloseoutAction;
@@ -364,3 +365,72 @@ fn completion_writeback_uses_project_repo_after_worktree_removal() {
     assert!(!pending);
     assert_eq!(code, None);
 }
+
+fn bind_repo(connection: &Connection, project_id: i64) -> tempfile::TempDir {
+    let repo = tempfile::tempdir().expect("project repo");
+    connection
+        .execute(
+            "UPDATE projects SET repo_path = ?2 WHERE id = ?1",
+            params![project_id, repo.path().to_str().expect("repo path")],
+        )
+        .expect("repo path");
+    repo
+}
+
+fn set_provider(connection: &Connection, issue_id: i64, provider: &str) {
+    connection
+        .execute(
+            "UPDATE issue_external_refs SET provider = ?2 WHERE issue_id = ?1",
+            params![issue_id, provider],
+        )
+        .expect("provider");
+}
+
+fn close_invocation(program: &str, number: i64, dir: &std::path::Path) -> ForgeInvocation {
+    let mut args = vec!["issue".to_string(), "close".to_string(), number.to_string()];
+    if program == "gh" {
+        args.push("--reason".to_string());
+        args.push("completed".to_string());
+    }
+    ForgeInvocation {
+        program: program.to_string(),
+        args,
+        dir: dir.to_path_buf(),
+    }
+}
+
+fn write_back(
+    connection: &Connection,
+    issue_id: i64,
+    worktree: &str,
+    action: CloseoutAction,
+) -> Result<(), crate::types::errors::CommandError> {
+    after_local_completion(connection, issue_id, worktree, None, Some(action))
+}
+
+#[test]
+fn merge_to_base_with_switch_on_closes_github_issue() {
+    let connection = memory();
+    let project_id = insert_project(&connection);
+    let repo = bind_repo(&connection, project_id);
+    let issue_id = insert_completed(&connection, project_id);
+    set_switches(&connection, project_id, true, false);
+    let removed = repo.path().join("removed-worktree");
+    let worktree = removed.to_str().expect("worktree path");
+    let expected = close_invocation("gh", 12, repo.path());
+
+    let (result, invocations) = with_captured_forge_invocations(|| {
+        let first = write_back(&connection, issue_id, worktree, CloseoutAction::MergeToBase);
+        let second = write_back(&connection, issue_id, worktree, CloseoutAction::MergeToBase);
+        (first, second)
+    });
+
+    result.0.expect("writeback");
+    result.1.expect("repeat");
+    assert_eq!(invocations, vec![expected]);
+    assert_eq!(status_of(&connection, issue_id), "completed");
+    assert_eq!(remote_state_of(&connection, issue_id), "closed");
+}
+
+#[path = "writeback_close_command_tests.rs"]
+mod writeback_close_command_tests;
