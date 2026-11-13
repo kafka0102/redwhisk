@@ -73,6 +73,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 涉及 Tauri 边界、状态机或 Codex session：读取 `docs/architecture-design/agent-development-rules.md`。
 - 诊断 Agent 会话行为（权限卡、模型或权限与预期不符、重建后续不上）：读取 `docs/architecture-design/agent-session-diagnostics.md`。
 - 诊断 Session 输入框在 Agent 运行中发送后长时间不进入执行：先读 `CONTEXT.md` 的「Turn 插入」与「排队追问」，再看 composer 的排队与 Codex `turn/steer`。
+- 诊断完成写回（合并到 base 没关远端、详情有待写回）：先读 `CONTEXT.md` 的「Issue 完成写回」，再看 `src-tauri/src/features/issue/completion/writeback_store.rs` 的 `after_local_completion`。
 - 创建 Git 提交：读取 `docs/standards/git-workflow.md`。
 - 发布或打包：读取 `docs/standards/release-workflow.md`。
 - 涉及后端命令、git 操作或轮询性能：额外读取 `docs/standards/performance.md`。
@@ -80,7 +81,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
 
-前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。
+前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0，那不是红。
 
 改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
 
@@ -95,7 +96,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 改了交互式 `PATH` 或子进程环境注入（`src-tauri/src/agent/command_detector.rs`、`src-tauri/src/agent/pty_session_manager.rs`、`src-tauri/src/git/command.rs`、`src-tauri/src/agent/*/transport.rs`）后，再跑 `cd src-tauri && cargo test --lib agent::command_detector`。规则见 `docs/architecture-design/agent-development-rules.md`「交互式 PATH 三条不变量」。
 
-格式化单个 Rust 文件时用 `rustfmt --edition 2021 <该文件的绝对路径>`。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
+格式化单个 Rust 文件时用 `rustfmt --edition 2021 --config skip_children=true <该文件的绝对路径>`。这样格式化 `mod.rs` 不会改写子模块。`cargo fmt` 带不带路径都会格式化整个 crate；提交前 `git diff --stat` 里若出现本次任务之外的 Rust 文件，先还原这些文件再继续。细则见 `docs/standards/coding-style.md`「格式与提交前检查」。
 
 依赖与安装前提（跑门禁前必须满足）：
 

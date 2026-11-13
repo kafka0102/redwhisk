@@ -4,7 +4,7 @@
 
 ## 先跑已有门禁
 
-Standards 写成通过之前，对 diff 里的前端文件跑 `pnpm lint`，对 diff 里的 Rust 文件跑 `rustfmt --edition 2021 --check`。这和 `scripts/hooks/pre-commit` 用的是同一类检查。任一失败，Standards 不通过。
+Standards 写成通过之前，对 diff 里的前端文件跑 `pnpm lint`，对 diff 里的 Rust 文件跑 `rustfmt --edition 2021 --config skip_children=true --check`。这和 `scripts/hooks/pre-commit` 用的是同一类检查。任一失败，Standards 不通过。格式化 `mod.rs` 时带上 `skip_children=true`，避免改写子模块。
 
 行数看 `scripts/check-rust-file-size.sh` 的结果。它数的是 `rustfmt --edition 2021` 之后的行。
 
