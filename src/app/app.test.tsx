@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -457,8 +457,6 @@ describe("App project entry", () => {
   });
 
   it("marks the Project Home window header as a Tauri drag region without React maximize handlers", async () => {
-    const user = userEvent.setup();
-
     render(<App />);
 
     await screen.findByRole("searchbox", { name: "搜索项目" });
@@ -472,7 +470,7 @@ describe("App project entry", () => {
 
     // 回归：Tauri drag.js 已在 double-click 时 internal_toggle_maximize；
     // React 再 toggle 会把刚最大化的窗口立刻 unmaximize。
-    await user.dblClick(header!);
+    fireEvent.doubleClick(header!);
 
     expect(getCurrentWindowMock).not.toHaveBeenCalled();
     expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();
@@ -669,7 +667,6 @@ describe("App project entry", () => {
 
   it("keeps workbench header maximize ownership on Tauri drag-region only", async () => {
     window.history.replaceState(null, "", "/?projectId=1");
-    const user = userEvent.setup();
 
     render(<App />);
 
@@ -687,7 +684,7 @@ describe("App project entry", () => {
 
     // 回归：原生 drag-region 已 maximize 后，React onDoubleClick 再读 isMaximized
     // 并 unmaximize，用户看到「最大化后又缩回来」。
-    await user.dblClick(header!);
+    fireEvent.doubleClick(header!);
 
     expect(getCurrentWindowMock).not.toHaveBeenCalled();
     expect(mockAppWindow.isMaximized).not.toHaveBeenCalled();

@@ -167,10 +167,11 @@ pnpm release:version 0.1.0
 4. 执行 `pnpm lint`
 5. 执行 `pnpm typecheck`
 6. 执行 `pnpm test`
-7. 执行 `pnpm build:macos`
-8. 提交版本号改动
-9. 创建 `v<version>` tag
-10. 推送当前分支与 tag，触发 GitHub Actions 发布
+7. 执行 `pnpm test:browser`
+8. 执行 `pnpm build:macos`
+9. 提交版本号改动
+10. 创建 `v<version>` tag
+11. 推送当前分支与 tag，触发 GitHub Actions 发布
 
 #### 手动分步（轻量等价）
 

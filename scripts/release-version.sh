@@ -86,6 +86,9 @@ pnpm typecheck
 echo "==> Test"
 pnpm test
 
+echo "==> Browser test"
+pnpm test:browser
+
 echo "==> 本地构建 Mac Universal 包"
 pnpm build:macos
 

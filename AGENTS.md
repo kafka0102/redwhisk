@@ -1,6 +1,6 @@
 # RedWhisk Agent 指令
 
-> 本文件是项目唯一的 AI 指令事实源。CLAUDE.md 通过 `@AGENTS.md` 引用本文，不另立规则。
+> 本文件是项目唯一的 AI 指令事实源，不另立规则。
 > 工程细节规范在 `docs/`，本文只负责：定向（读哪些 docs）、门禁（完成判定）、项目特有强约束。
 > 外部 skill / workflow / 模板的默认行为，不得覆盖本文。
 
@@ -35,7 +35,8 @@
 | 格式化 | `pnpm format` |
 | Lint | `pnpm lint` |
 | 类型检查 | `pnpm typecheck` |
-| 前端测试 | `pnpm test`（行为改动跑全量；vitest 过滤只用于定位失败，不能当作通过） |
+| 前端测试 | `pnpm test`（行为改动跑全量单测；vitest 过滤只用于定位失败，不能当作通过） |
+| 真实浏览器测量 | `pnpm test:browser`（需要本机 Chrome；默认 `pnpm test` 不包含） |
 | 构建 | `pnpm build` |
 | Rust 编译检查 | `bash scripts/check-rust-compile.sh` |
 | Rust 测试 | `cd src-tauri && cargo test` |
@@ -81,7 +82,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 ## 5. 质量门禁（任务完成判定，缺一不可）
 
-前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0，那不是红。
+前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。涉及 `*.browser.test.tsx` 的真实浏览器测量加 `--with-browser`；CI 的 PR 检查会单独跑 `pnpm test:browser`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0，那不是红。
 
 改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
 
@@ -105,7 +106,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - `vi.mock("某包")` 只替测试运行时，**不能**替代真实依赖安装；缺包时 `pnpm typecheck` / `pnpm build` 仍会报 `Cannot find module`。
 - 若 typecheck 报 `Cannot find module 'X'` 且 `X` 已在 `package.json` 声明：先 `pnpm install` 再重跑，不要把它当成源码逻辑 bug 去改 import 或加 `@ts-ignore`。
 
-纯文档改动（`docs/**`、`*.md`、`AGENTS.md`、`CLAUDE.md`）豁免 lint / typecheck / test / build，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
+纯文档改动（`docs/**`、`*.md`、`AGENTS.md`）豁免 lint / typecheck / test / build，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
 
 完成判定（缺一不可）：
 
@@ -141,7 +142,6 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 - 任务完成并按 §5 验证后，由 Agent 手动创建 commit；提交范围只含本次任务直接相关文件，禁止混入无关改动。
 - 提交历史只向前追加：前序提交有问题时用后续提交修正，不重写已有提交。
-- `.claude` 的 `Stop` hook 会检查是否存在未提交的任务改动：若有，会要求 Agent 自行完成提交（不依赖外部脚本生成 message），未完成提交不得结束本轮回复。
 - `pnpm format` / 验证命令若改写了任务相关文件，一并纳入本次提交；若改写了无关文件，先回退再提交。
 - 提交前必须 `git status --short` 复查，确认无残留任务相关未提交文件。
 - 标题：`<type>: <简体中文描述>`，`type` 小写（feat/fix/docs/refactor/test/chore/style/perf/build/ci/revert），不用 scope；禁止「更新源码」「更新文档」等泛化措辞。
@@ -176,4 +176,4 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 3. 本文件（AGENTS.md）
 4. 外部 skill / workflow / 模板默认行为
 
-冲突时以更具体的文档为准：`docs/architecture-design/agent-development-rules.md` 特定规则 > 本文通用规则；`docs/standards/**` 专项规范 > 概括性说明。CLAUDE.md 引用本文，不另立规则。
+冲突时以更具体的文档为准：`docs/architecture-design/agent-development-rules.md` 特定规则 > 本文通用规则；`docs/standards/**` 专项规范 > 概括性说明。

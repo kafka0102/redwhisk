@@ -416,6 +416,14 @@ pnpm typecheck
 pnpm test
 ```
 
+涉及 `*.browser.test.tsx` 的真实浏览器测量时，另跑：
+
+```bash
+pnpm test:browser
+```
+
+默认 `pnpm test` 不含真实浏览器测量；CI 的 PR 检查会单独运行 `pnpm test:browser`。
+
 改动依赖（`package.json` / `pnpm-lock.yaml`）、样式、Vite/Tauri 构建配置、静态资源路径或打包相关代码时，必须补充运行：
 
 ```bash

@@ -60,6 +60,9 @@ jobs:
       - name: 前端测试
         run: pnpm test
 
+      - name: 前端真实浏览器测试
+        run: pnpm test:browser
+
       - name: 前端构建
         run: pnpm build
 

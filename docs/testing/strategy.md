@@ -7,6 +7,7 @@
 | 层级                  | 位置                                         | 覆盖重点                                                  |
 | --------------------- | -------------------------------------------- | --------------------------------------------------------- |
 | 前端 unit / component | `src/**/*.test.ts(x)`                        | UI、hooks、reducer、formatter、command wrapper、i18n      |
+| 前端真实浏览器测量    | `src/**/*.browser.test.tsx`                  | Chrome 真实布局测量；走 `pnpm test:browser`，默认 `pnpm test` 不包含 |
 | 前端命令边界          | `src/shared/commands/command-client.test.ts` | command 名、参数形状、错误归一化                          |
 | Rust unit             | 各 `src-tauri/src/**/*.rs` 的 `#[cfg(test)]` | service、repository、migration、provider 映射、Git helper |
 | Rust integration      | `src-tauri/tests/`                           | local data、project、issue、session、settings 与 Git 检测 |
@@ -15,7 +16,7 @@
 
 | 改动                         | 至少新增/调整                                                | 建议运行                                                  |
 | ---------------------------- | ------------------------------------------------------------ | --------------------------------------------------------- |
-| TS/TSX 行为                  | 同 feature 或 command client 测试                            | `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test` |
+| TS/TSX 行为                  | 同 feature 或 command client 测试                            | `pnpm format`、`pnpm lint`、`pnpm typecheck`、`pnpm test`；涉及真实浏览器测量时另跑 `pnpm test:browser` |
 | Rust 后端 / repository / Git | 同模块 unit 或 `src-tauri/tests/`                            | `bash scripts/check-rust-compile.sh`；行为变更再跑对应 `cargo test` 过滤 |
 | Tauri DTO / command          | Rust command/service 测试 + 前端 command client/feature 测试 | `bash scripts/check-rust-compile.sh`，再跑两端相应测试    |
 | migration                    | migration runner 或 repository 升级测试                      | `bash scripts/check-rust-compile.sh`，再跑对应 `cargo test` 并检查旧数据回填 |
@@ -26,6 +27,8 @@
 ## 验收重点
 
 - 每个新 command 至少覆盖一个成功和一个失败路径。失败路径用 `scripts/check-rust-command-failure-tests.sh` 检查：新增命令要有一个 `#[test]`，函数体里同时出现命令名和 `expect_err`。
+- 新共享 seam 至少有一个测试使用下游调用方的真实输入形状（例如代码 Activity 的 `workspacePath`、Session 的 `sessionId`），不能只测先接入的一边。
+- 定时轮询或异步 hook 要覆盖“请求在途时隐藏、失焦、切 Tab 或卸载”：失活后恢复必须重新检测并交付正文，不能只推进签名或缓存。
 - 每个新状态或分支至少覆盖合法迁移、非法迁移和持久化回读。
 - event 测试覆盖乱序/重复、`epoch` 变化或 provider 不支持语义的安全降级。
 - migration 测试不能只验证空库；涉及变更/回填时必须验证历史数据。
@@ -56,7 +59,7 @@ cd - && git worktree remove --force "$tmp/base" && rmdir "$tmp"   # 清理用 wo
 
 判据：基线同样失败 → 既有问题，写进回报但不纳入本次改动；基线通过 → 本次引入，必须在本次修掉。
 
-注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**全量** `pnpm test`，过滤运行只用于定位，不作为通过依据。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0。那不是红，也不是通过。
+注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**默认全量单测** `pnpm test`（真实浏览器测量另跑 `pnpm test:browser`），过滤运行只用于定位，不作为通过依据。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0。那不是红，也不是通过。
 
 ## 文件树右键菜单
 
