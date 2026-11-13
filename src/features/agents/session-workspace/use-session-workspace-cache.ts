@@ -23,7 +23,6 @@ import {
   isFileTreeDirectoryLoaded,
   normalizeFileTreeDirectoryPath,
   upsertFileTreeListing,
-  type FileTreeDirectoryListing,
 } from "../../../shared/workspace/file-tree-listings";
 import { useConditionalPolling } from "../../../shared/workspace/use-conditional-polling";
 import { useWindowFocus } from "../../../shared/window/use-window-focus";
@@ -34,12 +33,16 @@ import {
   getProjectWorktreeCommitHistory,
   getProjectWorktreeFileTree,
   readProjectWorktreeDiff,
-  readProjectWorktreeFile,
   type WorkspaceCommitChangedFile,
   type WorkspaceCommitRecord,
   type WorkspaceChangedFile,
   type WorkspaceFileTreeNode,
 } from "./session-workspace-commands";
+import type { SessionWorkspaceCache } from "./session-workspace-cache-types";
+import {
+  openWorkspaceFileTab,
+  useSessionActiveFileRefresh,
+} from "./session-workspace-file-tab";
 import type {
   SessionSidePanelTab,
   SessionWorkspaceChangeTab,
@@ -82,43 +85,6 @@ export interface SessionWorkspaceTabState {
   activeWorkspaceTab: SessionWorkspaceTabKind;
   fileTab: SessionWorkspaceFileTab | null;
   changeTab: SessionWorkspaceChangeTab | null;
-}
-
-interface SessionWorkspaceCache {
-  activeWorkspaceTab: SessionWorkspaceTabKind;
-  changeTab: SessionWorkspaceChangeTab | null;
-  changes: WorkspaceChangedFile[];
-  changesErrorMessage: string | null;
-  changesRequestSequence: number;
-  committedChangesExpanded: boolean;
-  uncommittedChangesExpanded: boolean;
-  commitHistory: WorkspaceCommitRecord[];
-  isCommitFromWorktree: boolean;
-  // worktree 场景下解析出的分叉基分支名；非 worktree / 主分支 / 解析失败时为 null。
-  // 透传到 SessionSidePanel -> SessionChangesPanel 渲染首条黄色提交右侧的黄色 base Tag。
-  baseBranch: string | null;
-  /** 是否还有更早的已提交历史。 */
-  hasMoreCommitHistory: boolean;
-  isLoadingMoreCommitHistory: boolean;
-  loadMoreCommitHistoryErrorMessage: string | null;
-  commitHistoryErrorMessage: string | null;
-  commitHistoryRequestSequence: number;
-  fileTab: SessionWorkspaceFileTab | null;
-  fileTree: WorkspaceFileTreeNode[];
-  fileTreeListings: Record<string, FileTreeDirectoryListing>;
-  fileTreeErrorMessage: string | null;
-  /** 未提交变更是否已有可展示数据（含空列表的成功响应）：加载态 = 无展示数据 && 在途。 */
-  hasChangesDisplay: boolean;
-  /** 已提交历史是否已有可展示数据（含空列表的成功响应）。 */
-  hasCommitHistoryDisplay: boolean;
-  isChangesLoading: boolean;
-  isChangesUnavailable: boolean;
-  isCommitHistoryLoading: boolean;
-  isFileTreeLoading: boolean;
-  lastCommitHistorySignature: string | null;
-  lastChangesSignature: string | null;
-  lastFileTreeSignature: string | null;
-  sidePanelTab: SessionSidePanelTab;
 }
 
 const sessionWorkspaceCacheBySessionId = new Map<
@@ -235,110 +201,6 @@ export function clearSessionWorkspaceCacheForTest(): void {
   sessionWorkspaceCacheBySessionId.clear();
   inFlightRequestsBySessionId.clear();
   fileTreeListingSequenceByKey.clear();
-}
-
-/** 按指定 sessionId 更新 workspace cache 的写入函数（hook 内的 `updateSessionCache`）。 */
-type SessionCacheUpdater = (
-  targetSessionId: number,
-  updater: (cache: SessionWorkspaceCache) => SessionWorkspaceCache,
-) => void;
-
-/** 从工作区相对路径取 basename，作为 file tab 的标签（如 `src/app/a.ts` → `a.ts`）。 */
-function fileNameFromWorkspacePath(filePath: string): string {
-  const segments = filePath.split("/").filter((segment) => segment.length > 0);
-  return segments[segments.length - 1] ?? filePath;
-}
-
-/**
- * 打开指定 session 工作区内的一个文件：先在 file tab 落加载态，再读取内容 / 写失败态。
- *
- * 文件树点击（`openFile`）与消息流路径点击（`openFilePathForSession`）共用这一段
- * 写入 + 读取逻辑，避免两套读取路径在「已打开是否重复读盘」与失败态归属上分叉。
- */
-async function openWorkspaceFileTab({
-  projectId,
-  sessionId,
-  filePath,
-  updateSessionCache,
-  translateError,
-}: {
-  projectId: number;
-  sessionId: number;
-  filePath: string;
-  updateSessionCache: SessionCacheUpdater;
-  translateError: (error: unknown) => string;
-}): Promise<void> {
-  // 与 CodeWorkspace 对齐：已打开且仍在加载 / 已有内容时不重复读盘，
-  // 避免连点同一文件触发二次 IO 与全量 cache 刷新。
-  let shouldFetch = true;
-  updateSessionCache(sessionId, (cache) => {
-    const existing =
-      cache.fileTab?.filePath === filePath ? cache.fileTab : null;
-    if (existing != null) {
-      shouldFetch = false;
-      if (
-        cache.activeWorkspaceTab === "file" &&
-        (existing.content != null ||
-          existing.isLoading ||
-          existing.errorMessage != null)
-      ) {
-        return cache;
-      }
-      return {
-        ...cache,
-        activeWorkspaceTab: "file",
-        fileTab: existing,
-      };
-    }
-    return {
-      ...cache,
-      activeWorkspaceTab: "file",
-      fileTab: {
-        fileName: fileNameFromWorkspacePath(filePath),
-        filePath,
-        content: null,
-        errorMessage: null,
-        isLoading: true,
-      },
-    };
-  });
-
-  if (!shouldFetch) {
-    return;
-  }
-
-  try {
-    const content = await readProjectWorktreeFile({
-      projectId,
-      sessionId,
-      filePath,
-    });
-
-    updateSessionCache(sessionId, (cache) => ({
-      ...cache,
-      fileTab:
-        cache.fileTab?.filePath === filePath
-          ? {
-              ...cache.fileTab,
-              content,
-              errorMessage: null,
-              isLoading: false,
-            }
-          : cache.fileTab,
-    }));
-  } catch (error) {
-    updateSessionCache(sessionId, (cache) => ({
-      ...cache,
-      fileTab:
-        cache.fileTab?.filePath === filePath
-          ? {
-              ...cache.fileTab,
-              errorMessage: translateError(error),
-              isLoading: false,
-            }
-          : cache.fileTab,
-    }));
-  }
 }
 
 const defaultWorkspaceCache = (): SessionWorkspaceCache => ({
@@ -1250,6 +1112,22 @@ export function useSessionWorkspaceCache({
       isWindowFocused &&
       isSidePanelOpen &&
       currentCache.sidePanelTab === "files",
+  });
+
+  // 当前文件 Tab 的磁盘变化检测：与代码 Activity 共用同一套 3 秒可见刷新策略。
+  // 只在侧栏打开、文件 Tab 暴露且存在 fileTab 时启用；窗口聚焦由共享 hook 门控。
+  const activeFileTab =
+    currentCache.activeWorkspaceTab === "file" ? currentCache.fileTab : null;
+  useSessionActiveFileRefresh({
+    projectId,
+    sessionId,
+    fileTab: activeFileTab,
+    enabled:
+      isSidePanelOpen &&
+      currentCache.activeWorkspaceTab === "file" &&
+      activeFileTab != null,
+    updateSessionCache,
+    resolveErrorMessage: translateError,
   });
 
   // 失效信号：会话列表变更（回合开始 / 结束，Agent 可能在回合内真的 `git commit`）

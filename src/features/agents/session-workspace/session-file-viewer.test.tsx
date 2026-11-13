@@ -277,6 +277,37 @@ describe("SessionFileViewer", () => {
     });
   });
 
+  it("restores the reading position when a silent reload changes the file signature", async () => {
+    seedReadingPosition(420);
+    const { rerender } = render(renderViewer());
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
+      });
+    });
+
+    // 磁盘签名变化后的静默重载：加载身份变化，按既有缓存恢复一次。
+    monacoEditorApi.restoreViewState.mockClear();
+    const reloaded = {
+      ...fileTab.content!,
+      content: "export const value = 2;\n",
+      modifiedAt: 2,
+      sizeBytes: 25,
+    };
+    rerender(renderViewer({ content: reloaded }));
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
+      });
+    });
+
+    // 签名未变：普通重渲染不触发内容更新后的位置恢复。
+    monacoEditorApi.restoreViewState.mockClear();
+    rerender(renderViewer({ content: { ...reloaded } }));
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
+  });
+
   it("waits for a non-zero layout height before restoring", async () => {
     monacoEditorApi.layoutHeight = 0;
     seedReadingPosition(420);

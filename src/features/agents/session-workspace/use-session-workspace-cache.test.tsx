@@ -9,6 +9,11 @@ import {
   useSessionWorkspaceCache,
 } from "./use-session-workspace-cache";
 import type { AgentSessionListChangedEvent } from "../agent-session-events";
+import { resetActiveFileRefreshStateForTests } from "../../../shared/workspace/use-active-file-refresh";
+import {
+  readProjectWorktreeFile as readSharedProjectWorktreeFile,
+  statProjectWorktreeFile,
+} from "../../../shared/workspace/workspace-commands";
 import {
   getProjectWorktreeChanges,
   getProjectWorktreeCommitHistory,
@@ -18,6 +23,7 @@ import {
   type WorkspaceCommitChangedFile,
   type WorkspaceCommitRecord,
   type WorkspaceDiffContent,
+  type WorkspaceFileContent,
 } from "./session-workspace-commands";
 
 const eventMocks = vi.hoisted(() => ({
@@ -51,12 +57,31 @@ vi.mock("../session-workspace/session-workspace-commands", () => ({
   readProjectWorktreeFile: vi.fn(),
 }));
 
+vi.mock(
+  "../../../shared/workspace/workspace-commands",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../../shared/workspace/workspace-commands")
+      >();
+    return {
+      ...actual,
+      readProjectWorktreeFile: vi.fn(),
+      statProjectWorktreeFile: vi.fn(),
+    };
+  },
+);
+
 const getProjectWorktreeChangesMock = vi.mocked(getProjectWorktreeChanges);
 const getProjectWorktreeCommitHistoryMock = vi.mocked(
   getProjectWorktreeCommitHistory,
 );
 const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
+const readSharedProjectWorktreeFileMock = vi.mocked(
+  readSharedProjectWorktreeFile,
+);
+const statProjectWorktreeFileMock = vi.mocked(statProjectWorktreeFile);
 
 function wrapper({ children }: { children: ReactNode }) {
   return <I18nProvider initialLocale="en">{children}</I18nProvider>;
@@ -1983,6 +2008,13 @@ describe("useSessionWorkspaceCache openFilePathForSession", () => {
       hasMore: false,
     });
     readProjectWorktreeFileMock.mockReset();
+    statProjectWorktreeFileMock.mockReset();
+    statProjectWorktreeFileMock.mockImplementation(async (input) => ({
+      filePath: input.filePath,
+      sizeBytes: 19,
+      modifiedAt: null,
+    }));
+    readSharedProjectWorktreeFileMock.mockReset();
   });
 
   it("按目标 sessionId 打开工作区相对路径并写入 fileTab 内容", async () => {
@@ -2059,5 +2091,324 @@ describe("useSessionWorkspaceCache openFilePathForSession", () => {
       isLoading: false,
     });
     expect(fileTab?.errorMessage).toBe("file outside workspace");
+  });
+});
+
+describe("useSessionWorkspaceCache active file refresh", () => {
+  const FILE_PATH = "src/app/a.ts";
+  const OTHER_FILE_PATH = "src/app/b.ts";
+
+  let diskFiles: Map<string, WorkspaceFileContent>;
+
+  function missingFileError(filePath: string) {
+    return {
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: `cannot read ${filePath}`,
+    };
+  }
+
+  function contentFor(
+    filePath: string,
+    overrides: Partial<WorkspaceFileContent> = {},
+  ): WorkspaceFileContent {
+    return {
+      filePath,
+      language: "typescript",
+      content: `// ${filePath}\n`,
+      modifiedAt: 1,
+      sizeBytes: 20,
+      isBinary: false,
+      isTooLarge: false,
+      previewKind: null,
+      previewBytesBase64: "",
+      ...overrides,
+    };
+  }
+
+  function writeDiskFile(
+    filePath: string,
+    overrides: Partial<WorkspaceFileContent> = {},
+  ): WorkspaceFileContent {
+    const content = contentFor(filePath, overrides);
+    diskFiles.set(filePath, content);
+    return content;
+  }
+
+  function renderSessionCache(
+    initialProps: {
+      projectId: number;
+      sessionId: number | null;
+      isSidePanelOpen: boolean;
+    } = { projectId: 1, sessionId: 1, isSidePanelOpen: true },
+  ) {
+    return renderHook(
+      (props: {
+        projectId: number;
+        sessionId: number | null;
+        isSidePanelOpen: boolean;
+      }) => useSessionWorkspaceCache(props),
+      { initialProps, wrapper },
+    );
+  }
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    await settle();
+  }
+
+  async function openFile(
+    result: ReturnType<typeof renderSessionCache>["result"],
+    filePath: string,
+    sessionId = 1,
+  ): Promise<void> {
+    act(() => {
+      result.current.openFilePathForSession(sessionId, filePath);
+    });
+    await settle();
+    // 首轮 stat 只建立基线。
+    await advance(0);
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetActiveFileRefreshStateForTests();
+    diskFiles = new Map();
+
+    getProjectWorktreeChangesMock.mockReset();
+    getProjectWorktreeChangesMock.mockResolvedValue({
+      signature: "changes-empty",
+      files: [],
+    });
+    getProjectWorktreeCommitHistoryMock.mockReset();
+    getProjectWorktreeCommitHistoryMock.mockResolvedValue({
+      signature: "commits-empty",
+      commits: [],
+      isWorktree: false,
+      hasMore: false,
+    });
+
+    readProjectWorktreeFileMock.mockReset();
+    readProjectWorktreeFileMock.mockImplementation(async ({ filePath }) => {
+      const content = diskFiles.get(filePath);
+      if (!content) {
+        throw missingFileError(filePath);
+      }
+      return content;
+    });
+    readSharedProjectWorktreeFileMock.mockReset();
+    readSharedProjectWorktreeFileMock.mockImplementation(
+      async ({ filePath }) => {
+        const content = diskFiles.get(filePath);
+        if (!content) {
+          throw missingFileError(filePath);
+        }
+        return content;
+      },
+    );
+    statProjectWorktreeFileMock.mockReset();
+    statProjectWorktreeFileMock.mockImplementation(async ({ filePath }) => {
+      const content = diskFiles.get(filePath);
+      if (!content) {
+        throw missingFileError(filePath);
+      }
+      return {
+        filePath,
+        sizeBytes: content.sizeBytes,
+        modifiedAt: content.modifiedAt,
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("E1 文件 Tab 可见时按 3000ms 检测当前 fileTab，请求形状为 sessionId + filePath", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      filePath: FILE_PATH,
+    });
+    expect(statProjectWorktreeFileMock.mock.calls[0]?.[0]).not.toHaveProperty(
+      "workspacePath",
+    );
+
+    statProjectWorktreeFileMock.mockClear();
+    await advance(2999);
+    expect(statProjectWorktreeFileMock).not.toHaveBeenCalled();
+
+    await advance(1);
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("E2 签名变化时静默更新 fileTab.content，不进入加载态", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+    expect(result.current.fileTab?.content?.content).toBe(`// ${FILE_PATH}\n`);
+
+    const updated = writeDiskFile(FILE_PATH, {
+      content: "export const value = 2;\n",
+      sizeBytes: 25,
+      modifiedAt: 2,
+    });
+    readSharedProjectWorktreeFileMock.mockClear();
+    await advance(3000);
+
+    expect(readSharedProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+    expect(readSharedProjectWorktreeFileMock).toHaveBeenCalledWith({
+      projectId: 1,
+      sessionId: 1,
+      filePath: FILE_PATH,
+    });
+    expect(result.current.fileTab?.content).toEqual(updated);
+    expect(result.current.fileTab?.isLoading).toBe(false);
+    // 打开流程只读一次；变化刷新走共享 hook 的静默读取，不经过打开流程。
+    expect(readProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("E3 切到其它 workspace Tab 或关闭侧栏后停止检测，切回文件 Tab 按去抖补检", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result, rerender } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+
+    for (const tab of [
+      "session",
+      "changes",
+      "terminal:1",
+      "browser:1",
+    ] as const) {
+      act(() => {
+        result.current.selectWorkspaceTab(tab);
+      });
+      statProjectWorktreeFileMock.mockClear();
+      await advance(30_000);
+      expect(statProjectWorktreeFileMock).not.toHaveBeenCalled();
+
+      act(() => {
+        result.current.selectWorkspaceTab("file");
+      });
+      await advance(0);
+      expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+    }
+
+    rerender({ projectId: 1, sessionId: 1, isSidePanelOpen: false });
+    statProjectWorktreeFileMock.mockClear();
+    await advance(30_000);
+    expect(statProjectWorktreeFileMock).not.toHaveBeenCalled();
+
+    rerender({ projectId: 1, sessionId: 1, isSidePanelOpen: true });
+    await advance(0);
+    // 关闭侧栏已超过 3 秒：重新打开时立即补检一次。
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("E4 文件删除时清空正文并写既有错误态，恢复可读后自动读回", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+
+    diskFiles.delete(FILE_PATH);
+    await advance(3000);
+    expect(result.current.fileTab).toMatchObject({
+      filePath: FILE_PATH,
+      content: null,
+      isLoading: false,
+      errorMessage: `cannot read ${FILE_PATH}`,
+    });
+
+    const restored = writeDiskFile(FILE_PATH, {
+      content: "restored\n",
+      sizeBytes: 9,
+      modifiedAt: 3,
+    });
+    readSharedProjectWorktreeFileMock.mockClear();
+    await advance(3000);
+
+    expect(readSharedProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+    expect(result.current.fileTab?.content).toEqual(restored);
+    expect(result.current.fileTab?.errorMessage).toBeNull();
+    expect(result.current.fileTab?.isLoading).toBe(false);
+  });
+
+  it("E5 签名未变时不读取正文、不替换 content 引用", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+    const contentBefore = result.current.fileTab?.content;
+
+    readSharedProjectWorktreeFileMock.mockClear();
+    await advance(3000);
+
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(2);
+    expect(readSharedProjectWorktreeFileMock).not.toHaveBeenCalled();
+    expect(result.current.fileTab?.content).toBe(contentBefore);
+  });
+
+  it("B1 切回 3 秒内检测过的文件时等待剩余去抖", async () => {
+    writeDiskFile(FILE_PATH);
+    writeDiskFile(OTHER_FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+
+    await advance(2000);
+    await openFile(result, OTHER_FILE_PATH);
+    statProjectWorktreeFileMock.mockClear();
+
+    await openFile(result, FILE_PATH);
+    expect(statProjectWorktreeFileMock).not.toHaveBeenCalled();
+
+    await advance(1000);
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("B2 切回距上次检测已满 3 秒的文件时立即检测", async () => {
+    writeDiskFile(FILE_PATH);
+    writeDiskFile(OTHER_FILE_PATH);
+    const { result } = renderSessionCache();
+    await openFile(result, FILE_PATH);
+
+    await advance(1000);
+    await openFile(result, OTHER_FILE_PATH);
+    await advance(2001);
+    statProjectWorktreeFileMock.mockClear();
+
+    await openFile(result, FILE_PATH);
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("B3 不同 Session 的相同文件路径检测状态互不串用", async () => {
+    writeDiskFile(FILE_PATH);
+    const { result, rerender } = renderSessionCache();
+    await openFile(result, FILE_PATH, 1);
+
+    await advance(1000);
+    rerender({ projectId: 1, sessionId: 2, isSidePanelOpen: true });
+    await openFile(result, FILE_PATH, 2);
+    expect(statProjectWorktreeFileMock).toHaveBeenLastCalledWith({
+      projectId: 1,
+      sessionId: 2,
+      filePath: FILE_PATH,
+    });
+
+    statProjectWorktreeFileMock.mockClear();
+    rerender({ projectId: 1, sessionId: 1, isSidePanelOpen: true });
+    await advance(0);
+    expect(statProjectWorktreeFileMock).not.toHaveBeenCalled();
+
+    await advance(2000);
+    expect(statProjectWorktreeFileMock).toHaveBeenCalledTimes(1);
+    expect(statProjectWorktreeFileMock.mock.calls[0]?.[0]).toMatchObject({
+      projectId: 1,
+      sessionId: 1,
+      filePath: FILE_PATH,
+    });
   });
 });

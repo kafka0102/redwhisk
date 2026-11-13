@@ -62,6 +62,7 @@ import {
   type WorkspaceChangeKind,
   type WorkspaceFileTreeNode,
 } from "./session-workspace/session-workspace-commands";
+import { statProjectWorktreeFile } from "../../shared/workspace/workspace-commands";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openPath: vi.fn(),
@@ -186,6 +187,17 @@ vi.mock("./session-workspace/session-workspace-commands", () => ({
   readProjectWorktreeFile: vi.fn(),
 }));
 
+vi.mock("../../shared/workspace/workspace-commands", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../shared/workspace/workspace-commands")
+    >();
+  return {
+    ...actual,
+    statProjectWorktreeFile: vi.fn(),
+  };
+});
+
 vi.mock("../issues/issue-commands", () => ({
   completeIssueFlow: vi.fn(),
   completeIssueManual: vi.fn(),
@@ -235,6 +247,7 @@ const getProjectWorktreeCommitHistoryMock = vi.mocked(
 const getProjectWorktreeFileTreeMock = vi.mocked(getProjectWorktreeFileTree);
 const readProjectWorktreeDiffMock = vi.mocked(readProjectWorktreeDiff);
 const readProjectWorktreeFileMock = vi.mocked(readProjectWorktreeFile);
+const statProjectWorktreeFileMock = vi.mocked(statProjectWorktreeFile);
 const closeProjectTerminalMock = vi.mocked(closeProjectTerminal);
 const createTemporaryProjectTerminalMock = vi.mocked(
   createTemporaryProjectTerminal,
@@ -565,6 +578,15 @@ describe("AgentsActivity", () => {
     getProjectWorktreeFileTreeMock.mockReset();
     readProjectWorktreeDiffMock.mockReset();
     readProjectWorktreeFileMock.mockReset();
+    statProjectWorktreeFileMock.mockReset();
+    statProjectWorktreeFileMock.mockImplementation(async (input) => {
+      const content = await readProjectWorktreeFileMock(input);
+      return {
+        filePath: input.filePath,
+        sizeBytes: content.sizeBytes,
+        modifiedAt: content.modifiedAt,
+      };
+    });
     closeProjectTerminalMock.mockReset();
     createTemporaryProjectTerminalMock.mockReset();
     openPathMock.mockReset();
