@@ -283,6 +283,146 @@ describe("GitHub issue mirror board", () => {
     expect(screen.getByText("远端已重开")).toBeInTheDocument();
   });
 
+  it("shows project labels on a remote issue card", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 8,
+          number: 18,
+          title: "Remote labeled",
+          externalNumber: 200,
+          source: "remote",
+          provider: "github",
+          labels: [
+            {
+              id: 1,
+              name: "bug",
+              scope: "project",
+              projectId: 1,
+              color: "#2563EB",
+              workflowSkill: null,
+            },
+            {
+              id: 2,
+              name: "absent",
+              scope: "project",
+              projectId: 1,
+              color: "#16A34A",
+              workflowSkill: null,
+            },
+          ],
+          remoteLabels: ["Bug"],
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 0, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+
+    const card = (await screen.findByText("Remote labeled")).closest(
+      ".issue-card__shell",
+    );
+    expect(card).not.toBeNull();
+    const chips = Array.from(card!.querySelectorAll(".issue-card__label-chip"));
+    expect(chips.map((chip) => chip.textContent)).toEqual(["bug", "absent"]);
+    expect(chips[0]).toHaveStyle({ backgroundColor: "#2563EB" });
+    expect(chips[1]).toHaveStyle({ backgroundColor: "#16A34A" });
+    expect(card!.querySelector(".sr-only")?.textContent).toBe(
+      "标签: bug, absent",
+    );
+  });
+
+  it("omits the label row when a remote issue has no labels", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 9,
+          number: 19,
+          title: "Remote unlabeled",
+          externalNumber: 201,
+          source: "remote",
+          provider: "github",
+          labels: [],
+          remoteLabels: [],
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 0, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+
+    const card = (await screen.findByText("Remote unlabeled")).closest(
+      ".issue-card__shell",
+    );
+    expect(card).not.toBeNull();
+    expect(card!.querySelector(".issue-card__labels")).toBeNull();
+  });
+
+  it("keeps a single project label chip on a local issue card", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 10,
+          number: 20,
+          title: "Local labeled",
+          source: "local",
+          labels: [
+            {
+              id: 3,
+              name: "local-bug",
+              scope: "project",
+              projectId: 1,
+              color: "#E11D48",
+              workflowSkill: null,
+            },
+          ],
+          remoteLabels: [],
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 0, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+
+    const card = (await screen.findByText("Local labeled")).closest(
+      ".issue-card__shell",
+    );
+    expect(card).not.toBeNull();
+    const chips = Array.from(card!.querySelectorAll(".issue-card__label-chip"));
+    expect(chips.map((chip) => chip.textContent)).toEqual(["local-bug"]);
+    expect(chips[0]).toHaveStyle({ backgroundColor: "#E11D48" });
+    expect(chips[0]?.classList.contains("issue-card__label-chip--remote")).toBe(
+      false,
+    );
+  });
+
+  it("shows a host label when a remote issue has no project labels", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 11,
+          number: 21,
+          title: "Host labeled",
+          externalNumber: 202,
+          source: "remote",
+          provider: "github",
+          labels: [],
+          remoteLabels: ["bug"],
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 0, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+
+    const card = (await screen.findByText("Host labeled")).closest(
+      ".issue-card__shell",
+    );
+    expect(card).not.toBeNull();
+    const chips = Array.from(card!.querySelectorAll(".issue-card__label-chip"));
+    expect(chips.map((chip) => chip.textContent)).toEqual(["bug"]);
+  });
+
   it("shows relative sync status and an icon-only refresh button", async () => {
     const now = Date.now();
     getIssueSyncStatusMock.mockResolvedValue({

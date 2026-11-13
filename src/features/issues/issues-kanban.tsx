@@ -184,12 +184,16 @@ function IssueCard({
   const { messages, t } = useI18n();
   const [now] = useState(() => Date.now());
   const mirror = readIssueMirror(toBoardRecord(issue));
-  const remoteLabels = mirror.source === "remote" ? mirror.remoteLabels : [];
   const metaId = `issue-card-meta-${issue.id}`;
   const attentionId = `issue-card-attention-${issue.id}`;
   const descriptionId = `issue-card-description-${issue.id}`;
   const labelsId = `issue-card-labels-${issue.id}`;
-  const labels = mirror.source === "remote" ? [] : (issue.labels ?? []);
+  const labels = issue.labels ?? [];
+  const remoteLabels = visibleHostLabels(
+    mirror.source,
+    mirror.remoteLabels,
+    labels,
+  );
   const hasLabels = labels.length > 0 || remoteLabels.length > 0;
   const isRunnable = canRunIssue(issue);
   const tone =
@@ -326,5 +330,25 @@ function IssueCard({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function sameLabelName(left: string, right: string): boolean {
+  return left.localeCompare(right, "en", { sensitivity: "accent" }) === 0;
+}
+
+function visibleHostLabels(
+  source: "local" | "remote",
+  remoteLabels: readonly string[],
+  projectLabels: readonly { name: string }[],
+): string[] {
+  if (source !== "remote") {
+    return [];
+  }
+  return remoteLabels.filter(
+    (hostLabel) =>
+      !projectLabels.some((projectLabel) =>
+        sameLabelName(projectLabel.name, hostLabel),
+      ),
   );
 }
