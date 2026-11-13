@@ -6,14 +6,16 @@ use super::parse::parse_github_issue;
 use super::port::{ForgeIssueDraft, ForgeIssueError, RemoteIssue};
 
 pub(super) fn github_issue_create_args(draft: &ForgeIssueDraft) -> Vec<String> {
-    vec![
+    let mut args = vec![
         "issue".to_string(),
         "create".to_string(),
         "--title".to_string(),
         draft.title.clone(),
         "--body".to_string(),
         draft.body.clone(),
-    ]
+    ];
+    push_labels(&mut args, &draft.labels);
+    args
 }
 
 pub(super) fn github_issue_view_args(number: i64) -> Vec<String> {
@@ -27,7 +29,7 @@ pub(super) fn github_issue_view_args(number: i64) -> Vec<String> {
 }
 
 pub(super) fn gitlab_issue_create_args(draft: &ForgeIssueDraft) -> Vec<String> {
-    vec![
+    let mut args = vec![
         "issue".to_string(),
         "create".to_string(),
         "--title".to_string(),
@@ -36,7 +38,70 @@ pub(super) fn gitlab_issue_create_args(draft: &ForgeIssueDraft) -> Vec<String> {
         draft.body.clone(),
         "--no-editor".to_string(),
         "--yes".to_string(),
+    ];
+    push_labels(&mut args, &draft.labels);
+    args
+}
+
+pub(super) fn github_label_list_args() -> Vec<String> {
+    vec![
+        "label".to_string(),
+        "list".to_string(),
+        "--limit".to_string(),
+        "1000".to_string(),
+        "--json".to_string(),
+        "name".to_string(),
     ]
+}
+
+pub(super) fn gitlab_label_list_args(page: i64) -> Vec<String> {
+    vec![
+        "label".to_string(),
+        "list".to_string(),
+        "--output".to_string(),
+        "json".to_string(),
+        "--page".to_string(),
+        page.to_string(),
+        "--per-page".to_string(),
+        "100".to_string(),
+    ]
+}
+
+pub(super) fn parse_host_label_names(stdout: &str) -> Result<Vec<String>, ForgeIssueError> {
+    let value: serde_json::Value =
+        serde_json::from_str(stdout.trim()).map_err(|_| ForgeIssueError::Unparseable)?;
+    let items = value.as_array().ok_or(ForgeIssueError::Unparseable)?;
+    let mut names = Vec::with_capacity(items.len());
+    for item in items {
+        let Some(name) = item.get("name").and_then(serde_json::Value::as_str) else {
+            return Err(ForgeIssueError::Unparseable);
+        };
+        if !name.is_empty() {
+            names.push(name.to_string());
+        }
+    }
+    Ok(names)
+}
+
+pub(super) fn list_gitlab_labels(repo_dir: &Path) -> Result<Vec<String>, ForgeIssueError> {
+    let mut names = Vec::new();
+    for page in 1..=20 {
+        let stdout = capture_forge_stdout("glab", &gitlab_label_list_args(page), repo_dir)?;
+        let page_names = parse_host_label_names(&stdout)?;
+        let page_len = page_names.len();
+        names.extend(page_names);
+        if page_len < 100 {
+            break;
+        }
+    }
+    Ok(names)
+}
+
+fn push_labels(args: &mut Vec<String>, labels: &[String]) {
+    for label in labels {
+        args.push("--label".to_string());
+        args.push(label.clone());
+    }
 }
 
 pub(super) fn gitlab_issue_view_args(number: i64) -> Vec<String> {
@@ -113,7 +178,60 @@ mod tests {
     use super::{
         first_http_url, issue_number_from_url, parse_github_issue_view, parse_gitlab_issue_view,
     };
+    use crate::features::issue::github_issue_mirror::port::ForgeIssueDraft;
     use crate::features::issue::github_issue_mirror::port::{ForgeIssueError, RemoteIssueState};
+
+    fn matched_draft() -> ForgeIssueDraft {
+        ForgeIssueDraft {
+            title: "Mirror".to_string(),
+            body: "body".to_string(),
+            labels: vec!["Bug".to_string(), "docs".to_string()],
+        }
+    }
+
+    #[test]
+    fn github_issue_create_args_sends_only_existing_host_labels() {
+        let args = super::github_issue_create_args(&matched_draft());
+        assert_eq!(
+            args,
+            vec![
+                "issue".to_string(),
+                "create".to_string(),
+                "--title".to_string(),
+                "Mirror".to_string(),
+                "--body".to_string(),
+                "body".to_string(),
+                "--label".to_string(),
+                "Bug".to_string(),
+                "--label".to_string(),
+                "docs".to_string(),
+            ]
+        );
+        assert!(!args.iter().any(|arg| arg == "absent"));
+    }
+
+    #[test]
+    fn gitlab_issue_create_args_sends_only_existing_host_labels() {
+        let args = super::gitlab_issue_create_args(&matched_draft());
+        assert_eq!(
+            args,
+            vec![
+                "issue".to_string(),
+                "create".to_string(),
+                "--title".to_string(),
+                "Mirror".to_string(),
+                "--description".to_string(),
+                "body".to_string(),
+                "--no-editor".to_string(),
+                "--yes".to_string(),
+                "--label".to_string(),
+                "Bug".to_string(),
+                "--label".to_string(),
+                "docs".to_string(),
+            ]
+        );
+        assert!(!args.iter().any(|arg| arg == "absent"));
+    }
 
     #[test]
     fn parses_created_url_and_viewed_github_issue() {

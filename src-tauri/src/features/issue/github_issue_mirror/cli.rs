@@ -131,6 +131,13 @@ impl ForgeIssuePort for ProjectIssueForge {
         }
     }
 
+    fn list_labels(&self) -> Result<Vec<String>, ForgeIssueError> {
+        match self {
+            Self::Github(forge) => forge.list_labels(),
+            Self::Gitlab(forge) => forge.list_labels(),
+        }
+    }
+
     fn get_change_request_details(
         &self,
         number: i64,
@@ -230,6 +237,15 @@ impl ForgeIssuePort for GithubCliForge {
             super::create_cli::github_issue_view_args,
             super::create_cli::parse_github_issue_view,
         )
+    }
+
+    fn list_labels(&self) -> Result<Vec<String>, ForgeIssueError> {
+        let stdout = capture_forge_stdout(
+            "gh",
+            &super::create_cli::github_label_list_args(),
+            &self.repo_dir,
+        )?;
+        super::create_cli::parse_host_label_names(&stdout)
     }
 
     fn get_change_request_details(

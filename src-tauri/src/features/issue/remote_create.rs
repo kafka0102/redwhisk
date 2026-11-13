@@ -105,20 +105,29 @@ fn create_remote(
     refresh: impl FnOnce(i64) -> Result<(), CommandError>,
 ) -> Result<IssueRecord, CommandError> {
     let title = validate_title(&input.title)?;
-    service.validate_issue_label_ids(input.project_id, &input.label_ids)?;
+    let project_names = super::remote_label_attach::project_label_names(
+        service,
+        input.project_id,
+        &input.label_ids,
+    )?;
+    let live;
+    let port: &dyn ForgeIssuePort = if let Some(forge) = forge {
+        forge
+    } else {
+        let project = service.require_project(input.project_id)?;
+        live = ProjectIssueForge::new(Some(target.provider), PathBuf::from(project.repo_path));
+        &live
+    };
+    let host_labels = port.list_labels().map_err(forge_create_error)?;
     let draft = ForgeIssueDraft {
         title,
         body: input.description.trim().to_string(),
+        labels: super::remote_label_attach::attach_existing_host_labels(
+            &project_names,
+            &host_labels,
+        ),
     };
-    let created = match forge {
-        Some(forge) => forge.create_issue(&draft).map_err(forge_create_error)?,
-        None => {
-            let project = service.require_project(input.project_id)?;
-            let live =
-                ProjectIssueForge::new(Some(target.provider), PathBuf::from(project.repo_path));
-            live.create_issue(&draft).map_err(forge_create_error)?
-        }
-    };
+    let created = port.create_issue(&draft).map_err(forge_create_error)?;
     reject_unreadable(&created)?;
     let synced_at = match current_epoch_millis() {
         Ok(value) => value,

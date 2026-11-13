@@ -6,6 +6,7 @@ mod completion_comment;
 mod detail_read;
 mod github_issue_mirror;
 mod remote_create;
+mod remote_label_attach;
 mod remote_timeline;
 mod service;
 mod time;

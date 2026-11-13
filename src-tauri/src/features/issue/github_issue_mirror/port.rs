@@ -57,6 +57,7 @@ pub enum ForgeIssueError {
 pub struct ForgeIssueDraft {
     pub title: String,
     pub body: String,
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +108,10 @@ pub trait ForgeIssuePort {
     fn create_issue(&self, draft: &ForgeIssueDraft) -> Result<RemoteIssue, ForgeIssueError> {
         let _ = draft;
         Err(ForgeIssueError::CommandFailed)
+    }
+
+    fn list_labels(&self) -> Result<Vec<String>, ForgeIssueError> {
+        Ok(Vec::new())
     }
 
     fn list_change_requests(&self) -> Result<Vec<RemoteChangeRequest>, ForgeIssueError> {
@@ -196,18 +201,25 @@ pub struct FixedForge {
     pub close_calls: Mutex<Vec<i64>>,
     pub merge_calls: Mutex<Vec<(i64, String, bool)>>,
     pub merge_methods: Vec<String>,
+    pub host_labels: Vec<String>,
+    pub label_list_calls: Mutex<usize>,
+    label_error: Mutex<Option<ForgeIssueError>>,
 }
 
 #[cfg(test)]
 impl FixedForge {
     pub fn new(issues: Vec<RemoteIssue>) -> Self {
+        Self::blank(issues, None)
+    }
+
+    fn blank(issues: Vec<RemoteIssue>, error: Option<ForgeIssueError>) -> Self {
         Self {
             issues,
             change_requests: Vec::new(),
             calls: Mutex::new(Vec::new()),
             created: Mutex::new(None),
             create_calls: Mutex::new(Vec::new()),
-            error: Mutex::new(None),
+            error: Mutex::new(error),
             details: Mutex::new(None),
             detail_error: Mutex::new(None),
             ready_calls: Mutex::new(Vec::new()),
@@ -219,6 +231,9 @@ impl FixedForge {
             close_calls: Mutex::new(Vec::new()),
             merge_calls: Mutex::new(Vec::new()),
             merge_methods: default_merge_methods(),
+            host_labels: Vec::new(),
+            label_list_calls: Mutex::new(0),
+            label_error: Mutex::new(None),
         }
     }
 
@@ -233,25 +248,21 @@ impl FixedForge {
     }
 
     pub fn failing(error: ForgeIssueError) -> Self {
-        Self {
-            issues: Vec::new(),
-            change_requests: Vec::new(),
-            calls: Mutex::new(Vec::new()),
-            created: Mutex::new(None),
-            create_calls: Mutex::new(Vec::new()),
-            error: Mutex::new(Some(error)),
-            details: Mutex::new(None),
-            detail_error: Mutex::new(None),
-            ready_calls: Mutex::new(Vec::new()),
-            action_details: Mutex::new(None),
-            action_error: Mutex::new(None),
-            ready_supported: true,
-            review_calls: Mutex::new(Vec::new()),
-            review_supported: true,
-            close_calls: Mutex::new(Vec::new()),
-            merge_calls: Mutex::new(Vec::new()),
-            merge_methods: default_merge_methods(),
-        }
+        Self::blank(Vec::new(), Some(error))
+    }
+
+    pub fn with_host_labels<I, S>(mut self, labels: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.host_labels = labels.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn failing_labels(self, error: ForgeIssueError) -> Self {
+        *self.label_error.lock().expect("label error") = Some(error);
+        self
     }
 
     pub fn with_detail_error(self, error: ForgeIssueError) -> Self {
@@ -343,6 +354,14 @@ impl ForgeIssuePort for FixedForge {
             .expect("created issue")
             .clone()
             .ok_or(ForgeIssueError::CommandFailed)
+    }
+
+    fn list_labels(&self) -> Result<Vec<String>, ForgeIssueError> {
+        *self.label_list_calls.lock().expect("label list") += 1;
+        if let Some(error) = self.label_error.lock().expect("label error").clone() {
+            return Err(error);
+        }
+        Ok(self.host_labels.clone())
     }
 
     fn get_change_request_details(

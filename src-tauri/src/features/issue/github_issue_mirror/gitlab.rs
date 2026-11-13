@@ -44,6 +44,10 @@ impl ForgeIssuePort for GitlabCliForge {
         )
     }
 
+    fn list_labels(&self) -> Result<Vec<String>, ForgeIssueError> {
+        super::create_cli::list_gitlab_labels(&self.repo_dir)
+    }
+
     fn get_change_request_details(
         &self,
         number: i64,
