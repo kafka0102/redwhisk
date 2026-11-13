@@ -7,6 +7,7 @@ import {
   buildActiveFileSignature,
   useCodeActiveFileRefresh,
 } from "./use-code-active-file-refresh";
+import { resetActiveFileRefreshStateForTests } from "../../shared/workspace/use-active-file-refresh";
 
 vi.mock("../../shared/workspace/workspace-commands", () => ({
   readProjectWorktreeFile: vi.fn(),
@@ -54,6 +55,7 @@ describe("useCodeActiveFileRefresh", () => {
     vi.useFakeTimers();
     statMock.mockReset();
     readMock.mockReset();
+    resetActiveFileRefreshStateForTests();
     setVisibility(true);
     statMock.mockResolvedValue({
       filePath: fileContent.filePath,
@@ -92,7 +94,7 @@ describe("useCodeActiveFileRefresh", () => {
     setTabs.mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 
@@ -159,7 +161,7 @@ describe("useCodeActiveFileRefresh", () => {
     readMock.mockResolvedValue(updated);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 
@@ -218,7 +220,7 @@ describe("useCodeActiveFileRefresh", () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 
@@ -273,7 +275,7 @@ describe("useCodeActiveFileRefresh", () => {
       reason: "workspaceFileReadFailed",
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
     expect(tabs[0]?.content).toBeNull();
@@ -295,7 +297,7 @@ describe("useCodeActiveFileRefresh", () => {
     readMock.mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 
@@ -363,7 +365,7 @@ describe("useCodeActiveFileRefresh", () => {
     readMock.mockResolvedValue(updated);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 
@@ -432,7 +434,7 @@ describe("useCodeActiveFileRefresh", () => {
     onExternalConflict.mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settle();
 

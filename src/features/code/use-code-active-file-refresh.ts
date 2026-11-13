@@ -1,31 +1,17 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 
 import {
-  readProjectWorktreeFile,
-  statProjectWorktreeFile,
-  type WorkspaceFileContent,
-} from "../../shared/workspace/workspace-commands";
+  buildActiveFileSignature,
+  useActiveFileRefresh,
+} from "../../shared/workspace/use-active-file-refresh";
+import type { WorkspaceFileContent } from "../../shared/workspace/workspace-commands";
 import type { CodeFileTab } from "./code-workspace-cache";
+
+export { buildActiveFileSignature };
 
 export interface CodeExternalFileConflict {
   content: WorkspaceFileContent;
   filePath: string;
-}
-
-const ACTIVE_FILE_REFRESH_INTERVAL_MS = 5_000;
-
-export function buildActiveFileSignature(
-  sizeBytes: number,
-  modifiedAt: number | null | undefined,
-): string {
-  return `${sizeBytes}:${modifiedAt ?? 0}`;
 }
 
 export interface UseCodeActiveFileRefreshOptions {
@@ -44,9 +30,8 @@ export interface UseCodeActiveFileRefreshOptions {
 }
 
 /**
- * 「代码」Activity 激活文件 Tab 的条件轮询：可见时 5s 做轻量 stat 签名检测；
- * 签名未变不 read；变化则静默 read 更新 content（不 isLoading）；隐藏暂停；
- * 切换激活路径 / 恢复可见立即检；失败进入与挂载复检一致的错误态。
+ * 「代码」Activity 的激活文件刷新薄适配：检测、去抖、可见性由共享
+ * `useActiveFileRefresh` 负责；本层只把新正文落到 tab，并保留 dirty 冲突语义。
  */
 export function useCodeActiveFileRefresh({
   projectId,
@@ -59,13 +44,6 @@ export function useCodeActiveFileRefresh({
   isTabDirty,
   onExternalConflict,
 }: UseCodeActiveFileRefreshOptions): void {
-  const [isVisible, setIsVisible] = useState(
-    typeof document === "undefined" || document.visibilityState === "visible",
-  );
-  const checkGenRef = useRef(0);
-  const lastSignatureRef = useRef<{ path: string; signature: string } | null>(
-    null,
-  );
   const resolveErrorMessageRef = useRef(resolveErrorMessage);
   const setTabsRef = useRef(setTabs);
   const isTabDirtyRef = useRef(isTabDirty);
@@ -87,156 +65,52 @@ export function useCodeActiveFileRefresh({
     onExternalConflictRef.current = onExternalConflict;
   }, [onExternalConflict]);
 
-  // 切换 workspace / 激活路径时丢弃在途请求。
-  useEffect(() => {
-    checkGenRef.current += 1;
-  }, [activePath, workspacePath]);
-
-  useEffect(() => {
-    lastSignatureRef.current = null;
-  }, [workspacePath]);
-
-  // 切 tab / 正文已加载时用 knownSignature 播种，避免打开后立刻重复 read；
-  // 切回已打开 tab 时以缓存正文签名为基线，再由 stat 判断是否过期。
-  useEffect(() => {
-    if (!activePath || knownSignature == null) return;
-    if (lastSignatureRef.current?.path !== activePath) {
-      lastSignatureRef.current = {
-        path: activePath,
-        signature: knownSignature,
-      };
-    }
-  }, [activePath, knownSignature]);
-
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      setIsVisible(document.visibilityState === "visible");
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, []);
-
-  const check = useCallback(() => {
-    if (!enabled || !workspacePath || !activePath) return;
-    const path = activePath;
-    const rootPath = workspacePath;
-    const gen = (checkGenRef.current += 1);
-
-    void statProjectWorktreeFile({
-      projectId,
-      workspacePath: rootPath,
-      filePath: path,
-    })
-      .then(async (stat) => {
-        if (checkGenRef.current !== gen) return;
-        const signature = buildActiveFileSignature(
-          stat.sizeBytes,
-          stat.modifiedAt,
-        );
-        const previous = lastSignatureRef.current;
-        if (previous?.path === path && previous.signature === signature) {
-          return;
-        }
-        // 尚无该路径基线时只记录签名（首开/切 tab 由 openFile 负责正文）；
-        // 同路径签名变化才静默 read，避免与打开请求重复读。
-        if (previous?.path !== path) {
-          lastSignatureRef.current = { path, signature };
-          return;
-        }
-        lastSignatureRef.current = { path, signature };
-
-        try {
-          const content = await readProjectWorktreeFile({
-            projectId,
-            workspacePath: rootPath,
-            filePath: path,
-          });
-          if (checkGenRef.current !== gen) return;
-          lastSignatureRef.current = {
-            path,
-            signature: buildActiveFileSignature(
-              content.sizeBytes,
-              content.modifiedAt,
-            ),
-          };
-          if (isTabDirtyRef.current?.(path)) {
-            // dirty 缓冲不静默覆盖；交由 onExternalConflict 二选一。
-            onExternalConflictRef.current?.({
-              content,
-              filePath: path,
-            });
-            return;
+  useActiveFileRefresh({
+    projectId,
+    workspacePath,
+    filePath: activePath,
+    enabled,
+    knownSignature,
+    onContent: (content) => {
+      const filePath = content.filePath;
+      if (isTabDirtyRef.current?.(filePath)) {
+        // dirty 缓冲不静默覆盖；交由 onExternalConflict 二选一。
+        onExternalConflictRef.current?.({ content, filePath });
+        return;
+      }
+      setTabsRef.current((currentTabs) =>
+        currentTabs.map((tab) => {
+          if (tab.filePath !== filePath) {
+            return tab;
           }
-          setTabsRef.current((currentTabs) =>
-            currentTabs.map((tab) => {
-              if (tab.filePath !== path) {
-                return tab;
-              }
-              // 防御：无 isTabDirty 回调时仍不覆盖 dirty 缓冲。
-              if (tab.isDirty) {
-                return tab;
-              }
-              return {
+          // 防御：无 isTabDirty 回调时仍不覆盖 dirty 缓冲。
+          if (tab.isDirty) {
+            return tab;
+          }
+          return {
+            ...tab,
+            content,
+            errorMessage: null,
+            isDirty: false,
+            isLoading: false,
+            savedContent: content.content,
+          };
+        }),
+      );
+    },
+    onError: (error, filePath) => {
+      setTabsRef.current((currentTabs) =>
+        currentTabs.map((tab) =>
+          tab.filePath === filePath
+            ? {
                 ...tab,
-                content,
-                errorMessage: null,
-                isDirty: false,
+                content: null,
+                errorMessage: resolveErrorMessageRef.current(error),
                 isLoading: false,
-                savedContent: content.content,
-              };
-            }),
-          );
-        } catch (error) {
-          if (checkGenRef.current !== gen) return;
-          // 保留 path 但清空签名，使恢复可读后下一次 stat 必触发 read。
-          lastSignatureRef.current = { path, signature: "" };
-          setTabsRef.current((currentTabs) =>
-            currentTabs.map((tab) =>
-              tab.filePath === path
-                ? {
-                    ...tab,
-                    content: null,
-                    errorMessage: resolveErrorMessageRef.current(error),
-                    isLoading: false,
-                  }
-                : tab,
-            ),
-          );
-        }
-      })
-      .catch((error) => {
-        if (checkGenRef.current !== gen) return;
-        lastSignatureRef.current = { path, signature: "" };
-        setTabsRef.current((currentTabs) =>
-          currentTabs.map((tab) =>
-            tab.filePath === path
-              ? {
-                  ...tab,
-                  content: null,
-                  errorMessage: resolveErrorMessageRef.current(error),
-                  isLoading: false,
-                }
-              : tab,
-          ),
-        );
-      });
-  }, [activePath, enabled, projectId, workspacePath]);
-
-  useEffect(() => {
-    if (!enabled || !workspacePath || !activePath || !isVisible) {
-      return;
-    }
-
-    // 路径/workspace/恢复可见时立即检；可见期间 5s 轮询。
-    void check();
-    const timerId = window.setInterval(() => {
-      void check();
-    }, ACTIVE_FILE_REFRESH_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [activePath, check, enabled, isVisible, workspacePath]);
+              }
+            : tab,
+        ),
+      );
+    },
+  });
 }

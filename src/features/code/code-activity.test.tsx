@@ -28,6 +28,7 @@ import {
   writeEditorReadingPosition,
   type EditorReadingPosition,
 } from "../../shared/workspace/editor-reading-position";
+import { resetActiveFileRefreshStateForTests } from "../../shared/workspace/use-active-file-refresh";
 import { resetMarkdownPreviewStateForTests } from "../../shared/workspace/markdown-preview-state";
 import {
   codeEditorReadingPositionKey,
@@ -502,6 +503,7 @@ describe("CodeActivity", () => {
     setDocumentVisibility(true);
     resetCodeWorkspaceCacheForTests();
     resetEditorReadingPositionsForTests();
+    resetActiveFileRefreshStateForTests();
     resetMarkdownPreviewStateForTests();
     editorThemeProp.current = undefined;
     monacoEditorApi.reset();
@@ -1705,7 +1707,7 @@ describe("CodeActivity", () => {
     vi.mocked(readProjectWorktreeFile).mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settleMicrotasks();
 
@@ -1715,6 +1717,7 @@ describe("CodeActivity", () => {
       filePath: "src/file.ts",
     });
     expect(readProjectWorktreeFile).not.toHaveBeenCalled();
+    expect(monacoEditorApi.restoreViewState).not.toHaveBeenCalled();
     expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
       "data-value",
       fileContent.content,
@@ -1754,7 +1757,7 @@ describe("CodeActivity", () => {
     vi.mocked(readProjectWorktreeFile).mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settleMicrotasks();
 
@@ -1772,6 +1775,55 @@ describe("CodeActivity", () => {
       );
     });
     expect(screen.queryByText("Loading file…")).not.toBeInTheDocument();
+  });
+
+  it("restores the saved reading position after a silent refresh", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(
+      <I18nProvider initialLocale="en">
+        <CodeActivity projectId={1} roots={roots} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open file" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-editor")).toHaveAttribute(
+        "data-value",
+        fileContent.content,
+      );
+    });
+    await waitFor(() => {
+      expect(monacoEditorApi.onDidScrollChange).toHaveBeenCalled();
+    });
+    const scrollListener = monacoEditorApi.lastScrollListener();
+    act(() => {
+      scrollListener?.();
+    });
+    monacoEditorApi.restoreViewState.mockClear();
+
+    const updatedContent = {
+      ...fileContent,
+      content: "export const value = 2;\n",
+      modifiedAt: 2,
+      sizeBytes: 25,
+    };
+    vi.mocked(statProjectWorktreeFile).mockResolvedValue({
+      filePath: updatedContent.filePath,
+      sizeBytes: updatedContent.sizeBytes,
+      modifiedAt: updatedContent.modifiedAt,
+    });
+    vi.mocked(readProjectWorktreeFile).mockResolvedValue(updatedContent);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    await settleMicrotasks();
+
+    await waitFor(() => {
+      expect(monacoEditorApi.restoreViewState).toHaveBeenCalledWith({
+        scrollTop: 420,
+      });
+    });
   });
 
   it("shows the existing file-missing error state when active-file refresh fails", async () => {
@@ -1797,7 +1849,7 @@ describe("CodeActivity", () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settleMicrotasks();
 
@@ -2743,7 +2795,7 @@ describe("CodeActivity", () => {
     vi.mocked(readProjectWorktreeFile).mockClear();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settleMicrotasks();
 
@@ -2799,7 +2851,7 @@ describe("CodeActivity", () => {
     vi.mocked(readProjectWorktreeFile).mockResolvedValue(updatedContent);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(3_000);
     });
     await settleMicrotasks();
 
