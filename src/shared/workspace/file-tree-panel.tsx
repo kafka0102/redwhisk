@@ -1,5 +1,12 @@
-import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Tree, type TreeApi } from "react-arborist";
 
 import {
   fileTreeChildrenAccessor,
@@ -16,11 +23,13 @@ import {
   restoreFileTreeScrollOffset,
   writeFileTreeScrollOffset,
 } from "./file-tree-scroll-offset";
+import { type FileTreeEntryCreateInput } from "./file-tree-create-draft";
+import { FileTreePanelRow } from "./file-tree-panel-row";
 import {
-  isFileTreeDraftNodeId,
-  type FileTreeEntryCreateInput,
-} from "./file-tree-create-draft";
-import { FileTreeDraftRow, FileTreeRow } from "./file-tree-row";
+  FileTreeRowModelContext,
+  publishFileTreeRowModel,
+  type FileTreeRowRenderModel,
+} from "./file-tree-row-model";
 import { useFileTreeCreateDraft } from "./use-file-tree-create-draft";
 import {
   useFileTreePathEdit,
@@ -276,57 +285,37 @@ export const FileTreePanel = memo(function FileTreePanel({
     [],
   );
 
-  const renderFileTreeRow = useCallback(
-    (props: NodeRendererProps<WorkspaceFileTreeNode>) =>
-      isFileTreeDraftNodeId(props.node.data.id) ? (
-        <FileTreeDraftRow
-          {...props}
-          errorMessage={draftError?.message ?? null}
-          errorRevision={draftError?.revision ?? 0}
-          onCancel={cancelDraft}
-          onSubmit={submitDraftName}
-        />
-      ) : (
-        <FileTreeRow
-          {...props}
-          changedFileKinds={changedFileKinds}
-          directoryKinds={directoryKinds}
-          isMenuTarget={menu?.relativePath === props.node.data.path}
-          onOpenFile={onOpenFile}
-          onContextMenuNode={handleContextMenuNode}
-          rename={
-            rename?.path === props.node.data.path
-              ? {
-                  errorMessage: rename.errorMessage,
-                  errorRevision: rename.errorRevision,
-                  generation: rename.generation,
-                  name: rename.name,
-                  onCancel: cancelRename,
-                  onChange: changeRenameName,
-                  onSubmit: (generation: number) => {
-                    void submitRename(generation);
-                  },
-                }
-              : null
-          }
-        />
-      ),
-    [
+  const rowModel = useMemo<FileTreeRowRenderModel>(
+    () => ({
       cancelDraft,
+      cancelRename,
+      changeRenameName,
       changedFileKinds,
       directoryKinds,
-      draftError?.message,
-      draftError?.revision,
+      draftError,
+      menuPath: menu?.relativePath ?? null,
+      onContextMenuNode: handleContextMenuNode,
+      onOpenFile,
+      rename,
+      submitDraftName,
+      submitRename,
+    }),
+    [
+      cancelDraft,
+      cancelRename,
+      changeRenameName,
+      changedFileKinds,
+      directoryKinds,
+      draftError,
       handleContextMenuNode,
       menu?.relativePath,
       onOpenFile,
-      cancelRename,
-      changeRenameName,
       rename,
-      submitRename,
       submitDraftName,
+      submitRename,
     ],
   );
+  publishFileTreeRowModel(rowModel);
 
   const createActions =
     onCreateEntry && menu
@@ -385,28 +374,30 @@ export const FileTreePanel = memo(function FileTreePanel({
       ) : null}
       {hasFileTree ? (
         <div className="session-file-tree__viewport" ref={viewportRef}>
-          <Tree<WorkspaceFileTreeNode>
-            ref={treeApiRef}
-            aria-label={messages.agentsFeature.fileTree}
-            childrenAccessor={fileTreeChildrenAccessor}
-            className="session-file-tree__arborist"
-            data={treeData}
-            disableDrag
-            disableDrop
-            disableEdit
-            height={viewportHeight}
-            idAccessor="id"
-            indent={12}
-            initialOpenState={initialOpenState}
-            openByDefault={false}
-            overscanCount={8}
-            rowHeight={28}
-            width="100%"
-            onScroll={handleScroll}
-            onToggle={handleToggle}
-          >
-            {renderFileTreeRow}
-          </Tree>
+          <FileTreeRowModelContext.Provider value={rowModel}>
+            <Tree<WorkspaceFileTreeNode>
+              ref={treeApiRef}
+              aria-label={messages.agentsFeature.fileTree}
+              childrenAccessor={fileTreeChildrenAccessor}
+              className="session-file-tree__arborist"
+              data={treeData}
+              disableDrag
+              disableDrop
+              disableEdit
+              height={viewportHeight}
+              idAccessor="id"
+              indent={12}
+              initialOpenState={initialOpenState}
+              openByDefault={false}
+              overscanCount={8}
+              rowHeight={28}
+              width="100%"
+              onScroll={handleScroll}
+              onToggle={handleToggle}
+            >
+              {FileTreePanelRow}
+            </Tree>
+          </FileTreeRowModelContext.Provider>
         </div>
       ) : null}
       <WorkspacePathContextMenu

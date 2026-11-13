@@ -1,7 +1,7 @@
 import {
+  createElement,
   forwardRef,
   useImperativeHandle,
-  type ReactElement,
   type ReactNode,
 } from "react";
 import {
@@ -32,6 +32,10 @@ import {
   FileTreeStatusBadge,
   type FileTreeDraftRowProps,
 } from "./file-tree-row";
+import {
+  FileTreeRowModelContext,
+  readFileTreeRowModel,
+} from "./file-tree-row-model";
 import {
   FileTreePanel,
   type FileTreeEntryDeleteInput,
@@ -1726,19 +1730,7 @@ const menuTargetFileNode: WorkspaceFileTreeNode = {
 
 /** 用面板最近一次的行渲染器渲染目标行，读取菜单打开期间的行状态。 */
 function renderMenuTargetRow(): HTMLElement {
-  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
-  expect(renderer).toBeTypeOf("function");
-  const rowElement = renderer({
-    node: {
-      data: menuTargetFileNode,
-      level: 0,
-      isOpen: false,
-      toggle: () => {},
-    },
-    style: {},
-  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
-  const { container } = render(rowElement);
-  return container.firstElementChild as HTMLElement;
+  return renderTreeRowElement(menuTargetFileNode);
 }
 
 function renderWithI18n(component: ReactNode) {
@@ -1766,23 +1758,7 @@ function renderPanelAndOpenableRow(
     />,
   );
 
-  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
-  expect(renderer).toBeTypeOf("function");
-
-  const rowElement = renderer({
-    node: {
-      data: nodeData,
-      level: 0,
-      isOpen: false,
-      toggle: () => {},
-    },
-    style: {},
-  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
-
-  const { container } = render(rowElement);
-  const row = container.firstElementChild;
-  expect(row).toBeInstanceOf(HTMLElement);
-  return row as HTMLElement;
+  return renderTreeRowElement(nodeData);
 }
 
 function renderTreeRow(
@@ -1803,23 +1779,7 @@ function renderTreeRow(
     />,
   );
 
-  const renderer = treeRowRenderers[treeRowRenderers.length - 1];
-  expect(renderer).toBeTypeOf("function");
-
-  const rowElement = renderer({
-    node: {
-      data: nodeData,
-      level: 0,
-      isOpen: false,
-      toggle: () => {},
-    },
-    style: {},
-  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
-
-  const { container } = render(rowElement);
-  const row = container.firstElementChild;
-  expect(row).toBeInstanceOf(HTMLElement);
-  return row as HTMLElement;
+  return renderTreeRowElement(nodeData);
 }
 
 /** 渲染带「新建文件 / 新建文件夹」能力的面板，返回可 rerender 的视图。 */
@@ -1874,16 +1834,19 @@ function renderTreeRowElement(
 ): HTMLElement {
   const renderer = treeRowRenderers[treeRowRenderers.length - 1];
   expect(renderer).toBeTypeOf("function");
-  const rowElement = renderer({
-    node: {
-      data: nodeData,
-      level,
-      isOpen: false,
-      toggle: () => {},
-    },
-    style: {},
-  } as NodeRendererProps<WorkspaceFileTreeNode>) as ReactElement;
-  const { container } = render(rowElement);
+  const { container } = render(
+    <FileTreeRowModelContext.Provider value={readFileTreeRowModel()}>
+      {createElement(renderer, {
+        node: {
+          data: nodeData,
+          level,
+          isOpen: false,
+          toggle: () => {},
+        },
+        style: {},
+      } as NodeRendererProps<WorkspaceFileTreeNode>)}
+    </FileTreeRowModelContext.Provider>,
+  );
   const row = container.firstElementChild;
   expect(row).toBeInstanceOf(HTMLElement);
   return row as HTMLElement;
