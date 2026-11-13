@@ -103,6 +103,10 @@
   font-size: 12px;
 }
 
+.issue-detail__readonly-label--colored {
+  color: #ffffff;
+}
+
 .issue-detail-side-card {
   margin-bottom: 12px;
 }
@@ -114,7 +118,8 @@
   gap: 8px;
 }
 
-.issue-readonly-session-panel {
+/* 后加载的 .session-issue-panel 用同等优先级写了 padding: 12px，必须更具体才能和 GitHub 卡对齐 */
+.issue-page__side--readonly .issue-readonly-session-panel {
   height: 100%;
   padding: 0;
 }

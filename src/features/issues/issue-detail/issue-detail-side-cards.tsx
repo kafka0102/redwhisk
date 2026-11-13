@@ -28,7 +28,11 @@ export function IssueReadOnlyLabelRow({
     >
       {labels.map((label) => (
         <span
-          className="issue-detail__readonly-label"
+          className={
+            label.color == null
+              ? "issue-detail__readonly-label"
+              : "issue-detail__readonly-label issue-detail__readonly-label--colored"
+          }
           key={label.name.toLowerCase()}
           style={
             label.color == null ? undefined : { backgroundColor: label.color }
@@ -104,10 +108,7 @@ export function IssueDetailSideCards({
         />
       ))}
       {hasSession ? (
-        <aside
-          aria-label={messages.agentsFeature.sessionInfo}
-          className="issue-page__side"
-        >
+        <aside aria-label={messages.agentsFeature.sessionInfo}>
           <IssueReadonlySessionPanel
             canOpenSession={canOpenSession}
             linkedSessionId={linkedSessionId}
