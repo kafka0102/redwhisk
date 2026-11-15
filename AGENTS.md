@@ -61,7 +61,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 > 不得把领域逻辑塞进泛化 `utils`。
 >
-> `scripts/`：仓库级脚本（构建、发版、`check-rust-compile.sh` 正式构建口径编译检查、`check-rust-file-size.sh` / `check-frontend-file-size.sh` 单文件大小门禁等）。
+> `scripts/`：仓库级脚本（构建、发版、`check-rust-compile.sh` 正式构建口径编译检查、`check-rustfmt.sh` 本次改动的 Rust 格式检查、`check-rust-file-size.sh` / `check-frontend-file-size.sh` 单文件大小门禁等）。
 
 ## 4. 按任务类型读 docs
 
@@ -86,6 +86,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
 
+- `bash scripts/check-rustfmt.sh`（只检查本次改动的 `src-tauri/**/*.rs` 是否已 `rustfmt --edition 2021`。文件大小门禁只在临时副本上格式化来数行，不代替这条。提交后复查用 `--from <ref>`）
 - `bash scripts/check-rust-file-size.sh`（按 `rustfmt --edition 2021` 之后的行数，不按挤行前的原文）
 - `bash scripts/check-rust-compile.sh`
 - `bash scripts/check-rust-user-strings.sh`
@@ -115,6 +116,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 无新增 `@ts-ignore` / `@ts-nocheck` / `eslint-disable` / 跳过测试。
 - 每一处 diff 可追溯到用户请求、项目文档或验证失败。
 - 改动 Rust 时，`scripts/check-rust-compile.sh` 通过（正式构建口径的增量检查，不是整包构建）。
+- 改动 Rust 时，`scripts/check-rustfmt.sh` 通过（本次改动的 `.rs` 已格式化，不是全仓）。
 - 改动 Rust 时，`scripts/check-rust-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 - 改动前端源码时，`scripts/check-frontend-file-size.sh` 通过（越界文件已拆分或属白名单存量）。
 - 改动依赖或构建配置时，`bash scripts/check-frontend-gates.sh --with-build` 通过。

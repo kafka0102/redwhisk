@@ -6,6 +6,7 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+bash scripts/check-rustfmt.sh --cached
 bash scripts/check-unstaged-rustfmt.sh
 bash scripts/check-rust-user-strings.sh
 bash scripts/check-rust-command-failure-tests.sh

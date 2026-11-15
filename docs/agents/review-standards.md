@@ -6,7 +6,7 @@
 
 Standards 写成通过之前，先核对实现回报里同一 tree state 的项目门禁证据：命令、结果、HEAD 与 `git status --short`。证据覆盖本票 diff 时直接复用，不重复跑全量 `pnpm test`；不要另选测试命令。
 
-只有证据缺失、tree state 变了，或你需要独立核验时，才按项目门禁补跑：对 diff 里的前端文件跑 `pnpm lint`，对 diff 里的 Rust 文件跑 `rustfmt --edition 2021 --config skip_children=true --check`。这和 `scripts/hooks/pre-commit` 用的是同一类检查。任一失败，Standards 不通过。格式化 `mod.rs` 时带上 `skip_children=true`，避免改写子模块。
+只有证据缺失、tree state 变了，或你需要独立核验时，才按项目门禁补跑：对 diff 里的前端文件跑 `pnpm lint`，对 diff 里的 Rust 文件跑 `bash scripts/check-rustfmt.sh --files <那些文件>`。这条和 pre-commit 的 `bash scripts/check-rustfmt.sh --cached`、CI 的 `bash scripts/check-rustfmt.sh --from <base>` 是同一个脚本。`scripts/check-rust-file-size.sh` 只在临时副本上跑 rustfmt 来数行，不能代替它。任一失败，Standards 不通过。格式化 `mod.rs` 时带上 `skip_children=true`，避免改写子模块。
 
 行数看 `scripts/check-rust-file-size.sh` 的结果。它数的是 `rustfmt --edition 2021` 之后的行。
 

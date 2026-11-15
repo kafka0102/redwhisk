@@ -95,7 +95,11 @@ jobs:
         run: cargo test --offline --test local_data
         working-directory: src-tauri
 
-      # 两个门禁默认只查未提交改动，提交后再跑等于空转；CI 里改用 PR 全量 diff 口径。
+      # 这些门禁默认只查未提交改动，提交后再跑等于空转；CI 里改用 PR 全量 diff 口径。
+      # 文件大小门禁只在临时副本上格式化来数行，不检查源文件是否已 rustfmt。
+      - name: Rust 格式门禁
+        run: bash scripts/check-rustfmt.sh --from "${{ github.event.pull_request.base.sha }}"
+
       - name: Rust 文件大小门禁
         run: bash scripts/check-rust-file-size.sh --from "${{ github.event.pull_request.base.sha }}"
 
