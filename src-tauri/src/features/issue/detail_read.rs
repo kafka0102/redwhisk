@@ -14,11 +14,6 @@ pub(crate) fn read_issue_detail_in_data_dir(
     input: GetIssueDetailInput,
 ) -> Result<IssueDetailRecord, CommandError> {
     let database = open_issue_database(data_dir)?;
-    super::unavailable_recovery::refresh_remote_availability(
-        &database.connection,
-        input.project_id,
-        input.issue_id,
-    )?;
     read_issue_detail(&database.connection, &input)
 }
 
@@ -305,5 +300,47 @@ mod tests {
         )
         .expect_err("get_issue_detail");
         assert_eq!(error.code, CommandErrorCode::IssueNotFound);
+    }
+
+    #[test]
+    fn local_detail_read_does_not_probe_the_forge() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let database = super::super::archive::open_issue_database(temp.path()).expect("database");
+        let project_id = insert_project(&database.connection);
+        let issue_id = insert_issue(&database.connection, project_id);
+        database
+            .connection
+            .execute(
+                "INSERT INTO issue_external_refs (
+                    issue_id, project_id, provider, host, repo, external_id, external_number,
+                    external_url, remote_state, remote_author_login, remote_assignees_json,
+                    remote_labels_json, remote_updated_at, synced_at, sync_status
+                 ) VALUES (
+                    ?1, ?2, 'github', 'github.com', 'acme/redwhisk', 'ISSUE_128', 128,
+                    'https://github.com/acme/redwhisk/issues/128', 'open', 'lin',
+                    '[]', '[]', 10, 10, 'synced'
+                 )",
+                params![issue_id, project_id],
+            )
+            .expect("external identity");
+        drop(database);
+
+        let (detail, invocations) =
+            super::super::github_issue_mirror::with_captured_forge_invocations(|| {
+                read_issue_detail_in_data_dir(
+                    temp.path(),
+                    GetIssueDetailInput {
+                        project_id,
+                        issue_id,
+                    },
+                )
+                .expect("local detail")
+            });
+
+        assert!(
+            invocations.is_empty(),
+            "local detail must not call gh or glab, got {invocations:?}"
+        );
+        assert_eq!(detail.projection.expect("projection").repo, "acme/redwhisk");
     }
 }

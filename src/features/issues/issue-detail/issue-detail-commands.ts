@@ -60,6 +60,14 @@ export function getIssueDetail(
   return invokeCommand<IssueDetailRecord>("get_issue_detail", { input });
 }
 
+export function refreshIssueRemoteAvailability(
+  input: GetIssueDetailInput,
+): Promise<IssueDetailRecord> {
+  return invokeCommand<IssueDetailRecord>("refresh_issue_remote_availability", {
+    input,
+  });
+}
+
 export function retryIssueCompletionWriteback(
   input: RetryIssueCompletionWritebackInput,
 ): Promise<void> {

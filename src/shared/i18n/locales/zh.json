@@ -1183,6 +1183,7 @@
       "attachmentExportFailed": "Issue 附件导出失败。",
       "attachmentPreviewFailed": "Issue 附件预览失败。",
       "auditSaveFailed": "Agent Commit 审计保存失败。",
+      "availabilityRefreshFailed": "刷新远程 Issue 是否可用失败。",
       "autoCommitFailed": "Issue 自动提交失败。",
       "completeDetectionFailed": "Issue 完成检测失败。",
       "completeFailed": "Issue 完成失败。",

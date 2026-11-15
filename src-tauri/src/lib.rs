@@ -192,6 +192,7 @@ pub fn run() {
             features::issue::commands::detect_agent_commit_completion,
             features::issue::commands::get_issue_summary,
             features::issue::commands::get_issue_detail,
+            features::issue::unavailable_recovery::refresh_issue_remote_availability,
             features::issue::unavailable_recovery::apply_issue_recovery,
             features::issue::commands::retry_issue_completion_writeback,
             features::issue::commands::get_issue_timeline,

@@ -11,6 +11,7 @@ import { applyIssueRecovery, getIssueDetail } from "./issue-detail-commands";
 vi.mock("./issue-detail-commands", () => ({
   applyIssueRecovery: vi.fn(),
   getIssueDetail: vi.fn(),
+  refreshIssueRemoteAvailability: vi.fn(() => new Promise(() => {})),
   retryIssueCompletionWriteback: vi.fn(),
 }));
 

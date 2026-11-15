@@ -1183,6 +1183,7 @@
       "attachmentExportFailed": "Failed to export Issue attachment.",
       "attachmentPreviewFailed": "Failed to preview Issue attachment.",
       "auditSaveFailed": "Failed to save Agent Commit audit.",
+      "availabilityRefreshFailed": "Failed to refresh whether the remote issue is available.",
       "autoCommitFailed": "Failed to auto-commit Issue.",
       "completeDetectionFailed": "Issue completion detection failed.",
       "completeFailed": "Failed to complete Issue.",

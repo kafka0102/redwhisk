@@ -60,6 +60,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 vi.mock("./issue-detail-commands", () => ({
   applyIssueRecovery: vi.fn(),
   getIssueDetail: vi.fn(),
+  refreshIssueRemoteAvailability: vi.fn(() => new Promise(() => {})),
   retryIssueCompletionWriteback: vi.fn(),
 }));
 

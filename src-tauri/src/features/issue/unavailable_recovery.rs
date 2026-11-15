@@ -9,8 +9,8 @@ use std::path::Path;
 
 use tauri::State;
 
-use crate::app_state::AppState;
 use super::github_issue_mirror::{view_remote_issue, ForgeIssueError};
+use crate::app_state::AppState;
 use crate::types::errors::CommandError;
 use crate::types::errors::{CommandErrorCode, ErrorDetail};
 use crate::types::issue_detail::{
@@ -105,7 +105,24 @@ pub(crate) fn refresh_remote_availability(
         Err(ForgeIssueError::Forbidden) => IssueRecoveryRequest::Probe(RemoteProbeKind::Forbidden),
         Err(_) => return Ok(()),
     };
+    // The CLI call yields the connection. Keep-local or unlink during that
+    // window must not be overwritten by the probe result.
+    if matches!(
+        sync_status(connection, issue_id)?.as_deref(),
+        Some("kept_local" | "unlinked")
+    ) {
+        return Ok(());
+    }
     apply_issue_recovery_request(connection, project_id, issue_id, request)
+}
+
+pub(crate) fn refresh_issue_remote_availability_in_data_dir(
+    data_dir: &Path,
+    input: GetIssueDetailInput,
+) -> Result<IssueDetailRecord, CommandError> {
+    let database = open_issue_database(data_dir)?;
+    refresh_remote_availability(&database.connection, input.project_id, input.issue_id)?;
+    read_issue_detail(&database.connection, &input)
 }
 
 pub(crate) fn apply_issue_recovery_in_data_dir(
@@ -172,6 +189,27 @@ fn probe_for_retry(
             Err(_) => RemoteProbeKind::Failed,
         },
     )
+}
+
+#[tauri::command]
+pub async fn refresh_issue_remote_availability(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: GetIssueDetailInput,
+) -> Result<IssueDetailRecord, CommandError> {
+    let data_dir = super::commands::prepare_issue_data_dir(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        refresh_issue_remote_availability_in_data_dir(&data_dir, input)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            CommandErrorCode::IssuePersistenceFailed,
+            "Failed to refresh issue availability.",
+        )
+        .with_reason("availabilityRefreshFailed")
+        .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
+    })?
 }
 
 #[tauri::command]

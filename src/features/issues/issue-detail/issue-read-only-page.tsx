@@ -26,6 +26,7 @@ import { useI18n } from "../../../shared/i18n/i18n";
 import {
   applyIssueRecovery,
   getIssueDetail,
+  refreshIssueRemoteAvailability,
   retryIssueCompletionWriteback,
   type IssueDetailRecord,
   type RecoveryAction,
@@ -85,6 +86,7 @@ export function IssueReadOnlyPage({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [detail, setDetail] = useState<IssueDetailRecord | null>(null);
   const [detailIssueId, setDetailIssueId] = useState<number | null>(null);
+  const detailEpochRef = useRef(0);
   const titleParts = selectedIssue
     ? issueDetailTitleParts(selectedIssue)
     : null;
@@ -120,9 +122,14 @@ export function IssueReadOnlyPage({
       issueId,
       projectId: requestProjectId,
     }).then((next) => {
-      setDetail(next);
-      setDetailIssueId(issueId);
+      commitDetail(issueId, next);
     });
+  }
+
+  function commitDetail(issueId: number, next: IssueDetailRecord | null): void {
+    detailEpochRef.current += 1;
+    setDetail(next);
+    setDetailIssueId(issueId);
   }
 
   useEffect(() => {
@@ -134,13 +141,35 @@ export function IssueReadOnlyPage({
     let cancelled = false;
     void getIssueDetail({ projectId: requestProjectId, issueId })
       .then((next) => {
-        if (!cancelled) {
-          setDetail(next);
-          setDetailIssueId(issueId);
+        if (cancelled) {
+          return;
         }
+        detailEpochRef.current += 1;
+        const epoch = detailEpochRef.current;
+        setDetail(next);
+        setDetailIssueId(issueId);
+        if (next.projection == null) {
+          return;
+        }
+        void refreshIssueRemoteAvailability({
+          issueId,
+          projectId: requestProjectId,
+        })
+          .then((refreshed) => {
+            if (cancelled || detailEpochRef.current !== epoch) {
+              return;
+            }
+            detailEpochRef.current += 1;
+            setDetail(refreshed);
+            setDetailIssueId(issueId);
+          })
+          .catch(() => {
+            // 探测失败时保留已经画出的本地宿主卡片。
+          });
       })
       .catch(() => {
         if (!cancelled) {
+          detailEpochRef.current += 1;
           setDetail(null);
           setDetailIssueId(issueId);
         }
@@ -236,8 +265,7 @@ export function IssueReadOnlyPage({
             }).then(() =>
               getIssueDetail({ issueId, projectId: requestProjectId }).then(
                 (next) => {
-                  setDetail(next);
-                  setDetailIssueId(issueId);
+                  commitDetail(issueId, next);
                 },
               ),
             );

@@ -1,7 +1,11 @@
 use rusqlite::{params, Connection};
 
 use super::super::detail_read::read_issue_detail;
-use super::{apply_issue_recovery_request, IssueRecoveryRequest, RemoteProbeKind};
+use super::super::github_issue_mirror::{with_simulated_forge_failure, ForgeIssueError};
+use super::{
+    apply_issue_recovery_request, refresh_issue_remote_availability_in_data_dir,
+    IssueRecoveryRequest, RemoteProbeKind,
+};
 use crate::db::migrations::MigrationRunner;
 use crate::types::errors::CommandErrorCode;
 use crate::types::issue_detail::GetIssueDetailInput;
@@ -312,5 +316,117 @@ fn missing_issue_fails_apply_issue_recovery() {
         IssueRecoveryRequest::KeepLocal,
     )
     .expect_err("apply_issue_recovery");
+    assert_eq!(error.code, CommandErrorCode::IssueNotFound);
+}
+
+fn seed_file_issue(repo_path: &std::path::Path) -> (tempfile::TempDir, i64, i64) {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let database = super::super::archive::open_issue_database(temp.path()).expect("database");
+    database
+        .connection
+        .execute(
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES ('App', ?1, 1, 1)",
+            params![repo_path.to_string_lossy()],
+        )
+        .expect("project");
+    let project_id = database.connection.last_insert_rowid();
+    database
+        .connection
+        .execute(
+            "INSERT INTO issues (
+                project_id, number, title, description, status, source, created_at, updated_at,
+                status_changed_at, del
+             ) VALUES (?1, 128, 'flow', 'body', 'backlog', 'remote', 10, 20, 20, 0)",
+            params![project_id],
+        )
+        .expect("issue");
+    let issue_id = database.connection.last_insert_rowid();
+    database
+        .connection
+        .execute(
+            "INSERT INTO issue_external_refs (
+                issue_id, project_id, provider, host, repo, external_id, external_number,
+                external_url, remote_state, remote_author_login, remote_assignees_json,
+                remote_labels_json, remote_updated_at, synced_at, sync_status
+             ) VALUES (
+                ?1, ?2, 'github', 'github.com', 'acme/redwhisk', 'ISSUE_128', 128,
+                'https://github.com/acme/redwhisk/issues/128', 'open', 'lin',
+                '[]', '[]', 10, 10, 'synced'
+             )",
+            params![issue_id, project_id],
+        )
+        .expect("external identity");
+    drop(database);
+    (temp, project_id, issue_id)
+}
+
+#[test]
+fn refresh_issue_remote_availability_marks_not_found_after_the_probe() {
+    let repo = tempfile::tempdir().expect("repo");
+    let (temp, project_id, issue_id) = seed_file_issue(repo.path());
+    let (detail, invocations) = with_simulated_forge_failure(ForgeIssueError::NotFound, || {
+        refresh_issue_remote_availability_in_data_dir(
+            temp.path(),
+            GetIssueDetailInput {
+                project_id,
+                issue_id,
+            },
+        )
+        .expect("refresh_issue_remote_availability")
+    });
+    assert_eq!(invocations.len(), 1);
+    assert_eq!(invocations[0].program, "gh");
+    assert_eq!(invocations[0].args[0], "issue");
+    assert_eq!(invocations[0].args[1], "view");
+    let projection = detail.projection.expect("projection");
+    assert_eq!(projection.remote_state, "unavailable");
+    assert_eq!(projection.repo, "acme/redwhisk");
+    assert!(detail.unavailable_banner.is_some());
+}
+
+#[test]
+fn refresh_issue_remote_availability_keeps_local_state_when_the_probe_fails() {
+    let repo = tempfile::tempdir().expect("repo");
+    let (temp, project_id, issue_id) = seed_file_issue(repo.path());
+    let (detail, invocations) = with_simulated_forge_failure(ForgeIssueError::Offline, || {
+        refresh_issue_remote_availability_in_data_dir(
+            temp.path(),
+            GetIssueDetailInput {
+                project_id,
+                issue_id,
+            },
+        )
+        .expect("refresh_issue_remote_availability")
+    });
+    assert_eq!(invocations.len(), 1);
+    let projection = detail.projection.expect("projection");
+    assert_eq!(projection.remote_state, "open");
+    assert!(detail.unavailable_banner.is_none());
+}
+
+#[test]
+fn refresh_issue_remote_availability_missing_issue_fails() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let database = super::super::archive::open_issue_database(temp.path()).expect("database");
+    database
+        .connection
+        .execute(
+            "INSERT INTO projects (name, repo_path, created_at, last_opened_at)
+             VALUES ('App', '/tmp/app', 1, 1)",
+            [],
+        )
+        .expect("project");
+    let project_id = database.connection.last_insert_rowid();
+    drop(database);
+
+    let error = refresh_issue_remote_availability_in_data_dir(
+        temp.path(),
+        GetIssueDetailInput {
+            project_id,
+            issue_id: 404,
+        },
+    )
+    .expect_err("refresh_issue_remote_availability");
     assert_eq!(error.code, CommandErrorCode::IssueNotFound);
 }

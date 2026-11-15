@@ -43,6 +43,7 @@ vi.mock("../issue-commands", async (importOriginal) => {
 vi.mock("./issue-detail-commands", () => ({
   applyIssueRecovery: vi.fn(),
   getIssueDetail: vi.fn(),
+  refreshIssueRemoteAvailability: vi.fn(() => new Promise(() => {})),
   retryIssueCompletionWriteback: vi.fn(),
 }));
 
