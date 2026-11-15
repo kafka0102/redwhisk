@@ -282,17 +282,26 @@ fn extension(display_name: &str) -> String {
         .to_ascii_lowercase()
 }
 
-#[rustfmt::skip]
 fn too_large() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "The file is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "The file is larger than GitHub accepts.",
+    )
+    .with_reason("hostAttachmentTooLarge")
 }
 
-#[rustfmt::skip]
 fn upload_required() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "The host has not accepted this file yet.").with_reason("hostAttachmentUploadRequired")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "The host has not accepted this file yet.",
+    )
+    .with_reason("hostAttachmentUploadRequired")
 }
 
-#[rustfmt::skip]
 fn upload_failed() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload failed.").with_reason("hostAttachmentUploadFailed")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "GitHub attachment upload failed.",
+    )
+    .with_reason("hostAttachmentUploadFailed")
 }

@@ -205,13 +205,28 @@ fn encode_query(value: &str) -> String {
     encoded
 }
 
-#[rustfmt::skip]
 fn forge_upload_error(error: ForgeIssueError) -> CommandError {
     match error {
-        ForgeIssueError::Unauthenticated => CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload failed authentication.").with_reason("hostAttachmentUnauthenticated"),
-        ForgeIssueError::Forbidden => CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload was denied.").with_reason("hostAttachmentForbidden"),
-        ForgeIssueError::Offline => CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload failed because the network is unavailable.").with_reason("hostAttachmentOffline"),
-        ForgeIssueError::CliMissing => CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub CLI was not found.").with_reason("hostAttachmentCliMissing"),
+        ForgeIssueError::Unauthenticated => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "GitHub attachment upload failed authentication.",
+        )
+        .with_reason("hostAttachmentUnauthenticated"),
+        ForgeIssueError::Forbidden => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "GitHub attachment upload was denied.",
+        )
+        .with_reason("hostAttachmentForbidden"),
+        ForgeIssueError::Offline => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "GitHub attachment upload failed because the network is unavailable.",
+        )
+        .with_reason("hostAttachmentOffline"),
+        ForgeIssueError::CliMissing => CommandError::new(
+            CommandErrorCode::ForgeUnavailable,
+            "GitHub CLI was not found.",
+        )
+        .with_reason("hostAttachmentCliMissing"),
         ForgeIssueError::CommandFailed
         | ForgeIssueError::Unparseable
         | ForgeIssueError::RateLimited
@@ -220,27 +235,42 @@ fn forge_upload_error(error: ForgeIssueError) -> CommandError {
     }
 }
 
-#[rustfmt::skip]
 fn not_remote() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "Host attachment upload is only available when creating a remote issue.").with_reason("hostAttachmentNotRemote")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "Host attachment upload is only available when creating a remote issue.",
+    )
+    .with_reason("hostAttachmentNotRemote")
 }
 
-#[rustfmt::skip]
 fn unavailable() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload is unavailable.").with_reason("hostAttachmentUnavailable")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "GitHub attachment upload is unavailable.",
+    )
+    .with_reason("hostAttachmentUnavailable")
 }
 
-#[rustfmt::skip]
 fn rejected() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub does not accept this file.").with_reason("hostAttachmentRejected")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "GitHub does not accept this file.",
+    )
+    .with_reason("hostAttachmentRejected")
 }
 
-#[rustfmt::skip]
 fn too_large() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "The file is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "The file is larger than GitHub accepts.",
+    )
+    .with_reason("hostAttachmentTooLarge")
 }
 
-#[rustfmt::skip]
 fn upload_failed() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub attachment upload failed.").with_reason("hostAttachmentUploadFailed")
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "GitHub attachment upload failed.",
+    )
+    .with_reason("hostAttachmentUploadFailed")
 }

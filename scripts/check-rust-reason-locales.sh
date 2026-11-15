@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # 新增 command reason 必须在对应错误码的中英文 locale 里有文案。
-# with_reason / coded_error 用同一函数里的 CommandErrorCode，键是 errors.<CODE>.<reason>。
+# with_reason 配对同一函数里的 CommandErrorCode，键是 errors.<CODE>.<reason>。
+# 函数里只有一种错误码时用它，rustfmt 换行不影响配对。
+# 有多种错误码时，用该 with_reason 前面最近的一种。
+# coded_error 用名为 coded_error 的函数里的错误码。
 # features/issue/completion 里作为失败原因返回的裸 reason 用 errors.ISSUE_VALIDATION_FAILED。
 # 只查 src-tauri/src 的新增字面量。存量 reason 不追溯。测试文件不查。
+# 未跟踪文件和已暂存 diff 用同一套配对，不把整份新文件当成一个窗口。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -98,6 +102,42 @@ def helper_code(text, name):
     return None
 
 
+def enclosing_code(text, offset):
+    owner = None
+    for _name, body, start in functions(text):
+        if start <= offset < start + len(body):
+            owner = (body, start)
+    if owner is None:
+        return None
+    body, start = owner
+    unique = list(dict.fromkeys(code_re.findall(body)))
+    if len(unique) == 1:
+        return unique[0]
+    prior = code_re.findall(body[: offset - start])
+    return prior[-1] if prior else None
+
+
+def line_of(text, offset):
+    return text.count("\n", 0, offset) + 1
+
+
+def with_reason_hits(path, text, added_lines):
+    found = []
+    if not is_source(path):
+        return found
+    for match in with_reason_re.finditer(text):
+        token = match.group(1)
+        if not is_reason(token):
+            continue
+        start_line = line_of(text, match.start())
+        end_line = line_of(text, max(match.end() - 1, match.start()))
+        if not any(line in added_lines for line in range(start_line, end_line + 1)):
+            continue
+        code = enclosing_code(text, match.start())
+        found.append((screaming(code) if code else None, token, path))
+    return found
+
+
 def line_starts(text):
     starts = [0]
     for match in re.finditer(r"\n", text):
@@ -120,12 +160,6 @@ def requirements_in_window(path, window, file_text):
         return found
     completion = path.startswith("src-tauri/src/features/issue/completion/")
     commandish = "with_reason" in window or "coded_error" in window
-    for match in with_reason_re.finditer(window):
-        token = match.group(1)
-        if not is_reason(token):
-            continue
-        codes = code_re.findall(window[: match.start()])
-        found.append((screaming(codes[-1]) if codes else None, token, path))
     for match in coded_error_re.finditer(window):
         rest = window[match.end() : match.end() + 240]
         quoted = quoted_re.search(rest)
@@ -141,14 +175,9 @@ def requirements_in_window(path, window, file_text):
     return found
 
 
-def added_windows():
-    hits = []
-    if from_ref:
-        diff = git("diff", "-U0", f"{from_ref}...HEAD", "--", "src-tauri/src")
-        files = {}
-    else:
-        diff = git("diff", "-U0", "HEAD", "--", "src-tauri/src")
-        files = {}
+def added_lines_from_diff(diff):
+    files = {}
+    added = {}
     path = None
     new_line = 0
     for raw in diff.splitlines():
@@ -165,21 +194,38 @@ def added_windows():
         if not is_source(path):
             continue
         if raw.startswith("+") and not raw.startswith("+++"):
-            if path not in files:
-                files[path] = read_text(path)
-            hits.extend(requirements_in_window(path, window_at(files[path], new_line), files[path]))
+            added.setdefault(path, set()).add(new_line)
             new_line += 1
         elif raw.startswith("-") and not raw.startswith("---"):
             continue
         else:
             new_line += 1
+    return files, added
+
+
+def hits_for_text(path, text, lines):
+    hits = with_reason_hits(path, text, lines)
+    for line_no in lines:
+        hits.extend(requirements_in_window(path, window_at(text, line_no), text))
+    return hits
+
+
+def added_windows():
+    if from_ref:
+        diff = git("diff", "-U0", f"{from_ref}...HEAD", "--", "src-tauri/src")
+    else:
+        diff = git("diff", "-U0", "HEAD", "--", "src-tauri/src")
+    _files, added = added_lines_from_diff(diff)
+    hits = []
+    for path, lines in added.items():
+        hits.extend(hits_for_text(path, read_text(path), lines))
     if not from_ref:
         listing = git("ls-files", "--others", "--exclude-standard", "--", "src-tauri/src")
         for rel in listing.splitlines():
             if not is_source(rel):
                 continue
             text = read_text(rel)
-            hits.extend(requirements_in_window(rel, text, text))
+            hits.extend(hits_for_text(rel, text, set(range(1, text.count("\n") + 2))))
     return hits
 
 
@@ -208,7 +254,7 @@ def missing_messages(hits, locales):
             item = (path, token, "unresolved")
             if item not in seen:
                 seen.add(item)
-                missing.append(f"  {token} 在 {path} 找不到同一处的 CommandErrorCode")
+                missing.append(f"  {token} 在 {path} 找不到同一函数里的 CommandErrorCode")
             continue
         for name, locale in locales.items():
             if has_key(locale, code, token):
@@ -266,6 +312,54 @@ fn publish() -> Result<(), String> {
     locales["zh"]["errors"]["ISSUE_VALIDATION_FAILED"]["changeRequestNumberMissing"] = "读不到编号"
     locales["en"]["errors"]["ISSUE_VALIDATION_FAILED"]["changeRequestNumberMissing"] = "Missing number"
     assert missing_messages(hits + completion_hits, locales) == []
+    adjacent = """
+fn first() -> CommandError {
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "one",
+    )
+    .with_reason("hostAttachmentUnauthenticated")
+}
+
+fn second() -> CommandError {
+    CommandError::new(
+        CommandErrorCode::IssueNotFound,
+        "two",
+    )
+    .with_reason("hostAttachmentForbidden")
+}
+"""
+    path = "src-tauri/src/features/issue/host_attachment.rs"
+    all_lines = set(range(1, adjacent.count("\n") + 2))
+    paired = with_reason_hits(path, adjacent, all_lines)
+    assert ("FORGE_UNAVAILABLE", "hostAttachmentUnauthenticated", path) in paired
+    assert ("ISSUE_NOT_FOUND", "hostAttachmentForbidden", path) in paired
+    second_lines = {
+        index
+        for index, line in enumerate(adjacent.splitlines(), start=1)
+        if "second" in line or "IssueNotFound" in line or "hostAttachmentForbidden" in line
+    }
+    second_only = with_reason_hits(path, adjacent, second_lines)
+    assert second_only == [("ISSUE_NOT_FOUND", "hostAttachmentForbidden", path)]
+    mixed = """
+fn upload(flag: bool) -> CommandError {
+    if flag {
+        return CommandError::new(
+            CommandErrorCode::IssueNotFound,
+            "missing",
+        )
+        .with_reason("hostAttachmentUnavailable");
+    }
+    CommandError::new(
+        CommandErrorCode::ForgeUnavailable,
+        "failed",
+    )
+    .with_reason("hostAttachmentUploadFailed")
+}
+"""
+    mixed_hits = with_reason_hits(path, mixed, set(range(1, mixed.count("\n") + 2)))
+    assert ("ISSUE_NOT_FOUND", "hostAttachmentUnavailable", path) in mixed_hits
+    assert ("FORGE_UNAVAILABLE", "hostAttachmentUploadFailed", path) in mixed_hits
     print("reason locale 自检通过。")
 
 
@@ -281,7 +375,7 @@ if not hits:
 missing = missing_messages(hits, load_locales())
 if missing:
     print("新增 reason 没有写到对应错误码的中英文文案。")
-    print("with_reason / coded_error 用 errors.<CommandErrorCode>.<reason>。")
+    print("with_reason 用同一函数里的 CommandErrorCode。coded_error 用 errors.<CommandErrorCode>.<reason>。")
     print("完成流返回的裸 reason 用 errors.ISSUE_VALIDATION_FAILED.<reason>。")
     for item in missing:
         print(item)
