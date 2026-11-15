@@ -14,6 +14,8 @@ pub mod unavailable_recovery;
 mod validation;
 
 #[cfg(test)]
+mod attachment_same_name_tests;
+#[cfg(test)]
 mod remote_create_test;
 
 #[cfg(test)]

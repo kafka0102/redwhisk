@@ -12,7 +12,14 @@ import {
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 
-import { activateBlockFormat, type QuillLine } from "./rich-text-editor-blocks";
+import {
+  activateBlockFormat,
+  insertImageBatch,
+  retainLocalAttachments,
+  type QuillLine,
+  type RichTextAttachment,
+  type RichTextAttachmentKind,
+} from "./rich-text-editor-blocks";
 import {
   deltaToMarkdown,
   getAttachmentInsert,
@@ -59,24 +66,7 @@ function isAllowedProtocol(url: string, allowed: string[]): boolean {
   return allowed.includes(protocol);
 }
 
-export type RichTextAttachmentKind =
-  | "image"
-  | "pdf"
-  | "word"
-  | "text"
-  | "generic";
-
-export interface RichTextAttachment {
-  token: string;
-  displayName: string;
-  kind: RichTextAttachmentKind;
-  markdownToken: string;
-  isPreviewable: boolean;
-  imageSrc?: string | null;
-  previewLabel?: string;
-  downloadLabel?: string;
-  removeLabel?: string;
-}
+export type { RichTextAttachment, RichTextAttachmentKind };
 
 export interface RichTextEditorLabels {
   attachFile: string;
@@ -108,6 +98,7 @@ interface RichTextEditorProps {
   onRemoveAttachment?: (attachment: RichTextAttachment) => void;
   onUploadAttachment?: () => Promise<RichTextAttachment | null>;
   onUploadImage?: () => Promise<RichTextAttachment | null>;
+  hasMoreUploads?: () => boolean;
 }
 
 export function RichTextEditor({
@@ -120,6 +111,7 @@ export function RichTextEditor({
   onRemoveAttachment,
   onUploadAttachment,
   onUploadImage,
+  hasMoreUploads,
   placeholder,
   value,
 }: RichTextEditorProps) {
@@ -137,7 +129,9 @@ export function RichTextEditor({
     onRemoveAttachment,
     onUploadAttachment,
     onUploadImage,
+    hasMoreUploads,
   });
+  const imageUploadRef = useRef(false);
   const localizedAttachments = useMemo(
     () =>
       attachments.map((attachment) => ({
@@ -156,7 +150,10 @@ export function RichTextEditor({
 
   useEffect(() => {
     labelsRef.current = labels;
-    attachmentsRef.current = localizedAttachments;
+    attachmentsRef.current = retainLocalAttachments(
+      localizedAttachments,
+      attachmentsRef.current,
+    );
     handlersRef.current = {
       onChange,
       onDownloadAttachment,
@@ -164,6 +161,7 @@ export function RichTextEditor({
       onRemoveAttachment,
       onUploadAttachment,
       onUploadImage,
+      hasMoreUploads,
     };
   }, [
     labels,
@@ -174,6 +172,7 @@ export function RichTextEditor({
     onRemoveAttachment,
     onUploadAttachment,
     onUploadImage,
+    hasMoreUploads,
   ]);
 
   useEffect(() => {
@@ -188,38 +187,27 @@ export function RichTextEditor({
         return;
       }
 
-      const attachment = await uploadImage();
-      if (!attachment) {
-        return;
-      }
-      const currentLabels = labelsRef.current;
-      const localizedAttachment = {
-        ...attachment,
-        previewLabel: currentLabels.previewAttachment(attachment.displayName),
-        downloadLabel: currentLabels.downloadAttachment(attachment.displayName),
-        removeLabel: currentLabels.removeAttachment(attachment.displayName),
-      };
-      if (
-        !attachmentsRef.current.some(
-          (item) => item.token === localizedAttachment.token,
-        )
-      ) {
-        attachmentsRef.current = [
-          ...attachmentsRef.current,
-          localizedAttachment,
-        ];
-      }
-
-      const insertIndex = quill.getSelection(true)?.index ?? quill.getLength();
-      if (localizedAttachment.imageSrc) {
-        quill.insertEmbed(
-          insertIndex,
-          "image",
-          localizedAttachment.imageSrc,
-          "user",
+      imageUploadRef.current = true;
+      try {
+        await insertImageBatch(
+          quill,
+          uploadImage,
+          () => handlersRef.current.hasMoreUploads?.() ?? false,
+          () => labelsRef.current,
+          attachmentsRef,
+          () => {
+            handlersRef.current.onChange(
+              normalizeMarkdown(
+                deltaToMarkdown(
+                  getQuillOperations(quill),
+                  attachmentsRef.current,
+                ),
+              ),
+            );
+          },
         );
-        quill.insertText(insertIndex + 1, "\n", "user");
-        quill.setSelection(insertIndex + 2, 0, "user");
+      } finally {
+        imageUploadRef.current = false;
       }
     }
 
@@ -418,7 +406,7 @@ export function RichTextEditor({
 
   useEffect(() => {
     const quill = quillRef.current;
-    if (!quill) {
+    if (!quill || imageUploadRef.current) {
       return;
     }
 
@@ -426,7 +414,10 @@ export function RichTextEditor({
       deltaToMarkdown(getQuillOperations(quill), attachmentsRef.current),
     );
     const nextMarkdown = normalizeMarkdown(editorMarkdown);
-    if (currentMarkdown === nextMarkdown) {
+    if (
+      currentMarkdown === nextMarkdown ||
+      (currentMarkdown.includes("![") && !nextMarkdown.includes("!["))
+    ) {
       return;
     }
 

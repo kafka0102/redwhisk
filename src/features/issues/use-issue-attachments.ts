@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 
 import {
   exportIssueAttachment,
@@ -15,6 +15,7 @@ import {
   toAttachmentPreviewState,
 } from "./issue-form/issue-description-serializer";
 import type { IssueAttachmentDraft } from "./issue-form/issue-description-editor";
+import { bindMoreImages } from "./issue-form/issue-more-images";
 import { getCommandErrorMessage } from "../../shared/commands/command-error";
 import type { useI18n } from "../../shared/i18n/i18n";
 
@@ -30,6 +31,28 @@ interface UseIssueAttachmentsOptions {
   messages: Messages;
 }
 
+interface SelectedImageBatch {
+  paths: string[];
+  taken: number;
+  hasMoreImages: boolean;
+}
+
+export function uniqueImagePaths(selected: unknown): string[] {
+  const paths = Array.isArray(selected)
+    ? selected.filter((path): path is string => typeof path === "string")
+    : typeof selected === "string"
+      ? [selected]
+      : [];
+  const seen = new Set<string>();
+  return paths.filter((path) => {
+    if (seen.has(path)) {
+      return false;
+    }
+    seen.add(path);
+    return true;
+  });
+}
+
 export function useIssueAttachments({
   projectId,
   setForm,
@@ -38,39 +61,83 @@ export function useIssueAttachments({
   t,
   messages,
 }: UseIssueAttachmentsOptions) {
+  const imageBatchRef = useRef<SelectedImageBatch | null>(null);
+  const hasMoreImagesRef = useRef(false);
+
   async function selectAttachment(
     filter?: "image" | "file",
   ): Promise<IssueAttachmentDraft | null> {
+    if (filter === "image") {
+      return selectNextImage();
+    }
+
     const selectedPath = await open({
       directory: false,
       multiple: false,
-      title:
-        filter === "image"
-          ? messages.richText.image
-          : messages.issues.addAttachment,
-      filters:
-        filter === "image"
-          ? [
-              {
-                name: messages.issues.imageFilterName,
-                extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
-              },
-            ]
-          : undefined,
+      title: messages.issues.addAttachment,
+      filters: undefined,
     });
 
     if (typeof selectedPath !== "string") {
       return null;
     }
 
+    return saveSelectedAttachment(selectedPath);
+  }
+
+  async function selectNextImage(): Promise<IssueAttachmentDraft | null> {
+    const batch = imageBatchRef.current;
+    if (batch && batch.taken < batch.paths.length) {
+      const sourcePath = batch.paths[batch.taken];
+      batch.taken += 1;
+      batch.hasMoreImages = batch.taken < batch.paths.length;
+      const attachment = await saveSelectedAttachment(sourcePath);
+      markMoreImages(Boolean(attachment) && batch.hasMoreImages);
+      return attachment;
+    }
+
+    const selected = await open({
+      directory: false,
+      multiple: true,
+      title: messages.richText.image,
+      filters: [
+        {
+          name: messages.issues.imageFilterName,
+          extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"],
+        },
+      ],
+    });
+    const paths = uniqueImagePaths(selected);
+    if (paths.length === 0) {
+      imageBatchRef.current = null;
+      return null;
+    }
+
+    imageBatchRef.current = {
+      paths,
+      taken: 1,
+      hasMoreImages: paths.length > 1,
+    };
+    const attachment = await saveSelectedAttachment(paths[0]);
+    if (attachment) {
+      markMoreImages(paths.length > 1);
+    }
+    return attachment;
+  }
+
+  async function saveSelectedAttachment(
+    sourcePath: string,
+  ): Promise<IssueAttachmentDraft | null> {
     try {
-      const attachment = await buildDraftAttachment(selectedPath);
+      const attachment = await buildDraftAttachment(sourcePath);
       setForm((currentForm) => ({
         ...currentForm,
         attachments: [...currentForm.attachments, attachment],
       }));
       return attachment;
     } catch (error) {
+      imageBatchRef.current = null;
+      markMoreImages(false);
       setDialogErrorMessage(getCommandErrorMessage(error, t));
       return null;
     }
@@ -142,6 +209,14 @@ export function useIssueAttachments({
       setDialogErrorMessage(getCommandErrorMessage(error, t));
     }
   }
+
+  function markMoreImages(hasMoreImages: boolean) {
+    hasMoreImagesRef.current = hasMoreImages;
+  }
+
+  useEffect(() => {
+    bindMoreImages(selectAttachment, hasMoreImagesRef);
+  });
 
   return {
     selectAttachment,

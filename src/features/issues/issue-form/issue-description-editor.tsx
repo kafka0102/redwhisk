@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   RichTextEditor,
@@ -10,6 +10,7 @@ import { useI18n } from "../../../shared/i18n/i18n";
 import type { I18nMessages } from "../../../shared/i18n/messages";
 
 import type { IssueAttachmentRecord } from "../issue-commands";
+import { readBoundMoreImages } from "./issue-more-images";
 
 export interface IssueAttachmentDraft {
   token: string;
@@ -55,6 +56,13 @@ export function IssueDescriptionEditor({
   onRemoveAttachment,
 }: IssueDescriptionEditorProps) {
   const { messages } = useI18n();
+  const [pendingAttachments, setPendingAttachments] = useState<
+    Array<IssueAttachmentRecord | IssueAttachmentDraft>
+  >([]);
+  const selectAttachmentRef = useRef(onSelectAttachment);
+  useEffect(() => {
+    selectAttachmentRef.current = onSelectAttachment;
+  }, [onSelectAttachment]);
   const uploadedAttachmentsRef = useRef(
     new Map<string, IssueAttachmentRecord | IssueAttachmentDraft>(),
   );
@@ -68,15 +76,34 @@ export function IssueDescriptionEditor({
   async function handleUploadAttachment(
     filter?: "image" | "file",
   ): Promise<RichTextAttachment | null> {
-    const attachment = await onSelectAttachment?.(filter);
+    const attachment = await selectAttachmentRef.current?.(filter);
     if (!attachment) {
       return null;
     }
 
     const richTextAttachment = toRichTextAttachment(attachment);
     uploadedAttachmentsRef.current.set(richTextAttachment.token, attachment);
+    setPendingAttachments((current) =>
+      current.some(
+        (item) => getRichTextAttachmentToken(item) === richTextAttachment.token,
+      )
+        ? current
+        : [...current, attachment],
+    );
     return richTextAttachment;
   }
+
+  const editorAttachments = [
+    ...attachments,
+    ...pendingAttachments.filter(
+      (attachment) =>
+        !attachments.some(
+          (item) =>
+            getRichTextAttachmentToken(item) ===
+            getRichTextAttachmentToken(attachment),
+        ),
+    ),
+  ];
 
   function resolveAttachment(attachment: RichTextAttachment) {
     return (
@@ -89,7 +116,7 @@ export function IssueDescriptionEditor({
   return (
     <RichTextEditor
       ariaLabel={ariaLabel}
-      attachments={attachments.map(toRichTextAttachment)}
+      attachments={editorAttachments.map(toRichTextAttachment)}
       labels={toRichTextLabels(messages)}
       placeholder={placeholder}
       value={value}
@@ -116,6 +143,7 @@ export function IssueDescriptionEditor({
       onUploadAttachment={
         onSelectAttachment ? () => handleUploadAttachment("file") : undefined
       }
+      hasMoreUploads={() => readBoundMoreImages(selectAttachmentRef.current)}
       onUploadImage={
         onSelectAttachment ? () => handleUploadAttachment("image") : undefined
       }

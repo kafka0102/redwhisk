@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::time::current_epoch_millis;
 use super::validation::issue_database_error;
@@ -10,6 +11,12 @@ use crate::types::issue::{
     IssueAttachmentInput, IssueAttachmentKind, IssueAttachmentRecord,
     SaveIssueAttachmentDraftInput, SaveIssueAttachmentDraftResult,
 };
+
+static ATTACHMENT_NAME_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+fn next_attachment_sequence() -> u64 {
+    ATTACHMENT_NAME_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+}
 
 pub(super) struct NewAttachmentPersistence {
     pub(super) temp_token: String,
@@ -73,8 +80,6 @@ pub(super) fn persist_new_attachments(
             created_at,
             sanitize_attachment_file_name(&display_name)
         );
-        let relative_path =
-            format!(".redwhisk/issues/{issue_number}/attachments/{placeholder_name}");
         let absolute_path = data_dir
             .join("issues")
             .join(issue_number.to_string())
@@ -90,6 +95,25 @@ pub(super) fn persist_new_attachments(
             cleanup_created_files(&created_files);
             issue_io_error(error)
         })?;
+        created_files.push(absolute_path.clone());
+        let named_path = absolute_path.with_file_name(stored_attachment_name(
+            "pending",
+            created_at,
+            &display_name,
+        ));
+        fs::rename(&absolute_path, &named_path).map_err(|error| {
+            cleanup_created_files(&created_files);
+            issue_io_error(error)
+        })?;
+        let absolute_path = named_path;
+        let placeholder_name = absolute_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("attachment")
+            .to_string();
+        let relative_path =
+            format!(".redwhisk/issues/{issue_number}/attachments/{placeholder_name}");
+        created_files.pop();
         created_files.push(absolute_path.clone());
 
         let analysis = analyze_attachment(&display_name, attachment.mime_type.as_deref());
@@ -151,8 +175,11 @@ pub(super) fn save_issue_attachment_draft_in_data_dir(
     );
     let draft_dir = data_dir.join("issue-attachment-drafts");
     fs::create_dir_all(&draft_dir).map_err(issue_io_error)?;
-    let destination = draft_dir.join(stored_name);
-    fs::copy(&source, &destination).map_err(issue_io_error)?;
+    let temporary_path = draft_dir.join(stored_name);
+    fs::copy(&source, &temporary_path).map_err(issue_io_error)?;
+    let destination =
+        temporary_path.with_file_name(stored_attachment_name("draft", 0, &display_name));
+    fs::rename(&temporary_path, &destination).map_err(issue_io_error)?;
 
     let analysis = analyze_attachment(&display_name, None);
     Ok(SaveIssueAttachmentDraftResult {
@@ -315,6 +342,19 @@ pub(super) fn delete_attachment_files(
         }
     }
     Ok(())
+}
+
+pub(super) fn stored_attachment_name(
+    prefix: &str,
+    epoch_millis: i64,
+    display_name: &str,
+) -> String {
+    let sequence = next_attachment_sequence();
+    let safe_name = sanitize_attachment_file_name(display_name);
+    if epoch_millis == 0 {
+        return format!("{prefix}-{sequence}-{safe_name}");
+    }
+    format!("{prefix}-{epoch_millis}-{sequence}-{safe_name}")
 }
 
 pub(super) fn read_previewable_text_file(path: &str) -> Result<String, CommandError> {
