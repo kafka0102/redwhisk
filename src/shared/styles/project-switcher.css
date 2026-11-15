@@ -38,7 +38,8 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 2;
+  /* 高于 .issue-page（2），否则详情/编辑页会盖住列表；低于 .issue-dialog-overlay（10）。 */
+  z-index: 3;
   width: min(460px, calc(100vw - 80px));
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-dialog);
