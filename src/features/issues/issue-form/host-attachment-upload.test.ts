@@ -185,6 +185,78 @@ describe("host attachment upload on select", () => {
     expect(form.updateCalls).toBe(1);
     expect(form.createCalls).toBe(0);
   });
+
+  it("uploads the selected mp4 once before create", async () => {
+    const form = formWith(
+      async () => "https://github.com/user-attachments/assets/vid",
+    );
+    await form.setCreateSource("remote", "github");
+    await form.selectFile(file("vid", "clip.mp4"));
+    expect(form.uploadCalls).toEqual([
+      {
+        sourcePath: "/tmp/clip.mp4",
+        displayName: "clip.mp4",
+        tempToken: "vid",
+      },
+    ]);
+    expect(form.status("vid")).toBe("uploaded");
+    expect(form.createCalls).toBe(0);
+  });
+
+  it("uploads mov and webm and does not upload a pdf on github", async () => {
+    const form = formWith(
+      async () => "https://github.com/user-attachments/assets/vid",
+    );
+    await form.setCreateSource("remote", "github");
+    await form.selectFile(file("mov", "clip.mov"));
+    await form.selectFile(file("webm", "clip.webm"));
+    await form.selectFile(file("pdf", "notes.pdf"));
+    expect(form.uploadCalls.map((call) => call.displayName)).toEqual([
+      "clip.mov",
+      "clip.webm",
+    ]);
+    expect(form.status("pdf")).toBe("rejected");
+  });
+
+  it("uploads a 104857600 byte mp4 and keeps a larger mp4 on the form", async () => {
+    const form = formWith(
+      async () => "https://github.com/user-attachments/assets/vid",
+    );
+    await form.setCreateSource("remote", "github");
+    await form.selectFile(file("exact", "exact.mp4", 104_857_600));
+    await form.selectFile(file("over", "over.mp4", 104_857_601));
+    expect(form.uploadCalls.map((call) => call.displayName)).toEqual([
+      "exact.mp4",
+    ]);
+    expect(form.status("over")).toBe("failed");
+    await form.submit("body");
+    expect(form.createCalls).toBe(0);
+  });
+
+  it("uploads every selected gitlab file instead of rejecting it", async () => {
+    const form = formWith(async () => "[notes.pdf](/uploads/hash/notes.pdf)");
+    await form.setCreateSource("remote", "gitlab");
+    await form.selectFile(file("pdf", "notes.pdf"));
+    await form.selectFile(file("zip", "notes.zip"));
+    expect(form.uploadCalls.map((call) => call.displayName)).toEqual([
+      "notes.pdf",
+      "notes.zip",
+    ]);
+    expect(form.status("pdf")).toBe("uploaded");
+    expect(form.status("zip")).toBe("uploaded");
+    expect(form.createCalls).toBe(0);
+  });
+
+  it("does not create when a gitlab file upload fails", async () => {
+    const form = formWith(async () => {
+      throw new Error("upload failed");
+    });
+    await form.setCreateSource("remote", "gitlab");
+    await form.selectFile(file("pdf", "notes.pdf"));
+    await form.submit("Notes");
+    expect(form.createCalls).toBe(0);
+    expect(form.status("pdf")).toBe("failed");
+  });
 });
 
 describe("host attachment copy", () => {

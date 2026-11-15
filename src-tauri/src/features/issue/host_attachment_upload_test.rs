@@ -27,6 +27,10 @@ fn github_stdout() -> Vec<Result<String, ForgeIssueError>> {
     ]
 }
 
+fn github_asset(url: &str) -> Vec<Result<String, ForgeIssueError>> {
+    vec![Ok("42\n".to_string()), Ok(format!(r#"{{"url":"{url}"}}"#))]
+}
+
 #[test]
 fn upload_issue_host_attachment_sends_the_selected_png_and_keeps_the_login_snapshot() {
     let _lock = lock_uploads();
@@ -223,5 +227,102 @@ fn upload_issue_host_attachment_rejects_a_connection_that_is_not_ready() {
     let error = result.expect_err("not ready");
     assert_eq!(error.reason.as_deref(), Some("hostAttachmentUnavailable"));
     assert!(calls.is_empty());
+    assert_eq!(project.count("issues"), 0);
+}
+
+#[test]
+fn clip_mp4_uploads_as_a_bare_github_url() {
+    let _lock = lock_uploads();
+    let project = github_project(true, "ready");
+    let video = bytes_file(project.temp.path(), "clip.mp4", b"mp4");
+    let (result, calls) = with_scripted_forge_output(
+        github_asset("https://github.com/user-attachments/assets/vid"),
+        || {
+            upload_issue_host_attachment_in_data_dir(
+                project.temp.path(),
+                upload_input(project.project_id, &video, "clip.mp4"),
+            )
+        },
+    );
+    let uploaded = result.expect("video");
+    assert_eq!(
+        uploaded.markdown,
+        "https://github.com/user-attachments/assets/vid"
+    );
+    assert!(!uploaded.markdown.starts_with("!["));
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].program, "gh");
+    assert!(calls[1]
+        .args
+        .iter()
+        .any(|arg| arg.contains("content_type=video%2Fmp4")));
+    assert!(calls[1]
+        .args
+        .iter()
+        .any(|arg| arg == video.to_str().unwrap()));
+    forget_host_upload(project.project_id, "img");
+    assert_eq!(project.count("issues"), 0);
+}
+
+#[test]
+fn one_hundred_mebibyte_mp4_uploads_and_one_extra_byte_does_not() {
+    let _lock = lock_uploads();
+    let project = github_project(true, "ready");
+    let exact = len_file(project.temp.path(), "exact.mp4", 104_857_600);
+    let (exact_result, exact_calls) = with_scripted_forge_output(
+        github_asset("https://github.com/user-attachments/assets/vid"),
+        || {
+            upload_issue_host_attachment_in_data_dir(
+                project.temp.path(),
+                upload_input(project.project_id, &exact, "exact.mp4"),
+            )
+        },
+    );
+    assert!(exact_result.is_ok());
+    assert_eq!(exact_calls.len(), 2);
+    forget_host_upload(project.project_id, "img");
+    let over = len_file(project.temp.path(), "over.mp4", 104_857_601);
+    let (over_result, over_calls) = with_captured_forge_invocations(|| {
+        upload_issue_host_attachment_in_data_dir(
+            project.temp.path(),
+            upload_input(project.project_id, &over, "over.mp4"),
+        )
+    });
+    let error = over_result.expect_err("over");
+    assert_eq!(error.reason.as_deref(), Some("hostAttachmentTooLarge"));
+    assert_ne!(error.reason.as_deref(), Some("hostAttachmentUploadFailed"));
+    assert!(over_calls.is_empty());
+    assert_eq!(project.count("issues"), 0);
+}
+
+#[test]
+fn gitlab_pdf_upload_returns_the_api_markdown_verbatim() {
+    let _lock = lock_uploads();
+    let project = super::host_attachment_fixture::gitlab_project(true, "ready");
+    let pdf = bytes_file(project.temp.path(), "notes.pdf", b"pdf");
+    let (result, calls) = with_scripted_forge_output(
+        vec![Ok(
+            r#"{"url":"/uploads/hash/notes.pdf","full_path":"/acme/redwhisk/uploads/hash/notes.pdf","markdown":"[notes.pdf](/uploads/hash/notes.pdf)"}"#
+                .to_string(),
+        )],
+        || {
+            upload_issue_host_attachment_in_data_dir(
+                project.temp.path(),
+                upload_input(project.project_id, &pdf, "notes.pdf"),
+            )
+        },
+    );
+    let uploaded = result.expect("pdf");
+    assert_eq!(uploaded.markdown, "[notes.pdf](/uploads/hash/notes.pdf)");
+    assert!(!uploaded.markdown.contains("https://"));
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].program, "glab");
+    assert!(calls[0].args.iter().any(|arg| arg
+        == pdf
+            .to_str()
+            .map(|path| format!("file=@{path}"))
+            .as_deref()
+            .unwrap_or("")));
+    forget_host_upload(project.project_id, "img");
     assert_eq!(project.count("issues"), 0);
 }

@@ -36,6 +36,14 @@ impl GithubProject {
 }
 
 pub fn github_project(remote: bool, auth: &str) -> GithubProject {
+    forge_project("github", "https://github.com/", remote, auth)
+}
+
+pub fn gitlab_project(remote: bool, auth: &str) -> GithubProject {
+    forge_project("gitlab", "https://gitlab.com/", remote, auth)
+}
+
+fn forge_project(provider: &str, host: &str, remote: bool, auth: &str) -> GithubProject {
     let temp = tempfile::tempdir().expect("temp");
     let database = super::archive::open_issue_database(temp.path()).expect("db");
     database
@@ -62,8 +70,8 @@ pub fn github_project(remote: bool, auth: &str) -> GithubProject {
             "INSERT INTO project_forge_connections (
                 project_id, provider, host_url, repo_path, login, auth_status,
                 cli_installed, cli_authenticated, checked_at
-             ) VALUES (?1, 'github', 'https://github.com/', 'acme/redwhisk', 'octocat', ?2, 1, 1, 1)",
-            params![project_id, auth],
+             ) VALUES (?1, ?2, ?3, 'acme/redwhisk', 'octocat', ?4, 1, 1, 1)",
+            params![project_id, provider, host, auth],
         )
         .expect("connection");
     GithubProject {

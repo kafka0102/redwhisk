@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use super::github_issue_mirror::capture_forge_stdout;
 use super::github_issue_mirror::ForgeIssueError;
 use super::host_attachment_body::{
-    forget_host_upload, is_github_image, remember_host_upload, GITHUB_IMAGE_LIMIT,
+    forget_host_upload, is_github_image, is_github_video, remember_host_upload, GITHUB_IMAGE_LIMIT,
+    GITHUB_VIDEO_LIMIT,
 };
 use super::validation::issue_database_error;
 use crate::db::project_issue_source_repository::ProjectIssueSourceRepository;
@@ -51,21 +52,14 @@ pub(crate) fn upload_issue_host_attachment_in_data_dir(
     if !wants_remote(&settings) {
         return Err(not_remote());
     }
-    if settings.connection.auth_status != ForgeAuthStatus::Ready
-        || settings.connection.provider != Some(ForgeProvider::Github)
-    {
+    if settings.connection.auth_status != ForgeAuthStatus::Ready {
         return Err(unavailable());
     }
-    if !is_github_image(&input.display_name) {
-        return Err(rejected());
-    }
+    let provider = settings.connection.provider.ok_or_else(unavailable)?;
     let source = PathBuf::from(&input.source_path);
     let metadata = std::fs::metadata(&source).map_err(|_| upload_failed())?;
     if !metadata.is_file() {
         return Err(upload_failed());
-    }
-    if metadata.len() > GITHUB_IMAGE_LIMIT {
-        return Err(too_large());
     }
     let repo = settings
         .connection
@@ -77,18 +71,34 @@ pub(crate) fn upload_issue_host_attachment_in_data_dir(
     if repo.is_empty() {
         return Err(unavailable());
     }
+    let markdown = match provider {
+        ForgeProvider::Github => {
+            if !is_github_image(&input.display_name) && !is_github_video(&input.display_name) {
+                return Err(rejected());
+            }
+            let limit = if is_github_video(&input.display_name) {
+                GITHUB_VIDEO_LIMIT
+            } else {
+                GITHUB_IMAGE_LIMIT
+            };
+            if metadata.len() > limit {
+                return Err(too_large());
+            }
+            upload_github_asset(
+                Path::new(&project.repo_path),
+                &repo,
+                &input.display_name,
+                &source,
+            )?
+        }
+        ForgeProvider::Gitlab => upload_gitlab(Path::new(&project.repo_path), &repo, &source)?,
+    };
     forget_host_upload(input.project_id, &input.temp_token);
-    let markdown = upload_github_image(
-        Path::new(&project.repo_path),
-        &repo,
-        &input.display_name,
-        &source,
-    )?;
     remember_host_upload(input.project_id, &input.temp_token, &markdown);
     Ok(UploadIssueHostAttachmentResult { markdown })
 }
 
-fn upload_github_image(
+fn upload_github_asset(
     repo_dir: &Path,
     repo: &str,
     display_name: &str,
@@ -130,7 +140,31 @@ fn upload_github_image(
         .and_then(serde_json::Value::as_str)
         .filter(|value| !value.is_empty())
         .ok_or_else(upload_failed)?;
-    Ok(format!("![{display_name}]({asset})"))
+    if is_github_video(display_name) {
+        Ok(asset.to_string())
+    } else {
+        Ok(format!("![{display_name}]({asset})"))
+    }
+}
+
+fn upload_gitlab(repo_dir: &Path, repo: &str, source: &Path) -> Result<String, CommandError> {
+    let args = vec![
+        "api".to_string(),
+        "--method".to_string(),
+        "POST".to_string(),
+        "-F".to_string(),
+        format!("file=@{}", source.to_string_lossy()),
+        format!("projects/{}/uploads", encode_query(repo)),
+    ];
+    let stdout = capture_forge_stdout("glab", &args, repo_dir).map_err(forge_upload_error)?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(stdout.trim()).map_err(|_| upload_failed())?;
+    parsed
+        .get("markdown")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .ok_or_else(upload_failed)
 }
 
 fn wants_remote(settings: &ProjectIssueSourceSettings) -> bool {
@@ -152,6 +186,9 @@ fn content_type(display_name: &str) -> &'static str {
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "mp4" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
         _ => "image/png",
     }
 }
@@ -200,7 +237,7 @@ fn rejected() -> CommandError {
 
 #[rustfmt::skip]
 fn too_large() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "The image is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
+    CommandError::new(CommandErrorCode::ForgeUnavailable, "The file is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
 }
 
 #[rustfmt::skip]

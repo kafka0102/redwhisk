@@ -7,6 +7,7 @@ use crate::types::issue::CreateIssueInput;
 use crate::types::project_issue_source::ForgeProvider;
 
 pub(crate) const GITHUB_IMAGE_LIMIT: u64 = 10_485_760;
+pub(crate) const GITHUB_VIDEO_LIMIT: u64 = 104_857_600;
 
 static HOST_UPLOADS: Mutex<Option<HashMap<(i64, String), String>>> = Mutex::new(None);
 
@@ -39,6 +40,10 @@ pub(crate) fn is_github_image(display_name: &str) -> bool {
     )
 }
 
+pub(crate) fn is_github_video(display_name: &str) -> bool {
+    matches!(extension(display_name).as_str(), "mp4" | "mov" | "webm")
+}
+
 pub(crate) fn uses_host_body(input: &CreateIssueInput) -> bool {
     input.attachments.iter().any(|attachment| {
         attachment
@@ -52,10 +57,13 @@ pub(crate) fn remote_host_body(
     input: &CreateIssueInput,
     provider: ForgeProvider,
 ) -> Result<String, CommandError> {
-    if provider != ForgeProvider::Github || !uses_host_body(input) {
+    if !uses_host_body(input) {
         return Ok(input.description.trim().to_string());
     }
-    rewrite_github(input)
+    match provider {
+        ForgeProvider::Github => rewrite_github(input),
+        ForgeProvider::Gitlab => rewrite_gitlab(input),
+    }
 }
 
 pub(crate) fn saved_host_body<'body>(
@@ -63,11 +71,13 @@ pub(crate) fn saved_host_body<'body>(
     provider: ForgeProvider,
     body: &'body str,
 ) -> Option<&'body str> {
-    (provider == ForgeProvider::Github && uses_host_body(input)).then_some(body)
+    (uses_host_body(input) && matches!(provider, ForgeProvider::Github | ForgeProvider::Gitlab))
+        .then_some(body)
 }
 
 fn rewrite_github(input: &CreateIssueInput) -> Result<String, CommandError> {
     let mut body = input.description.clone();
+    let mut trailing = Vec::new();
     for attachment in &input.attachments {
         let Some(token) = attachment
             .temp_token
@@ -77,22 +87,56 @@ fn rewrite_github(input: &CreateIssueInput) -> Result<String, CommandError> {
             continue;
         };
         if is_github_image(&attachment.display_name) {
-            let len = image_len(attachment.source_path.as_deref().unwrap_or(""))?;
+            let len = file_len(attachment.source_path.as_deref().unwrap_or(""))?;
             if len > GITHUB_IMAGE_LIMIT {
                 return Err(too_large());
             }
-            let markdown = host_upload_markdown(input.project_id, token)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(upload_required)?;
+            let markdown = required_markdown(input.project_id, token)?;
             body = replace_accepted(&body, token, &markdown);
+        } else if is_github_video(&attachment.display_name) {
+            let len = file_len(attachment.source_path.as_deref().unwrap_or(""))?;
+            if len > GITHUB_VIDEO_LIMIT {
+                return Err(too_large());
+            }
+            let markdown = required_markdown(input.project_id, token)?;
+            body = excise_marker(&body, token);
+            trailing.push(markdown);
         } else {
             body = strip_unaccepted(&body, token);
         }
     }
-    Ok(body)
+    Ok(append_blocks(&body, &trailing))
 }
 
-fn image_len(path: &str) -> Result<u64, CommandError> {
+fn rewrite_gitlab(input: &CreateIssueInput) -> Result<String, CommandError> {
+    let mut body = input.description.clone();
+    let mut trailing = Vec::new();
+    for attachment in &input.attachments {
+        let Some(token) = attachment
+            .temp_token
+            .as_deref()
+            .filter(|token| !token.is_empty())
+        else {
+            continue;
+        };
+        let markdown = required_markdown(input.project_id, token)?;
+        if marker_in_image(&body, token) {
+            body = replace_accepted(&body, token, &markdown);
+        } else {
+            body = excise_marker(&body, token);
+            trailing.push(markdown);
+        }
+    }
+    Ok(append_blocks(&body, &trailing))
+}
+
+fn required_markdown(project_id: i64, token: &str) -> Result<String, CommandError> {
+    host_upload_markdown(project_id, token)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(upload_required)
+}
+
+fn file_len(path: &str) -> Result<u64, CommandError> {
     let metadata = std::fs::metadata(path).map_err(|_| upload_failed())?;
     if !metadata.is_file() {
         return Err(upload_failed());
@@ -107,6 +151,66 @@ fn replace_accepted(body: &str, token: &str, markdown: &str) -> String {
 fn strip_unaccepted(body: &str, token: &str) -> String {
     let marker = marker(token);
     drop_marker(&rewrite_marker(body, &marker, None), &marker)
+}
+
+fn excise_marker(body: &str, token: &str) -> String {
+    let marker = marker(token);
+    let without_images = rewrite_marker(body, &marker, None);
+    let mut result = String::new();
+    let mut offset = 0;
+    while offset < without_images.len() {
+        let rest = &without_images[offset..];
+        let (line, next, newline) = match rest.find('\n') {
+            Some(position) => (&rest[..position], offset + position + 1, true),
+            None => (rest, without_images.len(), false),
+        };
+        if line.trim() == marker {
+            if result.ends_with("\n\n") || result == "\n" {
+                result.pop();
+            }
+        } else {
+            result.push_str(&line.replace(&marker, ""));
+            if newline {
+                result.push('\n');
+            }
+        }
+        offset = next;
+    }
+    result
+}
+
+fn append_blocks(body: &str, blocks: &[String]) -> String {
+    if blocks.is_empty() {
+        return body.to_string();
+    }
+    let mut result = body.to_string();
+    for block in blocks {
+        if !result.is_empty() {
+            if !result.ends_with('\n') {
+                result.push('\n');
+            }
+            if !result.ends_with("\n\n") {
+                result.push('\n');
+            }
+        }
+        result.push_str(block);
+        if !result.ends_with('\n') {
+            result.push('\n');
+        }
+    }
+    result
+}
+
+fn marker_in_image(body: &str, token: &str) -> bool {
+    let marker = marker(token);
+    let mut rest = body;
+    while let Some(index) = rest.find(&marker) {
+        if image_start(rest, index).is_some() {
+            return true;
+        }
+        rest = &rest[index + marker.len()..];
+    }
+    false
 }
 
 fn marker(token: &str) -> String {
@@ -180,12 +284,12 @@ fn extension(display_name: &str) -> String {
 
 #[rustfmt::skip]
 fn too_large() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "The image is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
+    CommandError::new(CommandErrorCode::ForgeUnavailable, "The file is larger than GitHub accepts.").with_reason("hostAttachmentTooLarge")
 }
 
 #[rustfmt::skip]
 fn upload_required() -> CommandError {
-    CommandError::new(CommandErrorCode::ForgeUnavailable, "GitHub has not accepted this image yet.").with_reason("hostAttachmentUploadRequired")
+    CommandError::new(CommandErrorCode::ForgeUnavailable, "The host has not accepted this file yet.").with_reason("hostAttachmentUploadRequired")
 }
 
 #[rustfmt::skip]

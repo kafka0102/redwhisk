@@ -1,4 +1,5 @@
 export const GITHUB_IMAGE_LIMIT = 10_485_760;
+export const GITHUB_VIDEO_LIMIT = 104_857_600;
 
 export type HostProvider = "github" | "gitlab" | null;
 export type HostSource = "local" | "remote";
@@ -47,10 +48,41 @@ export interface HostAttachmentController {
 }
 
 const GITHUB_IMAGES = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
+const GITHUB_VIDEOS = new Set(["mp4", "mov", "webm"]);
+
+function extensionOf(displayName: string): string {
+  return displayName.split(".").pop()?.toLowerCase() ?? "";
+}
 
 export function isGithubImage(displayName: string): boolean {
-  const extension = displayName.split(".").pop()?.toLowerCase() ?? "";
-  return GITHUB_IMAGES.has(extension);
+  return GITHUB_IMAGES.has(extensionOf(displayName));
+}
+
+export function isGithubVideo(displayName: string): boolean {
+  return GITHUB_VIDEOS.has(extensionOf(displayName));
+}
+
+function hostAccepts(provider: HostProvider, displayName: string): boolean {
+  if (provider === "gitlab") {
+    return true;
+  }
+  if (provider === "github") {
+    return isGithubImage(displayName) || isGithubVideo(displayName);
+  }
+  return false;
+}
+
+function exceedsHostLimit(provider: HostProvider, file: HostFile): boolean {
+  if (provider !== "github" || file.byteLength === undefined) {
+    return false;
+  }
+  if (isGithubImage(file.displayName)) {
+    return file.byteLength > GITHUB_IMAGE_LIMIT;
+  }
+  if (isGithubVideo(file.displayName)) {
+    return file.byteLength > GITHUB_VIDEO_LIMIT;
+  }
+  return false;
 }
 
 export function descriptionWithoutToken(
@@ -100,7 +132,11 @@ export function createHostAttachmentController(
   const deleteCalls = 0;
 
   function shouldUpload(): boolean {
-    return mode === "create" && source === "remote" && provider === "github";
+    return (
+      mode === "create" &&
+      source === "remote" &&
+      (provider === "github" || provider === "gitlab")
+    );
   }
 
   async function waitInflight(): Promise<void> {
@@ -130,9 +166,9 @@ export function createHostAttachmentController(
     await pending;
   }
 
-  function githubFiles(): HostFile[] {
+  function acceptedFiles(): HostFile[] {
     return [...files.values()].filter((file) =>
-      isGithubImage(file.displayName),
+      hostAccepts(provider, file.displayName),
     );
   }
 
@@ -140,7 +176,7 @@ export function createHostAttachmentController(
     if (!shouldUpload()) {
       return;
     }
-    for (const file of githubFiles()) {
+    for (const file of acceptedFiles()) {
       if (
         oversized.has(file.token) ||
         statuses.get(file.token) === "uploaded"
@@ -150,10 +186,7 @@ export function createHostAttachmentController(
       if (statuses.get(file.token) === "uploading") {
         continue;
       }
-      if (
-        file.byteLength !== undefined &&
-        file.byteLength > GITHUB_IMAGE_LIMIT
-      ) {
+      if (exceedsHostLimit(provider, file)) {
         statuses.set(file.token, "failed");
         oversized.add(file.token);
         continue;
@@ -196,14 +229,11 @@ export function createHostAttachmentController(
       if (!shouldUpload()) {
         return;
       }
-      if (!isGithubImage(file.displayName)) {
+      if (!hostAccepts(provider, file.displayName)) {
         statuses.set(file.token, "rejected");
         return;
       }
-      if (
-        file.byteLength !== undefined &&
-        file.byteLength > GITHUB_IMAGE_LIMIT
-      ) {
+      if (exceedsHostLimit(provider, file)) {
         statuses.set(file.token, "failed");
         oversized.add(file.token);
         return;
@@ -230,7 +260,7 @@ export function createHostAttachmentController(
       if ([...oversized].some((token) => files.has(token))) {
         return false;
       }
-      const pending = githubFiles().filter(
+      const pending = acceptedFiles().filter(
         (file) => statuses.get(file.token) !== "uploaded",
       );
       for (const file of pending) {
@@ -240,7 +270,7 @@ export function createHostAttachmentController(
         await uploadOne(file);
       }
       await waitInflight();
-      return githubFiles().every(
+      return acceptedFiles().every(
         (file) => statuses.get(file.token) === "uploaded",
       );
     },

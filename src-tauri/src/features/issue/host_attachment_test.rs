@@ -1,6 +1,6 @@
 use super::github_issue_mirror::FixedForge;
 use super::host_attachment_fixture::{
-    attachment, bytes_file, github_project, lock_uploads, remember,
+    attachment, bytes_file, github_project, gitlab_project, lock_uploads, remember,
 };
 use super::remote_create::create_issue_with_forge;
 use crate::types::issue::{CreateIssueInput, IssueAttachmentInput};
@@ -267,4 +267,165 @@ fn switching_back_to_local_before_submit_does_not_write_the_host_url() {
     assert!(created.description.contains("{{issue-attachment:"));
     assert!(!created.description.contains(MARKDOWN));
     assert!(port.create_calls.lock().expect("calls").is_empty());
+}
+
+#[test]
+fn github_replaces_image_markdown_and_keeps_bare_video_url() {
+    let _lock = lock_uploads();
+    let project = github_project(true, "ready");
+    let shot = bytes_file(project.temp.path(), "shot.png", b"png");
+    let video = bytes_file(project.temp.path(), "clip.mp4", b"mp4");
+    let _image = remember(project.project_id, "img", MARKDOWN);
+    let _video = remember(
+        project.project_id,
+        "vid",
+        "https://github.com/user-attachments/assets/vid",
+    );
+    let port = forge();
+    let created = create_issue_with_forge(
+        &project.service(),
+        input(
+            project.project_id,
+            "See this\n\n![shot.png]({{issue-attachment-temp:img}})\n\nNotes\n\n{{issue-attachment-temp:vid}}\n",
+            vec![
+                attachment(&shot, "img", "shot.png"),
+                attachment(&video, "vid", "clip.mp4"),
+            ],
+        ),
+        &port,
+        |_| Ok(()),
+    )
+    .expect("created");
+    let expected = "See this\n\n![shot.png](https://github.com/user-attachments/assets/abc)\n\nNotes\n\nhttps://github.com/user-attachments/assets/vid\n";
+    assert_eq!(body_of(&port), expected);
+    assert_eq!(created.description, expected);
+}
+
+#[test]
+fn gitlab_uses_upload_markdown_verbatim_for_image_and_pdf() {
+    let _lock = lock_uploads();
+    let project = gitlab_project(true, "ready");
+    let shot = bytes_file(project.temp.path(), "shot.png", b"png");
+    let pdf = bytes_file(project.temp.path(), "notes.pdf", b"pdf");
+    let _image = remember(
+        project.project_id,
+        "img",
+        "![shot.png](/uploads/hash/shot.png)",
+    );
+    let _pdf = remember(
+        project.project_id,
+        "pdf",
+        "[notes.pdf](/uploads/hash/notes.pdf)",
+    );
+    let port = forge();
+    let created = create_issue_with_forge(
+        &project.service(),
+        input(
+            project.project_id,
+            "See this\n\n![shot.png]({{issue-attachment-temp:img}})\n\nNotes\n\n{{issue-attachment-temp:pdf}}\n",
+            vec![
+                attachment(&shot, "img", "shot.png"),
+                attachment(&pdf, "pdf", "notes.pdf"),
+            ],
+        ),
+        &port,
+        |_| Ok(()),
+    )
+    .expect("created");
+    let expected = "See this\n\n![shot.png](/uploads/hash/shot.png)\n\nNotes\n\n[notes.pdf](/uploads/hash/notes.pdf)\n";
+    assert_eq!(body_of(&port), expected);
+    assert_eq!(created.description, expected);
+    assert!(!created.description.contains("https://"));
+    assert!(!created.description.contains("issue-attachment"));
+    assert_eq!(created.attachments.len(), 2);
+}
+
+#[test]
+fn gitlab_upload_failure_does_not_create_and_does_not_skip_the_file() {
+    let _lock = lock_uploads();
+    let project = gitlab_project(true, "ready");
+    let pdf = bytes_file(project.temp.path(), "notes.pdf", b"pdf");
+    let port = forge();
+    let error = create_issue_with_forge(
+        &project.service(),
+        input(
+            project.project_id,
+            "{{issue-attachment-temp:pdf}}\n",
+            vec![attachment(&pdf, "pdf", "notes.pdf")],
+        ),
+        &port,
+        |_| Ok(()),
+    )
+    .expect_err("missing upload");
+    assert_eq!(
+        error.reason.as_deref(),
+        Some("hostAttachmentUploadRequired")
+    );
+    assert!(port.create_calls.lock().expect("calls").is_empty());
+    assert_eq!(project.count("issues"), 0);
+}
+
+#[test]
+fn oversized_mp4_does_not_create_a_remote_issue() {
+    let _lock = lock_uploads();
+    let project = github_project(true, "ready");
+    let video =
+        super::host_attachment_fixture::len_file(project.temp.path(), "clip.mp4", 104_857_601);
+    let _upload = remember(
+        project.project_id,
+        "vid",
+        "https://github.com/user-attachments/assets/vid",
+    );
+    let port = forge();
+    let error = create_issue_with_forge(
+        &project.service(),
+        input(
+            project.project_id,
+            "{{issue-attachment-temp:vid}}\n",
+            vec![attachment(&video, "vid", "clip.mp4")],
+        ),
+        &port,
+        |_| Ok(()),
+    )
+    .expect_err("too large");
+    assert_eq!(error.reason.as_deref(), Some("hostAttachmentTooLarge"));
+    assert_ne!(error.reason.as_deref(), Some("hostAttachmentUploadFailed"));
+    assert!(port.create_calls.lock().expect("calls").is_empty());
+    assert_eq!(project.count("issues"), 0);
+}
+
+#[test]
+fn non_body_files_are_appended_in_form_order_with_a_blank_line() {
+    let _lock = lock_uploads();
+    let project = github_project(true, "ready");
+    let first = bytes_file(project.temp.path(), "a.mp4", b"a");
+    let second = bytes_file(project.temp.path(), "b.webm", b"b");
+    let _first = remember(
+        project.project_id,
+        "a",
+        "https://github.com/user-attachments/assets/a",
+    );
+    let _second = remember(
+        project.project_id,
+        "b",
+        "https://github.com/user-attachments/assets/b",
+    );
+    let port = forge();
+    let created = create_issue_with_forge(
+        &project.service(),
+        input(
+            project.project_id,
+            "Notes\n\n{{issue-attachment-temp:a}}\n\n{{issue-attachment-temp:b}}\n",
+            vec![
+                attachment(&first, "a", "a.mp4"),
+                attachment(&second, "b", "b.webm"),
+            ],
+        ),
+        &port,
+        |_| Ok(()),
+    )
+    .expect("created");
+    let expected = "Notes\n\nhttps://github.com/user-attachments/assets/a\n\nhttps://github.com/user-attachments/assets/b\n";
+    assert_eq!(body_of(&port), expected);
+    assert_eq!(created.description, expected);
 }
