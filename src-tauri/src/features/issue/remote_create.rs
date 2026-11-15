@@ -92,7 +92,7 @@ fn dispatch(
     refresh: impl FnOnce(i64) -> Result<(), CommandError>,
 ) -> Result<IssueRecord, CommandError> {
     match decide(service, input.project_id)? {
-        Decision::Local => insert_created_issue(service, &input, None),
+        Decision::Local => insert_created_issue(service, &input, None, None),
         Decision::Remote(target) => create_remote(service, input, target, forge, refresh),
     }
 }
@@ -119,9 +119,10 @@ fn create_remote(
         &live
     };
     let host_labels = port.list_labels().map_err(forge_create_error)?;
+    let body = super::host_attachment_body::remote_host_body(&input, target.provider)?;
     let draft = ForgeIssueDraft {
         title,
-        body: input.description.trim().to_string(),
+        body: body.clone(),
         labels: super::remote_label_attach::attach_existing_host_labels(
             &project_names,
             &host_labels,
@@ -129,17 +130,19 @@ fn create_remote(
     };
     let created = port.create_issue(&draft).map_err(forge_create_error)?;
     reject_unreadable(&created)?;
-    let synced_at = match current_epoch_millis() {
-        Ok(value) => value,
-        Err(error) => return Err(attach_remote_url(error, &created.url)),
-    };
+    let synced_at =
+        current_epoch_millis().map_err(|error| attach_remote_url(error, &created.url))?;
     let mirror = mirror_fields(&created, &target, synced_at);
-    let saved = insert_created_issue(service, &input, Some(&mirror))
-        .map_err(|error| attach_remote_url(error, &created.url))?;
+    let saved = insert_created_issue(
+        service,
+        &input,
+        Some(&mirror),
+        super::host_attachment_body::saved_host_body(&input, target.provider, &body),
+    )
+    .map_err(|error| attach_remote_url(error, &created.url))?;
     let _ = refresh(saved.id);
     Ok(saved)
 }
-
 fn decide(service: &IssueService<'_>, project_id: i64) -> Result<Decision, CommandError> {
     service.require_project(project_id)?;
     let settings = ProjectIssueSourceRepository::new(service.issue_repository.connection())
@@ -219,9 +222,11 @@ fn insert_created_issue(
     service: &IssueService<'_>,
     input: &CreateIssueInput,
     mirror: Option<&MirrorFields>,
+    host_body: Option<&str>,
 ) -> Result<IssueRecord, CommandError> {
     let title = validate_title(&input.title)?;
-    let description = input.description.trim().to_string();
+    let description =
+        host_body.map_or_else(|| input.description.trim().to_string(), str::to_string);
     let label_ids = service.validate_issue_label_ids(input.project_id, &input.label_ids)?;
     let label_ids_json = serialize_label_ids(&label_ids)?;
     let transaction = service
@@ -245,7 +250,7 @@ fn insert_created_issue(
         &input.attachments,
     ) {
         Ok((attachments, files)) => {
-            let saved_issue = if attachments.is_empty() {
+            let saved_issue = if attachments.is_empty() || host_body.is_some() {
                 issue
             } else {
                 let rewritten = rewrite_attachment_tokens(&description, &attachments)?;

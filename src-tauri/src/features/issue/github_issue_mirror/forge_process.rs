@@ -101,6 +101,7 @@ pub(crate) struct ForgeInvocation {
 struct ForgeSimulation {
     invocations: Vec<ForgeInvocation>,
     failure: Option<ForgeIssueError>,
+    outputs: Vec<Result<String, ForgeIssueError>>,
 }
 
 #[cfg(test)]
@@ -125,6 +126,9 @@ fn simulated_forge_result(
             args: args.to_vec(),
             dir: repo_dir.to_path_buf(),
         });
+        if !simulation.outputs.is_empty() {
+            return Some(simulation.outputs.remove(0));
+        }
         if let Some(failure) = simulation.failure.clone() {
             return Some(Err(failure));
         }
@@ -140,6 +144,15 @@ fn simulated_forge_result(
 #[cfg(test)]
 fn with_simulation<T>(
     failure: Option<ForgeIssueError>,
+    f: impl FnOnce() -> T,
+) -> (T, Vec<ForgeInvocation>) {
+    with_simulation_outputs(failure, Vec::new(), f)
+}
+
+#[cfg(test)]
+fn with_simulation_outputs<T>(
+    failure: Option<ForgeIssueError>,
+    outputs: Vec<Result<String, ForgeIssueError>>,
     f: impl FnOnce() -> T,
 ) -> (T, Vec<ForgeInvocation>) {
     struct Guard {
@@ -158,6 +171,7 @@ fn with_simulation<T>(
         slot.replace(Some(ForgeSimulation {
             invocations: Vec::new(),
             failure,
+            outputs,
         }))
     });
     let _guard = Guard { previous };
@@ -194,6 +208,14 @@ pub(crate) fn with_simulated_forge_failure<T>(
     f: impl FnOnce() -> T,
 ) -> (T, Vec<ForgeInvocation>) {
     with_simulation(Some(failure), f)
+}
+
+#[cfg(test)]
+pub(crate) fn with_scripted_forge_output<T>(
+    outputs: Vec<Result<String, ForgeIssueError>>,
+    f: impl FnOnce() -> T,
+) -> (T, Vec<ForgeInvocation>) {
+    with_simulation_outputs(None, outputs, f)
 }
 
 #[cfg(test)]

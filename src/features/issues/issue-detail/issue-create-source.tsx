@@ -15,6 +15,7 @@ import {
   type ProjectIssueSourceSettings,
 } from "../../settings/issue-source-commands";
 import { isIssueConnectionReady } from "../issue-connection";
+import { publishHostAttachmentSource } from "../issue-form/host-attachment-session";
 
 interface IssueCreateSourceProps {
   projectId: number;
@@ -100,21 +101,26 @@ export function IssueCreateSource({
     if (!active || settings === null) {
       onBlockedChange(false);
       onChoiceChange(null);
+      publishHostAttachmentSource("local", null);
       return;
     }
+    const provider = knownProvider(settings.connection.provider);
     const ready = isIssueConnectionReady(settings);
     if (settings.issueSourceMode === "remote") {
       onBlockedChange(!ready);
       onChoiceChange(ready ? "remote" : null);
+      publishHostAttachmentSource(ready ? "remote" : "local", provider);
       return;
     }
     if (settings.issueSourceMode !== "mixed") {
       onBlockedChange(false);
       onChoiceChange(null);
+      publishHostAttachmentSource("local", provider);
       return;
     }
     onBlockedChange(false);
     onChoiceChange(choice);
+    publishHostAttachmentSource(choice, provider);
   }, [active, choice, onBlockedChange, onChoiceChange, settings]);
 
   if (!active || settings === null) {

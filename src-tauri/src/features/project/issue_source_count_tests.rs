@@ -22,12 +22,6 @@ fn issue_source_counts_ignore_deleted_rows_and_the_current_mode() {
     let project_id = create_project(data_dir.path(), repo);
     let connection =
         rusqlite::Connection::open(data_dir.path().join(DATABASE_FILE_NAME)).expect("open db");
-    connection
-        .execute(
-            "UPDATE projects SET issue_source_mode = 'remote' WHERE id = ?1",
-            params![project_id],
-        )
-        .expect("remote mode");
 
     let empty =
         get_project_issue_source_settings_in_data_dir(data_dir.path(), project_id).expect("empty");
@@ -47,6 +41,12 @@ fn issue_source_counts_ignore_deleted_rows_and_the_current_mode() {
         )
         .expect("issue");
     }
+    connection
+        .execute(
+            "UPDATE projects SET issue_source_mode = 'remote' WHERE id = ?1",
+            params![project_id],
+        )
+        .expect("remote mode");
     connection
         .execute(
             "UPDATE issues SET source = 'remote'

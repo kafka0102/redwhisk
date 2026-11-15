@@ -12,6 +12,7 @@ pub mod change_request;
 pub mod code_language;
 pub mod completion_attempt;
 pub mod errors;
+pub mod host_attachment;
 pub mod issue;
 pub mod issue_action;
 pub mod issue_completion;

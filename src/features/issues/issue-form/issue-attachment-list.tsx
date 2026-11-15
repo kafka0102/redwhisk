@@ -1,8 +1,10 @@
+import { type JSX } from "react";
 import { Download, Eye, Paperclip, Trash2 } from "lucide-react";
 
 import { useI18n } from "@/shared/i18n/i18n";
 import type { IssueAttachmentRecord } from "../issue-commands";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import { hostAttachmentStatusKey } from "./host-attachment-upload";
 
 interface IssueAttachmentListProps {
   attachments: Array<IssueAttachmentRecord | IssueAttachmentDraft>;
@@ -37,6 +39,7 @@ export function IssueAttachmentList({
           <span className="issue-page__attachment-name">
             {attachment.displayName}
           </span>
+          <HostAttachmentStatus attachment={attachment} />
           <div className="issue-page__attachment-actions">
             {attachment.isPreviewable ? (
               <button
@@ -87,4 +90,19 @@ function getAttachmentKey(
   }
 
   return `draft-${attachment.token}`;
+}
+
+function HostAttachmentStatus({
+  attachment,
+}: {
+  attachment: IssueAttachmentRecord | IssueAttachmentDraft;
+}): JSX.Element | null {
+  const { t } = useI18n();
+  if (!("hostStatus" in attachment) || !attachment.hostStatus) {
+    return null;
+  }
+  if (attachment.hostStatus === "uploaded") {
+    return null;
+  }
+  return <span>{t(hostAttachmentStatusKey(attachment.hostStatus))}</span>;
 }

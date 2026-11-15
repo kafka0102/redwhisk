@@ -6,6 +6,11 @@ import {
 } from "react";
 
 import { createIssue, type IssueRecord } from "./issue-commands";
+import {
+  hostAttachmentSession,
+  publishIssueDialogMode,
+  publishHostAttachmentSource,
+} from "./issue-form/host-attachment-session";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
 import {
   EMPTY_FORM,
@@ -104,6 +109,8 @@ export function useIssueDialogLifecycle({
   messages,
   onOpenAgentsActivity,
 }: UseIssueDialogLifecycleOptions) {
+  publishIssueDialogMode(dialogMode === "create" ? "create" : "edit");
+
   function restoreDialogTriggerFocus(fallbackIssue: IssueRecord | null) {
     requestAnimationFrame(() => {
       const trigger = dialogTriggerRef.current;
@@ -160,6 +167,8 @@ export function useIssueDialogLifecycle({
     if (isSaving) {
       return;
     }
+    hostAttachmentSession().cancel();
+    publishHostAttachmentSource("local", null);
 
     setDialogErrorMessage(null);
     setTitleError(null);
@@ -254,6 +263,11 @@ export function useIssueDialogLifecycle({
 
     try {
       if (dialogMode === "create") {
+        const ready = await hostAttachmentSession().prepareSubmit();
+        if (!ready) {
+          setDialogErrorMessage(t("issues.hostAttachmentUploadFailed"));
+          return;
+        }
         const createdIssue = await createIssue({
           projectId: requestProjectId,
           title: form.title,

@@ -1938,6 +1938,19 @@
         "name": "optional"
       }
     },
+    "UploadIssueHostAttachmentInput": {
+      "fields": {
+        "displayName": "required",
+        "projectId": "required",
+        "sourcePath": "required",
+        "tempToken": "required"
+      }
+    },
+    "UploadIssueHostAttachmentResult": {
+      "fields": {
+        "markdown": "required"
+      }
+    },
     "UserProfileRecord": {
       "fields": {
         "avatarPath": "required",

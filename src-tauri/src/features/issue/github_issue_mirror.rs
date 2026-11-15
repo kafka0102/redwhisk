@@ -21,8 +21,8 @@ pub(crate) use port::{
 pub(crate) use behavior::support::{ready_github_project, seed_remote_issue, set_auth, set_mode};
 #[cfg(test)]
 pub(crate) use forge_process::{
-    with_captured_forge_dirs, with_captured_forge_invocations, with_simulated_forge_failure,
-    ForgeInvocation,
+    with_captured_forge_dirs, with_captured_forge_invocations, with_scripted_forge_output,
+    with_simulated_forge_failure, ForgeInvocation,
 };
 #[cfg(test)]
 pub(crate) use port::{open_issue, FixedForge};

@@ -22,6 +22,7 @@ export interface IssueAttachmentDraft {
   attachmentId?: number | null;
   relativePath?: string | null;
   absolutePath?: string | null;
+  hostStatus?: "uploading" | "uploaded" | "failed" | "rejected";
 }
 
 interface IssueDescriptionEditorProps {

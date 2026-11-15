@@ -2,6 +2,11 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 
 import {
+  bindHostAttachmentProject,
+  hostAttachmentSession,
+} from "./issue-form/host-attachment-session";
+import { descriptionWithoutToken } from "./issue-form/host-attachment-upload";
+import {
   exportIssueAttachment,
   previewIssueAttachment,
   type IssueAttachmentRecord,
@@ -61,6 +66,7 @@ export function useIssueAttachments({
   t,
   messages,
 }: UseIssueAttachmentsOptions) {
+  bindHostAttachmentProject(projectId);
   const imageBatchRef = useRef<SelectedImageBatch | null>(null);
   const hasMoreImagesRef = useRef(false);
 
@@ -130,10 +136,33 @@ export function useIssueAttachments({
   ): Promise<IssueAttachmentDraft | null> {
     try {
       const attachment = await buildDraftAttachment(sourcePath);
+      const pending = hostAttachmentSession().selectFile({
+        token: attachment.token,
+        displayName: attachment.displayName,
+        sourcePath: attachment.sourcePath,
+      });
+      const hostStatus = hostAttachmentSession().status(attachment.token);
       setForm((currentForm) => ({
         ...currentForm,
-        attachments: [...currentForm.attachments, attachment],
+        attachments: [
+          ...currentForm.attachments,
+          hostStatus ? { ...attachment, hostStatus } : attachment,
+        ],
       }));
+      void pending.then(() => {
+        const nextStatus = hostAttachmentSession().status(attachment.token);
+        if (!nextStatus) {
+          return;
+        }
+        setForm((currentForm) => ({
+          ...currentForm,
+          attachments: currentForm.attachments.map((item) =>
+            "token" in item && item.token === attachment.token
+              ? { ...item, hostStatus: nextStatus }
+              : item,
+          ),
+        }));
+      });
       return attachment;
     } catch (error) {
       imageBatchRef.current = null;
@@ -146,8 +175,15 @@ export function useIssueAttachments({
   function removeAttachment(
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) {
+    if (!("id" in attachment)) {
+      hostAttachmentSession().removeFile(attachment.token);
+    }
     setForm((currentForm) => ({
       ...currentForm,
+      description:
+        "token" in attachment
+          ? descriptionWithoutToken(currentForm.description, attachment.token)
+          : currentForm.description,
       attachments: currentForm.attachments.filter((item) =>
         "id" in attachment
           ? !("id" in item && item.id === attachment.id)

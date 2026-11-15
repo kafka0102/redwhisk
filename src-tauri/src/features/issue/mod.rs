@@ -5,6 +5,8 @@ pub mod completion;
 mod completion_comment;
 mod detail_read;
 mod github_issue_mirror;
+pub mod host_attachment;
+mod host_attachment_body;
 mod remote_create;
 mod remote_label_attach;
 mod remote_timeline;
@@ -15,6 +17,12 @@ mod validation;
 
 #[cfg(test)]
 mod attachment_same_name_tests;
+#[cfg(test)]
+mod host_attachment_fixture;
+#[cfg(test)]
+mod host_attachment_test;
+#[cfg(test)]
+mod host_attachment_upload_test;
 #[cfg(test)]
 mod remote_create_test;
 

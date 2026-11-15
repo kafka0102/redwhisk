@@ -178,6 +178,7 @@ pub fn run() {
             features::issue::commands::sync_project_issues,
             features::issue::commands::get_issue_sync_status,
             features::issue::commands::create_issue,
+            features::issue::host_attachment::upload_issue_host_attachment,
             features::issue::commands::update_issue,
             features::issue::commands::preview_issue_attachment,
             features::issue::commands::export_issue_attachment,
