@@ -7,7 +7,6 @@ use std::process::Command;
 use thiserror::Error;
 
 use crate::git::command::{self, GitCommandError};
-use crate::types::session_workspace::CodeWorkspaceRoot;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitBranchInfo {
@@ -23,7 +22,7 @@ pub struct CreatedWorktree {
     pub worktree_root_path: String,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum GitWorktreeError {
     #[error("repo path is not an accessible directory: {0}")]
     InvalidRepoPath(String),
@@ -95,47 +94,8 @@ pub fn list_local_branches(repo_path: impl AsRef<Path>) -> Result<GitBranchInfo,
 
 pub fn list_code_workspaces(
     repo_path: impl AsRef<Path>,
-) -> Result<Vec<CodeWorkspaceRoot>, GitWorktreeError> {
-    let repo_path = ensure_repo_dir(repo_path.as_ref())?;
-    let project_root = repo_path.canonicalize().map_err(|error| {
-        GitWorktreeError::InvalidRepoPath(format!("{}: {error}", repo_path.to_string_lossy()))
-    })?;
-    let output = run_git(&repo_path, &["worktree", "list", "--porcelain"])?;
-    let mut roots = Vec::new();
-    let mut workspace_path: Option<String> = None;
-    let mut branch: Option<String> = None;
-
-    let append_workspace = |roots: &mut Vec<CodeWorkspaceRoot>,
-                            workspace_path: &mut Option<String>,
-                            branch: &mut Option<String>| {
-        let Some(path) = workspace_path.take() else {
-            return;
-        };
-        let is_project_root = Path::new(&path)
-            .canonicalize()
-            .is_ok_and(|candidate| candidate == project_root);
-        roots.push(CodeWorkspaceRoot {
-            branch: branch.take().unwrap_or_else(|| "HEAD".to_string()),
-            path,
-            is_project_root,
-        });
-    };
-    for line in output.lines().chain(std::iter::once("")) {
-        if let Some(path) = line.strip_prefix("worktree ") {
-            workspace_path = Some(path.to_string());
-        } else if let Some(value) = line.strip_prefix("branch refs/heads/") {
-            branch = Some(value.to_string());
-        } else if line.is_empty() {
-            append_workspace(&mut roots, &mut workspace_path, &mut branch);
-        }
-    }
-    roots.sort_by(|left, right| {
-        right
-            .is_project_root
-            .cmp(&left.is_project_root)
-            .then_with(|| left.branch.cmp(&right.branch))
-    });
-    Ok(roots)
+) -> Result<Vec<crate::types::session_workspace::CodeWorkspaceRoot>, GitWorktreeError> {
+    super::worktree_list::list_code_workspaces(repo_path)
 }
 
 pub fn create_worktree_for_issue(
@@ -602,7 +562,7 @@ fn list_worktree_branches(
     Ok(branches)
 }
 
-fn ensure_repo_dir(repo_path: &Path) -> Result<PathBuf, GitWorktreeError> {
+pub(super) fn ensure_repo_dir(repo_path: &Path) -> Result<PathBuf, GitWorktreeError> {
     if !repo_path.is_dir() {
         return Err(GitWorktreeError::InvalidRepoPath(
             repo_path.to_string_lossy().to_string(),
@@ -666,7 +626,7 @@ fn unique_worktree_path(root: &Path, base_name: &str) -> PathBuf {
     root.join(format!("{base_name}-overflow"))
 }
 
-fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> {
+pub(super) fn run_git(repo_path: &Path, args: &[&str]) -> Result<String, GitWorktreeError> {
     crate::git::index_lock::run_git(repo_path, args)
         .map(|value| value.trim().to_string())
         .map_err(GitWorktreeError::from)

@@ -15,4 +15,5 @@ pub mod remote;
 pub mod repository;
 pub mod status;
 pub mod worktree;
+pub mod worktree_list;
 pub mod worktree_name;

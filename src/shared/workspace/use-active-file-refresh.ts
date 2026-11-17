@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { isCommandError } from "../commands/command-error";
 import { useWindowFocus } from "../window/use-window-focus";
 import {
   readProjectWorktreeFile,
@@ -84,6 +85,26 @@ export function resetActiveFileRefreshStateForTests(): void {
 function isDocumentVisible(): boolean {
   return (
     typeof document === "undefined" || document.visibilityState === "visible"
+  );
+}
+
+/**
+ * 窗口回到前台时，文件 stat 会连带 `git worktree list`。描述符耗尽时 spawn 或
+ * 随后的文件元数据读取会失败，但文件本身还在。这类失败不进入错误态，保留已加载
+ * 正文，下一轮再试。文件真的消失仍走原来的错误态。
+ */
+function isTransientWorkspaceCapacityError(error: unknown): boolean {
+  if (!isCommandError(error)) {
+    return false;
+  }
+  if (error.reason === "codeWorkspaceReadFailed") {
+    return true;
+  }
+  return (error.details ?? []).some(
+    (detail) =>
+      detail["@type"] === "Cause" &&
+      typeof detail.message === "string" &&
+      detail.message.includes("Too many open files"),
   );
 }
 
@@ -227,6 +248,10 @@ export function useActiveFileRefresh({
         state.lastCheckedAt = Date.now();
         callbacksRef.current.onContent(content);
       } catch (error) {
+        if (isTransientWorkspaceCapacityError(error)) {
+          state.lastCheckedAt = Date.now();
+          return;
+        }
         // 清空签名，使恢复可读后的下一次 stat 必然触发 read。
         state.signature = "";
         state.lastCheckedAt = Date.now();

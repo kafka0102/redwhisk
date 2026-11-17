@@ -485,6 +485,51 @@ describe("useActiveFileRefresh", () => {
     expect(onContent).not.toHaveBeenCalled();
   });
 
+  it("C3 keeps the loaded signature when git worktree list fails with too many open files", async () => {
+    const workspacePath = rootFor("c3");
+    const { onContent, onError } = renderRefresh({
+      projectId: 1,
+      workspacePath,
+      filePath: FILE_PATH,
+      enabled: true,
+      knownSignature: baselineSignature,
+    });
+    await advance(0);
+
+    const failure = {
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "代码工作区读取失败。",
+      reason: "codeWorkspaceReadFailed",
+      details: [
+        {
+          "@type": "Cause",
+          message:
+            "git command failed for git worktree list --porcelain: Too many open files (os error 24)",
+        },
+      ],
+    };
+    statMock.mockRejectedValueOnce(failure);
+    await advance(3000);
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onContent).not.toHaveBeenCalled();
+    expect(readMock).not.toHaveBeenCalled();
+
+    statMock.mockResolvedValue({
+      filePath: FILE_PATH,
+      sizeBytes: fileContent.sizeBytes,
+      modifiedAt: fileContent.modifiedAt,
+    });
+    readMock.mockClear();
+    statMock.mockClear();
+    await advance(3000);
+
+    expect(statMock).toHaveBeenCalledTimes(1);
+    expect(readMock).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(onContent).not.toHaveBeenCalled();
+  });
+
   it("C2 reads the file again on the next check after a stat failure", async () => {
     const workspacePath = rootFor("c2");
     const { onContent, onError } = renderRefresh({

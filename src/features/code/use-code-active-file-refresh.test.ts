@@ -230,6 +230,73 @@ describe("useCodeActiveFileRefresh", () => {
     expect(readMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the open file when workspace listing fails with too many open files", async () => {
+    let tabs: CodeFileTab[] = [
+      {
+        content: fileContent,
+        errorMessage: null,
+        fileName: "file.ts",
+        filePath: "src/file.ts",
+        isDirty: false,
+        isEditable: false,
+        isLoading: false,
+        lastActiveAt: 1,
+        savedContent: fileContent.content,
+      },
+    ];
+    const setTabs = vi.fn(
+      (value: CodeFileTab[] | ((current: CodeFileTab[]) => CodeFileTab[])) => {
+        tabs = typeof value === "function" ? value(tabs) : value;
+      },
+    ) as unknown as Dispatch<SetStateAction<CodeFileTab[]>> &
+      ReturnType<typeof vi.fn>;
+    const knownSignature = buildActiveFileSignature(
+      fileContent.sizeBytes,
+      fileContent.modifiedAt,
+    );
+
+    renderHook(() =>
+      useCodeActiveFileRefresh({
+        projectId: 1,
+        workspacePath: "/tmp/redwhisk",
+        activePath: "src/file.ts",
+        enabled: true,
+        knownSignature,
+        setTabs,
+        resolveErrorMessage: (error) =>
+          error instanceof Object &&
+          "message" in error &&
+          typeof error.message === "string"
+            ? error.message
+            : "代码工作区读取失败。",
+      }),
+    );
+    await settle();
+    setTabs.mockClear();
+
+    statMock.mockRejectedValue({
+      code: "AGENT_SESSION_VALIDATION_FAILED",
+      message: "代码工作区读取失败。",
+      reason: "codeWorkspaceReadFailed",
+      details: [
+        {
+          "@type": "Cause",
+          message:
+            "git command failed for git worktree list --porcelain: Too many open files (os error 24)",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    await settle();
+
+    expect(tabs[0]?.content).toBe(fileContent);
+    expect(tabs[0]?.errorMessage).toBeNull();
+    expect(readMock).not.toHaveBeenCalled();
+  });
+
   it("reloads content after a failed refresh once the file is readable again", async () => {
     let tabs: CodeFileTab[] = [
       {
