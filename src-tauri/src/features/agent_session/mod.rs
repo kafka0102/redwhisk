@@ -60,6 +60,7 @@ mod workspace;
 mod workspace_checkout_filter;
 mod workspace_checkout_ops;
 pub mod workspace_commands;
+mod workspace_commit_history;
 mod workspace_diff;
 mod workspace_diff_commit;
 mod workspace_diff_preview;

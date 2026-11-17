@@ -217,6 +217,45 @@ describe("CommittedChangesTimeline base branch tag", () => {
     ).not.toBeNull();
     expect(rows[1].querySelector(".session-commit-row__remote-tag")).toBeNull();
   });
+
+  it("renders a pushed commit without a remote name as a purple dot and hides the remote tag", () => {
+    const commits = [
+      makeCommit({
+        hash: "local",
+        message: "not pushed",
+        isPushed: false,
+        pushedTo: null,
+      }),
+      makeCommit({
+        hash: "published",
+        message: "pushed without remote name",
+        isPushed: true,
+        pushedTo: null,
+      }),
+    ];
+
+    render(
+      <CommittedChangesTimeline
+        {...baseProps}
+        commits={commits}
+        isWorktree={false}
+      />,
+      { wrapper },
+    );
+
+    const unpushed = screen.getByText("not pushed").closest("li");
+    const pushed = screen.getByText("pushed without remote name").closest("li");
+    expect(
+      unpushed?.querySelector(".session-commit-timeline__dot--pushed"),
+    ).toBeNull();
+    expect(
+      pushed?.querySelector(".session-commit-timeline__dot--pushed"),
+    ).not.toBeNull();
+    expect(pushed?.querySelector(".session-commit-row__remote-tag")).toBeNull();
+    expect(
+      unpushed?.querySelector(".session-commit-row__remote-tag"),
+    ).toBeNull();
+  });
 });
 
 describe("CommittedChangesTimeline commit context menu", () => {
