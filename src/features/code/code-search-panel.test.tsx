@@ -449,6 +449,19 @@ describe("CodeSearchPanel workspace path context menu", () => {
     ).toBeNull();
   });
 
+  it("does not leave the file name selectable when the context menu opens", () => {
+    renderSearchResultsPanel();
+    const fileName = screen.getByText("app.ts");
+    const header = fileName.closest("button");
+    expect(header).toHaveClass("code-workspace__search-file-header");
+    fireEvent.contextMenu(header!, { clientX: 40, clientY: 80 });
+
+    // 右键选词发生在浏览器选区层。代码目录树文件行已用 user-select: none 挡住；
+    // 搜索结果文件头必须同样不可选，否则菜单打开后文件名会留下蓝色选区。
+    expect(window.getComputedStyle(header!).userSelect).toBe("none");
+    expect(window.getComputedStyle(fileName).userSelect).not.toBe("text");
+  });
+
   it("does not open the path menu or prevent default on a match row", () => {
     renderSearchResultsPanel();
     const matchRow = screen.getByRole("button", {

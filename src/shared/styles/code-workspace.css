@@ -644,6 +644,9 @@
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+  /* 与代码目录树一致：右键打开自定义菜单时，避免浏览器在文件名上留下文本选区。
+     文件名复制已由右键菜单项承担，行内文本无需被直接选中。 */
+  user-select: none;
 }
 
 .code-workspace__search-file-header:hover,
