@@ -23,7 +23,8 @@ warnings = "deny"
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
 # 系统剪贴板写入：WKWebView 的 navigator.clipboard.writeText 依赖 transient
-# activation / 焦点，窗口状态不满足时会 reject，改由原生侧写系统剪贴板。
+# activation / 焦点。插件只提供 NSPasteboard 状态；macOS 写入必须在主线程，
+# 不能走插件 async command（tokio worker 上 clearContents 会崩）。
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

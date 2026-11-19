@@ -32,8 +32,11 @@
 | 代码语言智能 | `ensure_code_language_host`、`stop_code_language_host`、`notify_code_language_document`、`code_language_definition`、`code_language_references`                                                                              | `features/code/code-language-commands.ts`                           | `features/code_language/commands.rs`     |
 | 应用更新     | `get_update_status`、`dismiss_update_prompt`                                                                                                                       | `shared/commands/app-update-commands.ts`                            | `features/app_update/commands.rs`        |
 | 应用主题     | `set_app_theme`（入参 `themePreference` + 已解析 `theme`；当前挂在 `project_terminal` 模块，语义属应用级，未来宜迁出）                                              | `shared/commands/app-commands.ts`                                   | `features/project_terminal/commands.rs`、`types/app_theme.rs`  |
+| 剪贴板       | `write_clipboard_text`                                                                                                                                             | `shared/commands/clipboard-commands.ts`                             | `commands/core_commands.rs`              |
 
 新增 command 必须同时更新 Rust DTO、adapter、`generate_handler!`、前端 wrapper、类型和成功/失败路径测试；并同步更新本注册表对应行 + 错误码到前端 locale 的映射（见错误码边界表）。不要只在本表新增名称。
+
+> `write_clipboard_text` 写入系统剪贴板纯文本。macOS 上 `NSPasteboard` 的 `clearContents` / `writeObjects` 必须在主线程执行；命令在后台接到请求后切回主线程再写。失败返回 `UnknownCommandError`，reason `clipboardWriteFailed`，对应 `errors.UNKNOWN_COMMAND_ERROR.clipboardWriteFailed`。不要走 `plugin:clipboard-manager|write_text`：那个 async command 在 tokio worker 上写剪贴板，会在 `_NSPasteboardDeclareTypes` 里崩溃。Linux / Windows 仍在调用线程写入，避免 Linux 主线程剪贴板死锁。
 
 > `get_project_issue_source_settings` 只读 SQLite，未探测时 `connection.authStatus` 为 `unknown`。返回的 `localIssueCount` 与 `remoteIssueCount` 是该项目 `issues.del = 0` 且 `source` 分别为 `local`、`remote` 的行数，不套用当前来源模式的可见性过滤，也不调用同步或连接探测。`update_project_issue_source_settings` 只写项目来源配置，缺省字段保持原值；非法模式、范围、间隔、空标签或非布尔返回 `ProjectValidationFailed`，reason 分别为 `issueSourceModeInvalid`、`issueSyncScopeInvalid`、`issueSyncIntervalInvalid`、`issueSyncLabelRequired`、`issueSourceSettingsInvalid`。`inspect_project_issue_connection` 用 git remote 与 gh/glab `auth status` 覆盖连接快照，不启动交互式登录，也不拉取远程 Issue。
 

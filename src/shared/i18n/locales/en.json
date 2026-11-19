@@ -1371,6 +1371,9 @@
       "workspaceNotFound": "The code workspace does not exist.",
       "workspacePathInvalid": "The workspace path is invalid.",
       "workspacePathRequired": "The workspace path is required."
+    },
+    "UNKNOWN_COMMAND_ERROR": {
+      "clipboardWriteFailed": "Could not write to the clipboard."
     }
   },
   "changesBranchMenu": {

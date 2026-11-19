@@ -132,6 +132,7 @@ pub fn run() {
             features::settings::agent_skill_commands::refresh_agent_skills,
             features::settings::agent_skill_commands::reconcile_saved_agent_skills,
             commands::core_commands::initialize_local_data,
+            commands::core_commands::write_clipboard_text,
             features::project::commands::create_project,
             features::project::commands::list_projects,
             features::project::commands::remove_project_from_list,
