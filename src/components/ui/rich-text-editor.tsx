@@ -14,6 +14,7 @@ import "quill/dist/quill.snow.css";
 
 import {
   activateBlockFormat,
+  deleteAttachmentFromEditor,
   insertImageBatch,
   retainLocalAttachments,
   type QuillLine,
@@ -22,10 +23,11 @@ import {
 } from "./rich-text-editor-blocks";
 import {
   deltaToMarkdown,
-  getAttachmentInsert,
+  dropRemovedEmbeddedImages,
   markdownToDelta,
   mergeMarkdownAttachments,
   normalizeMarkdown,
+  rememberEmbeddedImages,
   type DeltaOperation,
 } from "./rich-text-editor-markdown";
 
@@ -121,6 +123,8 @@ export function RichTextEditor({
   const quillRef = useRef<Quill | null>(null);
   const syncingRef = useRef(false);
   const attachmentsRef = useRef(attachments);
+  const announcedAttachmentTokensRef = useRef(new Set<string>());
+  const embeddedImageSourcesRef = useRef(new Set<string>());
   const labelsRef = useRef(labels);
   const handlersRef = useRef({
     onChange,
@@ -153,6 +157,7 @@ export function RichTextEditor({
     attachmentsRef.current = retainLocalAttachments(
       localizedAttachments,
       attachmentsRef.current,
+      announcedAttachmentTokensRef.current,
     );
     handlersRef.current = {
       onChange,
@@ -378,6 +383,15 @@ export function RichTextEditor({
 
       if (source === "user") {
         applyMarkdownShortcuts(quill);
+        const dropped = dropRemovedEmbeddedImages(
+          embeddedImageSourcesRef.current,
+          getQuillOperations(quill),
+          attachmentsRef.current,
+        );
+        attachmentsRef.current = dropped.attachments;
+        for (const attachment of dropped.removed) {
+          handlersRef.current.onRemoveAttachment?.(attachment);
+        }
       }
 
       handlersRef.current.onChange(
@@ -422,9 +436,12 @@ export function RichTextEditor({
     }
 
     syncingRef.current = true;
-    quill.setContents(
-      markdownToDelta(nextMarkdown, attachmentsRef.current).ops,
-    );
+    const nextOperations = markdownToDelta(
+      nextMarkdown,
+      attachmentsRef.current,
+    ).ops;
+    quill.setContents(nextOperations);
+    rememberEmbeddedImages(embeddedImageSourcesRef.current, nextOperations);
     syncingRef.current = false;
   }, [editorMarkdown]);
 
@@ -691,27 +708,6 @@ function getBlockShortcut(
     return { markerLength: 3, format: "list", value: "ordered" };
   }
   return null;
-}
-
-function deleteAttachmentFromEditor(
-  quill: Quill,
-  targetAttachment: RichTextAttachment,
-) {
-  let index = 0;
-  for (const operation of getQuillOperations(quill)) {
-    const attachment = getAttachmentInsert(operation, [targetAttachment]);
-    const length =
-      typeof operation.insert === "string" ? operation.insert.length : 1;
-    if (attachment?.token === targetAttachment.token) {
-      quill.deleteText(index, length, "user");
-      const nextCharacter = quill.getText(index, 1);
-      if (nextCharacter === "\n") {
-        quill.deleteText(index, 1, "user");
-      }
-      return;
-    }
-    index += length;
-  }
 }
 
 function getAttachmentIconText(kind: RichTextAttachmentKind): string {

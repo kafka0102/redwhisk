@@ -1,5 +1,10 @@
 import type Quill from "quill";
 
+import {
+  getAttachmentInsert,
+  type DeltaOperation,
+} from "./rich-text-editor-markdown";
+
 export type RichTextAttachmentKind =
   | "image"
   | "pdf"
@@ -22,14 +27,44 @@ export interface RichTextAttachment {
 export function retainLocalAttachments(
   incoming: RichTextAttachment[],
   local: RichTextAttachment[],
+  announcedTokens: Set<string> = new Set<string>(),
 ): RichTextAttachment[] {
   const incomingTokens = new Set(
     incoming.map((attachment) => attachment.token),
   );
-  return [
+  const retained = [
     ...incoming,
-    ...local.filter((attachment) => !incomingTokens.has(attachment.token)),
+    ...local.filter(
+      (attachment) =>
+        !incomingTokens.has(attachment.token) &&
+        !announcedTokens.has(attachment.token),
+    ),
   ];
+  for (const token of incomingTokens) {
+    announcedTokens.add(token);
+  }
+  return retained;
+}
+
+export function deleteAttachmentFromEditor(
+  quill: Quill,
+  targetAttachment: RichTextAttachment,
+): void {
+  const contents = quill.getContents() as { ops?: DeltaOperation[] };
+  let index = 0;
+  for (const operation of contents.ops ?? []) {
+    const attachment = getAttachmentInsert(operation, [targetAttachment]);
+    const length =
+      typeof operation.insert === "string" ? operation.insert.length : 1;
+    if (attachment?.token === targetAttachment.token) {
+      quill.deleteText(index, length, "user");
+      if (quill.getText(index, 1) === "\n") {
+        quill.deleteText(index, 1, "user");
+      }
+      return;
+    }
+    index += length;
+  }
 }
 
 // Quill 的 getLine 返回行 blot，这里只用到 domNode（读取行文本）和 length

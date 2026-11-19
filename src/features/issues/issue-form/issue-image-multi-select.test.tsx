@@ -1,9 +1,9 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Quill from "quill";
-import { useState, type SetStateAction } from "react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const emptySelection: string[] = [];
@@ -16,6 +16,7 @@ import {
 } from "../issue-commands";
 import { EMPTY_FORM, type IssueFormState } from "../issue-activity-types";
 import type { IssueAttachmentDraft } from "./issue-description-editor";
+import { buildIssueDescription } from "./issue-description-serializer";
 import { IssueEditablePage } from "../issue-detail/issue-editable-page";
 import { useIssueAttachments } from "../use-issue-attachments";
 
@@ -189,6 +190,81 @@ describe("Issue image multi-select", () => {
       expect(formError()).toBe("");
     },
   );
+
+  it("removes the attachment row when the cursor deletes the image embed", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue("/desk/one.png");
+    saveIssueAttachmentDraftMock.mockImplementation(async (input) =>
+      draftResult(input.sourcePath, "image"),
+    );
+    renderIssueImageForm();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Insert image" }),
+    );
+    await waitFor(() => {
+      expect(imageLines()).toHaveLength(1);
+    });
+
+    await act(async () => {
+      deleteFirstImageEmbedAsUser();
+    });
+
+    await waitFor(() => {
+      expect(editorImageCount()).toBe(0);
+      expect(
+        screen.queryByRole("button", { name: "Remove one.png" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(imageLines()).toEqual([]);
+    expect(submitDescription()).not.toContain("issue-attachment-temp");
+    expect(attachmentTokens()).toBe("");
+  });
+
+  it("does not restore a deleted image or keep an orphan temp token", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/desk/one.png", "/desk/two.jpg"]);
+    saveIssueAttachmentDraftMock.mockImplementation(async (input) =>
+      draftResult(input.sourcePath, "image"),
+    );
+    renderIssueImageForm();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Insert image" }),
+    );
+    await waitFor(() => {
+      expect(imageLines().map(imageAlt)).toEqual(["one.png", "two.jpg"]);
+    });
+
+    await act(async () => {
+      deleteFirstImageEmbedAsUser();
+    });
+
+    await waitFor(() => {
+      expect(editorImageCount()).toBe(1);
+      expect(
+        screen.queryByRole("button", { name: "Remove one.png" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: "Remove two.jpg" }),
+    ).toBeInTheDocument();
+    expect(imageLines().map(imageAlt)).toEqual(["two.jpg"]);
+    expect(submitDescription()).not.toContain("one.png");
+    expect(attachmentTokens().split(",").filter(Boolean)).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Remove two.jpg" }));
+
+    await waitFor(() => {
+      expect(editorImageCount()).toBe(0);
+      expect(
+        screen.queryByRole("button", { name: "Remove two.jpg" }),
+      ).not.toBeInTheDocument();
+    });
+    expect(submitDescription()).not.toContain("issue-attachment-temp");
+    expect(attachmentTokens()).toBe("");
+    expect(editorImageCount()).toBe(0);
+  });
 
   it("inserts multiple images in the order the file dialog returns", async () => {
     const user = userEvent.setup();
@@ -493,7 +569,6 @@ function IssueImageForm({ initial }: { initial: Partial<IssueFormState> }) {
     ...EMPTY_FORM,
     ...initial,
   });
-  const [description, setDescription] = useState(form.description);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const attachments = useIssueAttachments({
     projectId: 1,
@@ -512,7 +587,19 @@ function IssueImageForm({ initial }: { initial: Partial<IssueFormState> }) {
 
   return (
     <>
-      <div data-description-markdown={description} hidden />
+      <div
+        data-description-markdown={form.description}
+        data-attachment-tokens={form.attachments
+          .map((attachment) =>
+            "token" in attachment ? attachment.token : `id-${attachment.id}`,
+          )
+          .join(",")}
+        data-submit-description={buildIssueDescription(
+          form.description,
+          form.attachments,
+        )}
+        hidden
+      />
       <IssueEditablePage
         availableLabels={[]}
         errorMessage={errorMessage}
@@ -528,13 +615,7 @@ function IssueImageForm({ initial }: { initial: Partial<IssueFormState> }) {
         onCancel={() => undefined}
         onDeleteIssue={() => undefined}
         onDownloadAttachment={() => undefined}
-        onFormChange={(next: SetStateAction<IssueFormState>) => {
-          setForm((current) => {
-            const resolved = typeof next === "function" ? next(current) : next;
-            setDescription(resolved.description);
-            return resolved;
-          });
-        }}
+        onFormChange={setForm}
         onOpenProjectLabelsSettings={() => undefined}
         onOpenProjectSettings={() => undefined}
         onPreviewAttachment={() => undefined}
@@ -602,6 +683,42 @@ function findQuill(): Quill {
     throw new Error("missing quill");
   }
   return quill;
+}
+
+function deleteFirstImageEmbedAsUser(): void {
+  const quill = findQuill();
+  const contents = quill.getContents();
+  let index = 0;
+  for (const operation of contents.ops ?? []) {
+    if (
+      operation.insert &&
+      typeof operation.insert === "object" &&
+      "image" in operation.insert
+    ) {
+      quill.deleteText(index, 1, "user");
+      return;
+    }
+    index += typeof operation.insert === "string" ? operation.insert.length : 1;
+  }
+  throw new Error("missing image embed");
+}
+
+function editorImageCount(): number {
+  return document.querySelectorAll(".ql-editor img").length;
+}
+
+function attachmentTokens(): string {
+  return (
+    (document.querySelector("[data-attachment-tokens]") as HTMLElement).dataset
+      .attachmentTokens ?? ""
+  );
+}
+
+function submitDescription(): string {
+  return (
+    (document.querySelector("[data-submit-description]") as HTMLElement).dataset
+      .submitDescription ?? ""
+  );
 }
 
 function imageLines(): string[] {

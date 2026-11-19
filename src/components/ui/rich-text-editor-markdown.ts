@@ -263,6 +263,75 @@ export function getAttachmentInsert(
   return null;
 }
 
+export function imageSourcesFromOperations(
+  operations: DeltaOperation[],
+): Set<string> {
+  const sources = new Set<string>();
+  for (const operation of operations) {
+    const imageSrc = imageSourceFromInsert(operation.insert);
+    if (imageSrc) {
+      sources.add(imageSrc);
+    }
+  }
+  return sources;
+}
+
+export function rememberEmbeddedImages(
+  previousSources: Set<string>,
+  operations: DeltaOperation[],
+): void {
+  const currentSources = imageSourcesFromOperations(operations);
+  previousSources.clear();
+  for (const source of currentSources) {
+    previousSources.add(source);
+  }
+}
+
+export function dropRemovedEmbeddedImages(
+  previousSources: Set<string>,
+  operations: DeltaOperation[],
+  attachments: RichTextAttachment[],
+): {
+  attachments: RichTextAttachment[];
+  removed: RichTextAttachment[];
+} {
+  const currentSources = imageSourcesFromOperations(operations);
+  const removed = attachments.filter((attachment) => {
+    const imageSrc = attachment.imageSrc;
+    return (
+      attachment.kind === "image" &&
+      typeof imageSrc === "string" &&
+      imageSrc.length > 0 &&
+      previousSources.has(imageSrc) &&
+      !currentSources.has(imageSrc)
+    );
+  });
+  rememberEmbeddedImages(previousSources, operations);
+  if (removed.length === 0) {
+    return { attachments, removed };
+  }
+  const removedTokens = new Set(removed.map((attachment) => attachment.token));
+  return {
+    attachments: attachments.filter(
+      (attachment) => !removedTokens.has(attachment.token),
+    ),
+    removed,
+  };
+}
+
+function imageSourceFromInsert(
+  insert: DeltaOperation["insert"],
+): string | null {
+  if (
+    !insert ||
+    typeof insert !== "object" ||
+    typeof insert.image !== "string"
+  ) {
+    return null;
+  }
+  return insert.image;
+}
+
 const ORDERED_LIST_LINE_PATTERN = /^\s*\d+\.\s+/;
 const ORDERED_LIST_START_ONE_PATTERN = /^\s*1\.\s+/;
 

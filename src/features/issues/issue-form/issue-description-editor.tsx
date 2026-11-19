@@ -136,8 +136,13 @@ export function IssueDescriptionEditor({
       }}
       onRemoveAttachment={(attachment) => {
         const issueAttachment = resolveAttachment(attachment);
+        uploadedAttachmentsRef.current.delete(attachment.token);
+        setPendingAttachments((current) =>
+          current.filter(
+            (item) => getRichTextAttachmentToken(item) !== attachment.token,
+          ),
+        );
         if (issueAttachment) {
-          uploadedAttachmentsRef.current.delete(attachment.token);
           onRemoveAttachment?.(issueAttachment);
         }
       }}
