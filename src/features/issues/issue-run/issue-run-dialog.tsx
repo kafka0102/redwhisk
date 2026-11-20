@@ -44,6 +44,7 @@ import {
 import { useI18n } from "../../../shared/i18n/i18n";
 import { buildRunPromptPreview } from "./run-prompt-builder";
 import { RunModelSelect } from "./run-model-select";
+import { useRemoteIssueUrl } from "./use-remote-issue-url";
 import { useRunAgentModel } from "./use-run-agent-model";
 
 const NO_WORKFLOW_SKILL_VALUE = "__none__";
@@ -264,6 +265,7 @@ export function IssueRunDialog({
       ? NO_WORKFLOW_SKILL_VALUE
       : effectiveWorkflowSkill;
 
+  const remoteIssueUrl = useRemoteIssueUrl(projectId, issue.id);
   const preview = useMemo(() => {
     if (!selectedProfile) {
       return null;
@@ -273,8 +275,9 @@ export function IssueRunDialog({
       issue,
       profile: selectedProfile,
       selectedWorkflowSkill: effectiveWorkflowSkill,
+      remoteIssueUrl,
     });
-  }, [effectiveWorkflowSkill, issue, selectedProfile]);
+  }, [effectiveWorkflowSkill, issue, remoteIssueUrl, selectedProfile]);
   const promptDraft = preview?.finalPrompt ?? "";
   const effectiveTargetBranch =
     workspaceMode === "current_branch"

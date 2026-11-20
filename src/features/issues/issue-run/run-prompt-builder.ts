@@ -21,6 +21,7 @@ interface BuildRunPromptPreviewInput {
   issue: Pick<IssueRecord, "title" | "description" | "attachments">;
   profile: Pick<AgentProfileRecord, "promptTemplate">;
   selectedWorkflowSkill?: string | null;
+  remoteIssueUrl?: string | null;
 }
 
 const APP_INSTRUCTIONS =
@@ -111,6 +112,14 @@ export function buildRunPromptPreview(
         }),
       ),
     );
+    const remoteIssueHint = buildRemoteIssueHint(
+      issueTitle,
+      issueDescription,
+      input.remoteIssueUrl,
+    );
+    if (remoteIssueHint !== null) {
+      finalPromptSections.push(remoteIssueHint);
+    }
   }
 
   if (issueDescription.length > 0) {
@@ -190,6 +199,28 @@ function buildSkillInstruction(
   return containsChinese(`${issue.title}\n${issue.description}`)
     ? `使用skill ${skillName} 执行任务：`
     : `using skill ${skillName} for task:`;
+}
+
+function buildRemoteIssueHint(
+  title: string,
+  description: string,
+  remoteIssueUrl: string | null | undefined,
+): string | null {
+  const url = remoteIssueUrl?.trim() ?? "";
+  if (url.length === 0) {
+    return null;
+  }
+  return containsChinese(`${title}\n${description}`)
+    ? [
+        "这条任务对应的远程 Issue：",
+        url,
+        "所用的 skill 如果不处理远程 Issue，忽略这个地址。如果要创建或更新远程 Issue，只使用这一条，不要另建。",
+      ].join("\n")
+    : [
+        "Remote issue for this task:",
+        url,
+        "If the selected skill does not handle remote issues, ignore this address. If it creates or updates a remote issue, use this one and do not create another.",
+      ].join("\n");
 }
 
 function containsChinese(value: string): boolean {

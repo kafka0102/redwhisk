@@ -51,6 +51,7 @@ import {
   listSavedAgentSkills,
 } from "../settings/settings-commands";
 import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
+import { getIssueDetail } from "./issue-detail/issue-detail-commands";
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
@@ -58,6 +59,17 @@ import {
   openShadcnSelect,
   selectShadcnOption,
 } from "../../test/select-helpers";
+
+vi.mock("./issue-detail/issue-detail-commands", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("./issue-detail/issue-detail-commands")
+    >();
+  return {
+    ...actual,
+    getIssueDetail: vi.fn(),
+  };
+});
 
 vi.mock("./issue-commands", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./issue-commands")>();
@@ -260,6 +272,7 @@ const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
 const getProjectIssueSourceSettingsMock = vi.mocked(
   getProjectIssueSourceSettings,
 );
+const getIssueDetailMock = vi.mocked(getIssueDetail);
 const openDialogMock = vi.mocked(open);
 const saveDialogMock = vi.mocked(save);
 const convertFileSrcMock = vi.mocked(convertFileSrc);
@@ -588,6 +601,8 @@ describe("IssuesActivity", () => {
     listenMock.mockReset();
     listenMock.mockImplementation(async () => () => {});
     getProjectIssueSourceSettingsMock.mockReset();
+    getIssueDetailMock.mockReset();
+    getIssueDetailMock.mockRejectedValue(new Error("detail unavailable"));
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "local",
@@ -3432,6 +3447,57 @@ describe("IssuesActivity", () => {
     );
   });
 
+  it("mentions the remote issue only while a workflow skill is selected", async () => {
+    const user = userEvent.setup();
+    const remoteIssueUrl = "https://github.com/acme/redwhisk/issues/128";
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") {
+        return { profiles: [projectProfile] };
+      }
+
+      return { profiles: [globalProfile] };
+    });
+    getIssueDetailMock.mockResolvedValue({
+      projection: {
+        provider: "github",
+        repo: "acme/redwhisk",
+        externalUrl: remoteIssueUrl,
+        remoteState: "open",
+        authorLogin: null,
+        assignees: [],
+        labels: [],
+      },
+      linkedChangeRequests: [],
+      writebackPending: false,
+      writebackError: null,
+      unavailableBanner: null,
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
+        [
+          "using skill bmad-dev-story for task:",
+          [
+            "Remote issue for this task:",
+            remoteIssueUrl,
+            "If the selected skill does not handle remote issues, ignore this address. If it creates or updates a remote issue, use this one and do not create another.",
+          ].join("\n"),
+          "Existing description",
+        ].join("\n\n"),
+      ),
+    );
+
+    await selectShadcnOption(user, within(dialog), "Workflow skill", "None");
+
+    expect(within(dialog).getByLabelText("Final prompt")).toHaveValue(
+      existingIssueRunPromptWithoutSkill,
+    );
+  });
+
   it("allows selecting none for workflow skill and updates the final prompt", async () => {
     const user = userEvent.setup();
     listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
@@ -5552,6 +5618,8 @@ describe("Run Dialog 启动期模型选择", () => {
   ];
 
   beforeEach(() => {
+    getIssueDetailMock.mockReset();
+    getIssueDetailMock.mockRejectedValue(new Error("detail unavailable"));
     listAgentProfileModelsMock.mockReset();
     startAgentSessionMock.mockReset();
     listIssuesMock.mockReset();

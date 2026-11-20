@@ -266,6 +266,41 @@ describe("buildRunPromptPreview", () => {
     ).not.toContain(ISSUE_DELIVERY_SUMMARY_INSTRUCTION);
   });
 
+  it("adds the remote issue address only when a skill is selected", () => {
+    const issue = {
+      title: "登录页",
+      description: "登录页搜索很慢，看一下",
+      attachments: [],
+    };
+    const url = "https://github.com/acme/redwhisk/issues/128";
+    const withSkill = buildRunPromptPreview({
+      issue,
+      profile: { promptTemplate: "" },
+      selectedWorkflowSkill: "github-matt-workflow",
+      remoteIssueUrl: url,
+    });
+    const withoutSkill = buildRunPromptPreview({
+      issue,
+      profile: { promptTemplate: "" },
+      selectedWorkflowSkill: "",
+      remoteIssueUrl: url,
+    });
+
+    expect(withSkill.finalPrompt).toBe(
+      [
+        "使用skill github-matt-workflow 执行任务：",
+        [
+          "这条任务对应的远程 Issue：",
+          url,
+          "所用的 skill 如果不处理远程 Issue，忽略这个地址。如果要创建或更新远程 Issue，只使用这一条，不要另建。",
+        ].join("\n"),
+        "登录页搜索很慢，看一下",
+      ].join("\n\n"),
+    );
+    expect(withoutSkill.finalPrompt).toBe("登录页搜索很慢，看一下");
+    expect(withoutSkill.finalPrompt).not.toContain(url);
+  });
+
   it("does not inject delivery summary instruction when issue description is empty", () => {
     const preview = buildRunPromptPreview({
       issue: {
