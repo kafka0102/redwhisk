@@ -1,3 +1,4 @@
+// 详情打开时，Issues / Pull requests 页签由父级 IssuesActivityBoard 的 detailOpen 拿掉，不在本文件渲染。
 import { useState, type JSX } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
