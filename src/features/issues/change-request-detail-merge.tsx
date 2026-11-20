@@ -1,5 +1,4 @@
 import { useState, type JSX } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +14,7 @@ import {
   mergeChangeRequest,
   type ChangeRequestDetail,
 } from "./change-request-commands";
-import { hostLabel, isMerged } from "./change-request-detail-model";
+import { isMerged } from "./change-request-detail-model";
 
 type MergeMethod = "squash" | "merge" | "rebase";
 
@@ -28,9 +27,8 @@ export function ChangeRequestDetailMerge({
   detail: ChangeRequestDetail;
   onDetail: (detail: ChangeRequestDetail) => void;
 }): JSX.Element {
-  const host = hostLabel(detail.provider);
   if (isMerged(detail.state)) {
-    return <MergedSidebar detail={detail} host={host} />;
+    return <MergedSidebar detail={detail} />;
   }
   return (
     <OpenMergePanel projectId={projectId} detail={detail} onDetail={onDetail} />
@@ -39,10 +37,8 @@ export function ChangeRequestDetailMerge({
 
 function MergedSidebar({
   detail,
-  host,
 }: {
   detail: ChangeRequestDetail;
-  host: string;
 }): JSX.Element {
   const { t } = useI18n();
   return (
@@ -67,15 +63,6 @@ function MergedSidebar({
       {detail.sourceBranchDeleted === true ? (
         <p>{t("issues.changeRequests.sourceBranchDeleted")}</p>
       ) : null}
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          void openUrl(detail.url);
-        }}
-      >
-        {t("issues.changeRequests.viewOnHost", { host })}
-      </Button>
     </section>
   );
 }
@@ -90,7 +77,6 @@ function OpenMergePanel({
   onDetail: (detail: ChangeRequestDetail) => void;
 }): JSX.Element {
   const { t } = useI18n();
-  const host = hostLabel(detail.provider);
   const allowed = hostAllowsMerge(detail);
   const computing = isComputingMerge(detail);
   const [open, setOpen] = useState(false);
@@ -128,15 +114,6 @@ function OpenMergePanel({
         {detail.provider === "gitlab"
           ? t("issues.changeRequests.mergeMergeRequest")
           : t("issues.changeRequests.mergePullRequest")}
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          void openUrl(detail.url);
-        }}
-      >
-        {t("issues.changeRequests.handleOnHost", { host })}
       </Button>
       {open ? (
         <MergeDialog

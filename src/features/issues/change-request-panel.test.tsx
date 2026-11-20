@@ -1,9 +1,11 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { ChangeRequestPanel } from "./change-request-panel";
 import {
+  getProjectChangeRequest,
   listProjectChangeRequests,
   syncProjectChangeRequests,
   type ChangeRequestListResponse,
@@ -36,16 +38,23 @@ vi.mock("../../shared/window/use-window-focus", async () => {
 
 vi.mock("./change-request-commands", () => ({
   CHANGE_REQUEST_SYNC_CHANGED_EVENT: "change-request-sync-changed",
+  getProjectChangeRequest: vi.fn(),
   listProjectChangeRequests: vi.fn(),
   syncProjectChangeRequests: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 
+const getDetailMock = vi.mocked(getProjectChangeRequest);
 const listMock = vi.mocked(listProjectChangeRequests);
 const syncMock = vi.mocked(syncProjectChangeRequests);
+const openUrlMock = vi.mocked(openUrl);
 
 function response(): ChangeRequestListResponse {
   return {
@@ -120,9 +129,12 @@ describe("change request auto sync", () => {
     });
     listMock.mockReset();
     syncMock.mockReset();
+    getDetailMock.mockReset();
+    openUrlMock.mockReset();
     listenMock.mockReset();
     listenMock.mockResolvedValue(vi.fn());
     listMock.mockResolvedValue(response());
+    getDetailMock.mockImplementation(() => new Promise(() => undefined));
     syncMock.mockResolvedValue({ outcome: "synced", errorCode: null });
   });
 
@@ -213,5 +225,55 @@ describe("change request auto sync", () => {
     await flush();
     view.unmount();
     expect(unlisten).toHaveBeenCalled();
+  });
+
+  it("从行打开详情时顶栏使用该行标题", async () => {
+    listMock.mockResolvedValue({
+      rows: [
+        {
+          id: 10,
+          number: 10,
+          title: "排行榜小程序",
+          url: "https://github.com/acme/redwhisk/pull/10",
+          provider: "github",
+          state: "merged",
+          authorLogin: "kafka0102",
+          sourceBranch: "issue-14-rumengling",
+          targetBranch: "main",
+          reviewDecision: "approved",
+          checksOk: 2,
+          checksFailed: 0,
+          checksPending: 0,
+          remoteUpdatedAt: Date.parse("2026-11-07T14:00:00Z"),
+          linkedIssues: [],
+        },
+      ],
+      tabCount: 1,
+      counts: { open: 1, closed: 0 },
+      pullRequestRefs: [],
+    });
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestPanel projectId={4} sourceMode="remote" />
+      </I18nProvider>,
+    );
+    await flush();
+    fireEvent.click(screen.getByRole("heading", { name: "排行榜小程序" }));
+    await flush();
+
+    expect(
+      screen.getByRole("heading", { name: "#10 · 排行榜小程序" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("正在加载详情")).toBeInTheDocument();
+    expect(getDetailMock).toHaveBeenCalledWith({
+      projectId: 4,
+      provider: "github",
+      number: 10,
+    });
+    expect(screen.queryByRole("tab")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "在 GitHub 打开" }));
+    expect(openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/acme/redwhisk/pull/10",
+    );
   });
 });

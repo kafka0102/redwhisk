@@ -8,7 +8,10 @@ import {
   type ChangeRequestListResponse,
   type ChangeRequestSyncChangedEvent,
 } from "./change-request-commands";
-import { ChangeRequestDetailPage } from "./change-request-detail";
+import {
+  ChangeRequestDetailPage,
+  type ChangeRequestDetailListRow,
+} from "./change-request-detail";
 import { ChangeRequestList } from "./change-request-list";
 import {
   useIssueAutoSync,
@@ -44,6 +47,7 @@ export function ChangeRequestPanel({
   const [selected, setSelected] = useState<{
     provider: string;
     number: number;
+    listRow: ChangeRequestDetailListRow;
   } | null>(null);
   const [response, setResponse] = useState<ChangeRequestListResponse | null>(
     null,
@@ -136,6 +140,7 @@ export function ChangeRequestPanel({
         number={activeDetail.number}
         projectId={projectId}
         provider={activeDetail.provider}
+        listRow={selected?.listRow}
         onBack={() => {
           setSelected(null);
           onOpenDetailConsumed?.();
@@ -163,7 +168,17 @@ export function ChangeRequestPanel({
       }
       onFilterChange={setFilter}
       onOpenDetail={(row) =>
-        setSelected({ provider: row.provider, number: row.number })
+        setSelected({
+          provider: row.provider,
+          number: row.number,
+          listRow: {
+            number: row.number,
+            title: row.title,
+            url: row.url,
+            provider: row.provider,
+            state: row.state,
+          },
+        })
       }
       onOpenProjectSettings={onOpenProjectSettings}
     />

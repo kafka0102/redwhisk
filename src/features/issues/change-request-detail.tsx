@@ -1,47 +1,50 @@
 import { useState, type JSX } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
-import { Button } from "@/components/ui/button";
 import { useI18n } from "../../shared/i18n/i18n";
+import { ChangeRequestActionDialogs } from "./change-request-detail-actions";
 import { ChangeRequestDetailChecks } from "./change-request-detail-checks";
 import { ChangeRequestDetailDiscussion } from "./change-request-detail-discussion";
 import { ChangeRequestDetailFiles } from "./change-request-detail-files";
 import { ChangeRequestDetailHeader } from "./change-request-detail-header";
 import { ChangeRequestDetailMerge } from "./change-request-detail-merge";
 import { ChangeRequestDetailOverview } from "./change-request-detail-overview";
+import { ChangeRequestDetailSummary } from "./change-request-detail-summary";
 import { ChangeRequestDetailTabs } from "./change-request-detail-tabs";
-import { ChangeRequestActionDialogs } from "./change-request-detail-actions";
 import type { ChangeRequestDetailTab } from "./change-request-detail-model";
-import { hostLabel } from "./change-request-detail-model";
 import { useChangeRequestDetail } from "./use-change-request-detail";
 import { useChangeRequestActions } from "./use-change-request-actions";
 import type { ChangeRequestDetail } from "./change-request-commands";
+
+export interface ChangeRequestDetailListRow {
+  number: number;
+  title: string;
+  url: string;
+  provider: string;
+  state: string;
+}
 
 export function ChangeRequestDetailPage({
   projectId,
   provider,
   number,
+  listRow,
   onBack,
   onOpenIssue,
 }: {
   projectId: number;
   provider: string;
   number: number;
+  listRow?: ChangeRequestDetailListRow;
   onBack: () => void;
   onOpenIssue?: (issueId: number) => void;
 }): JSX.Element {
-  const { t } = useI18n();
   const { detail, setDetail } = useChangeRequestDetail({
     projectId,
     provider,
     number,
   });
   if (detail == null) {
-    return (
-      <section className="change-request-detail" aria-busy="true">
-        <p>{t("issues.changeRequests.loadingDetail")}</p>
-      </section>
-    );
+    return <ChangeRequestDetailLoading listRow={listRow} onBack={onBack} />;
   }
   return (
     <ChangeRequestDetailLoaded
@@ -53,6 +56,40 @@ export function ChangeRequestDetailPage({
       onBack={onBack}
       onOpenIssue={onOpenIssue}
     />
+  );
+}
+
+function ChangeRequestDetailLoading({
+  listRow,
+  onBack,
+}: {
+  listRow?: ChangeRequestDetailListRow;
+  onBack: () => void;
+}): JSX.Element {
+  const { t } = useI18n();
+  return (
+    <section
+      className="change-request-detail"
+      aria-busy="true"
+      aria-label={t("issues.changeRequests.detailRegion")}
+    >
+      {listRow == null ? null : (
+        <ChangeRequestDetailHeader
+          number={listRow.number}
+          title={listRow.title}
+          url={listRow.url}
+          provider={listRow.provider}
+          state={listRow.state}
+          showActions={false}
+          onBack={onBack}
+        />
+      )}
+      <div className="change-request-detail__loading">
+        <div className="change-request-detail__loading-box" role="status">
+          {t("issues.changeRequests.loadingDetail")}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -88,8 +125,15 @@ function ChangeRequestDetailLoaded({
       aria-label={t("issues.changeRequests.detailRegion")}
     >
       <ChangeRequestDetailHeader
-        detail={detail}
+        number={detail.number}
+        title={detail.title}
+        url={detail.url}
+        provider={detail.provider}
+        state={detail.state}
+        showActions
         pending={actions.pending}
+        readySupported={detail.readySupported}
+        reviewSupported={detail.reviewSupported}
         onBack={onBack}
         onMarkReady={actions.markReady}
         onRequestReview={actions.openReview}
@@ -111,19 +155,6 @@ function ChangeRequestDetailLoaded({
       {detail.detailStatus === "cached" ? (
         <p role="status">{t("issues.changeRequests.detailCached")}</p>
       ) : null}
-      {detail.detailStatus === "unavailable" ? (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            void openUrl(detail.url);
-          }}
-        >
-          {t("issues.changeRequests.openOnHost", {
-            host: hostLabel(detail.provider),
-          })}
-        </Button>
-      ) : null}
       <ChangeRequestDetailTabs detail={detail} tab={tab} onTabChange={setTab} />
       <div className="change-request-detail__grid">
         <div>
@@ -143,7 +174,8 @@ function ChangeRequestDetailLoaded({
             <ChangeRequestDetailDiscussion detail={detail} />
           ) : null}
         </div>
-        <aside>
+        <aside className="change-request-detail__side">
+          <ChangeRequestDetailSummary detail={detail} />
           <ChangeRequestDetailMerge
             projectId={projectId}
             detail={detail}

@@ -320,6 +320,17 @@ describe("change request detail", () => {
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/132",
     );
+    expect(
+      screen.getAllByRole("button", { name: "在 GitHub 打开" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "在 GitHub 中处理" }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("heading", { name: "概要" })
+        .compareDocumentPosition(screen.getByRole("heading", { name: "合并" })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("hides the merge button after merge", async () => {
@@ -389,9 +400,10 @@ describe("change request detail", () => {
     expect(
       screen.getByText("无法加载详情。仍可打开宿主。"),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "在 GitHub 打开" })[0],
-    );
+    expect(
+      screen.getAllByRole("button", { name: "在 GitHub 打开" }),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "在 GitHub 打开" }));
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/132",
     );
@@ -555,6 +567,9 @@ describe("change request detail", () => {
     expect(closeRequestMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("closed")).toBeInTheDocument();
     expect(screen.queryByText("merged")).toBeNull();
+    expect(screen.getByRole("button", { name: "标记就绪" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "请求审阅" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "关闭" })).toBeDisabled();
   });
 
   it("shows that mergeability is still being calculated", async () => {
@@ -835,5 +850,264 @@ describe("change request detail", () => {
     renderDetail();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByText("正在计算")).toBeNull();
+  });
+
+  it("列表行先显示标题", () => {
+    getDetailMock.mockImplementation(() => new Promise(() => undefined));
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestDetailPage
+          number={10}
+          projectId={4}
+          provider="github"
+          listRow={{
+            number: 10,
+            title: "排行榜小程序",
+            url: "https://github.com/acme/redwhisk/pull/10",
+            provider: "github",
+            state: "merged",
+          }}
+          onBack={() => undefined}
+        />
+      </I18nProvider>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "#10 · 排行榜小程序" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "在 GitHub 打开" }),
+    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "返回列表" })).toBeNull();
+    expect(screen.getByText("正在加载详情")).toBeInTheDocument();
+    expect(screen.queryByText("概要")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "在 GitHub 打开" }));
+    expect(openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/acme/redwhisk/pull/10",
+    );
+    expect(screen.queryByRole("tab")).toBeNull();
+    const section = document.querySelector(".change-request-detail");
+    expect(section?.firstElementChild?.tagName).toBe("HEADER");
+    expect(section?.querySelector(":scope > p")).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("正在加载详情");
+    expect(status.closest(".change-request-detail__loading")).not.toBeNull();
+  });
+
+  it("uses the GitLab name from the list row while detail is loading", () => {
+    getDetailMock.mockImplementation(() => new Promise(() => undefined));
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestDetailPage
+          number={10}
+          projectId={4}
+          provider="gitlab"
+          listRow={{
+            number: 10,
+            title: "排行榜小程序",
+            url: "https://gitlab.com/acme/redwhisk/-/merge_requests/10",
+            provider: "gitlab",
+            state: "open",
+          }}
+          onBack={() => undefined}
+        />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "在 GitLab 打开" }));
+    expect(openUrlMock).toHaveBeenCalledWith(
+      "https://gitlab.com/acme/redwhisk/-/merge_requests/10",
+    );
+    expect(screen.queryByRole("button", { name: "在 GitHub 打开" })).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+  });
+
+  it("does not invent a title without a list row", async () => {
+    let resolveLoad: (value: ChangeRequestDetail) => void = () => undefined;
+    getDetailMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    renderDetail();
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.queryByText("概要")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    const section = document.querySelector(".change-request-detail");
+    expect(section?.querySelector(":scope > p")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载详情");
+    expect(
+      screen.getByRole("status").closest(".change-request-detail__loading"),
+    ).not.toBeNull();
+    resolveLoad(detail({ number: 132, title: "Remote issue sync" }));
+    await flush();
+    expect(
+      screen.getByRole("heading", { name: "#132 · Remote issue sync" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("正在加载详情")).toBeNull();
+  });
+
+  it("puts merge facts in the side summary instead of under the title", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        number: 10,
+        title: "排行榜小程序",
+        state: "merged",
+        sourceBranch: "issue-14-rumengling",
+        targetBranch: "main",
+        authorLogin: "kafka0102",
+        commitCount: 12,
+        additions: 2582,
+        deletions: 118,
+        mergeCommitSha: "abc123",
+        blockingReasons: [],
+      }),
+    );
+    renderDetail();
+    await flush();
+    const header = screen
+      .getByRole("heading", { name: "#10 · 排行榜小程序" })
+      .closest("header");
+    expect(header).not.toHaveTextContent("合并状态");
+    expect(header).not.toHaveTextContent("kafka0102");
+    expect(header).not.toHaveTextContent("12 个提交");
+    expect(header).not.toHaveTextContent("issue-14-rumengling");
+    expect(header).not.toHaveTextContent("+2582");
+    const summary = screen
+      .getByRole("heading", { name: "概要" })
+      .closest("section");
+    const text = summary?.textContent ?? "";
+    let cursor = -1;
+    for (const label of [
+      "合并状态：",
+      "分支：",
+      "提交人：",
+      "提交：",
+      "变更：",
+    ]) {
+      const index = text.indexOf(label);
+      expect(index).toBeGreaterThan(cursor);
+      cursor = index;
+    }
+    expect(text).toContain("merged");
+    expect(text).toContain("issue-14-rumengling → main");
+    expect(text).toContain("kafka0102");
+    expect(text).toContain("12 个提交");
+    expect(text).toContain("+2582 −118");
+    const mergeHeading = screen.getByRole("heading", { name: "合并" });
+    expect(summary?.compareDocumentPosition(mergeHeading) ?? 0).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.getByText("已合并到 main")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "在 GitHub 打开" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "在 GitHub 中查看" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "在 GitHub 中处理" }),
+    ).toBeNull();
+  });
+
+  it("uses english summary labels and a back name", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        state: "merged",
+        sourceBranch: "issue-14-rumengling",
+        targetBranch: "main",
+        authorLogin: "kafka0102",
+        commitCount: 12,
+        additions: 2582,
+        deletions: 118,
+      }),
+    );
+    render(
+      <I18nProvider fixedLocale="en">
+        <ChangeRequestDetailPage
+          number={132}
+          projectId={4}
+          provider="github"
+          onBack={() => undefined}
+        />
+      </I18nProvider>,
+    );
+    await flush();
+    for (const label of [
+      "Merge status:",
+      "Branches:",
+      "Author:",
+      "Commits:",
+      "Changes:",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.getByText("merged")).toBeInTheDocument();
+    expect(screen.getByText("issue-14-rumengling → main")).toBeInTheDocument();
+    expect(screen.getByText("kafka0102")).toBeInTheDocument();
+    expect(screen.getByText("12 commits")).toBeInTheDocument();
+    expect(screen.getByText("+2582 −118")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to list" })).toBeNull();
+    expect(screen.queryByText("Back to list")).toBeNull();
+    const header = screen
+      .getByRole("heading", { name: "#132 · Remote issue sync" })
+      .closest("header");
+    expect(header).not.toHaveTextContent("kafka0102");
+    expect(header).not.toHaveTextContent("12 commits");
+  });
+
+  it("omits empty summary rows and keeps a one-sided diff", async () => {
+    getDetailMock.mockResolvedValue(detail({ authorLogin: null }));
+    const noAuthor = renderDetail();
+    await flush();
+    expect(screen.queryByText("提交人：")).toBeNull();
+    expect(screen.getByText("提交：")).toBeInTheDocument();
+    expect(screen.getByText("变更：")).toBeInTheDocument();
+    noAuthor.unmount();
+
+    getDetailMock.mockResolvedValue(detail({ commitCount: null }));
+    const noCommits = renderDetail();
+    await flush();
+    expect(screen.queryByText("提交：")).toBeNull();
+    expect(screen.queryByText("0 个提交")).toBeNull();
+    expect(screen.getByText("提交人：")).toBeInTheDocument();
+    noCommits.unmount();
+
+    getDetailMock.mockResolvedValue(
+      detail({ additions: null, deletions: null }),
+    );
+    const noDiff = renderDetail();
+    await flush();
+    expect(screen.queryByText("变更：")).toBeNull();
+    expect(screen.queryByText("+0 −0")).toBeNull();
+    noDiff.unmount();
+
+    getDetailMock.mockResolvedValue(detail({ additions: 3, deletions: null }));
+    renderDetail();
+    await flush();
+    expect(screen.getByText("变更：")).toBeInTheDocument();
+    expect(screen.getByText("+3 −0")).toBeInTheDocument();
+  });
+
+  it("names the back control 返回 and calls onBack", async () => {
+    const onBack = vi.fn();
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestDetailPage
+          number={132}
+          projectId={4}
+          provider="github"
+          onBack={onBack}
+        />
+      </I18nProvider>,
+    );
+    await flush();
+    const back = screen.getByRole("button", { name: "返回" });
+    expect(back.querySelector("svg")).not.toBeNull();
+    expect(back).not.toHaveTextContent("返回列表");
+    expect(screen.queryByText("返回列表")).toBeNull();
+    fireEvent.click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

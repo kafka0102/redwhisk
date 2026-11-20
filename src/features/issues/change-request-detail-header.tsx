@@ -1,70 +1,60 @@
 import type { JSX } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useI18n } from "../../shared/i18n/i18n";
-import type { ChangeRequestDetail } from "./change-request-commands";
 import { hostLabel, isMerged } from "./change-request-detail-model";
 
 export function ChangeRequestDetailHeader({
-  detail,
+  number,
+  title,
+  url,
+  provider,
+  state,
+  showActions,
   pending,
+  readySupported,
+  reviewSupported,
   onBack,
   onMarkReady,
   onRequestReview,
   onClose,
 }: {
-  detail: ChangeRequestDetail;
-  pending: boolean;
+  number: number;
+  title: string;
+  url: string;
+  provider: string;
+  state: string;
+  showActions: boolean;
+  pending?: boolean;
+  readySupported?: boolean;
+  reviewSupported?: boolean;
   onBack: () => void;
-  onMarkReady: () => void;
-  onRequestReview: () => void;
-  onClose: () => void;
+  onMarkReady?: () => void;
+  onRequestReview?: () => void;
+  onClose?: () => void;
 }): JSX.Element {
   const { t } = useI18n();
-  const host = hostLabel(detail.provider);
-  const merged = isMerged(detail.state);
+  const host = hostLabel(provider);
   const readyDisabled =
-    pending || detail.state !== "draft" || !detail.readySupported;
-  const reviewDisabled = pending || !detail.reviewSupported;
-  const closeDisabled = pending || detail.state !== "open";
+    pending === true || state !== "draft" || readySupported !== true;
+  const reviewDisabled = pending === true || reviewSupported !== true;
+  const closeDisabled = pending === true || state !== "open";
+  const actionsVisible = showActions && !isMerged(state);
   return (
     <header className="change-request-detail__header">
       <div className="change-request-detail__heading">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-          {t("issues.changeRequests.backToList")}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t("issues.changeRequests.back")}
+          onClick={onBack}
+        >
+          <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
         </Button>
-        <div>
-          <h2>
-            #{detail.number} · {detail.title}
-          </h2>
-          <p className="change-request-detail__sub">
-            <span
-              className={`change-request-state-chip change-request-state-chip--${detail.state}`}
-            >
-              {detail.state}
-            </span>
-            <span className="mono">{detail.sourceBranch}</span>
-            <span>→</span>
-            <span className="mono">{detail.targetBranch}</span>
-            {detail.authorLogin ? <span>{detail.authorLogin}</span> : null}
-            {detail.commitCount == null ? null : (
-              <span>
-                {t("issues.changeRequests.commitCount", {
-                  count: detail.commitCount,
-                })}
-              </span>
-            )}
-            {detail.additions == null && detail.deletions == null ? null : (
-              <span>
-                {t("issues.changeRequests.additionsDeletions", {
-                  additions: detail.additions ?? 0,
-                  deletions: detail.deletions ?? 0,
-                })}
-              </span>
-            )}
-          </p>
-        </div>
+        <h2>{`#${number} · ${title}`}</h2>
       </div>
       <div className="change-request-detail__actions">
         <Button
@@ -72,12 +62,12 @@ export function ChangeRequestDetailHeader({
           variant="secondary"
           size="sm"
           onClick={() => {
-            void openUrl(detail.url);
+            void openUrl(url);
           }}
         >
           {t("issues.changeRequests.openOnHost", { host })}
         </Button>
-        {merged ? null : (
+        {actionsVisible ? (
           <>
             <Button
               type="button"
@@ -86,7 +76,7 @@ export function ChangeRequestDetailHeader({
               disabled={readyDisabled}
               onClick={() => {
                 if (!readyDisabled) {
-                  onMarkReady();
+                  onMarkReady?.();
                 }
               }}
             >
@@ -99,7 +89,7 @@ export function ChangeRequestDetailHeader({
               disabled={reviewDisabled}
               onClick={() => {
                 if (!reviewDisabled) {
-                  onRequestReview();
+                  onRequestReview?.();
                 }
               }}
             >
@@ -112,14 +102,14 @@ export function ChangeRequestDetailHeader({
               disabled={closeDisabled}
               onClick={() => {
                 if (!closeDisabled) {
-                  onClose();
+                  onClose?.();
                 }
               }}
             >
               {t("issues.changeRequests.close")}
             </Button>
           </>
-        )}
+        ) : null}
       </div>
     </header>
   );
