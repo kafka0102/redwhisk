@@ -28,9 +28,8 @@ fn detail_fetch_failure_keeps_existing_snapshot() {
 
     assert_eq!(result.detail_status, "cached");
     assert_eq!(read_snapshot(&connection, project_id, 42), snapshot);
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(row_numbers(&listed), vec![42]);
 }
 
@@ -60,9 +59,8 @@ fn detail_fetch_failure_without_snapshot_is_unavailable() {
     assert!(result.comments.is_empty());
     assert_eq!(result.url, "https://github.com/acme/redwhisk/pull/42");
     assert_eq!(result.detail_error.as_deref(), Some("offline"));
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(row_numbers(&listed), vec![42]);
 }
 

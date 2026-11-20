@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 
 use super::pull_request_url::upgrade_pull_request_urls;
 use crate::types::change_request::{
@@ -20,7 +20,6 @@ struct StoredChangeRequest {
     source_branch: String,
     target_branch: String,
     review_decision: Option<String>,
-    requested_reviewers_json: String,
     checks_ok: Option<i64>,
     checks_failed: Option<i64>,
     checks_pending: Option<i64>,
@@ -31,29 +30,23 @@ pub(crate) fn list_project_change_requests(
     connection: &Connection,
     project_id: i64,
     filter: &str,
-    viewer_login: &str,
+    _viewer_login: &str,
 ) -> Result<ChangeRequestListResponse, CommandError> {
     ensure_project(connection, project_id)?;
     let selected = normalize_filter(filter)?;
-    let viewer = resolve_viewer(connection, project_id, viewer_login)?;
     let pull_request_refs = upgrade_pull_request_urls(connection, project_id)?;
     let stored = load_change_requests(connection, project_id)?;
     let links = load_links(connection, project_id)?;
     let counts = ChangeRequestFilterCounts {
-        review_requested: stored
+        open: stored.iter().filter(|row| is_open_like(&row.state)).count() as i64,
+        closed: stored
             .iter()
-            .filter(|row| is_review_requested(row, &viewer))
+            .filter(|row| is_closed_like(&row.state))
             .count() as i64,
-        created_by_me: stored
-            .iter()
-            .filter(|row| is_created_by_me(row, &viewer))
-            .count() as i64,
-        all_open: stored.iter().filter(|row| is_open_like(&row.state)).count() as i64,
-        recently_merged: stored.iter().filter(|row| row.state == "merged").count() as i64,
     };
     let rows = stored
         .iter()
-        .filter(|row| matches_filter(row, selected, &viewer))
+        .filter(|row| matches_filter(row, selected))
         .map(|row| to_row(row, links.get(&row.id).cloned().unwrap_or_default()))
         .collect();
     Ok(ChangeRequestListResponse {
@@ -106,34 +99,14 @@ pub(super) fn ensure_project(connection: &Connection, project_id: i64) -> Result
 
 fn normalize_filter(filter: &str) -> Result<&str, CommandError> {
     match filter {
-        "" | "review_requested" => Ok("review_requested"),
-        "created_by_me" | "all_open" | "recently_merged" => Ok(filter),
+        "" | "open" => Ok("open"),
+        "closed" => Ok("closed"),
         _ => Err(CommandError::new(
             CommandErrorCode::ProjectValidationFailed,
             "Change request filter is invalid.",
         )
         .with_reason("changeRequestFilterInvalid")),
     }
-}
-
-fn resolve_viewer(
-    connection: &Connection,
-    project_id: i64,
-    viewer_login: &str,
-) -> Result<String, CommandError> {
-    let explicit = viewer_login.trim();
-    if !explicit.is_empty() {
-        return Ok(explicit.to_lowercase());
-    }
-    let stored: Option<Option<String>> = connection
-        .query_row(
-            "SELECT login FROM project_forge_connections WHERE project_id = ?1",
-            params![project_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(query_failed)?;
-    Ok(stored.flatten().unwrap_or_default().trim().to_lowercase())
 }
 
 fn load_change_requests(
@@ -143,8 +116,7 @@ fn load_change_requests(
     let mut statement = connection
         .prepare(
             "SELECT id, provider, number, title, url, state, author_login, source_branch, target_branch,
-                    review_decision, requested_reviewers_json, checks_ok, checks_failed,
-                    checks_pending, remote_updated_at
+                    review_decision, checks_ok, checks_failed, checks_pending, remote_updated_at
              FROM change_requests
              WHERE project_id = ?1
              ORDER BY remote_updated_at DESC, number DESC",
@@ -163,11 +135,10 @@ fn load_change_requests(
                 source_branch: row.get(7)?,
                 target_branch: row.get(8)?,
                 review_decision: row.get(9)?,
-                requested_reviewers_json: row.get(10)?,
-                checks_ok: row.get(11)?,
-                checks_failed: row.get(12)?,
-                checks_pending: row.get(13)?,
-                remote_updated_at: row.get(14)?,
+                checks_ok: row.get(10)?,
+                checks_failed: row.get(11)?,
+                checks_pending: row.get(12)?,
+                remote_updated_at: row.get(13)?,
             })
         })
         .map_err(query_failed)?;
@@ -223,49 +194,20 @@ fn link_label(local_number: i64, provider: Option<&str>, external_number: Option
     }
 }
 
-fn matches_filter(row: &StoredChangeRequest, filter: &str, viewer: &str) -> bool {
+fn matches_filter(row: &StoredChangeRequest, filter: &str) -> bool {
     match filter {
-        "review_requested" => is_review_requested(row, viewer),
-        "created_by_me" => is_created_by_me(row, viewer),
-        "all_open" => is_open_like(&row.state),
-        "recently_merged" => row.state == "merged",
+        "open" => is_open_like(&row.state),
+        "closed" => is_closed_like(&row.state),
         _ => false,
     }
-}
-
-fn is_review_requested(row: &StoredChangeRequest, viewer: &str) -> bool {
-    is_open_like(&row.state)
-        && reviewer_requested(&row.requested_reviewers_json, viewer)
-        && !row
-            .review_decision
-            .as_deref()
-            .unwrap_or("none")
-            .eq_ignore_ascii_case("approved")
-}
-
-fn is_created_by_me(row: &StoredChangeRequest, viewer: &str) -> bool {
-    is_open_like(&row.state)
-        && !viewer.is_empty()
-        && row
-            .author_login
-            .as_deref()
-            .is_some_and(|author| author.to_lowercase() == viewer)
 }
 
 fn is_open_like(state: &str) -> bool {
     state == "open" || state == "draft"
 }
 
-fn reviewer_requested(requested_reviewers_json: &str, viewer: &str) -> bool {
-    if viewer.is_empty() {
-        return false;
-    }
-    let Ok(reviewers) = serde_json::from_str::<Vec<String>>(requested_reviewers_json) else {
-        return false;
-    };
-    reviewers
-        .iter()
-        .any(|reviewer| reviewer.to_lowercase() == viewer)
+fn is_closed_like(state: &str) -> bool {
+    state == "merged" || state == "closed"
 }
 
 pub(super) fn query_failed(error: rusqlite::Error) -> CommandError {

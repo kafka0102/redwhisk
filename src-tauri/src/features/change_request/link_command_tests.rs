@@ -21,7 +21,7 @@ fn closing_keyword_links_github_issue_and_plain_mention_does_not() {
         ],
     );
 
-    let listed = super::list_project_change_requests(&connection, project_id, "all_open", "")
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "")
         .expect("list_project_change_requests");
     let row_132 = listed.rows.iter().find(|row| row.number == 132).unwrap();
     let row_140 = listed.rows.iter().find(|row| row.number == 140).unwrap();
@@ -45,7 +45,7 @@ fn issue_branch_links_local_issue_and_plain_branch_does_not() {
         ],
     );
 
-    let listed = super::list_project_change_requests(&connection, project_id, "all_open", "")
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "")
         .expect("list_project_change_requests");
     let row_128 = listed.rows.iter().find(|row| row.number == 128).unwrap();
     let row_141 = listed.rows.iter().find(|row| row.number == 141).unwrap();
@@ -83,7 +83,7 @@ fn manual_link_twice_keeps_one_manual_row() {
     )
     .expect("link_change_request_issue");
 
-    let listed = super::list_project_change_requests(&connection, project_id, "all_open", "")
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "")
         .expect("list_project_change_requests");
     let row = listed.rows.iter().find(|row| row.number == 132).unwrap();
     assert_eq!(row.linked_issues.len(), 1);
@@ -108,7 +108,7 @@ fn one_pull_request_can_show_two_issues_and_one_issue_can_show_on_two() {
         ],
     );
 
-    let listed = super::list_project_change_requests(&connection, project_id, "all_open", "")
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "")
         .expect("list_project_change_requests");
     let row_132 = listed.rows.iter().find(|row| row.number == 132).unwrap();
     let row_129 = listed.rows.iter().find(|row| row.number == 129).unwrap();
@@ -206,7 +206,7 @@ fn request(number: i64, body: &str, branch: &str) -> RemoteChangeRequest {
 }
 
 fn listed_id(connection: &Connection, project_id: i64, number: i64) -> i64 {
-    super::list_project_change_requests(connection, project_id, "all_open", "")
+    super::list_project_change_requests(connection, project_id, "open", "")
         .expect("list")
         .rows
         .into_iter()

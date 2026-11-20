@@ -70,10 +70,8 @@ function response(): ChangeRequestListResponse {
     ],
     tabCount: 1,
     counts: {
-      reviewRequested: 0,
-      createdByMe: 0,
-      allOpen: 1,
-      recentlyMerged: 0,
+      open: 1,
+      closed: 0,
     },
     pullRequestRefs: [],
   };
@@ -156,6 +154,15 @@ describe("change request auto sync", () => {
     blurred.unmount();
 
     expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it("requests the open filter by default", async () => {
+    renderPanel("remote");
+    await flush();
+    expect(listMock).toHaveBeenCalledWith({
+      projectId: 4,
+      filter: "open",
+    });
   });
 
   it("syncs every 60 seconds while visible and focused, without overlapping", async () => {

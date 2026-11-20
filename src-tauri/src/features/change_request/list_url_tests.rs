@@ -30,12 +30,10 @@ fn list_project_change_requests_upgrades_known_urls_without_inventing_rows() {
         "https://github.com/acme/redwhisk/pull/999",
     );
 
-    let first =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
-    let second =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let first = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
+    let second = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
 
     assert_eq!(first.tab_count, 2);
     assert_eq!(second.tab_count, 2);

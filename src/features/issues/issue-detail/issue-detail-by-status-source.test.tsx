@@ -1216,10 +1216,8 @@ describe("Issue 详情按状态与来源", () => {
           rows: [],
           tabCount: 0,
           counts: {
-            reviewRequested: 0,
-            createdByMe: 0,
-            allOpen: 0,
-            recentlyMerged: 0,
+            open: 0,
+            closed: 0,
           },
           pullRequestRefs: [],
         };

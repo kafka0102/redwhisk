@@ -14,23 +14,17 @@ import {
 } from "./change-request-list-text";
 import type { ForgeProvider } from "../settings/issue-source-commands";
 
-const FILTERS: ChangeRequestFilter[] = [
-  "review_requested",
-  "created_by_me",
-  "all_open",
-  "recently_merged",
-];
+const FILTERS: ChangeRequestFilter[] = ["open", "closed"];
 
 export function ChangeRequestList({
   sourceMode,
   provider = null,
   response,
-  filter = "review_requested",
+  filter = "open",
   now,
   syncSlot = null,
   onFilterChange,
   onOpenProjectSettings,
-  onOpenUrl,
   onOpenDetail,
 }: {
   sourceMode: "local" | "remote" | "mixed" | null;
@@ -86,6 +80,9 @@ export function ChangeRequestList({
               onClick={() => onFilterChange?.(item)}
             >
               {t(filterLabel(item))}
+              <span aria-hidden="true" className="issue-board-tab__count">
+                {filterCount(item, response)}
+              </span>
             </button>
           ))}
         </div>
@@ -104,7 +101,6 @@ export function ChangeRequestList({
             key={row.id}
             now={now}
             row={row}
-            onOpenUrl={onOpenUrl}
             onOpenDetail={onOpenDetail}
           />
         ))
@@ -116,12 +112,10 @@ export function ChangeRequestList({
 function ChangeRequestRow({
   row,
   now,
-  onOpenUrl,
   onOpenDetail,
 }: {
   row: ChangeRequestListRow;
   now: number;
-  onOpenUrl?: (url: string) => void;
   onOpenDetail?: (row: ChangeRequestListRow) => void;
 }): JSX.Element {
   const { t } = useI18n();
@@ -130,12 +124,8 @@ function ChangeRequestRow({
   const reviewTone = review.tone === "muted" ? "neutral" : review.tone;
   const author = row.authorLogin ?? "";
   return (
-    <div
-      className="change-request-row"
-      role="row"
-      onClick={() => onOpenDetail?.(row)}
-    >
-      <div className="change-request-title">
+    <div className="change-request-row" role="row">
+      <div className="change-request-title" onClick={() => onOpenDetail?.(row)}>
         <span
           className={`change-request-state change-request-state--${row.state}`}
           role="img"
@@ -168,33 +158,24 @@ function ChangeRequestRow({
           </span>
         ))}
       </div>
-      <a
-        className="change-request-open"
-        href={row.url}
-        rel="noreferrer"
-        target="_blank"
-        onClick={(event) => {
-          event.stopPropagation();
-          onOpenUrl?.(row.url);
-        }}
-      >
-        {t("issues.changeRequests.open")}
-      </a>
     </div>
   );
 }
 
 function filterLabel(filter: ChangeRequestFilter): string {
-  switch (filter) {
-    case "created_by_me":
-      return "issues.changeRequests.createdByMe";
-    case "all_open":
-      return "issues.changeRequests.allOpen";
-    case "recently_merged":
-      return "issues.changeRequests.recentlyMerged";
-    default:
-      return "issues.changeRequests.reviewRequested";
+  return filter === "closed"
+    ? "issues.changeRequests.filterClosed"
+    : "issues.changeRequests.filterOpen";
+}
+
+function filterCount(
+  filter: ChangeRequestFilter,
+  response: ChangeRequestListResponse | null,
+): number {
+  if (response == null) {
+    return 0;
   }
+  return filter === "closed" ? response.counts.closed : response.counts.open;
 }
 
 function emptyLabel(
@@ -202,24 +183,14 @@ function emptyLabel(
   provider: ForgeProvider | null,
 ): string {
   const gitlab = provider === "gitlab";
-  switch (filter) {
-    case "created_by_me":
-      return gitlab
-        ? "issues.changeRequests.emptyMergeCreatedByMe"
-        : "issues.changeRequests.emptyCreatedByMe";
-    case "all_open":
-      return gitlab
-        ? "issues.changeRequests.emptyMergeAllOpen"
-        : "issues.changeRequests.emptyAllOpen";
-    case "recently_merged":
-      return gitlab
-        ? "issues.changeRequests.emptyMergeRecentlyMerged"
-        : "issues.changeRequests.emptyRecentlyMerged";
-    default:
-      return gitlab
-        ? "issues.changeRequests.emptyMergeReviewRequested"
-        : "issues.changeRequests.emptyReviewRequested";
+  if (filter === "closed") {
+    return gitlab
+      ? "issues.changeRequests.emptyMergeClosed"
+      : "issues.changeRequests.emptyClosed";
   }
+  return gitlab
+    ? "issues.changeRequests.emptyMergeAllOpen"
+    : "issues.changeRequests.emptyAllOpen";
 }
 
 function stateLabel(state: string, t: (key: string) => string): string {

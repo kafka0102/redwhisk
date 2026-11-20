@@ -192,7 +192,7 @@ impl LinkFixture {
 
     fn all_links(&self) -> Vec<ChangeRequestLinkedIssue> {
         let connection = Connection::open(self.data_dir.join("redwhisk.sqlite3")).expect("db");
-        let listed = list_project_change_requests(&connection, 1, "all_open", "").expect("list");
+        let listed = list_project_change_requests(&connection, 1, "open", "").expect("list");
         listed
             .rows
             .into_iter()

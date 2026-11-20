@@ -148,36 +148,56 @@ fn insert_sample(connection: &Connection, project_id: i64) {
 }
 
 #[test]
-fn review_requested_filter_returns_three_rows_and_tab_count_eight() {
+fn review_requested_filter_is_invalid() {
     let connection = open_memory();
     let project_id = insert_project(&connection);
     insert_sample(&connection, project_id);
 
-    let response = super::list_project_change_requests(
+    let error = super::list_project_change_requests(
         &connection,
         project_id,
         "review_requested",
         "yujianjia",
     )
-    .expect("list_project_change_requests");
+    .expect_err("list_project_change_requests");
 
-    assert_eq!(response.tab_count, 8);
-    assert_eq!(
-        response
-            .rows
-            .iter()
-            .map(|row| row.number)
-            .collect::<Vec<_>>(),
-        vec![132, 131, 130]
-    );
-    assert_eq!(response.counts.review_requested, 3);
-    assert_eq!(response.counts.created_by_me, 3);
-    assert_eq!(response.counts.all_open, 6);
-    assert_eq!(response.counts.recently_merged, 1);
+    assert_eq!(error.code, CommandErrorCode::ProjectValidationFailed);
+    assert_eq!(error.reason.as_deref(), Some("changeRequestFilterInvalid"));
 }
 
 #[test]
-fn empty_filter_matches_review_requested_rows() {
+fn open_filter_counts_open_and_draft() {
+    let connection = open_memory();
+    let project_id = insert_project(&connection);
+    insert_sample(&connection, project_id);
+
+    let response =
+        super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+            .expect("list_project_change_requests");
+
+    assert_eq!(row_numbers(&response), vec![132, 131, 130, 129, 128, 127]);
+    assert_eq!(response.counts.open, 6);
+    assert_eq!(response.counts.closed, 2);
+    assert_eq!(response.tab_count, 8);
+}
+
+#[test]
+fn closed_filter_returns_merged_and_closed_with_same_counts() {
+    let connection = open_memory();
+    let project_id = insert_project(&connection);
+    insert_sample(&connection, project_id);
+
+    let response =
+        super::list_project_change_requests(&connection, project_id, "closed", "yujianjia")
+            .expect("list_project_change_requests");
+
+    assert_eq!(row_numbers(&response), vec![125, 124]);
+    assert_eq!(response.counts.open, 6);
+    assert_eq!(response.counts.closed, 2);
+}
+
+#[test]
+fn empty_filter_matches_open_rows() {
     let connection = open_memory();
     let project_id = insert_project(&connection);
     insert_sample(&connection, project_id);
@@ -185,56 +205,79 @@ fn empty_filter_matches_review_requested_rows() {
     let response = super::list_project_change_requests(&connection, project_id, "", "yujianjia")
         .expect("list_project_change_requests");
 
-    assert_eq!(row_numbers(&response), vec![132, 131, 130]);
+    assert_eq!(row_numbers(&response), vec![132, 131, 130, 129, 128, 127]);
+    assert_eq!(response.counts.open, 6);
+    assert_eq!(response.counts.closed, 2);
     assert_eq!(response.tab_count, 8);
 }
 
 #[test]
-fn other_filters_skip_closed_124_and_keep_tab_count() {
+fn created_by_me_all_open_and_recently_merged_are_invalid() {
     let connection = open_memory();
     let project_id = insert_project(&connection);
     insert_sample(&connection, project_id);
 
-    let created =
-        super::list_project_change_requests(&connection, project_id, "created_by_me", "yujianjia")
-            .expect("list_project_change_requests");
-    let open =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
-    let merged = super::list_project_change_requests(
-        &connection,
-        project_id,
-        "recently_merged",
-        "yujianjia",
-    )
-    .expect("list_project_change_requests");
-
-    assert_eq!(row_numbers(&created), vec![132, 128, 127]);
-    assert_eq!(row_numbers(&open), vec![132, 131, 130, 129, 128, 127]);
-    assert_eq!(row_numbers(&merged), vec![125]);
-    assert_eq!(created.tab_count, 8);
-    assert_eq!(open.counts.recently_merged, 1);
-    assert!(!row_numbers(&created).contains(&124));
-    assert!(!row_numbers(&open).contains(&124));
-    assert!(!row_numbers(&merged).contains(&124));
+    for filter in ["created_by_me", "all_open", "recently_merged"] {
+        let error =
+            super::list_project_change_requests(&connection, project_id, filter, "yujianjia")
+                .expect_err(filter);
+        assert_eq!(error.code, CommandErrorCode::ProjectValidationFailed);
+        assert_eq!(error.reason.as_deref(), Some("changeRequestFilterInvalid"));
+    }
 }
 
 #[test]
-fn blank_viewer_login_zeroes_personal_filters_only() {
+fn blank_viewer_login_keeps_open_and_closed_counts() {
     let connection = open_memory();
     let project_id = insert_project(&connection);
     insert_sample(&connection, project_id);
 
-    let response =
-        super::list_project_change_requests(&connection, project_id, "review_requested", "  ")
+    let response = super::list_project_change_requests(&connection, project_id, "open", "")
+        .expect("list_project_change_requests");
+
+    assert_eq!(row_numbers(&response), vec![132, 131, 130, 129, 128, 127]);
+    assert_eq!(response.counts.open, 6);
+    assert_eq!(response.counts.closed, 2);
+}
+
+#[test]
+fn weird_state_stays_out_of_open_and_closed_counts() {
+    let connection = open_memory();
+    let project_id = insert_project(&connection);
+    insert_sample(&connection, project_id);
+    connection
+        .execute_batch("PRAGMA ignore_check_constraints = ON;")
+        .expect("ignore checks");
+    connection
+        .execute(
+            "INSERT INTO change_requests (
+                project_id, provider, host, repo, external_id, number, url, title,
+                state, author_login, source_branch, target_branch, review_decision,
+                requested_reviewers_json, remote_updated_at, synced_at
+             ) VALUES (
+                ?1, 'github', 'github.com', 'acme/redwhisk', 99, 99,
+                'https://github.com/acme/redwhisk/pull/99', 'Change 99',
+                'weird', 'lin', 'feat/remote-issue', 'main', 'none',
+                '[]', 1, 1
+             )",
+            params![project_id],
+        )
+        .expect("weird");
+
+    let open = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
+    let closed =
+        super::list_project_change_requests(&connection, project_id, "closed", "yujianjia")
             .expect("list_project_change_requests");
 
-    assert!(response.rows.is_empty());
-    assert_eq!(response.tab_count, 8);
-    assert_eq!(response.counts.review_requested, 0);
-    assert_eq!(response.counts.created_by_me, 0);
-    assert_eq!(response.counts.all_open, 6);
-    assert_eq!(response.counts.recently_merged, 1);
+    assert!(!row_numbers(&open).contains(&99));
+    assert!(!row_numbers(&closed).contains(&99));
+    assert_eq!(open.counts.open, 6);
+    assert_eq!(open.counts.closed, 2);
+    assert_eq!(closed.counts.open, 6);
+    assert_eq!(closed.counts.closed, 2);
+    assert_eq!(open.tab_count, 9);
+    assert_eq!(closed.tab_count, 9);
 }
 
 #[test]
@@ -256,7 +299,7 @@ fn list_project_change_requests_rejects_unknown_project_and_filter() {
     );
     let empty = super::list_project_change_requests(&connection, project_id, "", "yujianjia")
         .expect("list_project_change_requests");
-    assert_eq!(row_numbers(&empty), vec![132, 131, 130]);
+    assert_eq!(row_numbers(&empty), vec![132, 131, 130, 129, 128, 127]);
 }
 
 fn row_numbers(response: &ChangeRequestListResponse) -> Vec<i64> {
@@ -279,7 +322,7 @@ fn review_requested_rows_include_checks_and_wrapped_issue_labels() {
     link(&connection, project_id, 127, gitlab_issue);
 
     let response =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
+        super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
             .expect("list_project_change_requests");
     let row_132 = response.rows.iter().find(|row| row.number == 132).unwrap();
     let row_128 = response.rows.iter().find(|row| row.number == 128).unwrap();
@@ -326,7 +369,7 @@ fn review_requested_rows_include_checks_and_wrapped_issue_labels() {
 }
 
 #[test]
-fn blank_argument_uses_saved_forge_login() {
+fn empty_filter_ignores_saved_forge_login() {
     let connection = open_memory();
     let project_id = insert_project(&connection);
     insert_sample(&connection, project_id);
@@ -343,7 +386,9 @@ fn blank_argument_uses_saved_forge_login() {
     let response =
         super::list_project_change_requests(&connection, project_id, "", "").expect("list");
 
-    assert_eq!(row_numbers(&response), vec![132, 131, 130]);
+    assert_eq!(row_numbers(&response), vec![132, 131, 130, 129, 128, 127]);
+    assert_eq!(response.counts.open, 6);
+    assert_eq!(response.counts.closed, 2);
 }
 
 fn insert_issue(connection: &Connection, project_id: i64, number: i64, source: &str) -> i64 {

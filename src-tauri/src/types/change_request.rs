@@ -29,10 +29,8 @@ pub struct ChangeRequestSyncChangedEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeRequestFilterCounts {
-    pub review_requested: i64,
-    pub created_by_me: i64,
-    pub all_open: i64,
-    pub recently_merged: i64,
+    pub open: i64,
+    pub closed: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -944,7 +944,7 @@
 .change-request-head,
 .change-request-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) 168px 148px auto;
+  grid-template-columns: minmax(0, 1.6fr) 168px 148px;
   gap: 12px;
   align-items: center;
   padding: 8px 0;
@@ -959,7 +959,7 @@
 .change-request-title {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
   min-width: 0;
 }
 
@@ -976,7 +976,6 @@
 .change-request-state {
   width: 10px;
   height: 10px;
-  margin-top: 4px;
   border-radius: 50%;
   flex: none;
 }
@@ -1055,10 +1054,6 @@
   border-radius: 999px;
   background: var(--color-surface-muted);
   padding: 1px 8px;
-}
-
-.change-request-open {
-  color: var(--color-text);
 }
 
 .change-request-empty {

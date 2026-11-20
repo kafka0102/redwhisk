@@ -177,10 +177,8 @@ describe("GitHub issue mirror board", () => {
       rows: [],
       tabCount: 0,
       counts: {
-        reviewRequested: 0,
-        createdByMe: 0,
-        allOpen: 0,
-        recentlyMerged: 0,
+        open: 0,
+        closed: 0,
       },
       pullRequestRefs: [],
     });
@@ -893,9 +891,7 @@ describe("GitHub issue mirror board", () => {
     const tab = await screen.findByRole("tab", { name: /Pull requests/ });
     await waitFor(() => expect(tab).toHaveTextContent("0"));
     await user.click(tab);
-    expect(
-      screen.getByText("没有需要你审阅的 Pull request"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
   });
 
   it("uses the english credential, cache, and empty pull request copy", async () => {
@@ -925,9 +921,7 @@ describe("GitHub issue mirror board", () => {
     ).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByRole("tab", { name: /Pull requests/ }));
-    expect(
-      screen.getByText("No pull requests need your review"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No open pull requests")).toBeInTheDocument();
   });
 
   it("does not send a second sync while one is in flight", async () => {
@@ -1140,9 +1134,7 @@ describe("GitHub issue mirror board", () => {
       name: "Merge requests",
     });
     await user.click(gitlabTab);
-    expect(
-      screen.getByText("没有需要你审阅的 Merge request"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("没有打开的 Merge request")).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Merge requests" }),
     ).toBeInTheDocument();
@@ -1160,9 +1152,7 @@ describe("GitHub issue mirror board", () => {
       name: "Pull requests",
     });
     await user.click(githubTab);
-    expect(
-      screen.getByText("没有需要你审阅的 Pull request"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
   });
 
   it("centers the local connection button in the kanban area without a title", async () => {

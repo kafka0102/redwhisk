@@ -23,17 +23,13 @@ fn merged_at_window_start_is_stored_and_one_second_earlier_is_not() {
     super::sync_project_change_requests(&connection, project_id, &forge, CLOCK_MS)
         .expect("sync_project_change_requests");
 
-    let listed = super::list_project_change_requests(
-        &connection,
-        project_id,
-        "recently_merged",
-        "yujianjia",
-    )
-    .expect("list_project_change_requests");
+    let listed =
+        super::list_project_change_requests(&connection, project_id, "closed", "yujianjia")
+            .expect("list_project_change_requests");
 
     assert_eq!(row_numbers(&listed), vec![126]);
     assert_eq!(listed.tab_count, 1);
-    assert_eq!(listed.counts.recently_merged, 1);
+    assert_eq!(listed.counts.closed, 1);
 }
 
 #[test]
@@ -48,13 +44,12 @@ fn open_and_draft_before_the_window_are_stored() {
     super::sync_project_change_requests(&connection, project_id, &forge, CLOCK_MS)
         .expect("sync_project_change_requests");
 
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
 
     assert_eq!(row_numbers(&listed), vec![11, 10]);
     assert_eq!(listed.tab_count, 2);
-    assert_eq!(listed.counts.all_open, 2);
+    assert_eq!(listed.counts.open, 2);
 }
 
 #[test]
@@ -86,9 +81,8 @@ fn syncing_the_same_number_twice_keeps_one_row_and_the_second_title() {
     super::sync_project_change_requests(&connection, project_id, &second, CLOCK_MS)
         .expect("sync_project_change_requests");
 
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
 
     assert_eq!(row_numbers(&listed), vec![132]);
     assert_eq!(listed.rows[0].title, "Second");
@@ -112,9 +106,8 @@ fn forge_failure_keeps_existing_rows_and_reports_cache_failed() {
 
     assert_eq!(failed.outcome, super::ChangeRequestSyncOutcome::CacheFailed);
     assert_eq!(failed.error_code.as_deref(), Some("cache_failed"));
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(listed.tab_count, 8);
     assert_eq!(listed.rows.len(), 8);
 }
@@ -137,9 +130,8 @@ fn local_source_skips_without_calling_the_forge() {
         .expect("sync_project_change_requests");
 
     assert_eq!(skipped.outcome, super::ChangeRequestSyncOutcome::Skipped);
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(listed.tab_count, 1);
     assert_eq!(listed.rows[0].title, "Kept");
 }
@@ -171,9 +163,8 @@ fn held_project_lock_coalesces_without_clearing_rows() {
         super::ChangeRequestSyncOutcome::Coalesced
     );
     assert_eq!(coalesced.error_code, None);
-    let listed =
-        super::list_project_change_requests(&connection, project_id, "all_open", "yujianjia")
-            .expect("list_project_change_requests");
+    let listed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(listed.tab_count, 1);
     assert_eq!(listed.rows[0].title, "Kept");
 }
@@ -186,18 +177,18 @@ fn assert_stored_states(
     merged_number: i64,
     closed_number: i64,
 ) {
-    let open = super::list_project_change_requests(connection, project_id, "all_open", "yujianjia")
+    let open = super::list_project_change_requests(connection, project_id, "open", "yujianjia")
         .expect("list_project_change_requests");
-    let merged =
-        super::list_project_change_requests(connection, project_id, "recently_merged", "yujianjia")
-            .expect("list_project_change_requests");
+    let closed = super::list_project_change_requests(connection, project_id, "closed", "yujianjia")
+        .expect("list_project_change_requests");
     assert_eq!(state_of(&open, open_number), "open");
     assert_eq!(state_of(&open, draft_number), "draft");
-    assert_eq!(row_numbers(&merged), vec![merged_number]);
-    assert_eq!(state_of(&merged, merged_number), "merged");
+    assert_eq!(row_numbers(&closed), vec![closed_number, merged_number]);
+    assert_eq!(state_of(&closed, merged_number), "merged");
+    assert_eq!(state_of(&closed, closed_number), "closed");
     assert_eq!(open.tab_count, 4);
     assert!(!row_numbers(&open).contains(&closed_number));
-    assert!(!row_numbers(&merged).contains(&closed_number));
+    assert!(!row_numbers(&open).contains(&merged_number));
 }
 
 fn state_of(response: &ChangeRequestListResponse, number: i64) -> &str {

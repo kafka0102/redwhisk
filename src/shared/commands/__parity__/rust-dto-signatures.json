@@ -314,10 +314,8 @@
     },
     "ChangeRequestFilterCounts": {
       "fields": {
-        "allOpen": "required",
-        "createdByMe": "required",
-        "recentlyMerged": "required",
-        "reviewRequested": "required"
+        "closed": "required",
+        "open": "required"
       }
     },
     "ChangeRequestLinkedIssue": {

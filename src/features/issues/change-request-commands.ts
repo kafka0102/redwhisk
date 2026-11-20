@@ -1,16 +1,10 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
-export type ChangeRequestFilter =
-  | "review_requested"
-  | "created_by_me"
-  | "all_open"
-  | "recently_merged";
+export type ChangeRequestFilter = "open" | "closed";
 
 export interface ChangeRequestFilterCounts {
-  reviewRequested: number;
-  createdByMe: number;
-  allOpen: number;
-  recentlyMerged: number;
+  open: number;
+  closed: number;
 }
 
 export interface ChangeRequestLinkedIssue {

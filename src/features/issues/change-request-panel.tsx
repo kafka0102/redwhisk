@@ -40,7 +40,7 @@ export function ChangeRequestPanel({
   onOpenLinkedIssue?: (issueId: number) => void;
 }): JSX.Element | null {
   const { t } = useI18n();
-  const [filter, setFilter] = useState<ChangeRequestFilter>("review_requested");
+  const [filter, setFilter] = useState<ChangeRequestFilter>("open");
   const [selected, setSelected] = useState<{
     provider: string;
     number: number;
