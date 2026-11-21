@@ -4,12 +4,15 @@ import { useState } from "react";
 import type { IssueRecord, IssueStatus } from "./issue-commands";
 import {
   formatIssueAge,
-  issueForgeBadgeKey,
-  issueNumberLabel,
   linkedRequestLabel,
   readIssueMirror,
   toBoardRecord,
 } from "./issue-mirror-fields";
+import { IssueAssigneeAvatar } from "./issue-assignee-avatar";
+import { issueBoardNumberLabel } from "./issue-board-list-model";
+import { issueHasVisibleLabels } from "./issue-label-partition";
+import { IssueLabelRow } from "./issue-label-row";
+import { IssueSourceMark } from "./issue-source-mark";
 import type { RunDialogIssue } from "./use-issue-run-dialog";
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -188,13 +191,7 @@ function IssueCard({
   const attentionId = `issue-card-attention-${issue.id}`;
   const descriptionId = `issue-card-description-${issue.id}`;
   const labelsId = `issue-card-labels-${issue.id}`;
-  const labels = issue.labels ?? [];
-  const remoteLabels = visibleHostLabels(
-    mirror.source,
-    mirror.remoteLabels,
-    labels,
-  );
-  const hasLabels = labels.length > 0 || remoteLabels.length > 0;
+  const hasLabels = issueHasVisibleLabels(issue);
   const isRunnable = canRunIssue(issue);
   const tone =
     mirror.syncStatus === "error"
@@ -202,7 +199,7 @@ function IssueCard({
       : sourceMode === "mixed" && mirror.source === "remote"
         ? "info"
         : undefined;
-  const issueNumber = issueNumberLabel(issue.number, mirror);
+  const issueNumber = issueBoardNumberLabel(issue.number, mirror);
   const requestLabel = linkedRequestLabel(mirror);
   const describedBy = [
     metaId,
@@ -216,40 +213,41 @@ function IssueCard({
   return (
     <div role="listitem">
       <div className="issue-card__shell" data-tone={tone}>
-        <div className="issue-card__content-row">
-          <button
-            ref={(element) => {
-              if (element) {
-                cardRefs.current.set(issue.id, element);
-              } else {
-                cardRefs.current.delete(issue.id);
-              }
-            }}
-            aria-describedby={describedBy}
-            aria-label={issue.title}
-            aria-pressed={isSelected}
-            className="issue-card"
-            type="button"
-            onClick={(event) => onOpenIssue(issue, event.currentTarget)}
-          >
-            <span id={metaId} className="issue-card__meta-row">
-              <span className="issue-card__id">{issueNumber}</span>
-              <span className="issue-card__meta-aside">
-                <span className="issue-card__updated">
-                  {formatIssueAge(issue.updatedAt, now, {
-                    justNow: t("issues.timelineJustNow"),
-                    minutesAgo: (minutes) =>
-                      t("issues.timelineMinutesAgo", { minutes }),
-                    hoursAgo: (hours) =>
-                      t("issues.timelineHoursAgo", { hours }),
-                    daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
-                  })}
-                </span>
-                <span className="issue-card__forge">
-                  {t(issueForgeBadgeKey(mirror))}
-                </span>
-              </span>
+        <button
+          ref={(element) => {
+            if (element) {
+              cardRefs.current.set(issue.id, element);
+            } else {
+              cardRefs.current.delete(issue.id);
+            }
+          }}
+          aria-describedby={describedBy}
+          aria-label={issue.title}
+          aria-pressed={isSelected}
+          className="issue-card issue-card__hit"
+          type="button"
+          onClick={(event) => onOpenIssue(issue, event.currentTarget)}
+        />
+        <span className="issue-card__meta-row" id={metaId}>
+          <span className="issue-card__id-line">
+            <IssueSourceMark mirror={mirror} />
+            <span className="issue-card__id">{issueNumber}</span>
+          </span>
+          <span className="issue-card__meta-aside">
+            <span className="issue-card__updated">
+              {formatIssueAge(issue.updatedAt, now, {
+                justNow: t("issues.timelineJustNow"),
+                minutesAgo: (minutes) =>
+                  t("issues.timelineMinutesAgo", { minutes }),
+                hoursAgo: (hours) => t("issues.timelineHoursAgo", { hours }),
+                daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
+              })}
             </span>
+            <IssueAssigneeAvatar issue={issue} />
+          </span>
+        </span>
+        <div className="issue-card__body-row">
+          <div className="issue-card__body">
             <span className="issue-card__title">{issue.title}</span>
             {requestLabel ? (
               <span className="issue-card__remote-note">{requestLabel}</span>
@@ -271,8 +269,8 @@ function IssueCard({
             ) : null}
             {issue.linkedSessionAttention === "requested" ? (
               <span
-                id={attentionId}
                 className="attention-marker issue-card__attention"
+                id={attentionId}
               >
                 <span aria-hidden="true" className="attention-marker__dot" />
                 <span className="attention-marker__text">
@@ -281,74 +279,32 @@ function IssueCard({
               </span>
             ) : null}
             {issue.description ? (
-              <span id={descriptionId} className="issue-card__description">
+              <span className="issue-card__description" id={descriptionId}>
                 {toDescriptionExcerpt(issue.description)}
               </span>
             ) : null}
-          </button>
+            <IssueLabelRow id={labelsId} issue={issue} />
+          </div>
+          {isRunnable ? (
+            <button
+              aria-label={`${messages.issues.run} ${issue.title}`}
+              className="issue-card__run"
+              type="button"
+              onClick={(event) => {
+                onRunIssue(issue, event.currentTarget);
+              }}
+            >
+              <Play
+                aria-hidden="true"
+                fill="none"
+                size={14}
+                stroke="currentColor"
+                strokeWidth={2}
+              />
+            </button>
+          ) : null}
         </div>
-        {isRunnable ? (
-          <button
-            aria-label={`${messages.issues.run} ${issue.title}`}
-            className="issue-card__run"
-            type="button"
-            onClick={(event) => {
-              onRunIssue(issue, event.currentTarget);
-            }}
-          >
-            <Play aria-hidden="true" size={14} strokeWidth={2} />
-          </button>
-        ) : null}
-        {hasLabels ? (
-          <span id={labelsId} className="issue-card__labels">
-            <span className="sr-only">
-              {`${messages.issues.labels}: ${labels
-                .map((label) => label.name)
-                .concat(remoteLabels)
-                .join(", ")}`}
-            </span>
-            {labels.map((label) => (
-              <span
-                key={label.id}
-                aria-hidden="true"
-                className="issue-card__label-chip"
-                style={{ backgroundColor: label.color }}
-              >
-                {label.name}
-              </span>
-            ))}
-            {remoteLabels.map((label) => (
-              <span
-                key={label}
-                aria-hidden="true"
-                className="issue-card__label-chip issue-card__label-chip--remote"
-              >
-                {label}
-              </span>
-            ))}
-          </span>
-        ) : null}
       </div>
     </div>
-  );
-}
-
-function sameLabelName(left: string, right: string): boolean {
-  return left.localeCompare(right, "en", { sensitivity: "accent" }) === 0;
-}
-
-function visibleHostLabels(
-  source: "local" | "remote",
-  remoteLabels: readonly string[],
-  projectLabels: readonly { name: string }[],
-): string[] {
-  if (source !== "remote") {
-    return [];
-  }
-  return remoteLabels.filter(
-    (hostLabel) =>
-      !projectLabels.some((projectLabel) =>
-        sameLabelName(projectLabel.name, hostLabel),
-      ),
   );
 }

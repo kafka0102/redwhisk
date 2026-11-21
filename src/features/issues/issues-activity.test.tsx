@@ -988,17 +988,18 @@ describe("IssuesActivity", () => {
       name: "Existing issue",
     });
 
-    expect(card).toHaveTextContent("Existing issue");
-    expect(card).toHaveTextContent("#1");
-    expect(card).not.toHaveTextContent("#20");
+    const shell = card.closest(".issue-card__shell");
+    expect(shell).toHaveTextContent("Existing issue");
+    expect(shell).toHaveTextContent("#1");
+    expect(shell).not.toHaveTextContent("#20");
     const ageSeconds = Math.max(
       0,
       Math.floor((Date.now() - existingIssue.updatedAt) / 1000),
     );
     const ageDays = Math.floor(ageSeconds / 86_400);
-    expect(card).toHaveTextContent(`${ageDays}d ago`);
-    expect(card).toHaveTextContent("Existing description");
-    expect(card).not.toHaveTextContent(/priority|label|assignee|milestone/i);
+    expect(shell).toHaveTextContent(`${ageDays}d ago`);
+    expect(shell).toHaveTextContent("Existing description");
+    expect(shell).not.toHaveTextContent(/priority|assignee|milestone/i);
   });
 
   it("shows issue label chips on cards across lanes when labels are present", async () => {
@@ -1046,8 +1047,12 @@ describe("IssuesActivity", () => {
       name: "Linked session issue",
     });
 
-    expect(attentionCard).toHaveTextContent("Codex needs confirmation");
-    expect(normalCard).not.toHaveTextContent("Codex needs confirmation");
+    expect(attentionCard.closest(".issue-card__shell")).toHaveTextContent(
+      "Codex needs confirmation",
+    );
+    expect(normalCard.closest(".issue-card__shell")).not.toHaveTextContent(
+      "Codex needs confirmation",
+    );
   });
 
   it("opens a backlog issue edit page without status or updated-at fields", async () => {

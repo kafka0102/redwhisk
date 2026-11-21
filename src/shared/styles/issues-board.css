@@ -197,16 +197,45 @@
   transition: background-color 160ms ease-out;
 }
 
-.issue-card__content-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: end;
-  gap: 10px;
-}
-
 .issue-card__shell:has(.issue-card:hover),
 .issue-card__shell:has(.issue-card[aria-pressed="true"]) {
   background: var(--color-surface);
+}
+
+.issue-card__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+}
+
+.issue-card__meta-row,
+.issue-card__body-row {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.issue-card__body-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issue-card__body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-card__id-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .issue-card:focus-visible {
@@ -283,10 +312,11 @@
 
 .issue-card__run {
   display: grid;
-  position: absolute;
-  right: 10px;
-  bottom: 12px;
+  position: relative;
   z-index: 1;
+  flex: 0 0 auto;
+  align-self: center;
+  pointer-events: auto;
   place-items: center;
   width: 24px;
   height: 24px;
@@ -297,17 +327,14 @@
   cursor: pointer;
 }
 
+.issue-card__run svg {
+  fill: none;
+  stroke: currentColor;
+}
+
 .issue-card__run:hover {
   border-color: var(--color-border-strong);
   color: var(--color-text);
-}
-
-.issue-card__shell:has(.issue-card__run) .issue-card__title,
-.issue-card__shell:has(.issue-card__run) .issue-card__description,
-.issue-card__shell:has(.issue-card__run) .issue-card__remote-note,
-.issue-card__shell:has(.issue-card__run) .issue-card__attention,
-.issue-card__shell:has(.issue-card__run) .issue-card__labels {
-  padding-right: 34px;
 }
 
 .attention-marker {
@@ -891,11 +918,6 @@
   background: var(--color-danger-muted);
 }
 
-.issue-card__forge {
-  color: var(--color-text-muted);
-  font-weight: 650;
-}
-
 .issue-card__label-chip--remote {
   background: #d4d4d8;
   color: #3f3f46;
@@ -1061,4 +1083,233 @@
   place-items: center;
   height: 100%;
   min-height: 0;
+}
+
+.issue-board-mode {
+  display: flex;
+  grid-area: mode;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.issue-board-mode__filters,
+.issue-board-mode__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-board-mode__filters {
+  gap: 4px;
+}
+
+.issue-board-mode__tools {
+  margin-left: auto;
+}
+
+.issue-board-mode__filter,
+.issue-board-mode__view {
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.issue-board-mode__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+}
+
+.issue-board-mode__view {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.issue-board-mode__filter[aria-pressed="true"],
+.issue-board-mode__view[aria-pressed="true"] {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.issue-board-mode__search {
+  width: 240px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.issue-board-list {
+  grid-area: kanban;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 18px 20px;
+}
+
+.issue-board-list__empty {
+  margin: 28px 0;
+  color: var(--color-text-muted);
+}
+
+.issue-list-row {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.issue-list-row:has(.issue-list-row__hit:hover),
+.issue-list-row:has(.issue-list-row__hit[aria-pressed="true"]) {
+  background: var(--color-surface-muted);
+}
+
+.issue-list-row__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+}
+
+.issue-list-row__top,
+.issue-list-row__summary,
+.issue-list-row .issue-card__labels {
+  position: relative;
+  z-index: 0;
+}
+
+.issue-list-row__top {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.issue-list-row__title,
+.issue-list-row__aside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-list-row__title {
+  flex: 1 1 auto;
+}
+
+.issue-list-row__aside {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.issue-list-row__id {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-list-row__name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.issue-list-row__summary {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-source-mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.issue-source-mark svg {
+  width: 12px;
+  height: 12px;
+}
+
+.issue-assignee {
+  position: relative;
+  display: inline-flex;
+  pointer-events: auto;
+}
+
+.issue-assignee__avatar {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid rgb(23 24 26 / 12%);
+  border-radius: 999px;
+  background: #d8dbe1;
+  color: #5c6370;
+}
+
+.issue-assignee__avatar:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.issue-assignee__glyph,
+.issue-assignee__avatar img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.issue-assignee__avatar img {
+  object-fit: cover;
+}
+
+.issue-assignee__tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 3;
+  display: none;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1f2328;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.issue-assignee:hover .issue-assignee__tip,
+.issue-assignee:focus-within .issue-assignee__tip {
+  display: grid;
+}
+
+.issue-assignee__tip span:first-child {
+  color: #9da3ae;
+  font-size: 11px;
 }

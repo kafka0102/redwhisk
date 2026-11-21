@@ -222,7 +222,7 @@ describe("ProjectTerminalStatusBar", () => {
     await user.click(trigger);
 
     expect(
-      await screen.findByText("No quick commands yet."),
+      await screen.findByRole("menuitem", { name: "No quick commands yet." }),
     ).toBeInTheDocument();
   });
 

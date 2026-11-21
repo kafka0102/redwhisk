@@ -11,6 +11,7 @@ const ISSUE_MIRROR_FIELDS = [
   "remoteClosedWhileRunning",
   "remoteReopened",
   "pullRequestUrl",
+  "remoteAssignee",
 ] as const;
 
 type IssueMirrorField = (typeof ISSUE_MIRROR_FIELDS)[number];
@@ -69,6 +70,7 @@ type BoardRecordInput = IssueRecord &
       | "remoteClosedWhileRunning"
       | "remoteReopened"
       | "pullRequestUrl"
+      | "remoteAssignee"
     >
   >;
 
@@ -97,6 +99,7 @@ export function toBoardRecord(issue: BoardRecordInput): IssueBoardRecord {
     remoteClosedWhileRunning: issue.remoteClosedWhileRunning ?? false,
     remoteReopened: issue.remoteReopened ?? false,
     pullRequestUrl: issue.pullRequestUrl ?? null,
+    remoteAssignee: issue.remoteAssignee ?? null,
   };
 }
 

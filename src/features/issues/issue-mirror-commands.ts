@@ -14,6 +14,13 @@ export interface IssueBoardRecord extends IssueRecord {
   remoteClosedWhileRunning: boolean;
   remoteReopened: boolean;
   pullRequestUrl: string | null;
+  remoteAssignee?: IssueBoardAssignee | null;
+}
+
+export interface IssueBoardAssignee {
+  login: string;
+  name: string;
+  avatarUrl: string | null;
 }
 
 export interface IssueBoardListResponse {

@@ -265,8 +265,11 @@ describe("GitHub issue mirror board", () => {
   it("shows local and GitHub cards with remote notes", async () => {
     renderBoard();
     expect(await screen.findByText("#12")).toBeInTheDocument();
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
-    expect(screen.getAllByText("GitHub").length).toBeGreaterThan(0);
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("img", { name: "GitHub" }).length,
+    ).toBeGreaterThan(0);
+    expect(document.querySelector(".issue-card__forge")).toBeNull();
     expect(
       document.querySelector(".issue-card__label-chip--remote")?.textContent,
     ).toBe("bug");
@@ -533,7 +536,7 @@ describe("GitHub issue mirror board", () => {
 
   it("reloads the current project after issue-sync-changed and unsubscribes", async () => {
     const view = renderBoard();
-    await screen.findByText("GH #128");
+    await screen.findByText("#128");
     await waitFor(() =>
       expect(eventHandlers.has(ISSUE_SYNC_CHANGED_EVENT)).toBe(true),
     );
@@ -606,8 +609,8 @@ describe("GitHub issue mirror board", () => {
       await screen.findByRole("tab", { name: "Issues" }),
     ).toHaveTextContent("3");
     expect(screen.getByText("#12")).toBeInTheDocument();
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
-    expect(screen.getByText("GH #130")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(screen.getByText("#130")).toBeInTheDocument();
     expect(
       screen
         .getByRole("region", { name: "待办" })
@@ -631,8 +634,8 @@ describe("GitHub issue mirror board", () => {
       await screen.findByRole("tab", { name: "Issues" }),
     ).toHaveTextContent("1");
     expect(screen.getByText("#12")).toBeInTheDocument();
-    expect(screen.queryByText("GH #128")).not.toBeInTheDocument();
-    expect(screen.queryByText("GH #130")).not.toBeInTheDocument();
+    expect(screen.queryByText("#128")).not.toBeInTheDocument();
+    expect(screen.queryByText("#130")).not.toBeInTheDocument();
     expect(
       screen
         .getByRole("region", { name: "待办" })
@@ -654,8 +657,8 @@ describe("GitHub issue mirror board", () => {
       await screen.findByRole("tab", { name: "Issues" }),
     ).toHaveTextContent("2");
     expect(screen.queryByText("#12")).not.toBeInTheDocument();
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
-    expect(screen.getByText("GH #130")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(screen.getByText("#130")).toBeInTheDocument();
     expect(listIssuesMock).toHaveBeenCalledWith({
       projectId: 1,
       perStatusLimit: ISSUE_PAGE_SIZE,
@@ -996,40 +999,35 @@ describe("GitHub issue mirror board", () => {
 
     renderBoard();
     expect(await screen.findByText("#12")).toBeInTheDocument();
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
-    expect(screen.getByText("GL #7")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(screen.getByText("#7")).toBeInTheDocument();
     expect(screen.getByText("PR #124")).toBeInTheDocument();
     expect(screen.getByText("MR #41")).toBeInTheDocument();
     expect(
-      screen.getByText("Plain remote").closest(".issue-card"),
+      screen.getByText("Plain remote").closest(".issue-card__shell"),
     ).not.toHaveTextContent(/PR #|MR #/);
     expect(screen.queryByText(/通过|失败|已合并/)).not.toBeInTheDocument();
-    const githubRow = screen
-      .getByText("GH #128")
-      .closest(".issue-card__meta-row");
-    const gitlabRow = screen
-      .getByText("GL #7")
-      .closest(".issue-card__meta-row");
+    const githubRow = screen.getByText("#128").closest(".issue-card__meta-row");
+    const gitlabRow = screen.getByText("#7").closest(".issue-card__meta-row");
     const localRow = screen.getByText("#12").closest(".issue-card__meta-row");
-    expect(githubRow?.querySelector(".issue-card__forge")).toHaveTextContent(
-      "GitHub",
+    expect(githubRow?.querySelector('[data-kind="github"]')).not.toBeNull();
+    expect(gitlabRow?.querySelector('[data-kind="gitlab"]')).not.toBeNull();
+    expect(localRow?.querySelector('[data-kind="local"]')).not.toBeNull();
+    expect(githubRow?.textContent).not.toMatch(/GitHub|GitLab|本地/);
+    expect(gitlabRow?.textContent).not.toMatch(/GitHub|GitLab|本地/);
+    expect(localRow?.textContent).not.toMatch(/GitHub|GitLab|本地/);
+    const githubId = githubRow?.querySelector(".issue-card__id-line");
+    expect(githubId?.innerHTML.indexOf("issue-source-mark")).toBeLessThan(
+      githubId?.innerHTML.indexOf("#128") ?? -1,
     );
-    expect(gitlabRow?.querySelector(".issue-card__forge")).toHaveTextContent(
-      "GitLab",
-    );
-    expect(localRow?.querySelector(".issue-card__forge")).toHaveTextContent(
-      "本地",
-    );
-    expect(githubRow?.innerHTML.indexOf("GH #128")).toBeLessThan(
-      githubRow?.innerHTML.indexOf("issue-card__forge") ?? -1,
-    );
+    expect(screen.queryByText(/GH #|GL #/)).not.toBeInTheDocument();
 
     await selectShadcnOption(user, screen, "来源", "GitHub");
     await waitFor(() => {
       expect(screen.queryByText("Local card")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
-    expect(screen.getByText("GL #7")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(screen.getByText("#7")).toBeInTheDocument();
     expect(listIssuesMock).toHaveBeenCalledWith(
       expect.objectContaining({ sourceFilter: "remote" }),
     );
@@ -1047,7 +1045,7 @@ describe("GitHub issue mirror board", () => {
     });
     const view = renderBoard();
     await expectSyncToolbar("GitLab 凭据已过期", "error");
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
 
     getIssueSyncStatusMock.mockResolvedValue({
       lastSyncedAt: 1,
@@ -1090,7 +1088,7 @@ describe("GitHub issue mirror board", () => {
     expect(
       await screen.findByText("未找到 GitLab 命令行，已保留缓存"),
     ).toBeInTheDocument();
-    expect(screen.getByText("GH #128")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
   });
 
   it("uses the english GitLab credential sentence", async () => {
@@ -1184,30 +1182,465 @@ describe("GitHub issue mirror board", () => {
     expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
   });
 
-  it("keeps runnable card meta full width and parks the run button at the bottom right", async () => {
+  it("centers the backlog run button beside the title, summary, and labels", async () => {
     const user = userEvent.setup();
     renderBoard();
     const run = await screen.findByRole("button", {
       name: "运行 Local issue",
     });
     const shell = run.closest(".issue-card__shell");
-    const contentRow = shell?.querySelector(".issue-card__content-row");
+    const bodyRow = shell?.querySelector(".issue-card__body-row");
+    const body = shell?.querySelector(".issue-card__body");
     const metaRow = shell?.querySelector(".issue-card__meta-row");
+    const labels = shell?.querySelector(".issue-card__labels");
+    const icon = run.querySelector("svg");
     expect(shell).not.toBeNull();
-    expect(contentRow).not.toBeNull();
+    expect(bodyRow).not.toBeNull();
+    expect(body).not.toBeNull();
     expect(metaRow).not.toBeNull();
-    expect(contentRow?.contains(run)).toBe(false);
-    expect(metaRow?.closest(".issue-card__content-row")).toBe(contentRow);
-    expect(run.parentElement).toBe(shell);
-    expect(window.getComputedStyle(run).position).toBe("absolute");
-    expect(window.getComputedStyle(run).right).not.toBe("auto");
-    expect(window.getComputedStyle(run).bottom).not.toBe("auto");
+    expect(metaRow?.contains(run)).toBe(false);
+    expect(body?.contains(run)).toBe(false);
+    expect(labels?.contains(run)).toBe(false);
+    expect(bodyRow?.contains(run)).toBe(true);
+    expect(bodyRow?.contains(body ?? null)).toBe(true);
+    expect(window.getComputedStyle(bodyRow!).alignItems).toBe("center");
+    expect(window.getComputedStyle(run).position).not.toBe("absolute");
+    expect(icon?.getAttribute("fill")).toBe("none");
+    expect(window.getComputedStyle(icon!).fill).toBe("rgba(0, 0, 0, 0)");
     await user.click(run);
 
     const runningShell = screen
       .getByRole("button", { name: "Running remote" })
       .closest(".issue-card__shell");
     expect(runningShell?.querySelector(".issue-card__run")).toBeNull();
+  });
+
+  it("switches the issue board to a title-filtered open list", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 12,
+          title: "Open local alpha",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 2,
+          number: 4,
+          title: "Closed local alpha",
+          status: "completed",
+          source: "local",
+        }),
+        boardIssue({
+          id: 3,
+          number: 40,
+          title: "Open remote alpha",
+          externalNumber: 128,
+          source: "remote",
+          provider: "github",
+          remoteState: "open",
+          status: "completed",
+        }),
+        boardIssue({
+          id: 4,
+          number: 41,
+          title: "Closed remote alpha",
+          externalNumber: 129,
+          source: "remote",
+          provider: "github",
+          remoteState: "closed",
+          status: "running",
+        }),
+        boardIssue({
+          id: 5,
+          number: 13,
+          title: "Open local beta",
+          status: "review",
+          source: "local",
+          description: "alpha lives in the summary",
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 1, review: 1, completed: 2 },
+    });
+
+    renderBoard();
+    expect(
+      await screen.findByRole("region", { name: "待办" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "按标题搜索" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Open \d+$/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "看板模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+
+    expect(
+      screen.queryByRole("region", { name: "待办" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Open \d+$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("textbox", { name: "按标题搜索" })).toHaveStyle({
+      width: "240px",
+    });
+    expect(
+      screen.queryByRole("button", { name: "运行 Open local alpha" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("#12")).toBeInTheDocument();
+    expect(screen.getByText("#128")).toBeInTheDocument();
+    expect(screen.queryByText(/GH #|GL #/)).not.toBeInTheDocument();
+    expect(screen.getByText("Open local alpha")).toBeInTheDocument();
+    expect(screen.getByText("Open remote alpha")).toBeInTheDocument();
+    expect(screen.getByText("Open local beta")).toBeInTheDocument();
+    expect(screen.queryByText("Closed local alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Closed remote alpha")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "看板模式" }));
+    expect(
+      screen.queryByRole("textbox", { name: "按标题搜索" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Open \d+$/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "列表模式" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("region", { name: "待办" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+
+    await user.type(
+      screen.getByRole("textbox", { name: "按标题搜索" }),
+      "alpha",
+    );
+
+    expect(screen.getByText("Open local alpha")).toBeInTheDocument();
+    expect(screen.getByText("Open remote alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Open local beta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Closed local alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Closed remote alpha")).not.toBeInTheDocument();
+  });
+
+  it("counts a title-filtered open and closed list without matching summaries", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "列表模式",
+          description: "摘要没有关键词",
+          status: "backlog",
+          source: "local",
+          labels: [
+            {
+              id: 1,
+              name: "Intent",
+              scope: "project",
+              projectId: 1,
+              color: "#2563EB",
+              workflowSkill: null,
+            },
+          ],
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "另一个列表",
+          status: "running",
+          source: "local",
+        }),
+        boardIssue({
+          id: 3,
+          number: 3,
+          title: "第三条列表",
+          status: "review",
+          source: "local",
+        }),
+        boardIssue({
+          id: 4,
+          number: 4,
+          title: "已完成列表",
+          status: "completed",
+          source: "local",
+        }),
+        boardIssue({
+          id: 5,
+          number: 5,
+          title: "摘要命中",
+          description: "这里有列表两个字",
+          status: "backlog",
+          source: "local",
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 1, review: 1, completed: 1 },
+    });
+
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: "列表模式" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "按标题搜索" }),
+      "列表",
+    );
+
+    expect(screen.getByRole("button", { name: "Open 3" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Closed 1" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByText("列表模式")).toBeInTheDocument();
+    expect(screen.getByText("另一个列表")).toBeInTheDocument();
+    expect(screen.getByText("第三条列表")).toBeInTheDocument();
+    expect(screen.getByText("摘要没有关键词")).toBeInTheDocument();
+    expect(screen.getByText("Intent")).toBeInTheDocument();
+    expect(screen.queryByText("已完成列表")).not.toBeInTheDocument();
+    expect(screen.queryByText("摘要命中")).not.toBeInTheDocument();
+    expect(screen.queryByText("这里有列表两个字")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "运行 列表模式" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Closed 1" }));
+    expect(screen.getByText("已完成列表")).toBeInTheDocument();
+    expect(screen.queryByText("列表模式")).not.toBeInTheDocument();
+  });
+
+  it("buckets local workflow and remote state into open and closed lists", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "本地待办",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "本地进行",
+          status: "running",
+          source: "local",
+        }),
+        boardIssue({
+          id: 3,
+          number: 3,
+          title: "本地验收",
+          status: "review",
+          source: "local",
+        }),
+        boardIssue({
+          id: 4,
+          number: 4,
+          title: "本地完成",
+          status: "completed",
+          source: "local",
+        }),
+        boardIssue({
+          id: 5,
+          number: 5,
+          title: "远程仍打开",
+          status: "completed",
+          source: "remote",
+          provider: "github",
+          externalNumber: 10,
+          remoteState: "open",
+        }),
+        boardIssue({
+          id: 6,
+          number: 6,
+          title: "远程已关闭",
+          status: "running",
+          source: "remote",
+          provider: "github",
+          externalNumber: 7,
+          remoteState: "closed",
+        }),
+        boardIssue({
+          id: 7,
+          number: 7,
+          title: "远程状态空",
+          status: "backlog",
+          source: "remote",
+          provider: "gitlab",
+          externalNumber: 3,
+          remoteState: null,
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 2, review: 1, completed: 2 },
+    });
+
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: "列表模式" }));
+    expect(screen.getByText("本地待办")).toBeInTheDocument();
+    expect(screen.getByText("本地进行")).toBeInTheDocument();
+    expect(screen.getByText("本地验收")).toBeInTheDocument();
+    expect(screen.getByText("远程仍打开")).toBeInTheDocument();
+    expect(screen.getByText("#10")).toBeInTheDocument();
+    expect(screen.queryByText("本地完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("远程已关闭")).not.toBeInTheDocument();
+    expect(screen.queryByText("远程状态空")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Closed/ }));
+    expect(screen.getByText("本地完成")).toBeInTheDocument();
+    expect(screen.getByText("远程已关闭")).toBeInTheDocument();
+    expect(screen.getByText("远程状态空")).toBeInTheDocument();
+    expect(screen.getByText("#3")).toBeInTheDocument();
+    expect(screen.queryByText("远程仍打开")).not.toBeInTheDocument();
+    expect(screen.queryByText("本地待办")).not.toBeInTheDocument();
+    expect(screen.queryByText(/GH #|GL #/)).not.toBeInTheDocument();
+  });
+
+  it("shows a local assign-to-me avatar and remote avatar fallback", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "本地头像",
+          status: "backlog",
+          source: "local",
+          remoteAssignee: {
+            login: "ghost",
+            name: "Ghost",
+            avatarUrl: "https://example.com/ghost.png",
+          },
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "未指派",
+          status: "backlog",
+          source: "remote",
+          provider: "github",
+          externalNumber: 20,
+          remoteState: "open",
+          remoteAssignee: null,
+        }),
+        boardIssue({
+          id: 3,
+          number: 3,
+          title: "空头像",
+          status: "running",
+          source: "remote",
+          provider: "gitlab",
+          externalNumber: 21,
+          remoteState: "open",
+          remoteAssignee: {
+            login: "wsg",
+            name: "王颂歌",
+            avatarUrl: null,
+          },
+        }),
+        boardIssue({
+          id: 4,
+          number: 4,
+          title: "有头像",
+          status: "review",
+          source: "remote",
+          provider: "github",
+          externalNumber: 22,
+          remoteState: "open",
+          remoteAssignee: {
+            login: "lin",
+            name: "",
+            avatarUrl: "https://example.com/lin.png",
+          },
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 1, review: 1, completed: 0 },
+    });
+
+    renderBoard();
+    const localCard = (
+      await screen.findByRole("button", { name: "本地头像" })
+    ).closest(".issue-card__shell");
+    const unassigned = screen
+      .getByRole("button", { name: "未指派" })
+      .closest(".issue-card__shell");
+    const emptyAvatar = screen
+      .getByRole("button", { name: "空头像" })
+      .closest(".issue-card__shell");
+    const photo = screen
+      .getByRole("button", { name: "有头像" })
+      .closest(".issue-card__shell");
+    expect(
+      localCard?.querySelector('[role="img"][aria-label="指派给 me"]'),
+    ).not.toBeNull();
+    expect(localCard?.textContent).not.toContain("Ghost");
+    expect(localCard?.textContent).not.toContain("Assignee");
+    expect(localCard?.querySelector("img")).toBeNull();
+    expect(unassigned?.querySelector(".issue-assignee")).toBeNull();
+    expect(emptyAvatar?.querySelector("img")).toBeNull();
+    expect(emptyAvatar?.querySelector(".issue-assignee__glyph")).not.toBeNull();
+    expect(emptyAvatar?.textContent).toContain("Assignee");
+    expect(emptyAvatar?.textContent).toContain("王颂歌 @wsg");
+    expect(photo?.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://example.com/lin.png",
+    );
+    expect(photo?.textContent).toContain("lin @lin");
+
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+    const listRow = screen.getByText("空头像").closest(".issue-list-row");
+    expect(listRow?.querySelector("img")).toBeNull();
+    expect(listRow?.querySelector(".issue-assignee__glyph")).not.toBeNull();
+    expect(listRow?.textContent).toContain("Assignee");
+    expect(listRow?.textContent).toContain("王颂歌 @wsg");
+    expect(
+      screen.getByText("本地头像").closest(".issue-list-row")?.textContent,
+    ).not.toContain("Ghost");
+  });
+
+  it("shows an empty open list message in both locales", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 4,
+          title: "Done only",
+          status: "completed",
+          source: "local",
+        }),
+      ],
+      statusTotals: { backlog: 0, running: 0, review: 0, completed: 1 },
+    });
+    const view = renderBoard();
+    await user.click(await screen.findByRole("button", { name: "列表模式" }));
+    expect(screen.getByText("没有符合的 Open Issue")).toBeInTheDocument();
+
+    view.unmount();
+    render(
+      <I18nProvider fixedLocale="en">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    expect(
+      await screen.findByText("No matching Open issues"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Board view" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Search by title" }),
+    ).toBeInTheDocument();
   });
 });
 
