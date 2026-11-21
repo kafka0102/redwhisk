@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, Ref } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 import type { IssueBoardView, IssueListBucket } from "./issue-board-list-model";
@@ -12,6 +12,9 @@ export function IssueBoardModeBar({
   onViewChange,
   onBucketChange,
   onTitleQueryChange,
+  showCreate,
+  onCreateIssue,
+  createButtonRef,
 }: {
   view: IssueBoardView;
   bucket: IssueListBucket;
@@ -21,6 +24,9 @@ export function IssueBoardModeBar({
   onViewChange: (view: IssueBoardView) => void;
   onBucketChange: (bucket: IssueListBucket) => void;
   onTitleQueryChange: (query: string) => void;
+  showCreate: boolean;
+  onCreateIssue: (trigger: HTMLElement | null) => void;
+  createButtonRef: Ref<HTMLButtonElement | null>;
 }): JSX.Element {
   const { t } = useI18n();
   return (
@@ -48,16 +54,14 @@ export function IssueBoardModeBar({
         <div />
       )}
       <div className="issue-board-mode__tools">
-        {view === "list" ? (
-          <input
-            aria-label={t("issues.searchTitles")}
-            className="issue-board-mode__search"
-            placeholder={t("issues.searchTitles")}
-            type="text"
-            value={titleQuery}
-            onChange={(event) => onTitleQueryChange(event.target.value)}
-          />
-        ) : null}
+        <input
+          aria-label={t("issues.searchTitles")}
+          className="issue-board-mode__search"
+          placeholder={t("issues.searchTitles")}
+          type="text"
+          value={titleQuery}
+          onChange={(event) => onTitleQueryChange(event.target.value)}
+        />
         <button
           aria-label={t("issues.boardView")}
           aria-pressed={view === "board"}
@@ -78,6 +82,18 @@ export function IssueBoardModeBar({
         >
           <ListGlyph />
         </button>
+        {showCreate ? (
+          <button
+            ref={createButtonRef}
+            aria-label={t("issues.newIssue")}
+            className="issue-board-mode__create"
+            title={t("issues.newIssue")}
+            type="button"
+            onClick={(event) => onCreateIssue(event.currentTarget)}
+          >
+            {t("issues.newIssue")}
+          </button>
+        ) : null}
       </div>
     </div>
   );

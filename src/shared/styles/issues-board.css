@@ -148,25 +148,6 @@
   font-size: 12px;
 }
 
-.issue-lane__create {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  margin-left: auto;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.issue-lane__create:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
 .issue-lane__cards {
   display: grid;
   align-content: start;
@@ -1138,6 +1119,16 @@
   padding: 0;
 }
 
+.issue-board-mode__create {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
 .issue-board-mode__filter[aria-pressed="true"],
 .issue-board-mode__view[aria-pressed="true"] {
   background: var(--color-surface-muted);
@@ -1171,7 +1162,15 @@
   display: grid;
   gap: 4px;
   padding: 12px 10px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: var(--color-border);
+}
+
+.issue-list-row:first-child {
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: var(--color-border);
 }
 
 .issue-list-row:has(.issue-list-row__hit:hover),

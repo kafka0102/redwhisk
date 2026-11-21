@@ -630,6 +630,19 @@
   overflow-anchor: none;
 }
 
+.activity-surface--issues:has(.issue-board-mode):not(
+    :has(.issue-board-mode__filters)
+  ) {
+  gap: 6px;
+}
+
+.activity-surface--issues:has(.change-request-list) {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "header"
+    "kanban";
+}
+
 .activity-surface--issues .issues-status,
 .activity-surface--issues .issues-kanban {
   padding: 0 18px;

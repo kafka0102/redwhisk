@@ -1,4 +1,10 @@
-import { useState, type ComponentProps, type JSX, type ReactNode } from "react";
+import {
+  useState,
+  type ComponentProps,
+  type JSX,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { IssueBoardHeader, type IssueBoardPane } from "./issue-board-header";
 import { ChangeRequestPanel } from "./change-request-panel";
@@ -25,6 +31,9 @@ export function IssuesActivityBoard({
   openChangeRequest,
   onOpenChangeRequestConsumed,
   onOpenLinkedIssue,
+  createButtonRef,
+  showCreate = false,
+  onCreateIssue,
   ...kanban
 }: {
   actions?: ReactNode;
@@ -38,15 +47,19 @@ export function IssuesActivityBoard({
   openChangeRequest?: { provider: string; number: number } | null;
   onOpenChangeRequestConsumed?: () => void;
   onOpenLinkedIssue?: (issueId: number) => void;
+  createButtonRef: Ref<HTMLButtonElement | null>;
+  showCreate?: boolean;
+  onCreateIssue: (trigger: HTMLElement | null) => void;
 } & ComponentProps<typeof IssuesKanban>): JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false);
   const [view, setView] = useState<IssueBoardView>("board");
   const [bucket, setBucket] = useState<IssueListBucket>("open");
   const [titleQuery, setTitleQuery] = useState("");
-  const titleMatches = filterIssuesByTitle(
-    kanban.lanes.flatMap((lane) => lane.issues),
-    titleQuery,
-  );
+  const filteredLanes = kanban.lanes.map((lane) => ({
+    ...lane,
+    issues: filterIssuesByTitle(lane.issues, titleQuery),
+  }));
+  const titleMatches = filteredLanes.flatMap((lane) => lane.issues);
   const openCount = titleMatches.filter(
     (issue) => issueListBucket(issue) === "open",
   ).length;
@@ -77,6 +90,9 @@ export function IssuesActivityBoard({
           onBucketChange={setBucket}
           onTitleQueryChange={setTitleQuery}
           onViewChange={setView}
+          createButtonRef={createButtonRef}
+          showCreate={showCreate}
+          onCreateIssue={onCreateIssue}
         />
       ) : null}
       {pane === "pullRequests" ? (
@@ -100,7 +116,11 @@ export function IssuesActivityBoard({
           onOpenIssue={kanban.onOpenIssue}
         />
       ) : (
-        <IssuesKanban {...kanban} sourceMode={sourceMode} />
+        <IssuesKanban
+          {...kanban}
+          lanes={filteredLanes}
+          sourceMode={sourceMode}
+        />
       )}
     </>
   );

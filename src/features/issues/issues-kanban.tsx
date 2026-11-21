@@ -1,4 +1,4 @@
-import { LoaderCircle, Play, Plus } from "lucide-react";
+import { LoaderCircle, Play } from "lucide-react";
 import { useState } from "react";
 
 import type { IssueRecord, IssueStatus } from "./issue-commands";
@@ -38,9 +38,7 @@ interface IssuesKanbanProps {
   lanes: IssueLane[];
   selectedIssueId: number | null;
   cardRefs: React.RefObject<Map<number, HTMLButtonElement>>;
-  createButtonRef: React.RefObject<HTMLButtonElement | null>;
   laneLoadState: Record<IssueStatus, LaneLoadStateView>;
-  onCreateIssue: (trigger: HTMLElement | null) => void;
   onOpenIssue: (issue: IssueRecord, trigger: HTMLElement | null) => void;
   onRunIssue: (issue: RunDialogIssue, trigger: HTMLElement | null) => void;
   canRunIssue: (
@@ -49,7 +47,6 @@ interface IssuesKanbanProps {
   toDescriptionExcerpt: (markdown: string) => string;
   onLoadMore: (status: IssueStatus) => void;
   sourceMode?: "local" | "remote" | "mixed" | null;
-  showCreate?: boolean;
 }
 
 export function IssuesKanban({
@@ -57,16 +54,13 @@ export function IssuesKanban({
   lanes,
   selectedIssueId,
   cardRefs,
-  createButtonRef,
   laneLoadState,
-  onCreateIssue,
   onOpenIssue,
   onRunIssue,
   canRunIssue,
   toDescriptionExcerpt,
   onLoadMore,
   sourceMode = null,
-  showCreate = true,
 }: IssuesKanbanProps) {
   const { messages } = useI18n();
   return (
@@ -92,18 +86,6 @@ export function IssuesKanban({
                 <span className="issue-lane__status-dot" aria-hidden="true" />
                 <h3>{lane.label}</h3>
                 <span className="issue-lane__count">{lane.total}</span>
-                {lane.status === "backlog" && showCreate ? (
-                  <button
-                    ref={createButtonRef}
-                    aria-label={messages.issues.newIssue}
-                    className="issue-lane__create"
-                    title={messages.issues.newIssue}
-                    type="button"
-                    onClick={(event) => onCreateIssue(event.currentTarget)}
-                  >
-                    <Plus aria-hidden="true" size={14} strokeWidth={2} />
-                  </button>
-                ) : null}
               </div>
             </div>
             <div

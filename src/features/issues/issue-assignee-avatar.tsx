@@ -64,9 +64,9 @@ function DefaultAvatar(): JSX.Element {
       className="issue-assignee__glyph"
       viewBox="0 0 16 16"
     >
-      <circle cx="8" cy="6.1" fill="currentColor" r="2.05" />
+      <circle cx="8" cy="6.2" fill="currentColor" r="2.1" />
       <path
-        d="M4.1 12.4c.55-2.05 2-3.05 3.9-3.05s3.35 1 3.9 3.05c.1.35-.18.7-.55.7H4.65c-.37 0-.65-.35-.55-.7z"
+        d="M5.2 11.2c.45-1.7 1.4-2.5 2.8-2.5s2.35.8 2.8 2.5c.08.3-.14.55-.42.55H5.62c-.28 0-.5-.25-.42-.55z"
         fill="currentColor"
       />
     </svg>

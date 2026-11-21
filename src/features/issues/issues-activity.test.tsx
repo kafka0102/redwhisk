@@ -2139,7 +2139,7 @@ describe("IssuesActivity", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses the backlog lane header plus action to create issues", async () => {
+  it("puts New Issue to the right of the view icons", async () => {
     listIssuesMock.mockResolvedValue({ issues: [] });
 
     renderIssuesActivity();
@@ -2148,17 +2148,14 @@ describe("IssuesActivity", () => {
       .getByRole("tab", { name: "Issues" })
       .closest("header");
     const backlogLane = await screen.findByRole("region", { name: "Backlog" });
-    const createButton = within(backlogLane).getByRole("button", {
-      name: "New Issue",
-    });
 
     expect(header).not.toHaveTextContent("New Issue");
     expect(
-      within(backlogLane).queryByRole("button", {
-        name: "New Issue for backlog",
-      }),
+      within(backlogLane).queryByRole("button", { name: "New Issue" }),
     ).not.toBeInTheDocument();
-    expect(createButton).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New Issue" }),
+    ).toBeInTheDocument();
   });
 
   it("lists enabled launch profiles in settings display order and hides disabled ones", async () => {

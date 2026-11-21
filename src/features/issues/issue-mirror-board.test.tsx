@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -25,6 +25,7 @@ import {
 } from "./issue-mirror-commands";
 
 import "../../shared/styles/issues-board.css";
+import "../../shared/styles/workbench-shell.css";
 
 const eventHandlers = vi.hoisted(
   () => new Map<string, (event: { payload: unknown }) => void>(),
@@ -1270,8 +1271,8 @@ describe("GitHub issue mirror board", () => {
       await screen.findByRole("region", { name: "待办" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("textbox", { name: "按标题搜索" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("textbox", { name: "按标题搜索" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Open \d+$/ }),
     ).not.toBeInTheDocument();
@@ -1306,8 +1307,8 @@ describe("GitHub issue mirror board", () => {
 
     await user.click(screen.getByRole("button", { name: "看板模式" }));
     expect(
-      screen.queryByRole("textbox", { name: "按标题搜索" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("textbox", { name: "按标题搜索" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Open \d+$/ }),
     ).not.toBeInTheDocument();
@@ -1642,7 +1643,547 @@ describe("GitHub issue mirror board", () => {
       screen.getByRole("textbox", { name: "Search by title" }),
     ).toBeInTheDocument();
   });
+
+  it("filters each board lane by title and restores hidden cards", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "待办残句",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "待办其它",
+          description: "正文里的残句不算",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 3,
+          number: 3,
+          title: "验收残句",
+          status: "review",
+          source: "local",
+        }),
+        boardIssue({
+          id: 4,
+          number: 4,
+          title: "进行中的其它",
+          status: "running",
+          source: "local",
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 1, review: 1, completed: 0 },
+    });
+
+    renderBoard();
+    const search = await screen.findByRole("textbox", { name: "按标题搜索" });
+    expect(screen.getByRole("button", { name: "看板模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const backlog = screen.getByRole("region", { name: "待办" });
+    const review = screen.getByRole("region", { name: "待验收" });
+    const running = screen.getByRole("region", { name: "进行中" });
+    expect(backlog).toHaveTextContent("待办残句");
+    expect(backlog).toHaveTextContent("待办其它");
+    expect(review).toHaveTextContent("验收残句");
+
+    await user.type(search, "残句");
+
+    expect(backlog).toHaveTextContent("待办残句");
+    expect(backlog).not.toHaveTextContent("待办其它");
+    expect(review).toHaveTextContent("验收残句");
+    expect(running).toBeInTheDocument();
+    expect(running).not.toHaveTextContent("进行中的其它");
+    expect(screen.queryByText("正文里的残句不算")).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "   ");
+
+    expect(backlog).toHaveTextContent("待办残句");
+    expect(backlog).toHaveTextContent("待办其它");
+    expect(review).toHaveTextContent("验收残句");
+    expect(running).toHaveTextContent("进行中的其它");
+  });
+
+  it("filters the open or closed list by title and keeps the query on the board", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "待办残句",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "待办其它",
+          description: "正文里的残句不算",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 3,
+          number: 3,
+          title: "验收残句",
+          status: "review",
+          source: "local",
+        }),
+        boardIssue({
+          id: 4,
+          number: 4,
+          title: "已完成残句",
+          status: "completed",
+          source: "local",
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 0, review: 1, completed: 1 },
+    });
+
+    renderBoard();
+    await user.click(await screen.findByRole("button", { name: "列表模式" }));
+    const search = screen.getByRole("textbox", { name: "按标题搜索" });
+    await user.type(search, "残句");
+
+    expect(screen.getByRole("button", { name: "Open 2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Closed 1" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByText("待办残句")).toBeInTheDocument();
+    expect(screen.getByText("验收残句")).toBeInTheDocument();
+    expect(screen.queryByText("待办其它")).not.toBeInTheDocument();
+    expect(screen.queryByText("正文里的残句不算")).not.toBeInTheDocument();
+    expect(screen.queryByText("已完成残句")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Closed 1" }));
+    expect(screen.getByText("已完成残句")).toBeInTheDocument();
+    expect(screen.queryByText("待办残句")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "看板模式" }));
+    expect(search).toHaveValue("残句");
+    expect(screen.getByRole("region", { name: "待办" })).toHaveTextContent(
+      "待办残句",
+    );
+    expect(screen.getByRole("region", { name: "待办" })).not.toHaveTextContent(
+      "待办其它",
+    );
+    expect(screen.getByRole("region", { name: "已完成" })).toHaveTextContent(
+      "已完成残句",
+    );
+
+    await user.clear(search);
+    await user.type(search, "   ");
+    expect(screen.getByRole("region", { name: "待办" })).toHaveTextContent(
+      "待办其它",
+    );
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+    expect(search).toHaveValue("   ");
+    expect(screen.getByRole("button", { name: "Open 3" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Closed 1" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open 3" }));
+    expect(screen.getByText("待办其它")).toBeInTheDocument();
+    expect(screen.getByText("正文里的残句不算")).toBeInTheDocument();
+  });
+
+  it("uses a 6px board gap and keeps the 12px list gap", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const surface = document.querySelector(".activity-surface--issues");
+    expect(surface).not.toBeNull();
+    await screen.findByRole("region", { name: "待办" });
+    const boardIcon = screen.getByRole("button", { name: "看板模式" });
+    const listIcon = screen.getByRole("button", { name: "列表模式" });
+
+    expect(window.getComputedStyle(surface!).gap).toBe("6px");
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+      "status",
+    );
+    expect(window.getComputedStyle(boardIcon)).toMatchObject({
+      width: "28px",
+      height: "28px",
+    });
+    expect(window.getComputedStyle(listIcon)).toMatchObject({
+      width: "28px",
+      height: "28px",
+    });
+
+    await user.click(listIcon);
+    expect(window.getComputedStyle(surface!).gap).toBe("12px");
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+      "status",
+    );
+    expect(window.getComputedStyle(boardIcon)).toMatchObject({
+      width: "28px",
+      height: "28px",
+    });
+    expect(window.getComputedStyle(listIcon)).toMatchObject({
+      width: "28px",
+      height: "28px",
+    });
+  });
+
+  it("draws one top border on the first list issue and one border between rows", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "第一条",
+          status: "backlog",
+          source: "local",
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "第二条",
+          status: "running",
+          source: "local",
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 1, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+    document.documentElement.style.setProperty(
+      "--color-border",
+      "rgb(1, 2, 3)",
+    );
+    await user.click(await screen.findByRole("button", { name: "列表模式" }));
+    const first = screen.getByText("第一条").closest(".issue-list-row");
+    const second = screen.getByText("第二条").closest(".issue-list-row");
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    const firstStyle = window.getComputedStyle(first!);
+    const secondStyle = window.getComputedStyle(second!);
+    expect(firstStyle.borderTopWidth).toBe("1px");
+    expect(firstStyle.borderTopStyle).toBe("solid");
+    expect(firstStyle.borderTopColor).toBe(firstStyle.borderBottomColor);
+    expect(secondStyle.borderTopStyle).toBe("none");
+    expect(secondStyle.borderBottomWidth).toBe("1px");
+    expect(secondStyle.borderBottomColor).toBe(firstStyle.borderBottomColor);
+  });
+
+  it("puts New Issue to the right of the view icons and opens the create page", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    const backlog = await screen.findByRole("region", { name: "待办" });
+    expect(
+      within(backlog).queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+    expect(modeToolLabels()).toEqual([
+      "按标题搜索",
+      "看板模式",
+      "列表模式",
+      "新建 Issue",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+    expect(
+      screen.queryByRole("region", { name: "待办" }),
+    ).not.toBeInTheDocument();
+    expect(modeToolLabels()).toEqual([
+      "按标题搜索",
+      "看板模式",
+      "列表模式",
+      "新建 Issue",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "新建 Issue" }));
+    expect(
+      await screen.findByRole("form", { name: "新建 Issue" }),
+    ).toBeInTheDocument();
+  });
+
+  it("drops the issue search row from the pull request tab", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByRole("tab", { name: /Pull requests/ }));
+    const surface = document.querySelector(".activity-surface--issues");
+    expect(surface).not.toBeNull();
+    const areas = window.getComputedStyle(surface!).gridTemplateAreas;
+    expect(areas).not.toContain("mode");
+    expect(areas).not.toContain("status");
+    expect(areas).toContain("header");
+    expect(areas).toContain("kanban");
+    expect(
+      screen.queryByRole("textbox", { name: "按标题搜索" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "看板模式" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "列表模式" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Issues" }));
+    expect(
+      screen.getByRole("textbox", { name: "按标题搜索" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "看板模式" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "列表模式" }),
+    ).toBeInTheDocument();
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+      "mode",
+    );
+  });
+
+  it("shows New Issue on both views only when the board can create", async () => {
+    const user = userEvent.setup();
+    getProjectIssueSourceSettingsMock.mockResolvedValue({
+      ...sourceSettings("remote"),
+      connection: {
+        ...sourceSettings("remote").connection,
+        authStatus: "expired",
+        cliAuthenticated: false,
+      },
+    });
+    const view = renderBoard();
+    await screen.findByRole("button", { name: "看板模式" });
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+    expect(
+      screen.queryByRole("button", { name: "新建 Issue" }),
+    ).not.toBeInTheDocument();
+
+    for (const mode of ["local", "mixed", "remote"] as const) {
+      getProjectIssueSourceSettingsMock.mockResolvedValue(sourceSettings(mode));
+      view.rerender(
+        <I18nProvider fixedLocale="zh">
+          <IssuesActivity
+            projectId={mode === "local" ? 2 : mode === "mixed" ? 3 : 4}
+          />
+        </I18nProvider>,
+      );
+      expect(
+        await screen.findByRole("button", { name: "新建 Issue" }),
+      ).toBeInTheDocument();
+      const listLabel = screen.getByRole("button", { name: "列表模式" });
+      const boardLabel = screen.getByRole("button", { name: "看板模式" });
+      if (listLabel.getAttribute("aria-pressed") !== "true") {
+        await user.click(listLabel);
+      }
+      expect(
+        screen.getByRole("button", { name: "新建 Issue" }),
+      ).toBeInTheDocument();
+      await user.click(boardLabel);
+      expect(
+        screen.getByRole("button", { name: "新建 Issue" }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("centers the default avatar in the circle and still covers photo avatars", async () => {
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 1,
+          number: 1,
+          title: "空头像",
+          status: "backlog",
+          source: "remote",
+          provider: "github",
+          externalNumber: 21,
+          remoteState: "open",
+          remoteAssignee: {
+            login: "wsg",
+            name: "王颂歌",
+            avatarUrl: null,
+          },
+        }),
+        boardIssue({
+          id: 2,
+          number: 2,
+          title: "有头像",
+          status: "running",
+          source: "remote",
+          provider: "github",
+          externalNumber: 22,
+          remoteState: "open",
+          remoteAssignee: {
+            login: "lin",
+            name: "",
+            avatarUrl: "https://example.com/lin.png",
+          },
+        }),
+      ],
+      statusTotals: { backlog: 1, running: 1, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+    const emptyCard = (
+      await screen.findByRole("button", { name: "空头像" })
+    ).closest(".issue-card__shell");
+    const glyph = emptyCard?.querySelector(".issue-assignee__glyph");
+    expect(glyph).not.toBeNull();
+    const bounds = svgGlyphBounds(glyph!);
+    expect(
+      Math.hypot(
+        bounds.center.x - bounds.circle.cx,
+        bounds.center.y - bounds.circle.cy,
+      ),
+    ).toBeLessThanOrEqual(0.4);
+    for (const point of bounds.points) {
+      expect(
+        Math.hypot(point.x - bounds.circle.cx, point.y - bounds.circle.cy),
+      ).toBeLessThanOrEqual(bounds.circle.r);
+    }
+
+    const photoCard = screen
+      .getByRole("button", { name: "有头像" })
+      .closest(".issue-card__shell");
+    const image = photoCard?.querySelector("img");
+    expect(image).toHaveAttribute("src", "https://example.com/lin.png");
+    expect(photoCard?.querySelector(".issue-assignee__glyph")).toBeNull();
+    expect(window.getComputedStyle(image!).objectFit).toBe("cover");
+  });
 });
+
+function svgGlyphBounds(svg: Element): {
+  center: { x: number; y: number };
+  circle: { cx: number; cy: number; r: number };
+  points: Array<{ x: number; y: number }>;
+} {
+  const [minX, minY, width, height] = (
+    svg.getAttribute("viewBox") ?? "0 0 16 16"
+  )
+    .split(/[\s,]+/)
+    .map(Number);
+  const points: Array<{ x: number; y: number }> = [];
+  for (const node of svg.querySelectorAll("circle")) {
+    const cx = Number(node.getAttribute("cx"));
+    const cy = Number(node.getAttribute("cy"));
+    const radius = Number(node.getAttribute("r"));
+    points.push(
+      { x: cx - radius, y: cy },
+      { x: cx + radius, y: cy },
+      { x: cx, y: cy - radius },
+      { x: cx, y: cy + radius },
+    );
+  }
+  for (const node of svg.querySelectorAll("path")) {
+    points.push(...svgPathPoints(node.getAttribute("d") ?? ""));
+  }
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    center: {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    },
+    circle: {
+      cx: minX + width / 2,
+      cy: minY + height / 2,
+      r: Math.min(width, height) / 2,
+    },
+    points,
+  };
+}
+
+function svgPathPoints(path: string): Array<{ x: number; y: number }> {
+  const tokens = path.match(/[a-zA-Z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g) ?? [];
+  const points: Array<{ x: number; y: number }> = [];
+  let index = 0;
+  let command = "";
+  let x = 0;
+  let y = 0;
+  let startX = 0;
+  let startY = 0;
+  let previousControl: { x: number; y: number } | null = null;
+  const read = (): number => Number(tokens[index++]);
+  while (index < tokens.length) {
+    if (/[a-zA-Z]/.test(tokens[index] ?? "")) {
+      command = tokens[index++] ?? "";
+    }
+    const relative = command === command.toLowerCase();
+    if (command === "M" || command === "m") {
+      x = relative ? x + read() : read();
+      y = relative ? y + read() : read();
+      startX = x;
+      startY = y;
+      points.push({ x, y });
+      previousControl = null;
+      continue;
+    }
+    if (command === "H" || command === "h") {
+      x = relative ? x + read() : read();
+      points.push({ x, y });
+      previousControl = null;
+      continue;
+    }
+    if (
+      command === "C" ||
+      command === "c" ||
+      command === "S" ||
+      command === "s"
+    ) {
+      const originX = x;
+      const originY = y;
+      const reflected =
+        previousControl == null
+          ? { x: originX, y: originY }
+          : {
+              x: originX * 2 - previousControl.x,
+              y: originY * 2 - previousControl.y,
+            };
+      const first =
+        command === "S" || command === "s"
+          ? reflected
+          : {
+              x: relative ? originX + read() : read(),
+              y: relative ? originY + read() : read(),
+            };
+      const second = {
+        x: relative ? originX + read() : read(),
+        y: relative ? originY + read() : read(),
+      };
+      x = relative ? originX + read() : read();
+      y = relative ? originY + read() : read();
+      points.push(first, second, { x, y });
+      previousControl = second;
+      continue;
+    }
+    if (command === "Z" || command === "z") {
+      x = startX;
+      y = startY;
+      previousControl = null;
+      continue;
+    }
+    throw new Error(`unsupported svg command ${command}`);
+  }
+  return points;
+}
+
+function modeToolLabels(): string[] {
+  const tools = document.querySelector(".issue-board-mode__tools");
+  return [...(tools?.querySelectorAll("button, input") ?? [])].map(
+    (node) => node.getAttribute("aria-label") ?? "",
+  );
+}
 
 function sourceSettings(mode: "local" | "remote" | "mixed") {
   return {
