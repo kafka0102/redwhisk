@@ -10,6 +10,14 @@ Standards 写成通过之前，先核对实现回报里同一 tree state 的项�
 
 行数看 `scripts/check-rust-file-size.sh` 的结果。它数的是 `rustfmt --edition 2021` 之后的行。
 
+diff 在 `src/` 下只多了 `src/shared/commands/__parity__/rust-dto-signatures.json` 时，复用 `pnpm test:parity` 的证据。不要为此再跑 `bash scripts/check-frontend-gates.sh`。字段名与契约是否一致仍看 `bash scripts/check-rust-command-dto.sh`，它不核对这份快照。
+
+## 票面之外的文件
+
+diff 里每个改动文件都要能对上本票验收。对不上的，Standards 不通过。
+
+全量测试在票面之外的文件变红时，那处修复另提交，不并进本票。
+
 ## 每条都能打开
 
 验收写明集合里的每条记录都能打开目标时，目标不在当前内存集合里就直接返回，Spec 不通过。
