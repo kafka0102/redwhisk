@@ -146,6 +146,7 @@ fn agent_session_migration_creates_agent_sessions_and_session_events_schema() {
             "token_input",
             "token_output",
             "token_cache",
+            "runtime_log_path",
         ]
     );
 

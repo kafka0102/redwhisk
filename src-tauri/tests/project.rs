@@ -65,6 +65,19 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "pr_draft",
             "confirm_completion_action",
             "forge_host",
+            "issue_source_mode",
+            "issue_sync_scope",
+            "issue_sync_label",
+            "issue_sync_enabled",
+            "issue_sync_interval_seconds",
+            "issue_writeback_close_on_complete",
+            "issue_writeback_close_on_pr_merge",
+            "issue_writeback_comment",
+            "issue_create_source",
+            "last_issue_synced_at",
+            "last_issue_sync_error",
+            "last_change_request_synced_at",
+            "last_change_request_sync_error",
         ],
     );
     assert_eq!(
@@ -336,8 +349,24 @@ fn project_integer_id_migration_converts_existing_text_schema() {
             include_str!("../migrations/0022_agent_worktree_execution.sql"),
         ),
         (
+            "0027_issue_completion_flows",
+            include_str!("../migrations/0027_issue_completion_flows.sql"),
+        ),
+        (
+            "0032_issue_completion_flows_unified",
+            include_str!("../migrations/0032_issue_completion_flows_unified.sql"),
+        ),
+        (
             "0049_projects_removed_at",
             include_str!("../migrations/0049_projects_removed_at.sql"),
+        ),
+        (
+            "0057_project_completion_closeout",
+            include_str!("../migrations/0057_project_completion_closeout.sql"),
+        ),
+        (
+            "0058_project_confirm_completion_action",
+            include_str!("../migrations/0058_project_confirm_completion_action.sql"),
         ),
     ]);
 
@@ -416,8 +445,24 @@ fn project_integer_id_migration_keeps_existing_integer_ids() {
             include_str!("../migrations/0022_agent_worktree_execution.sql"),
         ),
         (
+            "0027_issue_completion_flows",
+            include_str!("../migrations/0027_issue_completion_flows.sql"),
+        ),
+        (
+            "0032_issue_completion_flows_unified",
+            include_str!("../migrations/0032_issue_completion_flows_unified.sql"),
+        ),
+        (
             "0049_projects_removed_at",
             include_str!("../migrations/0049_projects_removed_at.sql"),
+        ),
+        (
+            "0057_project_completion_closeout",
+            include_str!("../migrations/0057_project_completion_closeout.sql"),
+        ),
+        (
+            "0058_project_confirm_completion_action",
+            include_str!("../migrations/0058_project_confirm_completion_action.sql"),
         ),
     ]);
 

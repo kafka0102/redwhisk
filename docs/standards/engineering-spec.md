@@ -97,3 +97,5 @@
 4. 是否没有引入 `any`、`@ts-ignore` 或局部放宽类型检查
 5. 是否运行了 `pnpm lint` 与 `pnpm typecheck`
 6. 若改动了 `package.json` / `pnpm-lock.yaml`：是否已 `pnpm install`，且 `pnpm typecheck` / `pnpm build` 能解析新增模块（测试里的 `vi.mock` 不能替代安装）
+
+`pnpm lint` 包含 `scripts/check-frontend-feature-boundaries.mjs` 的跨 feature import 棘轮。存量跨 feature 依赖登记在 `scripts/frontend-feature-boundary-allowlist.txt`；新增依赖会失败。共享能力应下沉到 `src/shared/`，修复存量依赖后用脚本 `--update` 收紧白名单。

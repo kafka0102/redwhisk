@@ -37,7 +37,7 @@
 
 `src-tauri/Cargo.toml` 把 `warnings` 设为 `deny`。桌面应用编译库和二进制时没有 `cfg(test)`，只被测试引用的 `use` / `pub use` 会变成编译错误。`cargo test` 与 `cargo check --tests` 打开 `cfg(test)`，发现不了这类错误。
 
-改动 Rust 后用 [scripts/check-rust-compile.sh](../../scripts/check-rust-compile.sh) 做增量 `cargo check --offline --lib --bins`。不要用全量测试或 `tauri build` / `pnpm build:macos` 代替。行为是否正确仍靠过滤后的 `cargo test`。
+改动 Rust 后用 [scripts/check-rust-compile.sh](../../scripts/check-rust-compile.sh) 依次做增量 `cargo check --offline --lib --bins`、`cargo test --offline --lib --no-run` 与 `cargo check --offline --all-targets`。不要用全量测试或 `tauri build` / `pnpm build:macos` 代替。行为是否正确仍靠过滤后的 `cargo test`。
 
 ## 完成前
 

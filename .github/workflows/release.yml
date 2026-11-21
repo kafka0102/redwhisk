@@ -88,11 +88,7 @@ jobs:
         run: bash scripts/check-rust-command-reasons.sh --from "${{ github.event.pull_request.base.sha }}"
 
       - name: Rust 测试
-        run: cargo test --lib
-        working-directory: src-tauri
-
-      - name: Migration 注册测试
-        run: cargo test --offline --test local_data
+        run: cargo test --offline
         working-directory: src-tauri
 
       # 这些门禁默认只查未提交改动，提交后再跑等于空转；CI 里改用 PR 全量 diff 口径。
@@ -105,6 +101,11 @@ jobs:
 
       - name: 前端文件大小门禁
         run: bash scripts/check-frontend-file-size.sh --from "${{ github.event.pull_request.base.sha }}"
+
+      - name: 门禁脚本契约测试
+        run: |
+          bash scripts/tests/rust-compile-gate.test.sh
+          bash scripts/tests/frontend-feature-boundary-gate.test.sh
 
   # tag 触发：构建 Universal Mac 包并创建 draft Release
   release-macos:

@@ -84,11 +84,13 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 
 前端改动跑 `bash scripts/check-frontend-gates.sh`。依赖、Vite/Tauri 构建配置、静态资源路径或打包代码变更加 `--with-build`。涉及 `*.browser.test.tsx` 的真实浏览器测量加 `--with-browser`；CI 的 PR 检查会单独跑 `pnpm test:browser`。已提交后复查文件大小加 `--from <ref>`。顺序、豁免和「vitest 过滤不算通过」以脚本 `--help` 为准。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0，那不是红。
 
+`pnpm lint` 同时检查跨 feature import：新增的 `src/features/<A>` → `src/features/<B>` 依赖会失败，存量依赖由 `scripts/frontend-feature-boundary-allowlist.txt` 作为棘轮管理。
+
 改了 `src-tauri` 后按顺序跑下面的脚本。已提交的 diff 加 `--from <ref>`。细项以各脚本 `--help` 为准。`cargo test` 不能代替 `check-rust-compile.sh`。
 
 - `bash scripts/check-rustfmt.sh`（只检查本次改动的 `src-tauri/**/*.rs` 是否已 `rustfmt --edition 2021`。文件大小门禁只在临时副本上格式化来数行，不代替这条。提交后复查用 `--from <ref>`）
 - `bash scripts/check-rust-file-size.sh`（按 `rustfmt --edition 2021` 之后的行数，不按挤行前的原文）
-- `bash scripts/check-rust-compile.sh`
+- `bash scripts/check-rust-compile.sh`（正式构建、lib 测试与 `src-tauri/tests/**` 全目标编译口径）
 - `bash scripts/check-rust-user-strings.sh`
 - `bash scripts/check-rust-command-failure-tests.sh`
 - `bash scripts/check-rust-event-emit.sh`

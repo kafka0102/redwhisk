@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 正式构建口径的 Rust 编译检查。
-# 只对库和二进制做 dev profile 的 cargo check：不跑测试、不生成机器码、不链接、不打 Tauri 包。
+# 对正式构建目标与全部测试目标做 dev profile 编译：不运行测试、不生成机器码、不链接、不打包。
 # 规范: docs/architecture-design/agent-development-rules.md「测试与验证规则」
 set -euo pipefail
 
@@ -20,3 +20,8 @@ cargo check --offline --lib --bins
 # 否则缺字段这类错误要等到 cargo test 才出现。--no-run 只编译，不执行用例。
 echo "Rust 测试代码编译: cargo test --offline --lib --no-run"
 cargo test --offline --lib --no-run
+
+# 上面的 lib 测试编译不覆盖 src-tauri/tests/**。PR CI 使用 --all-targets，
+# 本地也必须同口径编译，否则集成测试会静默坏掉。
+echo "Rust 全目标编译检查: cargo check --offline --all-targets"
+cargo check --offline --all-targets

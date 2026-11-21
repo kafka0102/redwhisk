@@ -70,6 +70,7 @@ fn issue_migration_creates_issues_schema_with_project_index() {
             "label_ids",
             "number",
             "status_changed_at",
+            "source",
         ],
     );
     assert_eq!(
@@ -3562,6 +3563,9 @@ fn complete_issue_flow_external_worktree_confirms_skip_and_cancel_decisions() {
                 actual_path: None,
                 continue_after_commit: None,
                 worktree_cleanup_decision: Some(false),
+                closeout_action: None,
+                closeout_base: None,
+                closeout_draft: None,
             },
             temp_dir.path(),
             &redwhisk_lib::agent::pty_session_manager::PtySessionManager::new(),

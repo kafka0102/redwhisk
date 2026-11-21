@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
     "format": "prettier --write --log-level warn .vscode/extensions.json index.html package.json pnpm-lock.yaml prettier.config.mjs eslint.config.js eslint-rules vite.config.ts vitest.config.ts vitest.browser.config.ts tsconfig.json tsconfig.node.json \"src/**/*.{ts,tsx,css}\" \"src-tauri/capabilities/**/*.json\"",
-    "lint": "eslint src eslint.config.js eslint-rules vite.config.ts vitest.config.ts vitest.browser.config.ts",
+    "lint": "eslint src eslint.config.js eslint-rules vite.config.ts vitest.config.ts vitest.browser.config.ts && node scripts/check-frontend-feature-boundaries.mjs",
     "preview": "vite preview",
     "test": "vitest run --exclude '**/*.browser.test.tsx'",
     "test:browser": "vitest run --config vitest.browser.config.ts",
