@@ -74,6 +74,32 @@ const SESSION_FILE_LINKS: SessionFileLinks = {
 };
 
 describe("AgentMarkdown 链接分类", () => {
+  it("裸链接后的中文句号不进入链接", () => {
+    const message =
+      "已更新同一条需求锚点：https://github.com/kafka0102/redwhisk/issues/12。标题没改。";
+
+    const { container } = render(<AgentMarkdown>{message}</AgentMarkdown>);
+
+    const links = container.querySelectorAll("a");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute(
+      "href",
+      "https://github.com/kafka0102/redwhisk/issues/12",
+    );
+    expect(links[0]).toHaveTextContent(
+      /^https:\/\/github\.com\/kafka0102\/redwhisk\/issues\/12$/,
+    );
+    expect(container.textContent).toBe(message);
+  });
+
+  it("显式 Markdown 链接目标里的中文标点保持原样", () => {
+    render(<AgentMarkdown>{"[文档](https://example.com/a。b)"}</AgentMarkdown>);
+
+    expect(
+      screen.getByRole("link", { name: "文档" }).getAttribute("href"),
+    ).toBe("https://example.com/a%E3%80%82b");
+  });
+
   it("http(s) 链接维持新标签页打开", () => {
     render(
       <AgentMarkdown sessionFileLinks={SESSION_FILE_LINKS}>

@@ -12,7 +12,7 @@
 
 import remarkGfm from "remark-gfm";
 import type { TFunction } from "i18next";
-import type { Components } from "react-markdown";
+import type { Components, ExtraProps } from "react-markdown";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import { memo, useMemo } from "react";
 
@@ -42,6 +42,42 @@ function transformUrl(url: string): string {
   return /^file:/i.test(url) ? url : defaultUrlTransform(url);
 }
 
+const CJK_FULL_STOP_PATTERN = /。/u;
+
+/**
+ * GFM 裸链接只认 ASCII 尾标点。中文句号紧跟标题时，整段会被吃进链接目标。
+ * 仅在 AST 位置证明源码就是裸链接时切开，避免改动作者显式写出的 URL。
+ */
+function splitBareAutolinkAtCjkFullStop(
+  source: string,
+  node: ExtraProps["node"],
+  children: unknown,
+): { href: string; visibleText: string; trailingText: string } | null {
+  if (typeof children !== "string") {
+    return null;
+  }
+  const start = node?.position?.start.offset;
+  const end = node?.position?.end.offset;
+  if (
+    start === undefined ||
+    end === undefined ||
+    source.slice(start, end) !== children ||
+    !/^(?:https?:\/\/|www\.)/i.test(children)
+  ) {
+    return null;
+  }
+  const punctuationIndex = children.search(CJK_FULL_STOP_PATTERN);
+  if (punctuationIndex <= 0) {
+    return null;
+  }
+  const rawHref = children.slice(0, punctuationIndex);
+  return {
+    href: /^https?:\/\//i.test(rawHref) ? rawHref : `http://${rawHref}`,
+    visibleText: rawHref,
+    trailingText: children.slice(punctuationIndex),
+  };
+}
+
 /**
  * 构造 react-markdown 的组件映射。
  *
@@ -49,18 +85,30 @@ function transformUrl(url: string): string {
  * 本地路径回落纯文本。
  */
 function createMarkdownComponents(
+  source: string,
   sessionFileLinks: SessionFileLinks | undefined,
   isWorkspaceFilePath: (relativePath: string) => boolean,
   t: TFunction,
 ): Components {
   return {
-    a({ href, children }) {
-      const reference = href === undefined ? null : parseFileReference(href);
+    a({ href, children, node }) {
+      const repairedAutolink = splitBareAutolinkAtCjkFullStop(
+        source,
+        node,
+        children,
+      );
+      const resolvedHref = repairedAutolink?.href ?? href;
+      const restoredChildren = repairedAutolink?.visibleText ?? children;
+      const reference =
+        resolvedHref === undefined ? null : parseFileReference(resolvedHref);
       if (reference?.kind === "external") {
         return (
-          <a href={reference.href} target="_blank" rel="noreferrer">
-            {children}
-          </a>
+          <>
+            <a href={reference.href} target="_blank" rel="noreferrer">
+              {restoredChildren}
+            </a>
+            {repairedAutolink?.trailingText}
+          </>
         );
       }
 
@@ -86,7 +134,7 @@ function createMarkdownComponents(
           })}
           onClick={() => sessionFileLinks.openFilePath(filePath)}
         >
-          {children}
+          {restoredChildren}
         </button>
       );
     },
@@ -227,8 +275,14 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     candidatePaths,
   );
   const components = useMemo(
-    () => createMarkdownComponents(sessionFileLinks, isWorkspaceFilePath, t),
-    [isWorkspaceFilePath, sessionFileLinks, t],
+    () =>
+      createMarkdownComponents(
+        children,
+        sessionFileLinks,
+        isWorkspaceFilePath,
+        t,
+      ),
+    [children, isWorkspaceFilePath, sessionFileLinks, t],
   );
 
   return (
