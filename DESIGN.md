@@ -191,7 +191,8 @@ RedWhisk 的色彩系统是克制的工作台色彩：先建立中性结构，�
 ### Hierarchy
 
 - **Headline** (650, 22px, 1.2): 只用于 Project Home title。慎用。
-- **Title** (650, 16px, 1.25): activity 级标题，例如 Issues。
+- **Title** (650, 16px, 1.25): 活动列表头和卡片头，例如 Issues。
+- **Detail** (650, 18px, 1.25): Issue 只读详情、Issue 编辑详情，以及变更请求详情最上方标题。
 - **Body Strong** (650, 13px, 1.32): Project name、Issue title、dialog title 和 selected item label。
 - **Body** (400, 13px, 1.45): 默认 UI copy、button label、input 和 panel text。
 - **Label** (600, 12px, 1.35): field label、section label 和小型 panel header。
