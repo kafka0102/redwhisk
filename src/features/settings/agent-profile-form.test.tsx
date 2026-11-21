@@ -77,6 +77,54 @@ describe("AgentProfileForm", () => {
     testAgentCommandMock.mockResolvedValue({ command: "codex" });
   });
 
+  it("defaults a new profile to the scope with remaining capacity", () => {
+    renderForm({
+      mode: "create",
+      scope: "global",
+      projectId: 1,
+      scopeProfileCounts: { global: 30, project: 29 },
+      onCancel: () => {},
+      onSaved: () => {},
+    });
+
+    expect(screen.getByRole("combobox", { name: "范围" })).toHaveValue("项目");
+    expect(
+      screen.queryByText("每个范围最多可保存 30 个智能体配置。"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("blocks creating another profile in a full scope", () => {
+    renderForm({
+      mode: "create",
+      scope: "global",
+      projectId: 1,
+      scopeProfileCounts: { global: 30, project: 30 },
+      onCancel: () => {},
+      onSaved: () => {},
+    });
+
+    expect(
+      screen.getByRole("alert", {
+        name: "设置状态",
+      }),
+    ).toHaveTextContent("每个范围最多可保存 30 个智能体配置。");
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
+  });
+
+  it("keeps editing a profile in its full scope available", () => {
+    renderForm({
+      mode: "edit",
+      scope: "global",
+      projectId: 1,
+      profile: buildProfile(),
+      scopeProfileCounts: { global: 30, project: 30 },
+      onCancel: () => {},
+      onSaved: () => {},
+    });
+
+    expect(screen.getByRole("button", { name: "保存" })).toBeEnabled();
+  });
+
   describe("agentType select", () => {
     it("renders agentType options including DeepSeek", async () => {
       const user = userEvent.setup();

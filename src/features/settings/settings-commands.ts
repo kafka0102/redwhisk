@@ -14,6 +14,7 @@ export type ProjectLabelScope = "project" | "global";
 // ADR-0020：displayMode（json/tui）默认 json；enabled（默认 true）。
 // 与 Rust `AgentProfileRecord` 字段一一对应（camelCase 跨边界）。
 export type AgentDisplayMode = "json" | "tui";
+export const AGENT_PROFILE_LIMIT_PER_SCOPE = 30;
 
 export interface AgentProfileRecord {
   id: number;

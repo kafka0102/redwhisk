@@ -104,6 +104,7 @@
   "settings": {
     "actions": "Actions",
     "agents": "Agents",
+    "agentProfileLimitReached": "Up to 30 agent profiles can be saved in each scope.",
     "cancel": "Cancel",
     "close": "Close",
     "closeMessage": "Close message",
@@ -1047,6 +1048,7 @@
       "default": "Agent command is unavailable."
     },
     "AGENT_PROFILE_VALIDATION_FAILED": {
+      "agentProfileLimitExceeded": "Up to 30 agent profiles can be saved in each scope.",
       "commandRequired": "Agent command is required.",
       "labelColorInvalid": "Label color must be in #RRGGBB format.",
       "labelNameNotUnique": "Global Label name must be unique.",

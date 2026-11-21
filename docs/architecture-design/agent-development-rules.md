@@ -344,6 +344,7 @@ Codex 与 Claude 的 **json** session 走结构化 provider，不走 PTY；**tui
 
 - `agent_profiles.scope` 为 `project | global`。
 - Project 级 profile 用 `project_id` 关联 Project。
+- 全局与每个 Project 的未删除 Agent Profile 分别最多 30 个；同一 Project 理论最多使用 30 个全局配置加 30 个项目配置。
 - 当前 migrations 已移除早期 `project_agent_overrides` 表。
 - 字段包括 `name`、`agent_type`、`command`、`scope`、`project_id`、`mode`、`dangerous`、`default_skill`、`prompt_template`。
 

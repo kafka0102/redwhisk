@@ -59,6 +59,29 @@ impl<'connection> AgentProfileRepository<'connection> {
             .optional()
     }
 
+    pub fn count_active_profiles_by_scope(
+        &self,
+        scope: &AgentScope,
+        project_id: Option<i64>,
+        exclude_id: Option<i64>,
+    ) -> rusqlite::Result<i64> {
+        match scope {
+            AgentScope::Global => self.connection.query_row(
+                "SELECT COUNT(*) FROM agent_profiles
+                 WHERE scope = 'global' AND del = 0 AND (?1 IS NULL OR id <> ?1)",
+                params![exclude_id],
+                |row| row.get(0),
+            ),
+            AgentScope::Project => self.connection.query_row(
+                "SELECT COUNT(*) FROM agent_profiles
+                 WHERE scope = 'project' AND project_id = ?1 AND del = 0
+                   AND (?2 IS NULL OR id <> ?2)",
+                params![project_id, exclude_id],
+                |row| row.get(0),
+            ),
+        }
+    }
+
     /// 还没有显示顺序的未删除 profile，按升级前规则排一次并写入。
     /// 启用在前，同组按 id 升序，接在已有最大顺序之后。软删行不参与。
     fn backfill_missing_display_orders(&self) -> rusqlite::Result<()> {

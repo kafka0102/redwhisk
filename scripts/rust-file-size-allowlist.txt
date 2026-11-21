@@ -23,5 +23,5 @@ src-tauri/src/features/issue/completion/effect_interpreter.rs # 944 lines, basel
 src-tauri/src/features/issue/completion/state_machine.rs # 895 lines, baseline 2026-10-28
 src-tauri/src/features/issue/service.rs # 4261 lines, baseline 2026-10-28
 src-tauri/src/features/project_terminal/service.rs # 3490 lines, baseline 2026-10-28
-src-tauri/src/features/settings/service.rs # 978 lines, baseline 2026-10-28
+src-tauri/src/features/settings/service.rs # 1000 lines, baseline 2026-11-21
 src-tauri/src/git/worktree.rs # 1151 lines, baseline 2026-10-28

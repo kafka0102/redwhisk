@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import {
+  AGENT_PROFILE_LIMIT_PER_SCOPE,
   detectCodexCommand,
   saveAgentProfile,
   testAgentCommand,
@@ -46,6 +47,7 @@ interface AgentProfileFormProps {
   scope: AgentScope;
   projectId: number | null;
   profile?: AgentProfileRecord | null;
+  scopeProfileCounts?: Record<AgentScope, number>;
   onCancel: () => void;
   onSaved: (profile: AgentProfileRecord) => void;
 }
@@ -55,6 +57,7 @@ export function AgentProfileForm({
   scope,
   projectId,
   profile,
+  scopeProfileCounts = { global: 0, project: 0 },
   onCancel,
   onSaved,
 }: AgentProfileFormProps) {
@@ -65,7 +68,12 @@ export function AgentProfileForm({
   );
   const [command, setCommand] = useState(() => profile?.command ?? "");
   const [scopeValue, setScopeValue] = useState<AgentScope>(
-    () => profile?.scope ?? scope,
+    () =>
+      profile?.scope ??
+      (scopeProfileCounts.global >= AGENT_PROFILE_LIMIT_PER_SCOPE &&
+      scopeProfileCounts.project < AGENT_PROFILE_LIMIT_PER_SCOPE
+        ? "project"
+        : scope),
   );
   const [modeValue] = useState(() => profile?.mode ?? "full-access");
   const [dangerous] = useState(() => profile?.dangerous ?? true);
@@ -198,11 +206,16 @@ export function AgentProfileForm({
   const trimmedCommand = command.trim();
   const isNameTooLong = trimmedName.length > AGENT_NAME_MAX_LENGTH;
   const nameError = isNameTooLong ? messages.settings.agentNameTooLong : null;
+  const selectedScopeProfileCount = scopeProfileCounts[scopeValue];
+  const isScopeAtCapacity =
+    selectedScopeProfileCount >= AGENT_PROFILE_LIMIT_PER_SCOPE &&
+    (mode === "create" || profile?.scope !== scopeValue);
   const isSubmitDisabled =
     isSaving ||
     trimmedName.length === 0 ||
     trimmedCommand.length === 0 ||
-    isNameTooLong;
+    isNameTooLong ||
+    isScopeAtCapacity;
 
   const dialogTitle =
     mode === "create"
@@ -422,6 +435,16 @@ export function AgentProfileForm({
             aria-label={messages.settings.status}
           >
             {statusMessage}
+          </p>
+        ) : null}
+
+        {isScopeAtCapacity ? (
+          <p
+            className="issue-dialog__status"
+            role="alert"
+            aria-label={messages.settings.status}
+          >
+            {t("settings.agentProfileLimitReached")}
           </p>
         ) : null}
 

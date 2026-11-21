@@ -19,7 +19,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui";
-import { type AgentProfileRecord } from "./settings-commands";
+import { type AgentProfileRecord, type AgentScope } from "./settings-commands";
 import { AgentProfileForm } from "./agent-profile-form";
 import { TuiHookRegistrationCard } from "./tui-hook-registration-card";
 import { useAgentCommandArgs } from "./use-agent-command-args";
@@ -49,6 +49,7 @@ interface AgentsSettingsPanelProps {
   loadState: "loading" | "ready" | "error";
   profiles: AgentProfileRecord[];
   projectId: number;
+  scopeProfileCounts: Record<AgentScope, number>;
   onAddFormChange: (form: AddFormState | null) => void;
   onDeleteProfile: (profile: AgentProfileRecord) => void;
   onEditingProfileChange: (state: EditingProfileState | null) => void;
@@ -64,6 +65,7 @@ export function AgentsSettingsPanel({
   loadState,
   profiles,
   projectId,
+  scopeProfileCounts,
   onAddFormChange,
   onDeleteProfile,
   onEditingProfileChange,
@@ -358,6 +360,7 @@ export function AgentsSettingsPanel({
           mode="create"
           scope="global"
           projectId={addForm.projectId}
+          scopeProfileCounts={scopeProfileCounts}
           onCancel={() => onAddFormChange(null)}
           onSaved={onProfileSaved}
         />
@@ -370,6 +373,7 @@ export function AgentsSettingsPanel({
           scope={editingProfile.profile.scope}
           projectId={projectId}
           profile={editingProfile.profile}
+          scopeProfileCounts={scopeProfileCounts}
           onCancel={() => onEditingProfileChange(null)}
           onSaved={onProfileSaved}
         />

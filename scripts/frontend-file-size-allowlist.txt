@@ -10,4 +10,4 @@ src/features/agents/message-stream/message-stream-reducer.ts # 988 lines, regist
 src/components/ui/rich-text-editor.tsx # 739 lines, registered 2026-10-24
 src/shared/i18n/messages.ts # 673 lines, registered 2026-10-24
 src/features/issues/issue-commands.ts # 588 lines, registered 2026-10-24
-src/features/settings/project-settings-activity.tsx # 918 lines, registered 2026-10-24
+src/features/settings/project-settings-activity.tsx # 925 lines, registered 2026-11-21

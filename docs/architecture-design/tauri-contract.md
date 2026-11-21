@@ -78,6 +78,8 @@
 
 > `save_agent_display_order`：入参 `SaveAgentDisplayOrderInput.profileIds`，为当前全部未删除 profile 的 id 顺序。缺少未删除 profile、重复、未知或已软删 id 时返回既有 `AgentProfileValidationFailed`（`reason=agentDisplayOrderMismatch`），原顺序不变。成功后项目级与全局级列表都按这份全应用顺序返回。
 
+> `save_agent_profile`：全局与每个 Project 的未删除 Agent Profile 分别最多 30 个。容量检查按保存后的目标 scope 与 project 计算，编辑当前 scope 内的已有 profile 不额外占位；超过上限返回 `AgentProfileValidationFailed`（`reason=agentProfileLimitExceeded`），不写库。软删除 profile 不占容量。
+
 > `get_project_worktree_commit_history`：`ProjectWorkspaceInput` 可选 `limit` / `offset`（缺省 50 / 0）；`ProjectWorktreeCommitHistoryResponse.hasMore` 为本页条数 `>= limit`。允许 `limit > 50` 支撑整窗刷新；`signature` 仍对**本次响应** commits 计算。
 >
 > `get_project_worktree_file_tree`：`ProjectWorkspaceInput` 可选 `directoryPath`（缺省 / 空 / `.` 表示工作区根）。每次只返回该目录的**一层**子节点；子目录在前端展开时再请求。`signature` 对本次 listing 计算。

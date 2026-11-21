@@ -24,6 +24,8 @@ use crate::types::saved_agent_skill::{
     SavedAgentSkillListResponse, SavedAgentSkillRecord,
 };
 
+use super::agent_profile_capacity::{ensure_agent_profile_capacity, AGENT_PROFILE_LIMIT_PER_SCOPE};
+
 pub struct SettingsService<'connection, TDetector> {
     repository: AgentProfileRepository<'connection>,
     project_label_repository: ProjectLabelRepository<'connection>,
@@ -66,7 +68,14 @@ where
     /// 或已存在记录则静默跳过。单条 profile 写入失败会记 stderr 但不阻断其余 agent 播种。
     /// deepseek 探测命令名是 `dsh`，不是字面量 `deepseek`。
     pub fn seed_builtin_agents(&self) -> Result<(), CommandError> {
+        let mut global_count = self
+            .repository
+            .count_active_profiles_by_scope(&AgentScope::Global, None, None)
+            .map_err(settings_database_error)?;
         for agent_type in BUILTIN_AGENT_SEED_ORDER {
+            if global_count >= AGENT_PROFILE_LIMIT_PER_SCOPE {
+                break;
+            }
             // 先查是否已播种：命令探测要拉起 login/interactive shell（.zshrc 带 nvm 等
             // 配置时每个命令数秒），每次启动为 4 个已播种 agent 白跑探测会明显加重开机负载。
             let already_seeded = self
@@ -85,7 +94,7 @@ where
 
             let default_input =
                 default_builtin_profile_input(agent_type.clone(), &detected_command);
-            if let Err(error) = self.repository.save_profile(
+            match self.repository.save_profile(
                 default_input.id,
                 &default_input.name,
                 default_input.agent_type,
@@ -99,8 +108,11 @@ where
                 &default_input.display_mode,
                 default_input.enabled,
             ) {
-                // 单条失败不阻断其余 agent 播种；上层 setup 钩子只关心整体是否 OK。
-                eprintln!("[settings] 内置 agent {agent_type:?} 播种失败：{error}");
+                Ok(_) => global_count += 1,
+                Err(error) => {
+                    // 单条失败不阻断其余 agent 播种；上层 setup 钩子只关心整体是否 OK。
+                    eprintln!("[settings] failed to seed builtin agent {agent_type:?}: {error}");
+                }
             }
         }
         Ok(())
@@ -206,6 +218,12 @@ where
             })?;
             self.ensure_project_exists(project_id)?;
         }
+
+        let active_count = self
+            .repository
+            .count_active_profiles_by_scope(&input.scope, input.project_id, input.id)
+            .map_err(settings_database_error)?;
+        ensure_agent_profile_capacity(&input.scope, active_count)?;
 
         self.detector
             .test_command(&command)
@@ -976,3 +994,7 @@ mod seed_deepseek_tests;
 #[cfg(test)]
 #[path = "service_display_order_tests.rs"]
 mod display_order_tests;
+
+#[cfg(test)]
+#[path = "service_agent_profile_limit_tests.rs"]
+mod agent_profile_limit_tests;

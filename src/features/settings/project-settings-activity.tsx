@@ -12,6 +12,7 @@ import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "@/components/ui/use-confirm-dialog";
 import { LoadingDialog } from "@/components/ui/loading-dialog";
 import {
+  AGENT_PROFILE_LIMIT_PER_SCOPE,
   deleteAgentProfile,
   deleteProjectLabel,
   deleteSavedAgentSkill,
@@ -234,6 +235,11 @@ export function ProjectSettingsActivity({
   const currentProfilesLoadState = isProfilesCurrent
     ? profilesLoadState
     : "loading";
+  const hasAgentProfileCapacity =
+    !isProfilesCurrent ||
+    profilesLoadState !== "ready" ||
+    globalProfiles.length < AGENT_PROFILE_LIMIT_PER_SCOPE ||
+    projectProfiles.length < AGENT_PROFILE_LIMIT_PER_SCOPE;
   const currentAddForm = addForm?.projectId === projectId ? addForm : null;
   const currentEditingProfile =
     editingProfile?.contextProjectId === projectId ? editingProfile : null;
@@ -733,6 +739,12 @@ export function ProjectSettingsActivity({
                   variant="outline"
                   type="button"
                   aria-label={messages.settings.newAgent}
+                  disabled={!hasAgentProfileCapacity}
+                  title={
+                    hasAgentProfileCapacity
+                      ? undefined
+                      : t("settings.agentProfileLimitReached")
+                  }
                   onClick={() => {
                     setAddForm({ projectId });
                     setEditingProfile(null);
@@ -811,6 +823,10 @@ export function ProjectSettingsActivity({
                 loadState={currentProfilesLoadState}
                 profiles={currentProfiles}
                 projectId={projectId}
+                scopeProfileCounts={{
+                  global: globalProfiles.length,
+                  project: projectProfiles.length,
+                }}
                 onAddFormChange={handleAddFormChange}
                 onDeleteProfile={handleDeleteProfile}
                 onEditingProfileChange={handleEditingProfileChange}

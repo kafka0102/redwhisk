@@ -1194,6 +1194,35 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("disables New agent when both profile scopes reach 30 profiles", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
+      profiles: Array.from({ length: 30 }, (_, index) => ({
+        ...(scope === "project" ? projectProfile : globalProfile),
+        id: (scope === "project" ? 100 : 200) + index,
+        name: `${scope}-${index}`,
+        displayOrder: index + 1,
+      })),
+    }));
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    expect(screen.getByRole("button", { name: "New agent" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "New agent" })).toHaveAttribute(
+      "title",
+      "Up to 30 agent profiles can be saved in each scope.",
+    );
+  });
+
   it("renders display mode and enabled columns with values per profile", async () => {
     const user = userEvent.setup();
     const tuiDisabledProfile: AgentProfileRecord = {
