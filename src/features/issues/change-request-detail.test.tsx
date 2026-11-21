@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -203,6 +205,14 @@ function renderDetail(
   );
 }
 
+function sideElement(): HTMLElement {
+  const side = document.querySelector(".change-request-detail__side");
+  if (!(side instanceof HTMLElement)) {
+    throw new Error("missing side");
+  }
+  return side;
+}
+
 describe("change request detail", () => {
   beforeEach(() => {
     focusState.initial = true;
@@ -343,11 +353,126 @@ describe("change request detail", () => {
     );
     renderDetail();
     await flush();
-    expect(screen.getByText("已合并到 main")).toBeInTheDocument();
-    expect(screen.getByText(/9f3c2a1/)).toBeInTheDocument();
+    expect(screen.getByText("已合并")).toBeInTheDocument();
+    expect(screen.queryByText("已合并到 main")).toBeNull();
+    expect(screen.queryByText(/9f3c2a1/)).toBeNull();
+    expect(screen.queryByRole("heading", { name: "合并" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "合并 Pull Request" }),
     ).toBeNull();
+  });
+
+  it("shows 已合并 in the summary and omits the merge panel", async () => {
+    getDetailMock.mockResolvedValue(
+      detail({
+        state: "merged",
+        targetBranch: "main",
+        mergeCommitSha: "abc123",
+      }),
+    );
+    renderDetail();
+    await flush();
+    const side = document.querySelector(".change-request-detail__side");
+    if (!(side instanceof HTMLElement)) {
+      throw new Error("missing side");
+    }
+    const summary = within(side)
+      .getByRole("heading", { name: "概要" })
+      .closest("section");
+    if (summary == null) {
+      throw new Error("missing summary");
+    }
+    expect(within(summary).getByText("已合并")).toBeInTheDocument();
+    expect(within(summary).queryByText("merged")).toBeNull();
+    expect(within(side).queryByRole("heading", { name: "合并" })).toBeNull();
+    expect(within(side).queryByText("已合并到 main")).toBeNull();
+    expect(within(side).queryByText("abc123")).toBeNull();
+  });
+
+  it("shows Chinese labels for open, closed, and draft", async () => {
+    getDetailMock.mockResolvedValue(detail({ state: "open" }));
+    const openView = renderDetail();
+    await flush();
+    expect(screen.getByText("打开")).toBeInTheDocument();
+    expect(screen.queryByText("open")).toBeNull();
+    openView.unmount();
+
+    getDetailMock.mockResolvedValue(detail({ state: "closed" }));
+    const closedView = renderDetail();
+    await flush();
+    expect(screen.getByText("已关闭")).toBeInTheDocument();
+    expect(screen.queryByText("closed")).toBeNull();
+    closedView.unmount();
+
+    getDetailMock.mockResolvedValue(detail({ state: "draft" }));
+    renderDetail();
+    await flush();
+    expect(screen.getByText("草稿")).toBeInTheDocument();
+    expect(screen.queryByText("draft")).toBeNull();
+  });
+
+  it("shows English labels for open, closed, draft, and merged", async () => {
+    const cases = [
+      ["open", "Open"],
+      ["closed", "Closed"],
+      ["draft", "Draft"],
+      ["merged", "Merged"],
+    ] as const;
+    for (const [state, label] of cases) {
+      getDetailMock.mockResolvedValue(detail({ state }));
+      const view = render(
+        <I18nProvider fixedLocale="en">
+          <ChangeRequestDetailPage
+            number={132}
+            projectId={4}
+            provider="github"
+            onBack={() => undefined}
+          />
+        </I18nProvider>,
+      );
+      await flush();
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.queryByText(state)).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it("shows an unknown merge state as itself", async () => {
+    getDetailMock.mockResolvedValue(detail({ state: "weird" }));
+    renderDetail();
+    await flush();
+    expect(screen.getByText("weird")).toBeInTheDocument();
+    expect(screen.queryByText("已合并")).toBeNull();
+  });
+
+  it("keeps the merge card beside the summary when the request is open", async () => {
+    renderDetail();
+    await flush();
+    const side = sideElement();
+    expect(
+      within(side).getByRole("heading", { name: "概要" }),
+    ).toBeInTheDocument();
+    expect(
+      within(side).getByRole("heading", { name: "合并" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the merge card when the request is closed", async () => {
+    getDetailMock.mockResolvedValue(detail({ state: "closed" }));
+    renderDetail();
+    await flush();
+    expect(
+      within(sideElement()).getByRole("heading", { name: "合并" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the merge card when the request is a draft", async () => {
+    getDetailMock.mockResolvedValue(detail({ state: "draft" }));
+    renderDetail();
+    await flush();
+    expect(
+      within(sideElement()).getByRole("heading", { name: "合并" }),
+    ).toBeInTheDocument();
   });
 
   it("renders ready diffs and host fallbacks for other patch states", async () => {
@@ -467,11 +592,11 @@ describe("change request detail", () => {
     fireEvent.click(screen.getByRole("button", { name: "标记就绪" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByText("draft")).toBeInTheDocument();
+    expect(screen.getByText("草稿")).toBeInTheDocument();
     expect(markReadyMock).toHaveBeenCalledTimes(1);
     resolveReady(detail({ state: "open", title: "Ready window" }));
     await flush();
-    expect(screen.getByText("open")).toBeInTheDocument();
+    expect(screen.getByText("打开")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Ready window/ }),
     ).toBeInTheDocument();
@@ -492,7 +617,7 @@ describe("change request detail", () => {
 
     expect(markReadyMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert")).toHaveTextContent("登录已过期");
-    expect(screen.getByText("draft")).toBeInTheDocument();
+    expect(screen.getByText("草稿")).toBeInTheDocument();
   });
 
   it("disables unsupported ready and review actions without calling the host", async () => {
@@ -552,7 +677,7 @@ describe("change request detail", () => {
 
     expect(closeRequestMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByText("open")).toBeInTheDocument();
+    expect(screen.getByText("打开")).toBeInTheDocument();
   });
 
   it("replaces the detail with closed, not merged, after close is confirmed", async () => {
@@ -565,7 +690,7 @@ describe("change request detail", () => {
     await flush();
 
     expect(closeRequestMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("closed")).toBeInTheDocument();
+    expect(screen.getByText("已关闭")).toBeInTheDocument();
     expect(screen.queryByText("merged")).toBeNull();
     expect(screen.getByRole("button", { name: "标记就绪" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "请求审阅" })).toBeEnabled();
@@ -774,9 +899,10 @@ describe("change request detail", () => {
       method: "squash",
       deleteSourceBranch: true,
     });
-    expect(screen.getByText("已合并到 main")).toBeInTheDocument();
-    expect(screen.getByText("Squash and merge")).toBeInTheDocument();
-    expect(screen.getByText("9f3c2a1")).toBeInTheDocument();
+    expect(screen.getByText("已合并")).toBeInTheDocument();
+    expect(screen.queryByText("已合并到 main")).toBeNull();
+    expect(screen.queryByText("Squash and merge")).toBeNull();
+    expect(screen.queryByText("9f3c2a1")).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByLabelText("合并后删除源分支")).toBeNull();
     expect(
@@ -821,12 +947,12 @@ describe("change request detail", () => {
     fireEvent.click(screen.getByRole("button", { name: "合并" }));
     await flush();
     expect(screen.getByRole("alert")).toHaveTextContent("变更请求操作失败。");
-    expect(screen.getByText("open")).toBeInTheDocument();
+    expect(screen.getByText("打开")).toBeInTheDocument();
     expect(screen.queryByText("merged")).toBeNull();
     expect(mergeRequestMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows that the source branch was deleted only when the host says so", async () => {
+  it("does not keep source branch deletion after the merge card is gone", async () => {
     getDetailMock.mockResolvedValue(
       detail({
         state: "merged",
@@ -838,7 +964,7 @@ describe("change request detail", () => {
     );
     renderDetail();
     await flush();
-    expect(screen.getByText("源分支已删除")).toBeInTheDocument();
+    expect(screen.queryByText("源分支已删除")).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "合并 Pull Request" }),
@@ -989,16 +1115,15 @@ describe("change request detail", () => {
       expect(index).toBeGreaterThan(cursor);
       cursor = index;
     }
-    expect(text).toContain("merged");
+    expect(text).toContain("已合并");
+    expect(text).not.toContain("merged");
     expect(text).toContain("issue-14-rumengling → main");
     expect(text).toContain("kafka0102");
     expect(text).toContain("12 个提交");
     expect(text).toContain("+2582 −118");
-    const mergeHeading = screen.getByRole("heading", { name: "合并" });
-    expect(summary?.compareDocumentPosition(mergeHeading) ?? 0).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-    expect(screen.getByText("已合并到 main")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "合并" })).toBeNull();
+    expect(screen.queryByText("已合并到 main")).toBeNull();
+    expect(screen.queryByText("abc123")).toBeNull();
     expect(
       screen.getAllByRole("button", { name: "在 GitHub 打开" }),
     ).toHaveLength(1);
@@ -1042,7 +1167,8 @@ describe("change request detail", () => {
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getByText("merged")).toBeInTheDocument();
+    expect(screen.getByText("Merged")).toBeInTheDocument();
+    expect(screen.queryByText("merged")).toBeNull();
     expect(screen.getByText("issue-14-rumengling → main")).toBeInTheDocument();
     expect(screen.getByText("kafka0102")).toBeInTheDocument();
     expect(screen.getByText("12 commits")).toBeInTheDocument();
@@ -1111,3 +1237,185 @@ describe("change request detail", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("change request detail styles", () => {
+  it("sets fullscreen detail titles to 18px and leaves activity and card titles at 16px", () => {
+    const rules = cssRules(
+      readFileSync(
+        resolve(process.cwd(), "src/shared/styles/issues-board.css"),
+        "utf8",
+      ),
+    );
+    const fullscreenSelector =
+      ".issue-surface-header--fullscreen .issue-surface-header__title";
+    const activitySelector =
+      ".issue-surface-header--activity .issue-surface-header__title";
+    const cardSelector =
+      ".issue-surface-header--card .issue-surface-header__title";
+    const fullscreen = rules.filter((rule) =>
+      splitSelectors(rule.selector).includes(fullscreenSelector),
+    );
+    expect(fullscreen).toHaveLength(1);
+    expect(declaration(fullscreen[0]?.body ?? "", "font-size")).toBe("18px");
+    expect(declaration(fullscreen[0]?.body ?? "", "line-height")).toBe("1.25");
+    expect(splitSelectors(fullscreen[0]?.selector ?? "")).not.toContain(
+      activitySelector,
+    );
+    expect(splitSelectors(fullscreen[0]?.selector ?? "")).not.toContain(
+      cardSelector,
+    );
+
+    const activity = ruleWithSelector(rules, activitySelector);
+    const card = ruleWithSelector(rules, cardSelector);
+    expect(declaration(activity.body, "font-size")).toBe("16px");
+    expect(declaration(activity.body, "line-height")).toBe("1.25");
+    expect(declaration(card.body, "font-size")).toBe("16px");
+    expect(declaration(card.body, "line-height")).toBe("1.25");
+    expect(activity).not.toBe(fullscreen[0]);
+    expect(card).not.toBe(fullscreen[0]);
+    expect(
+      declaration(
+        ruleWithSelector(rules, ".issue-surface-header__title").body,
+        "font-weight",
+      ),
+    ).toBe("650");
+  });
+
+  it("sets the change request title to 18px above the activity heading", () => {
+    const rules = cssRules(
+      readFileSync(
+        resolve(process.cwd(), "src/shared/styles/change-request-detail.css"),
+        "utf8",
+      ),
+    );
+    const shell = cssRules(
+      readFileSync(
+        resolve(process.cwd(), "src/shared/styles/workbench-shell.css"),
+        "utf8",
+      ),
+    );
+    const activityHeading = ruleWithSelector(shell, ".activity-surface h2");
+    expect(declaration(activityHeading.body, "font-size")).toBe("22px");
+    const title = rules.find((rule) =>
+      splitSelectors(rule.selector).some(
+        (selector) =>
+          selector.includes(".change-request-detail__heading") &&
+          selector.includes("h2") &&
+          declaration(rule.body, "font-size") === "18px",
+      ),
+    );
+    expect(title).toBeDefined();
+    const titleSelector = splitSelectors(title?.selector ?? "").find(
+      (selector) =>
+        selector.includes(".change-request-detail__heading") &&
+        selector.includes("h2"),
+    );
+    expect(titleSelector).toBeTruthy();
+    expect(specificityBeats(titleSelector ?? "", ".activity-surface h2")).toBe(
+      true,
+    );
+    expect(declaration(title?.body ?? "", "line-height")).toBe("1.25");
+    expect(declaration(title?.body ?? "", "font-weight")).toBe("650");
+    expect(declaration(title?.body ?? "", "letter-spacing")).toBe("0");
+  });
+
+  it("paints the merged status chip with muted background in dark theme", () => {
+    const rules = cssRules(
+      readFileSync(
+        resolve(process.cwd(), "src/shared/styles/change-request-detail.css"),
+        "utf8",
+      ),
+    );
+    const dark = rules.find((rule) =>
+      splitSelectors(rule.selector).some(
+        (selector) =>
+          selector.includes('[data-theme="dark"]') &&
+          selector.includes(".change-request-state-chip--merged"),
+      ),
+    );
+    expect(dark).toBeDefined();
+    expect(declaration(dark?.body ?? "", "background")).toBe(
+      "var(--color-merged-muted)",
+    );
+    expect(declaration(dark?.body ?? "", "color")).toBe("var(--color-merged)");
+    expect(declaration(dark?.body ?? "", "background")).not.toBe(
+      "var(--color-merged)",
+    );
+    expect(declaration(dark?.body ?? "", "color")).not.toBe("#fff");
+  });
+
+  it("keeps the merged status chip on a merged background with white text", () => {
+    const rules = cssRules(
+      readFileSync(
+        resolve(process.cwd(), "src/shared/styles/change-request-detail.css"),
+        "utf8",
+      ),
+    );
+    const light = rules.find((rule) =>
+      splitSelectors(rule.selector).some(
+        (selector) =>
+          selector.includes(".change-request-state-chip--merged") &&
+          !selector.includes("data-theme"),
+      ),
+    );
+    expect(light).toBeDefined();
+    expect(declaration(light?.body ?? "", "background")).toBe(
+      "var(--color-merged)",
+    );
+    expect(declaration(light?.body ?? "", "color")).toBe("#fff");
+  });
+});
+
+function specificityBeats(selector: string, other: string): boolean {
+  const left = specificityOf(selector);
+  const right = specificityOf(other);
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return (left[index] ?? 0) > (right[index] ?? 0);
+    }
+  }
+  return false;
+}
+
+function specificityOf(selector: string): [number, number, number] {
+  const ids = selector.match(/#[\w-]+/g)?.length ?? 0;
+  const withoutIds = selector.replace(/#[\w-]+/g, "");
+  const classes = withoutIds.match(/(\.[\w-]+|\[[^\]]+\])/g)?.length ?? 0;
+  const withoutClasses = withoutIds.replace(/(\.[\w-]+|\[[^\]]+\])/g, "");
+  const elements = withoutClasses.match(/[a-zA-Z][\w-]*/g)?.length ?? 0;
+  return [ids, classes, elements];
+}
+
+function cssRules(css: string): Array<{ selector: string; body: string }> {
+  const rules: Array<{ selector: string; body: string }> = [];
+  for (const match of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+    const selector = match[1]?.trim() ?? "";
+    if (selector.length === 0) {
+      continue;
+    }
+    rules.push({ selector, body: match[2] ?? "" });
+  }
+  return rules;
+}
+
+function splitSelectors(selector: string): string[] {
+  return selector.split(",").map((part) => part.trim());
+}
+
+function ruleWithSelector(
+  rules: Array<{ selector: string; body: string }>,
+  selector: string,
+): { selector: string; body: string } {
+  const found = rules.find((rule) =>
+    splitSelectors(rule.selector).includes(selector),
+  );
+  if (found == null) {
+    throw new Error(`missing rule ${selector}`);
+  }
+  return found;
+}
+
+function declaration(body: string, property: string): string {
+  const match = body.match(new RegExp(`${property}\\s*:\\s*([^;]+);`));
+  return match?.[1]?.trim() ?? "";
+}

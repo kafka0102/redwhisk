@@ -39,9 +39,13 @@
 }
 
 .issue-surface-header--activity .issue-surface-header__title,
-.issue-surface-header--fullscreen .issue-surface-header__title,
 .issue-surface-header--card .issue-surface-header__title {
   font-size: 16px;
+  line-height: 1.25;
+}
+
+.issue-surface-header--fullscreen .issue-surface-header__title {
+  font-size: 18px;
   line-height: 1.25;
 }
 

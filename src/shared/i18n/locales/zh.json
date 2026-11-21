@@ -552,6 +552,8 @@
       "mergePullRequest": "合并 Pull Request",
       "mergeStatus": "合并状态：",
       "merged": "已合并",
+      "statusClosed": "已关闭",
+      "statusDraft": "草稿",
       "mergedInto": "已合并到 {{branch}}",
       "missingPatch": "没有补丁。",
       "openHostForFile": "打开宿主",

@@ -23,7 +23,7 @@ export function ChangeRequestDetailSummary({
             <span
               className={`change-request-state-chip change-request-state-chip--${detail.state}`}
             >
-              {detail.state}
+              {mergeStatusLabel(detail.state, t)}
             </span>
           </dd>
         </div>
@@ -63,4 +63,19 @@ export function ChangeRequestDetailSummary({
       </dl>
     </section>
   );
+}
+
+function mergeStatusLabel(state: string, t: (key: string) => string): string {
+  switch (state) {
+    case "open":
+      return t("issues.changeRequests.open");
+    case "closed":
+      return t("issues.changeRequests.statusClosed");
+    case "draft":
+      return t("issues.changeRequests.statusDraft");
+    case "merged":
+      return t("issues.changeRequests.merged");
+    default:
+      return state;
+  }
 }

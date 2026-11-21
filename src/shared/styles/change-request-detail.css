@@ -42,6 +42,13 @@
   margin: 0;
 }
 
+.change-request-detail .change-request-detail__heading h2 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
 .change-request-detail__sub,
 .change-request-detail__actions,
 .change-request-chip-row,
@@ -168,7 +175,12 @@
 .change-request-chip--merged,
 .change-request-state-chip--merged {
   background: var(--color-merged);
-  color: var(--color-text-on-merged, #fff);
+  color: #fff;
+}
+
+:root[data-theme="dark"] .change-request-state-chip--merged {
+  background: var(--color-merged-muted);
+  color: var(--color-merged);
 }
 
 .change-request-file-row,

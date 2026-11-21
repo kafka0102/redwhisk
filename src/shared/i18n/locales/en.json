@@ -552,6 +552,8 @@
       "mergePullRequest": "Merge pull request",
       "mergeStatus": "Merge status:",
       "merged": "Merged",
+      "statusClosed": "Closed",
+      "statusDraft": "Draft",
       "mergedInto": "Merged into {{branch}}",
       "missingPatch": "The patch is unavailable.",
       "openHostForFile": "Open on host",

@@ -11,7 +11,10 @@ import { ChangeRequestDetailMerge } from "./change-request-detail-merge";
 import { ChangeRequestDetailOverview } from "./change-request-detail-overview";
 import { ChangeRequestDetailSummary } from "./change-request-detail-summary";
 import { ChangeRequestDetailTabs } from "./change-request-detail-tabs";
-import type { ChangeRequestDetailTab } from "./change-request-detail-model";
+import {
+  isMerged,
+  type ChangeRequestDetailTab,
+} from "./change-request-detail-model";
 import { useChangeRequestDetail } from "./use-change-request-detail";
 import { useChangeRequestActions } from "./use-change-request-actions";
 import type { ChangeRequestDetail } from "./change-request-commands";
@@ -177,11 +180,13 @@ function ChangeRequestDetailLoaded({
         </div>
         <aside className="change-request-detail__side">
           <ChangeRequestDetailSummary detail={detail} />
-          <ChangeRequestDetailMerge
-            projectId={projectId}
-            detail={detail}
-            onDetail={setDetail}
-          />
+          {isMerged(detail.state) ? null : (
+            <ChangeRequestDetailMerge
+              projectId={projectId}
+              detail={detail}
+              onDetail={setDetail}
+            />
+          )}
         </aside>
       </div>
     </section>
