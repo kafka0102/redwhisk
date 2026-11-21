@@ -129,8 +129,7 @@ export function issueNumberLabel(
   mirror: IssueMirrorView,
 ): string {
   if (mirror.source === "remote" && mirror.externalNumber != null) {
-    const prefix = mirror.provider === "gitlab" ? "GL" : "GH";
-    return `${prefix} #${mirror.externalNumber}`;
+    return `#${mirror.externalNumber}`;
   }
   return `#${issueNumber}`;
 }

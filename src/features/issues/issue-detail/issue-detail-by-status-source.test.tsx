@@ -12,6 +12,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { I18nProvider } from "../../../shared/i18n/i18n";
+import "../../../shared/styles/issue-detail.css";
 import { makeAgentSession } from "../../../test/agent-session-fixture";
 import { listAgentSessions } from "../../agents/agent-session-commands";
 import { getProjectIssueSourceSettings } from "../../settings/issue-source-commands";
@@ -261,11 +262,49 @@ function changeRequest(
 }
 
 function detailTitle(issue: IssueBoardRecord): string {
-  if (issue.source === "remote" && issue.externalNumber != null) {
-    const prefix = issue.provider === "gitlab" ? "GL" : "GH";
-    return `${prefix} #${issue.externalNumber} · ${issue.title}`;
+  const number =
+    issue.source === "remote" && issue.externalNumber != null
+      ? issue.externalNumber
+      : issue.number;
+  return `#${number} · ${issue.title}`;
+}
+
+const listMarkdown = "- 第一项\n- 第二项";
+
+function px(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function lineBoxHeight(element: HTMLElement): number {
+  const style = window.getComputedStyle(element);
+  const fontSize = px(style.fontSize);
+  if (style.lineHeight.endsWith("px")) {
+    return px(style.lineHeight);
   }
-  return `#${issue.number} · ${issue.title}`;
+  const multiplier = px(style.lineHeight);
+  return multiplier > 0 ? fontSize * multiplier : fontSize * 1.2;
+}
+
+function listItemGap(first: HTMLElement, second: HTMLElement): number {
+  const firstBox = first.getBoundingClientRect();
+  const secondBox = second.getBoundingClientRect();
+  if (firstBox.height > 0 && secondBox.height > 0) {
+    return secondBox.top - firstBox.bottom;
+  }
+  const nestedMargin = (
+    item: HTMLElement,
+    edge: "marginTop" | "marginBottom",
+  ): number => {
+    const child = item.querySelector("p");
+    return child == null ? 0 : px(window.getComputedStyle(child)[edge]);
+  };
+  return (
+    px(window.getComputedStyle(first).marginBottom) +
+    px(window.getComputedStyle(second).marginTop) +
+    nestedMargin(first, "marginBottom") +
+    nestedMargin(second, "marginTop")
+  );
 }
 
 function opensBacklogEditor(issue: IssueBoardRecord): boolean {
@@ -367,6 +406,11 @@ async function openFromBoard(
 
 describe("Issue 详情按状态与来源", () => {
   beforeAll(async () => {
+    // jsdom 没有 Tailwind preflight。补上列表重置，确认只读详情的标记能盖过它。
+    const listReset = document.createElement("style");
+    listReset.textContent =
+      "ul, ol { list-style-type: none; margin: 0; } p { margin: 0; } .issue-page__main--readonly .issue-detail__description { font-size: 14px; }";
+    document.head.appendChild(listReset);
     await import("../issue-detail/issue-editable-page");
     await import("../issue-detail/issue-read-only-page");
   });
@@ -839,8 +883,8 @@ describe("Issue 详情按状态与来源", () => {
       linkedChangeRequests: [],
     });
     expect(
-      within(root).getByRole("heading", { level: 2, name: "GL #7 · 完成流程" }),
-    ).toBeInTheDocument();
+      within(root).getByRole("heading", { level: 2, name: "#7 · 完成流程" }),
+    ).not.toHaveTextContent(/\bGL\b/);
     const host = within(root).getByRole("region", { name: "GitLab" });
     await userEvent.click(
       within(host).getByRole("button", { name: "打开 GitLab" }),
@@ -849,6 +893,109 @@ describe("Issue 详情按状态与来源", () => {
       "https://gitlab.com/acme/redwhisk/-/issues/7",
     );
     expect(within(root).queryByRole("heading", { name: "待办" })).toBeNull();
+  });
+
+  it("GitHub 详情标题显示远端编号，不出现 GH", async () => {
+    const issue = boardIssue({
+      id: 78,
+      number: 3,
+      title: "残句处理",
+      status: "running",
+      source: "remote",
+      provider: "github",
+      externalNumber: 78,
+    });
+    const root = await openFromBoard(issue, {
+      projection: hostProjection(),
+      linkedChangeRequests: [],
+    });
+    const heading = within(root).getByRole("heading", {
+      level: 2,
+      name: "#78 · 残句处理",
+    });
+    expect(heading).not.toHaveTextContent(/\bGH\b/);
+    expect(
+      within(root).queryByRole("heading", { level: 2, name: "#3 · 残句处理" }),
+    ).toBeNull();
+  });
+
+  it("本地详情标题仍是项目内编号", async () => {
+    const issue = boardIssue({
+      id: 12,
+      number: 12,
+      title: "本地标题",
+      status: "running",
+      source: "local",
+    });
+    const root = await openFromBoard(issue, {
+      projection: null,
+      linkedChangeRequests: [],
+    });
+    const heading = within(root).getByRole("heading", {
+      level: 2,
+      name: "#12 · 本地标题",
+    });
+    expect(heading).not.toHaveTextContent(/\bGH\b|\bGL\b/);
+  });
+
+  it("只读详情把 Markdown 列表显示为两项带标记且缩进的列表", async () => {
+    const issue = boardIssue({
+      id: 81,
+      number: 81,
+      title: "列表间距",
+      status: "running",
+      source: "local",
+      description: listMarkdown,
+    });
+    const root = await openFromBoard(issue, {
+      projection: null,
+      linkedChangeRequests: [],
+    });
+    const article = within(root).getByRole("article");
+    const items = within(article).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      "第一项",
+      "第二项",
+    ]);
+    const list = items[0]?.closest("ul");
+    expect(list).not.toBeNull();
+    const listStyle = window.getComputedStyle(list as HTMLElement);
+    expect(listStyle.listStyleType).toBe("disc");
+    expect(px(listStyle.paddingLeft)).toBeGreaterThan(0);
+    const description = (list as HTMLElement).parentElement;
+    expect(description).not.toBeNull();
+    const descriptionStyle = window.getComputedStyle(
+      description as HTMLElement,
+    );
+    expect(descriptionStyle.whiteSpace).not.toBe("pre-wrap");
+    expect(listItemGap(items[0], items[1])).toBeLessThan(
+      lineBoxHeight(description as HTMLElement),
+    );
+  });
+
+  it("编辑态仍把同一段 Markdown 显示为带缩进的列表", async () => {
+    const issue = boardIssue({
+      id: 82,
+      number: 82,
+      title: "编辑列表",
+      status: "backlog",
+      source: "local",
+      description: listMarkdown,
+    });
+    const form = await openFromBoard(issue, {
+      projection: null,
+      linkedChangeRequests: [],
+    });
+    const editor = form.querySelector(".ql-editor");
+    expect(editor).toBeInstanceOf(HTMLElement);
+    const items = within(editor as HTMLElement).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      "第一项",
+      "第二项",
+    ]);
+    expect(px(window.getComputedStyle(items[0]).paddingLeft)).toBeGreaterThan(
+      0,
+    );
   });
 
   it("只读标签在正文上方，零个标签没有标签行", async () => {
@@ -1318,9 +1465,9 @@ describe("Issue 详情按状态与来源", () => {
     expect(
       within(root).getByRole("heading", {
         level: 2,
-        name: "GH #55 · 完成流程",
+        name: "#55 · 完成流程",
       }),
-    ).toBeInTheDocument();
+    ).not.toHaveTextContent(/\bGH\b/);
     expect(within(root).getByText("正文还在")).toBeInTheDocument();
     expect(within(root).queryByRole("region", { name: "GitHub" })).toBeNull();
   });
@@ -1342,7 +1489,7 @@ describe("Issue 详情按状态与来源", () => {
     expect(
       within(root).getByRole("heading", {
         level: 2,
-        name: "GH #59 · 完成流程",
+        name: "#59 · 完成流程",
       }),
     ).toBeInTheDocument();
     expect(within(root).getByText("正文还在")).toBeInTheDocument();
@@ -1511,17 +1658,14 @@ describe("Issue 详情按状态与来源", () => {
     expect(
       within(screen.getByRole("region", { name: "Issue 详情" })).getByRole(
         "heading",
-        { level: 2, name: "GH #60 · 完成流程" },
+        { level: 2, name: "#60 · 完成流程" },
       ),
     ).toBeInTheDocument();
   });
 
-  it.each([
-    { provider: "github" as const, prefix: "GH" },
-    { provider: "gitlab" as const, prefix: "GL" },
-  ])(
-    "远程待办保存本地副本后回到看板，再打开仍是 $prefix #128",
-    async ({ provider, prefix }) => {
+  it.each([{ provider: "github" as const }, { provider: "gitlab" as const }])(
+    "远程待办保存本地副本后回到看板，再打开仍是 #128 · 新标题（$provider）",
+    async ({ provider }) => {
       const user = userEvent.setup();
       const issue = boardIssue({
         id: 128,
@@ -1571,9 +1715,9 @@ describe("Issue 详情按状态与来源", () => {
       expect(
         within(reopened).getByRole("heading", {
           level: 2,
-          name: `${prefix} #128 · 新标题`,
+          name: "#128 · 新标题",
         }),
-      ).toBeInTheDocument();
+      ).not.toHaveTextContent(/\bGH\b|\bGL\b/);
       expect(
         screen.queryByRole("heading", { level: 2, name: "#12 · 原标题" }),
       ).toBeNull();
@@ -1584,7 +1728,7 @@ describe("Issue 详情按状态与来源", () => {
     },
   );
 
-  it("推进状态后仍保留 GH 编号，不退回项目内编号", async () => {
+  it("推进状态后仍保留远端编号，不退回项目内编号", async () => {
     const user = userEvent.setup();
     const issue = boardIssue({
       id: 70,
@@ -1621,14 +1765,14 @@ describe("Issue 详情按状态与来源", () => {
     expect(advanced).not.toHaveProperty("provider");
     expect(advanced).not.toHaveProperty("externalNumber");
     expect(
-      screen.getByRole("heading", { level: 2, name: "GH #128 · 原标题" }),
+      screen.getByRole("heading", { level: 2, name: "#128 · 原标题" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { level: 2, name: "#12 · 原标题" }),
     ).toBeNull();
   });
 
-  it("完成流程后仍保留 GH 编号，不退回项目内编号", async () => {
+  it("完成流程后仍保留远端编号，不退回项目内编号", async () => {
     const user = userEvent.setup();
     const issue = boardIssue({
       id: 71,
@@ -1677,7 +1821,7 @@ describe("Issue 详情按状态与来源", () => {
     expect(completed.issue).not.toHaveProperty("provider");
     expect(completed.issue).not.toHaveProperty("externalNumber");
     expect(
-      screen.getByRole("heading", { level: 2, name: "GH #128 · 原标题" }),
+      screen.getByRole("heading", { level: 2, name: "#128 · 原标题" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { level: 2, name: "#12 · 原标题" }),

@@ -406,6 +406,35 @@
   white-space: pre-wrap;
 }
 
+.issue-page__main--readonly .issue-detail__description {
+  white-space: normal;
+}
+
+.issue-page__main--readonly .issue-detail__description p,
+.issue-page__main--readonly .issue-detail__description ul,
+.issue-page__main--readonly .issue-detail__description ol,
+.issue-page__main--readonly .issue-detail__description li {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.issue-page__main--readonly .issue-detail__description ul,
+.issue-page__main--readonly .issue-detail__description ol {
+  padding-left: 1.5em;
+}
+
+.issue-page__main--readonly .issue-detail__description ul {
+  list-style-type: disc;
+}
+
+.issue-page__main--readonly .issue-detail__description ol {
+  list-style-type: decimal;
+}
+
+.issue-page__main--readonly .issue-detail__description pre {
+  white-space: pre-wrap;
+}
+
 .issue-detail__description img,
 .issue-description-attachment__image {
   display: block;
