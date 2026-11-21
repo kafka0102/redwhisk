@@ -28,7 +28,7 @@ import {
 } from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
-import { isAgentProfileTypeVisible } from "./agent-profile-visibility";
+import { isAgentProfileTypeVisible } from "../../shared/agents/agent-profile-visibility";
 
 // ADR-0020 / ADR-0048 / ADR-0060：表单可选 agentType。
 // claude_code 是前端 UI 别名（agent-visuals 视作 Claude），不在新建表单暴露。

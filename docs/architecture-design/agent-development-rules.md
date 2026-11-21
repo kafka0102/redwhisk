@@ -347,7 +347,7 @@ Codex 与 Claude 的 **json** session 走结构化 provider，不走 PTY；**tui
 - 全局与每个 Project 的未删除 Agent Profile 分别最多 30 个；同一 Project 理论最多使用 30 个全局配置加 30 个项目配置。
 - 当前 migrations 已移除早期 `project_agent_overrides` 表。
 - 字段包括 `name`、`agent_type`、`command`、`scope`、`project_id`、`mode`、`dangerous`、`default_skill`、`prompt_template`。
-- DeepSeek Harness 的底层 provider、`AgentType`、存量 Profile/Session 与续接能力保留，但当前暂时隐藏设置列表、新建类型和任务运行选择中的 Profile 入口，并停止 `dsh` 自动播种。入口可见性由 `src/features/settings/agent-profile-visibility.ts` 集中判定。
+- DeepSeek Harness 的底层 provider、`AgentType`、存量 Profile/Session 与续接能力保留，但当前暂时隐藏设置列表、新建类型和任务运行选择中的 Profile 入口，并停止 `dsh` 自动播种。入口可见性由 `src/shared/agents/agent-profile-visibility.ts` 集中判定。
 
 后续 Agent 不应继续按早期规划文档中的 `ProjectAgentOverride` 表实现新功能；涉及 Settings 数据模型时，以 `src-tauri/migrations/0007_restructure_agent_profiles.sql`、`src-tauri/src/types/agent_profile.rs` 和当前 repository/service 为准。
 

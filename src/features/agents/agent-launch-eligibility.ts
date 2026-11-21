@@ -1,5 +1,5 @@
 import type { AgentProfileRecord } from "../settings/settings-commands";
-import { isAgentProfileTypeVisible } from "../settings/agent-profile-visibility";
+import { isAgentProfileTypeVisible } from "../../shared/agents/agent-profile-visibility";
 
 // 会话入口（Issue Run 等）选择列表的可见性与可选择性判定。
 // 抽纯函数便于单元测试，多入口共用，避免 UI 层散落分支。规则：

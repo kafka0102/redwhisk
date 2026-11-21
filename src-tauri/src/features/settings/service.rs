@@ -86,8 +86,7 @@ where
                 continue;
             }
 
-            let command_name = builtin_agent_command_name(&agent_type);
-            let detected_command = match self.detector.detect_command(command_name) {
+            let detected_command = match self.detector.detect_command(agent_type.as_db_str()) {
                 Ok(command) => command,
                 Err(_) => continue,
             };
@@ -942,10 +941,6 @@ const BUILTIN_AGENT_SEED_ORDER: [AgentType; 4] = [
     AgentType::OpenCode,
     AgentType::Grok,
 ];
-
-fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
-    agent_type.as_db_str()
-}
 
 /// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。
 fn default_builtin_profile_input(

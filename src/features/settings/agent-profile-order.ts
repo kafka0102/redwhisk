@@ -2,6 +2,7 @@ import {
   saveAgentDisplayOrder,
   type AgentProfileRecord,
 } from "./settings-commands";
+import { isAgentProfileTypeVisible } from "../../shared/agents/agent-profile-visibility";
 
 // 编辑已有行时保留原显示顺序；新出现的行接在当前 scope 列表最后。
 export function placeSavedAgentProfile(
@@ -63,5 +64,28 @@ export function applyAgentDisplayOrder(
     return nextOrder === undefined
       ? profile
       : { ...profile, displayOrder: nextOrder };
+  });
+}
+
+// 可见行只在原可见槽位间重排；隐藏行保留完整顺序中的相对位置。
+export function mergeVisibleAgentOrderIntoAllProfiles(
+  profiles: readonly AgentProfileRecord[],
+  orderedVisibleIds: readonly number[],
+): number[] {
+  const visibleIds = new Set(
+    profiles
+      .filter((profile) => isAgentProfileTypeVisible(profile.agentType))
+      .map((profile) => profile.id),
+  );
+  const nextVisibleIds = orderedVisibleIds.filter((id) => visibleIds.has(id));
+  let visibleIndex = 0;
+
+  return profiles.map((profile) => {
+    if (!visibleIds.has(profile.id)) {
+      return profile.id;
+    }
+    const nextId = nextVisibleIds[visibleIndex];
+    visibleIndex += 1;
+    return nextId ?? profile.id;
   });
 }

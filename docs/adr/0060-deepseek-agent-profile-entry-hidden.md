@@ -26,7 +26,7 @@ DeepSeek Harness 的 ACP provider 已接入，但当前产品阶段不开放用�
 
 ## 代码事实来源
 
-- 页面可见性：`src/features/settings/agent-profile-visibility.ts`
+- 页面可见性：`src/shared/agents/agent-profile-visibility.ts`
 - 设置入口：`src/features/settings/settings-agents-panel.tsx`、`src/features/settings/agent-profile-form.tsx`
 - 任务运行入口：`src/features/agents/agent-launch-eligibility.ts`
 - 自动播种：`src-tauri/src/features/settings/service.rs`

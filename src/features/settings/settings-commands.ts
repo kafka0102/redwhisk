@@ -1,10 +1,10 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
-// AgentType 统一从 agent-session-commands 导出，避免多处定义冲突。
+// AgentType 统一定义在中性共享模块，避免多处定义冲突与 cross-feature 类型依赖。
 // 后端 AgentType 枚举（Codex/Claude）序列化为 "codex"/"claude"；
 // "claude_code" 为前端 UI 别名（agent-visuals 视作 Claude）。
-export type { AgentType } from "../agents/agent-session-commands";
-import type { AgentType } from "../agents/agent-session-commands";
+export type { AgentType } from "../../shared/agents/agent-type";
+import type { AgentType } from "../../shared/agents/agent-type";
 
 export type AgentScope = "project" | "global";
 export type AgentSkillScope = "project" | "global";

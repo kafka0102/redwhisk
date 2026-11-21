@@ -16,6 +16,7 @@ const rust = rustRaw as RustSig;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const srcDir = path.resolve(here, "../../..");
 const tsFiles = [
+  path.join(srcDir, "shared/agents/agent-type.ts"),
   path.join(srcDir, "features/project/project-commands.ts"),
   path.join(srcDir, "features/project/project-forge-commands.ts"),
   path.join(srcDir, "features/issues/issue-commands.ts"),

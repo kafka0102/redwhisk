@@ -31,10 +31,8 @@ import {
   moveAgentRow,
   type AgentRowReorderDrag,
 } from "./agent-row-reorder";
-import {
-  filterVisibleAgentProfiles,
-  mergeVisibleAgentOrderIntoAllProfiles,
-} from "./agent-profile-visibility";
+import { filterVisibleAgentProfiles } from "./agent-profile-visibility";
+import { mergeVisibleAgentOrderIntoAllProfiles } from "./agent-profile-order";
 
 interface AddFormState {
   projectId: number;
