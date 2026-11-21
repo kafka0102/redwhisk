@@ -86,6 +86,80 @@ function response(): ChangeRequestListResponse {
   };
 }
 
+function namedResponse(
+  titles: string[],
+  counts: { open: number; closed: number } = { open: 0, closed: 2 },
+): ChangeRequestListResponse {
+  return {
+    rows: titles.map((title, index) => ({
+      id: index + 1,
+      number: index + 1,
+      title,
+      url: `https://github.com/acme/redwhisk/pull/${index + 1}`,
+      provider: "github",
+      state: "closed",
+      authorLogin: "lin",
+      sourceBranch: "feat/closed",
+      targetBranch: "main",
+      reviewDecision: "none",
+      checksOk: 0,
+      checksFailed: 0,
+      checksPending: 0,
+      remoteUpdatedAt: Date.parse("2026-11-07T14:00:00Z"),
+      linkedIssues: [],
+    })),
+    tabCount: titles.length,
+    counts,
+    pullRequestRefs: [],
+  };
+}
+
+function deferLists(): Array<{
+  filter: string | undefined;
+  resolve: (value: ChangeRequestListResponse) => void;
+}> {
+  const requests: Array<{
+    filter: string | undefined;
+    resolve: (value: ChangeRequestListResponse) => void;
+  }> = [];
+  listMock.mockImplementation((input) => {
+    return new Promise((resolve) => {
+      requests.push({ filter: input.filter, resolve });
+    });
+  });
+  return requests;
+}
+
+function latestRequest(
+  requests: Array<{
+    filter: string | undefined;
+    resolve: (value: ChangeRequestListResponse) => void;
+  }>,
+  filter: string,
+): { resolve: (value: ChangeRequestListResponse) => void } {
+  const matches = requests.filter((item) => item.filter === filter);
+  const found = matches[matches.length - 1];
+  if (found == null) {
+    throw new Error(`missing ${filter} request`);
+  }
+  return found;
+}
+
+function renderLocalizedPanel(
+  locale: "en" | "zh",
+  provider: "github" | "gitlab",
+): void {
+  render(
+    <I18nProvider fixedLocale={locale}>
+      <ChangeRequestPanel
+        projectId={4}
+        sourceMode="remote"
+        provider={provider}
+      />
+    </I18nProvider>,
+  );
+}
+
 function setPageVisibility(value: "hidden" | "visible"): void {
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -275,5 +349,264 @@ describe("change request auto sync", () => {
     expect(openUrlMock).toHaveBeenCalledWith(
       "https://github.com/acme/redwhisk/pull/10",
     );
+  });
+
+  it("更早发出的空 Open 响应不会盖掉 Closed 的甲和乙", async () => {
+    const requests: Array<{
+      filter: string | undefined;
+      resolve: (value: ChangeRequestListResponse) => void;
+    }> = [];
+    listMock.mockImplementation((input) => {
+      return new Promise((resolve) => {
+        requests.push({ filter: input.filter, resolve });
+      });
+    });
+    let resolveSync: (value: {
+      outcome: "synced";
+      errorCode: null;
+    }) => void = () => undefined;
+    syncMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSync = resolve;
+        }),
+    );
+
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestPanel
+          projectId={4}
+          sourceMode="remote"
+          provider="github"
+        />
+      </I18nProvider>,
+    );
+    await flush();
+    resolveSync({ outcome: "synced", errorCode: null });
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+
+    const closedIndex = requests.findIndex((item) => item.filter === "closed");
+    const earlierOpens = requests.filter(
+      (item, index) => item.filter === "open" && index < closedIndex,
+    );
+    const closedRequest = requests[closedIndex];
+    const openRequest = earlierOpens[earlierOpens.length - 1];
+    if (closedRequest == null || openRequest == null) {
+      throw new Error("missing closed or earlier open request");
+    }
+
+    closedRequest.resolve(namedResponse(["甲", "乙"]));
+    await flush();
+    expect(screen.getByRole("heading", { name: "甲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "乙" })).toBeInTheDocument();
+
+    openRequest.resolve(namedResponse([]));
+    await flush();
+    expect(screen.getByRole("heading", { name: "甲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "乙" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Closed/ })).toHaveTextContent(
+      "2",
+    );
+    expect(
+      screen.queryByText("没有关闭的 Pull request"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Closed 最新响应为空时显示没有关闭的 Pull request", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("zh", "github");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+
+    latestRequest(requests, "closed").resolve(
+      namedResponse([], { open: 0, closed: 0 }),
+    );
+    await flush();
+
+    expect(screen.getByRole("button", { name: /Closed/ })).toHaveTextContent(
+      "0",
+    );
+    expect(screen.getByText("没有关闭的 Pull request")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "甲" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "乙" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("GitLab 中文在没有关闭记录时显示没有关闭的 Merge request", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("zh", "gitlab");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+
+    latestRequest(requests, "closed").resolve(
+      namedResponse([], { open: 0, closed: 0 }),
+    );
+    await flush();
+
+    expect(screen.getByText("没有关闭的 Merge request")).toBeInTheDocument();
+    expect(
+      screen.queryByText("没有关闭的 Pull request"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows No closed pull requests for an empty GitHub closed list", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("en", "github");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+
+    latestRequest(requests, "closed").resolve(
+      namedResponse([], { open: 0, closed: 0 }),
+    );
+    await flush();
+
+    expect(screen.getByText("No closed pull requests")).toBeInTheDocument();
+    expect(
+      screen.queryByText("没有关闭的 Pull request"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows No closed merge requests for an empty GitLab closed list", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("en", "gitlab");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+
+    latestRequest(requests, "closed").resolve(
+      namedResponse([], { open: 0, closed: 0 }),
+    );
+    await flush();
+
+    expect(screen.getByText("No closed merge requests")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No closed pull requests"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("后返回的 Closed 响应不会盖掉 Open 的打开的", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("zh", "github");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+    const closedRequest = latestRequest(requests, "closed");
+
+    fireEvent.click(screen.getByRole("button", { name: /Open/ }));
+    await flush();
+    latestRequest(requests, "open").resolve(
+      namedResponse(["打开的"], { open: 1, closed: 0 }),
+    );
+    await flush();
+
+    closedRequest.resolve(namedResponse(["甲", "乙"]));
+    await flush();
+
+    expect(screen.getByRole("heading", { name: "打开的" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "甲" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "乙" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open/ })).toHaveTextContent("1");
+  });
+
+  it("同一个 Closed 筛选里后返回的旧响应不会盖掉甲和乙", async () => {
+    const requests = deferLists();
+    syncMock.mockImplementation(() => new Promise(() => undefined));
+    renderLocalizedPanel("zh", "github");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+    const olderClosed = latestRequest(requests, "closed");
+
+    fireEvent.click(screen.getByRole("button", { name: /Open/ }));
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+    const newerClosed = latestRequest(requests, "closed");
+    if (newerClosed === olderClosed) {
+      throw new Error("missing a newer closed request");
+    }
+
+    newerClosed.resolve(namedResponse(["甲", "乙"]));
+    await flush();
+    olderClosed.resolve(namedResponse([], { open: 0, closed: 0 }));
+    await flush();
+
+    expect(screen.getByRole("heading", { name: "甲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "乙" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Closed/ })).toHaveTextContent(
+      "2",
+    );
+    expect(
+      screen.queryByText("没有关闭的 Pull request"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("同步成功后按 Closed 刷新，旧的空 Open 响应不会清掉甲和乙", async () => {
+    const requests = deferLists();
+    const resolveSyncs: Array<
+      (value: { outcome: "synced"; errorCode: null }) => void
+    > = [];
+    syncMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSyncs.push(resolve);
+        }),
+    );
+    renderLocalizedPanel("zh", "github");
+    await flush();
+    const originalSync = resolveSyncs[0];
+    const earlierOpen = requests.filter((item) => item.filter === "open");
+    const openRequest = earlierOpen[earlierOpen.length - 1];
+    if (originalSync == null || openRequest == null) {
+      throw new Error("missing sync or earlier open request");
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: /Closed/ }));
+    await flush();
+    latestRequest(requests, "closed").resolve(namedResponse(["甲", "乙"]));
+    await flush();
+    expect(screen.getByRole("heading", { name: "甲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "乙" })).toBeInTheDocument();
+
+    const requestCountBeforeSync = requests.length;
+    originalSync({ outcome: "synced", errorCode: null });
+    await flush();
+    const refresh = requests[requestCountBeforeSync];
+    if (refresh == null) {
+      throw new Error("missing list refresh after sync");
+    }
+    expect(refresh.filter).toBe("closed");
+
+    refresh.resolve(namedResponse(["甲", "乙"]));
+    await flush();
+    openRequest.resolve(namedResponse([], { open: 0, closed: 2 }));
+    await flush();
+
+    expect(screen.getByRole("heading", { name: "甲" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "乙" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Closed/ })).toHaveTextContent(
+      "2",
+    );
+    expect(
+      screen.queryByText("没有关闭的 Pull request"),
+    ).not.toBeInTheDocument();
   });
 });

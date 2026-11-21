@@ -57,32 +57,43 @@ export function ChangeRequestPanel({
   const pageVisible = usePageVisible();
   const windowFocused = useWindowFocus();
   const syncingRef = useRef(false);
+  const listRequestIdRef = useRef(0);
+  const filterRef = useRef(filter);
   const canSync = sourceMode === "remote" || sourceMode === "mixed";
+  const selectFilter = useCallback((nextFilter: ChangeRequestFilter) => {
+    filterRef.current = nextFilter;
+    setFilter(nextFilter);
+  }, []);
+
+  const loadList = useCallback(
+    async (nextFilter: ChangeRequestFilter) => {
+      const requestId = listRequestIdRef.current + 1;
+      listRequestIdRef.current = requestId;
+      const next = await listProjectChangeRequests({
+        projectId,
+        filter: nextFilter,
+      });
+      if (requestId !== listRequestIdRef.current) {
+        return;
+      }
+      setResponse(next);
+    },
+    [projectId],
+  );
 
   useEffect(() => {
     if (!canSync) {
       return;
     }
-    let cancelled = false;
-    void listProjectChangeRequests({ projectId, filter })
-      .then((next) => {
-        if (!cancelled) {
-          setResponse(next);
-        }
-      })
-      .catch(() => {});
+    void loadList(filter).catch(() => {});
     return () => {
-      cancelled = true;
+      listRequestIdRef.current += 1;
     };
-  }, [canSync, filter, projectId]);
+  }, [canSync, filter, loadList]);
 
   const reload = useCallback(async () => {
-    const next = await listProjectChangeRequests({
-      projectId,
-      filter,
-    });
-    setResponse(next);
-  }, [filter, projectId]);
+    await loadList(filterRef.current);
+  }, [loadList]);
 
   const runSync = useCallback(async (): Promise<AutoSyncResult> => {
     if (syncingRef.current) {
@@ -166,7 +177,7 @@ export function ChangeRequestPanel({
           <p role="status">{t("issues.syncCacheFailed")}</p>
         )
       }
-      onFilterChange={setFilter}
+      onFilterChange={selectFilter}
       onOpenDetail={(row) =>
         setSelected({
           provider: row.provider,
