@@ -181,7 +181,6 @@ fn same_seed_round_appends_builtin_profiles_in_existing_seed_order() {
             ("claude", Ok("claude")),
             ("opencode", Ok("opencode")),
             ("grok", Ok("grok")),
-            ("dsh", Ok("dsh")),
         ]),
     );
 
@@ -191,13 +190,7 @@ fn same_seed_round_appends_builtin_profiles_in_existing_seed_order() {
     // 表尾已是 codex，既有播种规则跳过该类型；其余仍按播种顺序接在后面。
     assert_eq!(
         listed_names(&service, AgentScope::Global, None),
-        vec![
-            "disabled-tail",
-            "Claude Code",
-            "OpenCode",
-            "Grok",
-            "DeepSeek",
-        ]
+        vec!["disabled-tail", "Claude Code", "OpenCode", "Grok",]
     );
 }
 

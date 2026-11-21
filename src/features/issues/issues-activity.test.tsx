@@ -49,6 +49,7 @@ import {
   listAgentProfiles,
   listProjectLabels,
   listSavedAgentSkills,
+  type AgentProfileRecord,
 } from "../settings/settings-commands";
 import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
 import { getIssueDetail } from "./issue-detail/issue-detail-commands";
@@ -2193,6 +2194,37 @@ describe("IssuesActivity", () => {
       "Later Global (Global)",
       "Project Codex (Project)",
     ]);
+  });
+
+  it("hides DeepSeek from run profiles and shows no-profile state", async () => {
+    const user = userEvent.setup();
+    const deepseekProfile: AgentProfileRecord = {
+      ...globalProfile,
+      id: 150,
+      name: "Hidden DeepSeek",
+      agentType: "deepseek",
+      command: "dsh",
+    };
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [] };
+      return { profiles: [deepseekProfile] };
+    });
+
+    renderIssuesActivity();
+
+    const { dialog } = await openExistingIssueRunDialog(user);
+    expect(
+      within(dialog).getByText(
+        "No Agent Profile is available for the current agent type.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("combobox", { name: "Agent profile" }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).queryByText("Hidden DeepSeek"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens a compact run dialog with read-only prompt when profiles are available", async () => {

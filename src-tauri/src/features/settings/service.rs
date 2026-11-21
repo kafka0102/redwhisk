@@ -61,12 +61,12 @@ where
             .map_err(agent_command_error)
     }
 
-    /// 启动时异步检测 + 幂等播种内置 agent（ADR-0020 / ADR-0048）。
+    /// 启动时异步检测 + 幂等播种当前可见内置 agent（ADR-0020 / ADR-0060）。
     ///
-    /// 按 `[codex, claude, opencode, grok, deepseek]` 顺序逐个探测命令；探测成功且库中**无任何
+    /// 按 `[codex, claude, opencode, grok]` 顺序逐个探测命令；探测成功且库中**无任何
     /// 记录（含软删 `del=1`）**则按内置默认值表插入一条 global profile。探测失败（未装）
     /// 或已存在记录则静默跳过。单条 profile 写入失败会记 stderr 但不阻断其余 agent 播种。
-    /// deepseek 探测命令名是 `dsh`，不是字面量 `deepseek`。
+    /// DeepSeek 的配置入口当前暂隐，因此不探测 `dsh`、不自动播种；已有记录与 provider 不变。
     pub fn seed_builtin_agents(&self) -> Result<(), CommandError> {
         let mut global_count = self
             .repository
@@ -935,20 +935,16 @@ fn settings_database_error(error: rusqlite::Error) -> CommandError {
     .with_detail(ErrorDetail::new("Cause").with_value("message", error.to_string()))
 }
 
-/// 内置 agent 播种顺序与默认值（ADR-0020 决策清单 #1 与「内置 Agent 默认值表」）。
-const BUILTIN_AGENT_SEED_ORDER: [AgentType; 5] = [
+/// 当前可见内置 agent 的播种顺序（ADR-0060 暂隐 DeepSeek 入口）。
+const BUILTIN_AGENT_SEED_ORDER: [AgentType; 4] = [
     AgentType::Codex,
     AgentType::Claude,
     AgentType::OpenCode,
     AgentType::Grok,
-    AgentType::DeepSeek,
 ];
 
 fn builtin_agent_command_name(agent_type: &AgentType) -> &'static str {
-    match agent_type {
-        AgentType::DeepSeek => "dsh",
-        _ => agent_type.as_db_str(),
-    }
+    agent_type.as_db_str()
 }
 
 /// 按 spec 默认值表构造内置 agent 的 global profile；command 用探测解析后的命令字符串。

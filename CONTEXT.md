@@ -306,8 +306,12 @@ _Avoid_: 持久化后缀索引、全盘 watcher、gitignore 派生后缀表
 DeepSeek 提供的本机智能体运行时，在 RedWhisk 中作为一种 Agent 类型。它的结构化会话只呈现已经提交的助手正文、思考、工具结果和权限请求，不包含生成过程中的逐字增量，也没有 mode 或 plan。
 _Avoid_: DeepSeek SDK、DeepSeek 模型接口、Codex App Server
 
+**Agent Profile 页面可见性**：
+Agent Profile 的设置列表、新建类型与任务运行选择是否向用户开放。DeepSeek Harness 的底层 provider、AgentType、存量 Profile/Session 与续接能力保留，但当前暂时隐藏其 Profile 管理入口并停止 `dsh` 自动播种；恢复时只调整集中式页面可见性判定。
+_Avoid_: 删除 DeepSeek 类型、关闭 DeepSeek provider、迁移存量数据
+
 **内置智能体自动播种**：
-应用启动时异步检测本机是否安装 codex/claude/opencode/grok/dsh 命令，对已安装且库中该 agentType 无任何记录（含软删）的，自动插入一条默认开启的全局 Agent profile；软删后因记录留存不再重复播种。检测仅启动时执行，不提供手动刷新。
+应用启动时异步检测本机是否安装 codex/claude/opencode/grok 命令，对已安装且库中该 agentType 无任何记录（含软删）的，自动插入一条默认开启的全局 Agent profile；软删后因记录留存不再重复播种。DeepSeek 的配置入口当前暂隐，因此不探测 `dsh`、不自动播种，已有 Profile 不删除也不改写。检测仅启动时执行，不提供手动刷新。
 _Avoid_: 强制每次出现的播种、盲插未安装项、手动检测按钮
 
 **Agent 展示形式**（displayMode）：

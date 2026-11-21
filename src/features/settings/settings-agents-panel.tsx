@@ -31,6 +31,10 @@ import {
   moveAgentRow,
   type AgentRowReorderDrag,
 } from "./agent-row-reorder";
+import {
+  filterVisibleAgentProfiles,
+  mergeVisibleAgentOrderIntoAllProfiles,
+} from "./agent-profile-visibility";
 
 interface AddFormState {
   projectId: number;
@@ -83,13 +87,17 @@ export function AgentsSettingsPanel({
     profilesRef.current = profiles;
     onReorderProfilesRef.current = onReorderProfiles;
   });
+  const visibleProfiles = useMemo(
+    () => filterVisibleAgentProfiles(profiles),
+    [profiles],
+  );
   const orderedProfiles = useMemo(
-    () => applyPreviewOrder(profiles, previewIds),
-    [profiles, previewIds],
+    () => applyPreviewOrder(visibleProfiles, previewIds),
+    [previewIds, visibleProfiles],
   );
   // ADR-0020 决策 8：批量获取可见 profiles 的启动参数；codex/claude 返回非空、
   // opencode/grok 当前为空。仅非空时命令列渲染「i」图标。
-  const { argsByProfileId } = useAgentCommandArgs(profiles);
+  const { argsByProfileId } = useAgentCommandArgs(visibleProfiles);
 
   return (
     <>
@@ -107,7 +115,7 @@ export function AgentsSettingsPanel({
         <p className="grid min-h-24 place-items-center px-6 pt-2 text-xs text-muted-foreground">
           {messages.settings.loading}
         </p>
-      ) : profiles.length === 0 ? (
+      ) : visibleProfiles.length === 0 ? (
         <Empty className="min-h-32 border border-border">
           <EmptyTitle>{messages.settings.noAgents}</EmptyTitle>
         </Empty>
@@ -174,9 +182,9 @@ export function AgentsSettingsPanel({
                   if (typeof handle.setPointerCapture === "function") {
                     handle.setPointerCapture(event.pointerId);
                   }
-                  const startOrderedIds = profilesRef.current.map(
-                    (item) => item.id,
-                  );
+                  const startOrderedIds = filterVisibleAgentProfiles(
+                    profilesRef.current,
+                  ).map((item) => item.id);
                   reorderDragRef.current = {
                     pointerId: event.pointerId,
                     draggedId: profile.id,
@@ -233,7 +241,12 @@ export function AgentsSettingsPanel({
                       drag.lastOrderedIds,
                     )
                   ) {
-                    onReorderProfilesRef.current(drag.lastOrderedIds);
+                    onReorderProfilesRef.current(
+                      mergeVisibleAgentOrderIntoAllProfiles(
+                        profilesRef.current,
+                        drag.lastOrderedIds,
+                      ),
+                    );
                   }
                 };
 

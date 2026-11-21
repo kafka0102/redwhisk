@@ -126,7 +126,7 @@ describe("AgentProfileForm", () => {
   });
 
   describe("agentType select", () => {
-    it("renders agentType options including DeepSeek", async () => {
+    it("renders exactly the four visible agentType options", async () => {
       const user = userEvent.setup();
       renderForm({
         mode: "create",
@@ -138,17 +138,11 @@ describe("AgentProfileForm", () => {
 
       await openShadcnSelect(user, screen, "智能体类型");
 
-      for (const optionText of [
-        "Codex",
-        "Claude Code",
-        "OpenCode",
-        "Grok",
-        "DeepSeek",
-      ]) {
-        expect(
-          await screen.findByRole("option", { name: optionText }),
-        ).toBeInTheDocument();
-      }
+      expect(
+        (await screen.findAllByRole("option")).map(
+          (option) => option.textContent,
+        ),
+      ).toEqual(["Codex", "Claude Code", "OpenCode", "Grok"]);
     });
   });
 
@@ -208,41 +202,6 @@ describe("AgentProfileForm", () => {
 
       await selectShadcnOption(user, screen, "展示形式", "TUI");
       expect(trigger).toHaveTextContent("TUI");
-    });
-
-    it("hides the display mode switch for deepseek and saves json", async () => {
-      const user = userEvent.setup();
-      saveAgentProfileMock.mockResolvedValue(
-        buildProfile({ agentType: "deepseek", displayMode: "json" }),
-      );
-
-      renderForm({
-        mode: "create",
-        scope: "global",
-        projectId: null,
-        onCancel: () => {},
-        onSaved: () => {},
-      });
-
-      await selectShadcnOption(user, screen, "展示形式", "TUI");
-      await selectShadcnOption(user, screen, "智能体类型", "DeepSeek");
-      expect(
-        screen.queryByRole("combobox", { name: "展示形式" }),
-      ).not.toBeInTheDocument();
-
-      await user.type(screen.getByLabelText("智能体配置名称"), "DeepSeek");
-      await user.type(screen.getByLabelText("智能体命令"), "dsh");
-      await user.click(screen.getByRole("button", { name: "保存" }));
-
-      await waitFor(() => {
-        expect(saveAgentProfileMock).toHaveBeenCalledWith(
-          expect.objectContaining({
-            agentType: "deepseek",
-            displayMode: "json",
-            enabled: true,
-          }),
-        );
-      });
     });
 
     it("preserves tui when switching codex→opencode→codex", async () => {

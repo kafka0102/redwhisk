@@ -1194,6 +1194,78 @@ describe("ProjectSettingsActivity", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides DeepSeek from the agents table and keeps visible profiles", async () => {
+    const user = userEvent.setup();
+    const deepseekProfile: AgentProfileRecord = {
+      ...globalProfile,
+      id: 30,
+      name: "Hidden DeepSeek",
+      agentType: "deepseek",
+      command: "dsh",
+      displayOrder: 2,
+    };
+    const grokProfile: AgentProfileRecord = {
+      ...globalProfile,
+      id: 40,
+      name: "Visible Grok",
+      agentType: "grok",
+      command: "grok",
+      displayOrder: 3,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [projectProfile] };
+      return { profiles: [deepseekProfile, grokProfile] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Project Codex",
+      "Visible Grok",
+    ]);
+    expect(
+      screen.queryByRole("button", { name: "Hidden DeepSeek" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the empty state when only DeepSeek profiles exist", async () => {
+    const user = userEvent.setup();
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          ...globalProfile,
+          id: 30,
+          name: "Hidden DeepSeek",
+          agentType: "deepseek",
+          command: "dsh",
+        },
+      ],
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    expect(await screen.findAllByText("No agents")).toHaveLength(1);
+    expect(
+      screen.queryByRole("table", { name: "Configured agents" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("disables New agent when both profile scopes reach 30 profiles", async () => {
     const user = userEvent.setup();
     listAgentProfilesMock.mockImplementation(async ({ scope }) => ({
@@ -1505,6 +1577,59 @@ describe("ProjectSettingsActivity", () => {
       "Second Agent",
       "Third Agent",
       "First Agent",
+    ]);
+  });
+
+  it("saves visible reordering while hidden DeepSeek keeps its slot", async () => {
+    const user = userEvent.setup();
+    const codex: AgentProfileRecord = {
+      ...projectProfile,
+      id: 11,
+      name: "Visible Codex",
+      displayOrder: 1,
+    };
+    const deepseek: AgentProfileRecord = {
+      ...globalProfile,
+      id: 22,
+      name: "Hidden DeepSeek",
+      agentType: "deepseek",
+      command: "dsh",
+      displayOrder: 2,
+    };
+    const grok: AgentProfileRecord = {
+      ...globalProfile,
+      id: 33,
+      name: "Visible Grok",
+      agentType: "grok",
+      command: "grok",
+      displayOrder: 3,
+    };
+    listAgentProfilesMock.mockImplementation(async ({ scope }) => {
+      if (scope === "project") return { profiles: [codex] };
+      return { profiles: [deepseek, grok] };
+    });
+
+    render(
+      <ProjectSettingsActivity
+        onProjectUpdated={onProjectUpdated}
+        projectId={1}
+        projectName="RedWhisk"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await screen.findByRole("table", { name: "Configured agents" });
+
+    dragAgentRow("Visible Codex", "Visible Grok");
+
+    await waitFor(() =>
+      expect(saveAgentDisplayOrderMock).toHaveBeenCalledWith({
+        profileIds: [33, 22, 11],
+      }),
+    );
+    expect(agentRowNames(agentTableRows())).toEqual([
+      "Visible Grok",
+      "Visible Codex",
     ]);
   });
 

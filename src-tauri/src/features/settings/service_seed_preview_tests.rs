@@ -22,7 +22,7 @@ impl SeedTestDetector {
     }
 
     /// 记录 `detect_command` 调用次数的共享句柄，供断言「未发生探测」。
-    fn calls_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<String>>> {
+    pub(super) fn calls_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<String>>> {
         self.detect_calls.clone()
     }
 
@@ -250,7 +250,6 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
             ("claude", Ok("claude")),
             ("opencode", Ok("opencode")),
             ("grok", Ok("grok")),
-            ("dsh", Ok("dsh")),
         ]),
     );
 
@@ -273,18 +272,8 @@ fn seed_builtin_agents_processes_codex_claude_opencode_grok_in_order() {
             AgentType::Claude,
             AgentType::OpenCode,
             AgentType::Grok,
-            AgentType::DeepSeek,
         ]
     );
-    let deepseek = profiles
-        .iter()
-        .find(|profile| profile.agent_type == AgentType::DeepSeek)
-        .expect("deepseek profile");
-    assert_eq!(deepseek.name, "DeepSeek");
-    assert_eq!(deepseek.command, "dsh");
-    assert_eq!(deepseek.display_mode, "json");
-    assert!(deepseek.enabled);
-    assert_eq!(deepseek.scope, AgentScope::Global);
     let claude = profiles
         .iter()
         .find(|p| p.agent_type == AgentType::Claude)

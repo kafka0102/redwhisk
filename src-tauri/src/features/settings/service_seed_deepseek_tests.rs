@@ -2,17 +2,14 @@ use super::seed_preview_tests::{
     migrated_in_memory_connection, test_settings_service, SeedTestDetector,
 };
 use super::*;
-use crate::types::agent_profile::{
-    AgentScope, AgentType, DeleteAgentProfileInput, SaveAgentProfileInput,
-};
+use crate::types::agent_profile::{AgentScope, AgentType, SaveAgentProfileInput};
 
 #[test]
-fn seed_builtin_agents_inserts_deepseek_json_profile_when_dsh_detected() {
+fn seed_builtin_agents_does_not_probe_dsh_or_insert_deepseek() {
     let connection = migrated_in_memory_connection();
-    let service = test_settings_service(
-        &connection,
-        SeedTestDetector::with_detect_result("dsh", Ok("/usr/local/bin/dsh")),
-    );
+    let detector = SeedTestDetector::with_detect_result("dsh", Ok("/usr/local/bin/dsh"));
+    let detect_calls = detector.calls_handle();
+    let service = test_settings_service(&connection, detector);
 
     service.seed_builtin_agents().expect("seed");
 
@@ -23,22 +20,22 @@ fn seed_builtin_agents_inserts_deepseek_json_profile_when_dsh_detected() {
         })
         .expect("list")
         .profiles;
-    assert_eq!(profiles.len(), 1);
-    assert_eq!(profiles[0].agent_type, AgentType::DeepSeek);
-    assert_eq!(profiles[0].name, "DeepSeek");
-    assert_eq!(profiles[0].command, "/usr/local/bin/dsh");
-    assert_eq!(profiles[0].display_mode, "json");
-    assert!(profiles[0].enabled);
-    assert_eq!(profiles[0].scope, AgentScope::Global);
+    assert!(profiles.is_empty());
+    assert!(
+        !detect_calls
+            .lock()
+            .expect("detect calls")
+            .contains(&"dsh".to_string()),
+        "hidden DeepSeek must not probe dsh"
+    );
 }
 
 #[test]
-fn seed_builtin_agents_does_not_reseed_soft_deleted_deepseek() {
+fn seed_builtin_agents_keeps_existing_deepseek_without_reseeding() {
     let connection = migrated_in_memory_connection();
-    let service = test_settings_service(
-        &connection,
-        SeedTestDetector::with_detect_result("dsh", Ok("dsh")),
-    );
+    let detector = SeedTestDetector::with_detect_result("dsh", Ok("dsh"));
+    let detect_calls = detector.calls_handle();
+    let service = test_settings_service(&connection, detector);
     let saved = service
         .save_agent_profile(SaveAgentProfileInput {
             id: None,
@@ -55,9 +52,6 @@ fn seed_builtin_agents_does_not_reseed_soft_deleted_deepseek() {
             enabled: true,
         })
         .expect("save");
-    service
-        .delete_agent_profile(DeleteAgentProfileInput { id: saved.id })
-        .expect("delete");
 
     service.seed_builtin_agents().expect("seed");
 
@@ -68,7 +62,40 @@ fn seed_builtin_agents_does_not_reseed_soft_deleted_deepseek() {
         })
         .expect("list")
         .profiles;
-    assert!(profiles.is_empty(), "软删 deepseek 后不应重新播种");
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].id, saved.id);
+    assert_eq!(profiles[0].agent_type, AgentType::DeepSeek);
+    assert!(
+        !detect_calls
+            .lock()
+            .expect("detect calls")
+            .contains(&"dsh".to_string()),
+        "existing DeepSeek must not trigger dsh probing"
+    );
+}
+
+#[test]
+fn seed_builtin_agents_with_codex_and_dsh_only_inserts_codex() {
+    let connection = migrated_in_memory_connection();
+    let service = test_settings_service(
+        &connection,
+        SeedTestDetector::with_detect_results(&[
+            ("codex", Ok("/usr/local/bin/codex")),
+            ("dsh", Ok("/usr/local/bin/dsh")),
+        ]),
+    );
+
+    service.seed_builtin_agents().expect("seed");
+
+    let profiles = service
+        .list_agent_profiles(ListAgentProfilesInput {
+            scope: AgentScope::Global,
+            project_id: None,
+        })
+        .expect("list")
+        .profiles;
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].agent_type, AgentType::Codex);
 }
 
 #[test]

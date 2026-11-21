@@ -1,7 +1,9 @@
 import type { AgentProfileRecord } from "../settings/settings-commands";
+import { isAgentProfileTypeVisible } from "../settings/agent-profile-visibility";
 
 // 会话入口（Issue Run 等）选择列表的可见性与可选择性判定。
 // 抽纯函数便于单元测试，多入口共用，避免 UI 层散落分支。规则：
+// - 当前隐藏的 AgentType → 完全隐藏（前端过滤；后端不校验）。
 // - enabled=false → 完全隐藏（前端过滤；后端不校验）。
 // - enabled=true → 正常可选（含 Codex / Claude / OpenCode / Grok）。
 export interface AgentProfileLaunchEligibility {
@@ -14,13 +16,13 @@ export interface AgentProfileLaunchEligibility {
 export function resolveAgentProfileLaunchEligibility(
   profile: AgentProfileRecord,
 ): AgentProfileLaunchEligibility {
-  if (!profile.enabled) {
+  if (!isAgentProfileTypeVisible(profile.agentType) || !profile.enabled) {
     return { visible: false, selectable: false };
   }
   return { visible: true, selectable: true };
 }
 
-// 渲染选择列表前的过滤：剔除 enabled=false 的项。
+// 渲染选择列表前的过滤：剔除当前隐藏类型与 enabled=false 的项。
 // 返回新数组，不修改入参。
 export function filterLaunchVisibleAgentProfiles(
   profiles: readonly AgentProfileRecord[],

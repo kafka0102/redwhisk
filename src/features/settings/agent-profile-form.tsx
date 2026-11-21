@@ -28,16 +28,20 @@ import {
 } from "../../components/ui/select";
 import { useI18n } from "../../shared/i18n/i18n";
 import { toast } from "../../shared/toast";
+import { isAgentProfileTypeVisible } from "./agent-profile-visibility";
 
-// ADR-0020 / ADR-0048：表单可选 agentType。
+// ADR-0020 / ADR-0048 / ADR-0060：表单可选 agentType。
 // claude_code 是前端 UI 别名（agent-visuals 视作 Claude），不在新建表单暴露。
-const AGENT_TYPE_OPTIONS: ReadonlyArray<{ value: AgentType; label: string }> = [
+const ALL_AGENT_TYPE_OPTIONS = [
   { value: "codex", label: "Codex" },
   { value: "claude", label: "Claude Code" },
   { value: "opencode", label: "OpenCode" },
   { value: "grok", label: "Grok" },
   { value: "deepseek", label: "DeepSeek" },
-];
+] as const satisfies ReadonlyArray<{ value: AgentType; label: string }>;
+const AGENT_TYPE_OPTIONS = ALL_AGENT_TYPE_OPTIONS.filter((option) =>
+  isAgentProfileTypeVisible(option.value),
+);
 
 // ADR-0020 决策 10：name 上限 20 字符（label 是 15，别混淆）。
 const AGENT_NAME_MAX_LENGTH = 20;

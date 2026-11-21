@@ -52,6 +52,14 @@ describe("resolveAgentProfileLaunchEligibility", () => {
       ),
     ).toEqual({ visible: false, selectable: false });
   });
+
+  it("deepseek 即使 enabled=true 也完全隐藏", () => {
+    expect(
+      resolveAgentProfileLaunchEligibility(
+        makeProfile({ agentType: "deepseek" }),
+      ),
+    ).toEqual({ visible: false, selectable: false });
+  });
 });
 
 describe("filterLaunchVisibleAgentProfiles", () => {
@@ -64,6 +72,17 @@ describe("filterLaunchVisibleAgentProfiles", () => {
     ];
     const visible = filterLaunchVisibleAgentProfiles(profiles);
     expect(visible.map((profile) => profile.id)).toEqual([1, 3, 4]);
+  });
+
+  it("剔除 DeepSeek 但保留其他已启用类型", () => {
+    const profiles = [
+      makeProfile({ id: 1 }),
+      makeProfile({ id: 2, agentType: "deepseek" }),
+      makeProfile({ id: 3, agentType: "grok" }),
+    ];
+    expect(
+      filterLaunchVisibleAgentProfiles(profiles).map((profile) => profile.id),
+    ).toEqual([1, 3]);
   });
 
   it("返回新数组，不修改入参", () => {
