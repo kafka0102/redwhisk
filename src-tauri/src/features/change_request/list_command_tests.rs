@@ -339,7 +339,7 @@ fn review_requested_rows_include_checks_and_wrapped_issue_labels() {
             .iter()
             .map(|link| link.label.as_str())
             .collect::<Vec<_>>(),
-        vec!["#12", "GH #128"]
+        vec!["#12 · issue", "#128 · issue"]
     );
     assert_eq!(row_130.checks_ok, Some(0));
     assert_eq!(row_130.checks_failed, Some(0));
@@ -353,7 +353,7 @@ fn review_requested_rows_include_checks_and_wrapped_issue_labels() {
             .iter()
             .map(|link| link.label.as_str())
             .collect::<Vec<_>>(),
-        vec!["#12"]
+        vec!["#12 · issue"]
     );
     assert_eq!(row_127.checks_ok, Some(2));
     assert_eq!(row_127.checks_pending, Some(1));
@@ -364,7 +364,7 @@ fn review_requested_rows_include_checks_and_wrapped_issue_labels() {
             .iter()
             .map(|link| link.label.as_str())
             .collect::<Vec<_>>(),
-        vec!["GL #7"]
+        vec!["#7 · issue"]
     );
 }
 

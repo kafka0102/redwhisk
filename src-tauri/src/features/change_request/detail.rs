@@ -8,7 +8,7 @@ use super::detail_snapshot::{
     detail_from_fresh, detail_from_snapshot, has_snapshot, load_row, load_snapshot,
     unavailable_detail, write_fresh_snapshot,
 };
-use super::list::{ensure_project, query_failed};
+use super::list::{ensure_project, link_label, query_failed};
 
 pub(crate) fn get_project_change_request(
     connection: &Connection,
@@ -279,7 +279,8 @@ fn load_linked_issues(
 ) -> Result<Vec<ChangeRequestLinkedIssue>, CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT issues.id, issues.number, refs.provider, refs.external_number, links.link_kind
+            "SELECT issues.id, issues.number, issues.title, refs.provider,
+                    refs.external_number, links.link_kind
              FROM change_request_issue_links links
              JOIN issues ON issues.id = links.issue_id
              LEFT JOIN issue_external_refs refs ON refs.issue_id = issues.id
@@ -291,14 +292,11 @@ fn load_linked_issues(
         .query_map(params![change_request_id], |row| {
             let issue_id: i64 = row.get(0)?;
             let local_number: i64 = row.get(1)?;
-            let provider: Option<String> = row.get(2)?;
-            let external_number: Option<i64> = row.get(3)?;
-            let link_kind: String = row.get(4)?;
-            let label = match (provider.as_deref(), external_number) {
-                (Some("github"), Some(number)) => format!("GH #{number}"),
-                (Some("gitlab"), Some(number)) => format!("GL #{number}"),
-                _ => format!("#{local_number}"),
-            };
+            let title: String = row.get(2)?;
+            let provider: Option<String> = row.get(3)?;
+            let external_number: Option<i64> = row.get(4)?;
+            let link_kind: String = row.get(5)?;
+            let label = link_label(local_number, provider.as_deref(), external_number, &title);
             Ok(ChangeRequestLinkedIssue {
                 issue_id,
                 label,

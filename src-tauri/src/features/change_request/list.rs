@@ -152,7 +152,7 @@ fn load_links(
     let mut statement = connection
         .prepare(
             "SELECT links.change_request_id, issues.id, issues.number, refs.provider,
-                    refs.external_number, links.link_kind
+                    refs.external_number, links.link_kind, issues.title
              FROM change_request_issue_links AS links
              JOIN issues ON issues.id = links.issue_id
              LEFT JOIN issue_external_refs AS refs ON refs.issue_id = issues.id
@@ -168,11 +168,12 @@ fn load_links(
             let provider: Option<String> = row.get(3)?;
             let external_number: Option<i64> = row.get(4)?;
             let link_kind: String = row.get(5)?;
+            let title: String = row.get(6)?;
             Ok((
                 change_request_id,
                 ChangeRequestLinkedIssue {
                     issue_id,
-                    label: link_label(local_number, provider.as_deref(), external_number),
+                    label: link_label(local_number, provider.as_deref(), external_number, &title),
                     link_kind,
                 },
             ))
@@ -186,12 +187,17 @@ fn load_links(
     Ok(links)
 }
 
-fn link_label(local_number: i64, provider: Option<&str>, external_number: Option<i64>) -> String {
-    match (provider, external_number) {
-        (Some("github"), Some(number)) => format!("GH #{number}"),
-        (Some("gitlab"), Some(number)) => format!("GL #{number}"),
-        _ => format!("#{local_number}"),
-    }
+pub(super) fn link_label(
+    local_number: i64,
+    provider: Option<&str>,
+    external_number: Option<i64>,
+    title: &str,
+) -> String {
+    let number = match (provider, external_number) {
+        (Some("github" | "gitlab"), Some(number)) => number,
+        _ => local_number,
+    };
+    format!("#{number} · {title}")
 }
 
 fn matches_filter(row: &StoredChangeRequest, filter: &str) -> bool {

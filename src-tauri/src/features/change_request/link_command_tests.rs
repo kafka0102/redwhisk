@@ -25,7 +25,7 @@ fn closing_keyword_links_github_issue_and_plain_mention_does_not() {
         .expect("list_project_change_requests");
     let row_132 = listed.rows.iter().find(|row| row.number == 132).unwrap();
     let row_140 = listed.rows.iter().find(|row| row.number == 140).unwrap();
-    assert_eq!(row_132.linked_issues[0].label, "GH #128");
+    assert_eq!(row_132.linked_issues[0].label, "#128 · issue");
     assert_eq!(row_132.linked_issues[0].link_kind, "closing");
     assert!(row_140.linked_issues.is_empty());
     assert_eq!(issue_status(&connection, github_issue), "backlog");
@@ -49,7 +49,7 @@ fn issue_branch_links_local_issue_and_plain_branch_does_not() {
         .expect("list_project_change_requests");
     let row_128 = listed.rows.iter().find(|row| row.number == 128).unwrap();
     let row_141 = listed.rows.iter().find(|row| row.number == 141).unwrap();
-    assert_eq!(row_128.linked_issues[0].label, "#12");
+    assert_eq!(row_128.linked_issues[0].label, "#12 · issue");
     assert_eq!(row_128.linked_issues[0].link_kind, "branch");
     assert!(row_141.linked_issues.is_empty());
     assert_eq!(issue_status(&connection, local_issue), "backlog");
@@ -87,7 +87,7 @@ fn manual_link_twice_keeps_one_manual_row() {
         .expect("list_project_change_requests");
     let row = listed.rows.iter().find(|row| row.number == 132).unwrap();
     assert_eq!(row.linked_issues.len(), 1);
-    assert_eq!(row.linked_issues[0].label, "#12");
+    assert_eq!(row.linked_issues[0].label, "#12 · issue");
     assert_eq!(row.linked_issues[0].link_kind, "manual");
     assert_eq!(issue_status(&connection, local_issue), "backlog");
 }
@@ -118,9 +118,9 @@ fn one_pull_request_can_show_two_issues_and_one_issue_can_show_on_two() {
             .iter()
             .map(|link| link.label.as_str())
             .collect::<Vec<_>>(),
-        vec!["#12", "GH #128"]
+        vec!["#12 · issue", "#128 · issue"]
     );
-    assert_eq!(row_129.linked_issues[0].label, "#12");
+    assert_eq!(row_129.linked_issues[0].label, "#12 · issue");
     assert_eq!(issue_status(&connection, local_issue), "backlog");
     assert_eq!(issue_status(&connection, github_issue), "backlog");
 }

@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from "react";
+import { GitPullRequest } from "lucide-react";
 
 import { useI18n } from "../../shared/i18n/i18n";
 
@@ -88,22 +89,27 @@ export function ChangeRequestList({
         </div>
         {syncSlot}
       </div>
-      <div className="change-request-head">
-        <span>{t("issues.changeRequests.columnTitle")}</span>
-        <span>{t("issues.changeRequests.columnChecks")}</span>
-        <span>{t("issues.changeRequests.columnLinks")}</span>
-      </div>
       {rows.length === 0 ? (
-        <p>{t(emptyLabel(filter, provider))}</p>
+        <div className="issue-pull-requests-empty">
+          <GitPullRequest aria-hidden="true" size={28} strokeWidth={1.8} />
+          <p>{t(emptyLabel(filter, provider))}</p>
+        </div>
       ) : (
-        rows.map((row) => (
-          <ChangeRequestRow
-            key={row.id}
-            now={now}
-            row={row}
-            onOpenDetail={onOpenDetail}
-          />
-        ))
+        <>
+          <div className="change-request-head">
+            <span>{t("issues.changeRequests.columnTitle")}</span>
+            <span>{t("issues.changeRequests.columnChecks")}</span>
+            <span>{t("issues.changeRequests.columnLinks")}</span>
+          </div>
+          {rows.map((row) => (
+            <ChangeRequestRow
+              key={row.id}
+              now={now}
+              row={row}
+              onOpenDetail={onOpenDetail}
+            />
+          ))}
+        </>
       )}
     </section>
   );
@@ -153,7 +159,11 @@ function ChangeRequestRow({
       </div>
       <div className="change-request-links">
         {row.linkedIssues.map((link) => (
-          <span key={link.issueId} className="change-request-link">
+          <span
+            key={link.issueId}
+            className="change-request-link"
+            title={link.label}
+          >
             {link.label}
           </span>
         ))}

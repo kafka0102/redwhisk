@@ -46,8 +46,12 @@ function response(): ChangeRequestListResponse {
         reviewDecision: "review_required",
         remoteUpdatedAt: Date.parse("2026-11-07T14:58:00Z"),
         linkedIssues: [
-          { issueId: 12, label: "#12", linkKind: "branch" },
-          { issueId: 128, label: "GH #128", linkKind: "closing" },
+          { issueId: 12, label: "#12 · 本地标题", linkKind: "branch" },
+          {
+            issueId: 128,
+            label: "#128 · 这是一个长到放不进关联列的标题",
+            linkKind: "closing",
+          },
         ],
       }),
       row({
@@ -60,7 +64,9 @@ function response(): ChangeRequestListResponse {
         checksPending: 1,
         reviewDecision: "pending",
         remoteUpdatedAt: Date.parse("2026-11-07T12:00:00Z"),
-        linkedIssues: [{ issueId: 7, label: "GL #7", linkKind: "closing" }],
+        linkedIssues: [
+          { issueId: 7, label: "#7 · 完成流程", linkKind: "closing" },
+        ],
       }),
       row({
         id: 130,
@@ -82,7 +88,9 @@ function response(): ChangeRequestListResponse {
         checksPending: null,
         reviewDecision: "none",
         remoteUpdatedAt: Date.parse("2026-11-07T13:00:00Z"),
-        linkedIssues: [{ issueId: 12, label: "#12", linkKind: "branch" }],
+        linkedIssues: [
+          { issueId: 12, label: "#12 · 本地标题", linkKind: "branch" },
+        ],
       }),
       row({
         id: 140,
@@ -145,6 +153,30 @@ function emptyResponse(): ChangeRequestListResponse {
   };
 }
 
+function expectEmptyChangeRequests(copy: string): void {
+  expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Closed" })).toBeInTheDocument();
+  expect(document.querySelector(".change-request-head")).toBeNull();
+  expect(screen.queryByText("标题")).toBeNull();
+  expect(screen.queryByText("检查 / 评审")).toBeNull();
+  expect(screen.queryByText("关联 Issue")).toBeNull();
+  expect(screen.queryByText("Title")).toBeNull();
+  expect(screen.queryByText("Checks / review")).toBeNull();
+  expect(screen.queryByText("Linked issues")).toBeNull();
+  const empty = document.querySelector(".issue-pull-requests-empty");
+  expect(empty).not.toBeNull();
+  const icon = empty?.querySelector("svg");
+  const copyNode = empty?.querySelector("p");
+  expect(icon).not.toBeNull();
+  expect(icon?.getAttribute("fill")).toBe("none");
+  expect(icon?.getAttribute("stroke")).toBe("currentColor");
+  expect(copyNode).toHaveTextContent(copy);
+  expect(
+    icon!.compareDocumentPosition(copyNode!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).not.toBe(0);
+  expect(window.getComputedStyle(empty!).placeItems).toBe("center");
+}
+
 describe("change request list", () => {
   it("shows review copy, wrapped links, and does not navigate the row", () => {
     const onOpenUrl = vi.fn();
@@ -205,9 +237,27 @@ describe("change request list", () => {
       [...document.querySelectorAll(".change-request-link")].map(
         (link) => link.textContent,
       ),
-    ).toEqual(["#12", "GH #128", "GL #7", "#12"]);
+    ).toEqual([
+      "#12 · 本地标题",
+      "#128 · 这是一个长到放不进关联列的标题",
+      "#7 · 完成流程",
+      "#12 · 本地标题",
+    ]);
     expect(screen.queryByText(/\+\d/)).toBeNull();
-    expect(screen.getByText("GL #7")).toBeInTheDocument();
+    const shortLink = screen.getByText("#7 · 完成流程");
+    expect(shortLink).toHaveTextContent("#7 · 完成流程");
+    expect(shortLink.textContent).not.toMatch(/…|\.\.\./);
+    expect(shortLink.tagName).not.toBe("BUTTON");
+    const longLabel = "#128 · 这是一个长到放不进关联列的标题";
+    const longLink = screen.getByText(longLabel);
+    expect(longLink).toHaveAttribute("title", longLabel);
+    expect(longLink.tagName).not.toBe("BUTTON");
+    for (const link of [shortLink, longLink]) {
+      const style = window.getComputedStyle(link);
+      expect(style.whiteSpace).toBe("nowrap");
+      expect(style.overflow).toBe("hidden");
+      expect(style.textOverflow).toBe("ellipsis");
+    }
     expect(screen.queryByRole("link", { name: "打开" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
     expect(document.querySelector("a[href*='github.com']")).toBeNull();
@@ -254,9 +304,41 @@ describe("change request list", () => {
         sourceMode="remote"
       />,
     );
-    expect(screen.getByText("标题")).toBeInTheDocument();
-    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
+    expectEmptyChangeRequests("没有打开的 Pull request");
     expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
+  });
+
+  it("shows the header and the row when one pull request is open", () => {
+    renderList(
+      "zh",
+      <ChangeRequestList
+        filter="open"
+        now={NOW}
+        provider="github"
+        response={{
+          ...emptyResponse(),
+          counts: { open: 1, closed: 0 },
+          rows: [
+            row({
+              id: 7,
+              number: 7,
+              title: "完成流程",
+              linkedIssues: [
+                { issueId: 7, label: "#7 · 完成流程", linkKind: "closing" },
+              ],
+            }),
+          ],
+        }}
+        sourceMode="remote"
+      />,
+    );
+    expect(document.querySelector(".change-request-head")).not.toBeNull();
+    expect(screen.getByText("标题")).toBeInTheDocument();
+    expect(screen.getByText("检查 / 评审")).toBeInTheDocument();
+    expect(screen.getByText("关联 Issue")).toBeInTheDocument();
+    expect(document.querySelector(".change-request-row")).not.toBeNull();
+    expect(screen.getByText("#7 · 完成流程")).toBeInTheDocument();
+    expect(screen.queryByText("没有打开的 Pull request")).toBeNull();
   });
 
   it("shows the connection empty state only for local mode", () => {
@@ -455,7 +537,7 @@ describe("change request list", () => {
       screen.getByRole("region", { name: "Merge requests" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Merge request 筛选")).toBeInTheDocument();
-    expect(screen.getByText("没有打开的 Merge request")).toBeInTheDocument();
+    expectEmptyChangeRequests("没有打开的 Merge request");
 
     rerender(
       <I18nProvider initialLocale="zh">
@@ -468,7 +550,7 @@ describe("change request list", () => {
         />
       </I18nProvider>,
     );
-    expect(screen.getByText("没有关闭的 Merge request")).toBeInTheDocument();
+    expectEmptyChangeRequests("没有关闭的 Merge request");
 
     rerender(
       <I18nProvider initialLocale="zh">
@@ -485,7 +567,7 @@ describe("change request list", () => {
       screen.getByRole("region", { name: "Pull requests" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Pull request 筛选")).toBeInTheDocument();
-    expect(screen.getByText("没有打开的 Pull request")).toBeInTheDocument();
+    expectEmptyChangeRequests("没有打开的 Pull request");
 
     rerender(
       <I18nProvider initialLocale="zh">
@@ -498,7 +580,7 @@ describe("change request list", () => {
         />
       </I18nProvider>,
     );
-    expect(screen.getByText("没有关闭的 Pull request")).toBeInTheDocument();
+    expectEmptyChangeRequests("没有关闭的 Pull request");
   });
 
   it("shows open and closed empty copy in English", () => {
@@ -517,7 +599,7 @@ describe("change request list", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByText("No open merge requests")).toBeInTheDocument();
+    expectEmptyChangeRequests("No open merge requests");
 
     rerender(
       <I18nProvider initialLocale="en">
@@ -530,7 +612,7 @@ describe("change request list", () => {
         />
       </I18nProvider>,
     );
-    expect(screen.getByText("No closed merge requests")).toBeInTheDocument();
+    expectEmptyChangeRequests("No closed merge requests");
 
     rerender(
       <I18nProvider initialLocale="en">
@@ -544,7 +626,7 @@ describe("change request list", () => {
       </I18nProvider>,
     );
     expect(screen.getByLabelText("Pull request filters")).toBeInTheDocument();
-    expect(screen.getByText("No open pull requests")).toBeInTheDocument();
+    expectEmptyChangeRequests("No open pull requests");
 
     rerender(
       <I18nProvider initialLocale="en">
@@ -557,6 +639,6 @@ describe("change request list", () => {
         />
       </I18nProvider>,
     );
-    expect(screen.getByText("No closed pull requests")).toBeInTheDocument();
+    expectEmptyChangeRequests("No closed pull requests");
   });
 });

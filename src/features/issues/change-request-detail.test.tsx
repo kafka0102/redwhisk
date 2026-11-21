@@ -157,7 +157,9 @@ function detail(patch: Partial<ChangeRequestDetail> = {}): ChangeRequestDetail {
         state: null,
       },
     ],
-    linkedIssues: [{ issueId: 128, label: "GH #128", linkKind: "closing" }],
+    linkedIssues: [
+      { issueId: 128, label: "#128 · 残句处理", linkKind: "closing" },
+    ],
     readySupported: true,
     reviewSupported: true,
     supportedMergeMethods: ["squash", "merge", "rebase"],
@@ -292,18 +294,29 @@ describe("change request detail", () => {
     getDetailMock.mockResolvedValue(
       detail({
         linkedIssues: [
-          { issueId: 12, label: "#12", linkKind: "branch" },
-          { issueId: 128, label: "GH #128", linkKind: "closing" },
+          { issueId: 12, label: "#12 · 本地标题", linkKind: "branch" },
+          { issueId: 128, label: "#128 · 残句处理", linkKind: "closing" },
+          { issueId: 7, label: "#7 · 完成流程", linkKind: "closing" },
         ],
       }),
     );
     renderDetail(onOpenIssue);
     await flush();
-    expect(screen.getByRole("button", { name: "#12" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "GH #128" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "GH #128" }));
+    expect(
+      screen.getByRole("button", { name: "#128 · 残句处理" }),
+    ).toHaveTextContent("#128 · 残句处理");
+    expect(
+      screen.getByRole("button", { name: "#7 · 完成流程" }),
+    ).toHaveTextContent("#7 · 完成流程");
+    expect(
+      screen.getByRole("button", { name: "#12 · 本地标题" }),
+    ).toHaveTextContent("#12 · 本地标题");
+    expect(screen.queryByText(/GH #|GL #/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "#128 · 残句处理" }));
     expect(onOpenIssue).toHaveBeenCalledWith(128);
-    fireEvent.click(screen.getByRole("button", { name: "#12" }));
+    fireEvent.click(screen.getByRole("button", { name: "#7 · 完成流程" }));
+    expect(onOpenIssue).toHaveBeenCalledWith(7);
+    fireEvent.click(screen.getByRole("button", { name: "#12 · 本地标题" }));
     expect(onOpenIssue).toHaveBeenCalledWith(12);
   });
 
