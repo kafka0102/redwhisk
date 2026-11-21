@@ -27,6 +27,7 @@ pub struct RemoteIssue {
     pub url: String,
     pub author_login: Option<String>,
     pub assignees: Vec<String>,
+    pub remote_assignee: Option<crate::types::issue_mirror::IssueBoardAssignee>,
     pub labels: Vec<String>,
     pub updated_at: i64,
 }
@@ -230,7 +231,10 @@ impl FixedForge {
             review_supported: true,
             close_calls: Mutex::new(Vec::new()),
             merge_calls: Mutex::new(Vec::new()),
-            merge_methods: default_merge_methods(),
+            merge_methods: ["squash", "merge", "rebase"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
             host_labels: Vec::new(),
             label_list_calls: Mutex::new(0),
             label_error: Mutex::new(None),
@@ -485,15 +489,8 @@ pub fn open_issue(number: i64, title: &str) -> RemoteIssue {
         url: format!("https://github.com/acme/redwhisk/issues/{number}"),
         author_login: None,
         assignees: Vec::new(),
+        remote_assignee: None,
         labels: Vec::new(),
         updated_at: 1,
     }
-}
-
-#[cfg(test)]
-fn default_merge_methods() -> Vec<String> {
-    ["squash", "merge", "rebase"]
-        .into_iter()
-        .map(str::to_string)
-        .collect()
 }

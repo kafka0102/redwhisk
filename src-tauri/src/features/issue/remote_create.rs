@@ -402,7 +402,7 @@ mod tests {
 
     use super::super::github_issue_mirror::board::list_board_issues;
     use super::super::github_issue_mirror::{
-        ready_github_project, FixedForge, RemoteIssue, RemoteIssueState,
+        open_issue, ready_github_project, FixedForge, RemoteIssue,
     };
     use super::super::service::IssueService;
     use super::create_issue_with_forge;
@@ -411,19 +411,14 @@ mod tests {
     use crate::types::issue::CreateIssueInput;
 
     fn mirror_issue() -> RemoteIssue {
-        RemoteIssue {
-            external_id: "issue-128".to_string(),
-            number: 128,
-            title: "Mirror the remote issue".to_string(),
-            body: "Created on the forge, stored once locally.".to_string(),
-            state: RemoteIssueState::Open,
-            is_pull_request: false,
-            url: "https://github.com/acme/redwhisk/issues/128".to_string(),
-            author_login: Some("lin".to_string()),
-            assignees: vec!["yujianjia".to_string()],
-            labels: vec!["sync".to_string()],
-            updated_at: 1_700_000_000_000,
-        }
+        let mut issue = open_issue(128, "Mirror the remote issue");
+        issue.external_id = "issue-128".to_string();
+        issue.body = "Created on the forge, stored once locally.".to_string();
+        issue.author_login = Some("lin".to_string());
+        issue.assignees = vec!["yujianjia".to_string()];
+        issue.labels = vec!["sync".to_string()];
+        issue.updated_at = 1_700_000_000_000;
+        issue
     }
 
     #[test]

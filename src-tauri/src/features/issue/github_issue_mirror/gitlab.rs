@@ -189,6 +189,8 @@ pub(super) fn parse_gitlab_issue(value: &serde_json::Value) -> Option<RemoteIssu
         Some(state) => parse_state(state)?,
         None => RemoteIssueState::Open,
     };
+    let (assignees, remote_assignee) =
+        super::assignee::parse_assignees(value.get("assignees"), "username");
     Some(RemoteIssue {
         external_id,
         number,
@@ -209,7 +211,8 @@ pub(super) fn parse_gitlab_issue(value: &serde_json::Value) -> Option<RemoteIssu
             .pointer("/author/username")
             .and_then(serde_json::Value::as_str)
             .map(str::to_string),
-        assignees: usernames(value.get("assignees")),
+        assignees,
+        remote_assignee,
         labels: label_names(value.get("labels")),
         updated_at: parse_updated_at(value.get("updated_at")).unwrap_or(0),
     })
@@ -221,20 +224,6 @@ fn parse_state(value: &str) -> Option<RemoteIssueState> {
         "closed" => Some(RemoteIssueState::Closed),
         _ => None,
     }
-}
-
-fn usernames(value: Option<&serde_json::Value>) -> Vec<String> {
-    let Some(serde_json::Value::Array(items)) = value else {
-        return Vec::new();
-    };
-    items
-        .iter()
-        .filter_map(|item| {
-            item.get("username")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        })
-        .collect()
 }
 
 fn label_names(value: Option<&serde_json::Value>) -> Vec<String> {

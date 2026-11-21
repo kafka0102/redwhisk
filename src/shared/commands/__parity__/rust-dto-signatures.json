@@ -835,6 +835,13 @@
         "storedName": "required"
       }
     },
+    "IssueBoardAssignee": {
+      "fields": {
+        "avatarUrl": "required",
+        "login": "required",
+        "name": "required"
+      }
+    },
     "IssueBoardListResponse": {
       "fields": {
         "issues": "required",
@@ -862,6 +869,7 @@
         "projectId": "required",
         "provider": "required",
         "pullRequestUrl": "required",
+        "remoteAssignee": "optional",
         "remoteClosedWhileRunning": "required",
         "remoteLabels": "required",
         "remoteReopened": "required",

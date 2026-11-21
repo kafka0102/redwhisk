@@ -301,6 +301,9 @@ fn board_record(
         remote_closed_while_running: view.remote_closed_while_running,
         remote_reopened: view.remote_reopened,
         pull_request_url,
+        remote_assignee: projection
+            .and_then(|item| item.remote_assignees_json.as_deref())
+            .and_then(super::assignee::first_board_assignee),
         issue,
     }
 }

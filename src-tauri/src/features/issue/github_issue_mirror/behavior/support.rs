@@ -169,6 +169,7 @@ pub fn remote_issue(number: i64, state: RemoteIssueState, title: &str) -> Remote
         url: format!("https://github.com/acme/redwhisk/issues/{number}"),
         author_login: Some("octocat".to_string()),
         assignees: vec!["me".to_string()],
+        remote_assignee: None,
         labels: vec!["bug".to_string()],
         updated_at: 30,
     }

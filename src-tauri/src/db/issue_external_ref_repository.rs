@@ -10,6 +10,7 @@ pub struct IssueMirrorProjection {
     pub sync_status: Option<String>,
     pub remote_closed_while_running: bool,
     pub remote_reopened: bool,
+    pub remote_assignees_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,7 +294,7 @@ impl<'connection> IssueExternalRefRepository<'connection> {
         let mut statement = self.connection.prepare(
             "SELECT issues.id, issues.source, refs.provider, refs.external_number, refs.remote_state,
                     refs.remote_labels_json, refs.sync_status, refs.remote_closed_while_running,
-                    refs.remote_reopened
+                    refs.remote_reopened, refs.remote_assignees_json
              FROM issues
              LEFT JOIN issue_external_refs AS refs ON refs.issue_id = issues.id
              WHERE issues.project_id = ?1",
@@ -310,6 +311,7 @@ impl<'connection> IssueExternalRefRepository<'connection> {
                     sync_status: row.get(6)?,
                     remote_closed_while_running: row.get::<_, Option<i64>>(7)?.unwrap_or(0) != 0,
                     remote_reopened: row.get::<_, Option<i64>>(8)?.unwrap_or(0) != 0,
+                    remote_assignees_json: row.get(9)?,
                 },
             ))
         })?;

@@ -1,3 +1,4 @@
+mod assignee;
 pub(crate) mod board;
 mod cli;
 mod create_cli;
@@ -29,6 +30,7 @@ pub(crate) use port::{open_issue, FixedForge};
 #[cfg(test)]
 pub(crate) use sync::sync_project_issues;
 
+pub(crate) use assignee::assignee_logins;
 pub(crate) use board::load_issue_board;
 pub(crate) use board::IssueBoardListResponse;
 pub(crate) use sync::sync_connected_issues;
@@ -62,6 +64,83 @@ mod tests {
         assert_eq!(listed[0].status, crate::types::issue::IssueStatus::Backlog);
         assert_eq!(listed[0].external_number, Some(17));
         assert_eq!(listed[0].provider.as_deref(), Some("github"));
+    }
+
+    #[test]
+    fn board_keeps_first_assignee_and_reads_legacy_login_names() {
+        let harness = ready_github_project("all_open", None);
+        let mut remote = open_issue(17, "Imported from GitHub");
+        remote.assignees = vec!["yujianjia".to_string(), "other".to_string()];
+        remote.remote_assignee = Some(crate::types::issue_mirror::IssueBoardAssignee {
+            login: "yujianjia".to_string(),
+            name: "\u{4e8e}\u{5efa}\u{5bb6}".to_string(),
+            avatar_url: Some("https://avatars.example/y.png".to_string()),
+        });
+        let forge = FixedForge::new(vec![remote]);
+        sync_project_issues(&harness.connection, harness.project_id, &forge, 1_000).expect("sync");
+
+        let listed = list_board_page(
+            &harness.connection,
+            harness.project_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("board");
+        let assignee = listed.issues[0].remote_assignee.as_ref().expect("assignee");
+        assert_eq!(assignee.login, "yujianjia");
+        assert_eq!(assignee.name, "\u{4e8e}\u{5efa}\u{5bb6}");
+        assert_eq!(
+            assignee.avatar_url.as_deref(),
+            Some("https://avatars.example/y.png")
+        );
+        let issue_id = listed.issues[0].issue.id;
+        assert_eq!(
+            detail_logins(&harness.connection, harness.project_id, issue_id),
+            vec!["yujianjia".to_string(), "other".to_string(),]
+        );
+
+        harness
+            .connection
+            .execute(
+                "UPDATE issue_external_refs SET remote_assignees_json = ?1 WHERE issue_id = ?2",
+                params![r#"["ada"]"#, issue_id],
+            )
+            .expect("legacy assignees");
+        let listed = list_board_page(
+            &harness.connection,
+            harness.project_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("legacy board");
+        let legacy = listed.issues[0].remote_assignee.as_ref().expect("legacy");
+        assert_eq!(legacy.login, "ada");
+        assert_eq!(legacy.name, "ada");
+        assert!(legacy.avatar_url.is_none());
+        assert_eq!(
+            detail_logins(&harness.connection, harness.project_id, issue_id),
+            vec!["ada".to_string()]
+        );
+    }
+
+    fn detail_logins(connection: &Connection, project_id: i64, issue_id: i64) -> Vec<String> {
+        crate::features::issue::detail_read::read_issue_detail(
+            connection,
+            &crate::types::issue_detail::GetIssueDetailInput {
+                project_id,
+                issue_id,
+            },
+        )
+        .expect("detail")
+        .projection
+        .expect("projection")
+        .assignees
     }
 
     #[test]

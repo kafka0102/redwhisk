@@ -4,6 +4,14 @@ use super::issue::{IssueRecord, IssueStatusTotals};
 
 pub const ISSUE_SYNC_CHANGED_EVENT: &str = "issue-sync-changed";
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueBoardAssignee {
+    pub login: String,
+    pub name: String,
+    pub avatar_url: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueSyncOutcome {
@@ -49,6 +57,8 @@ pub struct IssueBoardRecord {
     pub remote_closed_while_running: bool,
     pub remote_reopened: bool,
     pub pull_request_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_assignee: Option<IssueBoardAssignee>,
 }
 
 #[derive(Debug, Clone, Serialize)]

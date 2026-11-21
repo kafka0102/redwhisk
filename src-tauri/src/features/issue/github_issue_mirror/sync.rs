@@ -261,7 +261,7 @@ fn insert_new(
             .map_err(persistence)?;
     }
     let labels_json = json_list(&remote.labels);
-    let assignees_json = json_list(&remote.assignees);
+    let assignees_json = super::assignee::assignees_json(remote);
     refs.insert_ref(&ref_row(
         created.id,
         project_id,
@@ -326,7 +326,7 @@ fn update_existing(
         .map_err(persistence)?;
     }
     let labels_json = json_list(&remote.labels);
-    let assignees_json = json_list(&remote.assignees);
+    let assignees_json = super::assignee::assignees_json(remote);
     refs.update_ref(&ref_row(
         issue_id,
         project_id,

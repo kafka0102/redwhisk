@@ -7,6 +7,7 @@ use crate::types::issue_detail::{
 
 use super::archive::open_issue_database;
 use super::completion::writeback_store::detail_writeback;
+use super::github_issue_mirror::assignee_logins;
 use super::validation::{issue_database_error, issue_not_found};
 
 pub(crate) fn read_issue_detail_in_data_dir(
@@ -47,7 +48,7 @@ pub(crate) fn read_issue_detail(
                     external_url: row.get(2)?,
                     remote_state: normalize_remote_state(&row.get::<_, String>(3)?),
                     author_login: row.get(4)?,
-                    assignees: string_list(&row.get::<_, String>(5)?),
+                    assignees: assignee_logins(&row.get::<_, String>(5)?),
                     labels: string_list(&row.get::<_, String>(6)?),
                 })
             },
