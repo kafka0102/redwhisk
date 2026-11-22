@@ -15,6 +15,9 @@ const CHANGE_REQUESTS_MIGRATION_SQL: &str =
 const CHANGE_REQUEST_SYNC_STATUS_MIGRATION_VERSION: &str = "0066_change_request_sync_status";
 const CHANGE_REQUEST_SYNC_STATUS_MIGRATION_SQL: &str =
     include_str!("../../migrations/0066_change_request_sync_status.sql");
+const PROJECT_ISSUE_DISPLAY_MODE_MIGRATION_VERSION: &str = "0067_project_issue_display_mode";
+const PROJECT_ISSUE_DISPLAY_MODE_MIGRATION_SQL: &str =
+    include_str!("../../migrations/0067_project_issue_display_mode.sql");
 
 pub(super) fn migrations() -> Vec<Migration> {
     vec![
@@ -49,6 +52,10 @@ pub(super) fn migrations() -> Vec<Migration> {
         Migration {
             version: CHANGE_REQUEST_SYNC_STATUS_MIGRATION_VERSION,
             sql: CHANGE_REQUEST_SYNC_STATUS_MIGRATION_SQL,
+        },
+        Migration {
+            version: PROJECT_ISSUE_DISPLAY_MODE_MIGRATION_VERSION,
+            sql: PROJECT_ISSUE_DISPLAY_MODE_MIGRATION_SQL,
         },
     ]
 }

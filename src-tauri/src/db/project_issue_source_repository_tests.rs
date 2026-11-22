@@ -2,7 +2,8 @@ use rusqlite::{params, Connection};
 
 use crate::db::migrations::MigrationRunner;
 use crate::types::project_issue_source::{
-    IssueCreateSource, IssueSourceMode, IssueSyncScope, UpdateProjectIssueSourceSettings,
+    IssueCreateSource, IssueDisplayMode, IssueSourceMode, IssueSyncScope,
+    UpdateProjectIssueSourceSettings,
 };
 
 const ISSUE_SOURCE_SETTINGS_MIGRATION: &str = "0060_project_issue_source_settings";
@@ -14,6 +15,10 @@ fn open_database() -> Connection {
         .expect("foreign keys");
     connection
 }
+
+#[cfg(test)]
+#[path = "project_issue_source_display_mode_tests.rs"]
+mod display_mode_tests;
 
 fn insert_legacy_project(connection: &Connection) -> i64 {
     connection
@@ -67,11 +72,13 @@ fn migrated_project_defaults_to_local_issue_source_mode() {
         i64,
         i64,
         String,
+        String,
     ) = connection
         .query_row(
             "SELECT issue_source_mode, issue_sync_scope, issue_sync_label, issue_sync_enabled,
                     issue_sync_interval_seconds, issue_writeback_close_on_complete,
-                    issue_writeback_close_on_pr_merge, issue_writeback_comment, issue_create_source
+                    issue_writeback_close_on_pr_merge, issue_writeback_comment, issue_create_source,
+                    issue_display_mode
              FROM projects WHERE id = ?1",
             params![project_id],
             |row| {
@@ -85,6 +92,7 @@ fn migrated_project_defaults_to_local_issue_source_mode() {
                     row.get(6)?,
                     row.get(7)?,
                     row.get(8)?,
+                    row.get(9)?,
                 ))
             },
         )
@@ -98,6 +106,7 @@ fn migrated_project_defaults_to_local_issue_source_mode() {
     assert_eq!(settings.6, 1);
     assert_eq!(settings.7, 1);
     assert_eq!(settings.8, "local");
+    assert_eq!(settings.9, "board");
 
     let issue: (String, String, i64, String) = connection
         .query_row(
@@ -188,6 +197,7 @@ fn saved_issue_source_settings_survive_reopening_the_database() {
             .update(UpdateProjectIssueSourceSettings {
                 project_id,
                 issue_source_mode: Some(IssueSourceMode::Mixed),
+                issue_display_mode: Some(IssueDisplayMode::List),
                 issue_sync_scope: Some(IssueSyncScope::Label),
                 issue_sync_label: Some("bug".to_string()),
                 issue_sync_enabled: Some(false),
@@ -206,6 +216,7 @@ fn saved_issue_source_settings_survive_reopening_the_database() {
         .expect("read settings")
         .expect("project settings");
     assert_eq!(loaded.issue_source_mode, IssueSourceMode::Mixed);
+    assert_eq!(loaded.issue_display_mode, IssueDisplayMode::List);
     assert_eq!(loaded.issue_sync_scope, IssueSyncScope::Label);
     assert_eq!(loaded.issue_sync_label.as_deref(), Some("bug"));
     assert!(!loaded.issue_sync_enabled);
@@ -236,6 +247,7 @@ fn full_update(project_id: i64) -> UpdateProjectIssueSourceSettings {
     UpdateProjectIssueSourceSettings {
         project_id,
         issue_source_mode: Some(IssueSourceMode::Local),
+        issue_display_mode: Some(IssueDisplayMode::Board),
         issue_sync_scope: Some(IssueSyncScope::AssignedToMe),
         issue_sync_label: None,
         issue_sync_enabled: Some(true),

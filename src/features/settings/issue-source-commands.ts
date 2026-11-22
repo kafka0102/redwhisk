@@ -1,6 +1,7 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 
 export type IssueSourceMode = "local" | "remote" | "mixed";
+export type IssueDisplayMode = "board" | "list";
 export type IssueSyncScope = "assigned_to_me" | "all_open" | "label" | "all";
 export type IssueCreateSource = "local" | "remote";
 export type ForgeProvider = "github" | "gitlab";
@@ -26,6 +27,7 @@ export interface ProjectIssueConnection {
 export interface ProjectIssueSourceSettings {
   projectId: number;
   issueSourceMode: IssueSourceMode;
+  issueDisplayMode: IssueDisplayMode;
   issueSyncScope: IssueSyncScope;
   issueSyncLabel: string | null;
   issueSyncEnabled: boolean;
@@ -42,6 +44,7 @@ export interface ProjectIssueSourceSettings {
 export interface UpdateProjectIssueSourceSettingsInput {
   projectId: number;
   issueSourceMode?: IssueSourceMode;
+  issueDisplayMode?: IssueDisplayMode;
   issueSyncScope?: IssueSyncScope;
   issueSyncLabel?: string;
   issueSyncEnabled?: boolean;

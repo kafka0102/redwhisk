@@ -28,7 +28,6 @@ import {
   type LaneTotalsMap,
   INITIAL_LANE_LOAD_STATE,
   INITIAL_LANE_TOTALS,
-  deriveLaneTotals,
   mergeIssues,
 } from "./issue-lane-helpers";
 import {
@@ -51,11 +50,11 @@ import { useIssueDialogLifecycle } from "./use-issue-dialog-lifecycle";
 import { type RunDialogIssue, useIssueRunDialog } from "./use-issue-run-dialog";
 import { isIssueFormDirty } from "./issue-form/issue-form-dirty";
 import { issueBoardListInput } from "./issue-board-query";
+import { reloadIssueBoard } from "./issue-board-reload";
 import { IssuesActivityBoard } from "./issues-activity-board";
 import { useChangeRequestNavigation } from "./use-change-request-navigation";
 import { IssuesActivityReadonlySlot } from "./issues-activity-readonly-slot";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
-import { toBoardIssues } from "./issue-mirror-fields";
 import type { IssueSourceFilter } from "./issue-source-filter";
 import { isIssueEditorOpen } from "./issue-detail/issue-detail-mode";
 import { useIssueSyncChrome } from "./use-issue-sync-chrome";
@@ -154,16 +153,8 @@ export function IssuesActivity({
     isLoadingLabels,
   } = useIssueLabelCatalog(projectId, activeProjectIdRef, t);
   const reloadMirroredIssues = useCallback(
-    (sourceFilter: IssueSourceFilter) => {
-      void listIssues(
-        issueBoardListInput(projectId, sourceFilter, {
-          perStatusLimit: ISSUE_PAGE_SIZE,
-        }),
-      ).then((response) => {
-        setIssues(toBoardIssues(response.issues));
-        setLaneTotals(deriveLaneTotals(response.statusTotals, response.issues));
-      });
-    },
+    (sourceFilter: IssueSourceFilter) =>
+      reloadIssueBoard(projectId, sourceFilter, setIssues, setLaneTotals),
     [projectId],
   );
   const {
@@ -171,8 +162,11 @@ export function IssuesActivity({
     sourceFilter,
     provider,
     showCreate,
+    issueBoard,
     toolbar: issueSyncToolbar,
-  } = useIssueSyncChrome(projectId, reloadMirroredIssues);
+  } = useIssueSyncChrome(projectId, reloadMirroredIssues, () =>
+    setErrorMessage(t("issues.displayModeSaveFailed")),
+  );
   const changeRequestNav = useChangeRequestNavigation();
   const loadingMoreRef = useRef<Set<IssueStatus>>(new Set());
   const previousSelectedIssueIdRef = useRef<number | null>(
@@ -623,6 +617,7 @@ export function IssuesActivity({
             provider={provider}
             onOpenProjectSettings={onOpenProjectSettings}
             onPaneChange={changeRequestNav.setBoardPane}
+            issueBoard={issueBoard}
             openChangeRequest={changeRequestNav.openDetail}
             onOpenChangeRequestConsumed={changeRequestNav.consumeOpenDetail}
             onOpenLinkedIssue={(issueId) => {

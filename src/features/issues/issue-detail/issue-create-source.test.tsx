@@ -29,6 +29,7 @@ function settings(
   const base: ProjectIssueSourceSettings = {
     projectId: 1,
     issueSourceMode: "mixed",
+    issueDisplayMode: "board",
     issueSyncScope: "all_open",
     issueSyncLabel: null,
     issueSyncEnabled: true,

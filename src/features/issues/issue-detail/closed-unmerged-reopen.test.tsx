@@ -234,6 +234,7 @@ describe("closed unmerged reopen", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "mixed",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,

@@ -27,7 +27,7 @@ completion_attempts 保留历史完成尝试审计。
 
 | 表                                      | 责任                     | 关键约束/事实                                                                                |
 | --------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `projects`                              | 项目仓库与 worktree 配置 | `repo_path` 唯一；worktree root 策略与 setup command 属于项目。Issue 来源另有 `issue_source_mode`（`local` / `remote` / `mixed`，默认 `local`）、`issue_sync_scope`、`issue_sync_label`、`issue_sync_enabled`、`issue_sync_interval_seconds`（≥ 60，默认 90）、三个写回开关和 `issue_create_source` |
+| `projects`                              | 项目仓库与 worktree 配置 | `repo_path` 唯一；worktree root 策略与 setup command 属于项目。Issue 来源另有 `issue_display_mode`（`board` / `list`，默认 `board`）、`issue_source_mode`（`local` / `remote` / `mixed`，默认 `local`）、`issue_sync_scope`、`issue_sync_label`、`issue_sync_enabled`、`issue_sync_interval_seconds`（≥ 60，默认 90）、三个写回开关和 `issue_create_source` |
 | `issues`                                | 项目内任务               | `project_id` 外键；状态受 CHECK；`number` 在项目内唯一；`del` 为软删除；`source` 为 `local` 或 `remote`，默认 `local`，迁移不改写已有标题、状态和删除标记 |
 | `issue_external_refs`                   | GitHub / GitLab Issue 外部身份 | `issue_id` 主键并级联删除。`(provider, host, external_id)` 唯一，`(project_id, provider, host, repo, external_number)` 也唯一。`host` 是小写主机名。`sync_status` 由 `0064_issue_external_ref_recovery` 扩展为 `synced`、`error`、`unavailable`、`kept_local`、`unlinked`。同步成功写 `projects.last_issue_synced_at` 并清空 `last_issue_sync_error`；凭据过期或缓存失败只更新错误码，不删除 Issue。`kept_local` 与 `unlinked` 后续同步跳过 |
 | `project_forge_connections`             | 项目 Forge 连接快照      | `project_id` 主键并级联删除；`provider` 仅 `github` / `gitlab` 或空；`auth_status` 为 `unknown` / `ready` / `expired` / `unauthenticated` / `cli_missing` / `not_forge`；未探测则没有行。不存 token |
@@ -69,5 +69,6 @@ completion_attempts 保留历史完成尝试审计。
 9. `0063_issue_completion_writeback` 新增 `issue_completion_writebacks`。不修改已发布 migration，也不回滚已经成立的本地完成。
 10. `0065_change_requests` 新增 `change_requests`、`change_request_issue_links`、`change_request_details`，并给 `issue_pull_requests` 增加可空 `change_request_id`。不修改已发布 migration。登记列表从 `0059` 起移到 `db/migration_list_tail.rs`。
 11. `0066_change_request_sync_status` 只给 `projects` 增加 PR/MR 同步水位和最后错误。不修改 `0065`。登记仍在 `db/migration_list_tail.rs`。
+12. `0067_project_issue_display_mode` 只给 `projects` 增加项目级 `issue_display_mode`，合法值为 `board` / `list`，已有项目默认 `board`；不修改已发布 migration，也不改 Issue、会话、PR/MR 或其他项目设置。
 
 不得从 React 直接读写 SQLite，也不得用前端缓存替代状态事实源。

@@ -19,6 +19,8 @@ mod create_project_issues_tests;
 #[cfg(test)]
 mod issue_source_count_tests;
 #[cfg(test)]
+mod issue_source_display_mode_tests;
+#[cfg(test)]
 mod issue_source_settings_tests;
 
 pub use service::ProjectService;

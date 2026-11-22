@@ -465,6 +465,7 @@ describe("Issue 详情按状态与来源", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "mixed",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,

@@ -15,9 +15,9 @@ use crate::git::command::apply_interactive_path;
 use crate::git::forge::{cli_is_installed, inspect_forge_remote, ForgeHost};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_issue_source::{
-    ForgeAuthStatus, ForgeProvider, IssueCreateSource, IssueSourceMode, IssueSyncScope,
-    ProjectIssueConnection, ProjectIssueSourceSettings, UpdateProjectIssueSourceSettings,
-    UpdateProjectIssueSourceSettingsInput,
+    ForgeAuthStatus, ForgeProvider, IssueCreateSource, IssueDisplayMode, IssueSourceMode,
+    IssueSyncScope, ProjectIssueConnection, ProjectIssueSourceSettings,
+    UpdateProjectIssueSourceSettings, UpdateProjectIssueSourceSettingsInput,
 };
 
 const CLI_AUTH_TIMEOUT: Duration = Duration::from_secs(3);
@@ -296,6 +296,7 @@ fn parse_update(
     Ok(UpdateProjectIssueSourceSettings {
         project_id: input.project_id,
         issue_source_mode: optional_mode(input.issue_source_mode.as_ref())?,
+        issue_display_mode: optional_display_mode(input.issue_display_mode.as_ref())?,
         issue_sync_scope: optional_scope(input.issue_sync_scope.as_ref())?,
         issue_sync_label: optional_text(input.issue_sync_label.as_ref())?,
         issue_sync_enabled: optional_bool(input.issue_sync_enabled.as_ref())?,
@@ -309,6 +310,18 @@ fn parse_update(
         issue_writeback_comment: optional_bool(input.issue_writeback_comment.as_ref())?,
         issue_create_source: optional_create_source(input.issue_create_source.as_ref())?,
     })
+}
+
+fn optional_display_mode(
+    value: Option<&Option<Value>>,
+) -> Result<Option<IssueDisplayMode>, CommandError> {
+    match value {
+        None => Ok(None),
+        Some(Some(Value::String(text))) => IssueDisplayMode::parse(text)
+            .map(Some)
+            .ok_or_else(|| validation_error("issueDisplayModeInvalid")),
+        Some(_) => Err(validation_error("issueDisplayModeInvalid")),
+    }
 }
 
 fn optional_mode(value: Option<&Value>) -> Result<Option<IssueSourceMode>, CommandError> {
@@ -409,6 +422,7 @@ pub(crate) fn project_not_found(project_id: i64) -> CommandError {
 
 pub(crate) fn validation_error(reason: &'static str) -> CommandError {
     let message = match reason {
+        "issueDisplayModeInvalid" => "Issue display mode must be either board or list.",
         "issueSourceModeInvalid" => "Issue source mode is invalid.",
         "issueSyncScopeInvalid" => "Issue sync scope is invalid.",
         "issueSyncIntervalInvalid" => {

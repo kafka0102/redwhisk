@@ -186,6 +186,7 @@ describe("App project entry", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "local",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: false,

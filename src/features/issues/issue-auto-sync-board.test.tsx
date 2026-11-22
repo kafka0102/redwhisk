@@ -142,6 +142,7 @@ describe("issue auto sync gate", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "mixed",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,
@@ -301,6 +302,7 @@ describe("issue auto sync gate", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "local",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,
@@ -340,6 +342,7 @@ describe("issue auto sync gate", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "remote",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,

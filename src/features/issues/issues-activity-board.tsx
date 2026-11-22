@@ -24,6 +24,7 @@ export function IssuesActivityBoard({
   issueCount,
   pane,
   onPaneChange,
+  issueBoard,
   projectId,
   sourceMode,
   provider = null,
@@ -40,6 +41,12 @@ export function IssuesActivityBoard({
   issueCount: number;
   pane: IssueBoardPane;
   onPaneChange: (pane: IssueBoardPane) => void;
+  issueBoard: {
+    view: IssueBoardView;
+    bucket: IssueListBucket;
+    onViewChange: (view: IssueBoardView) => void;
+    onBucketChange: (bucket: IssueListBucket) => void;
+  };
   projectId: number;
   sourceMode: "local" | "remote" | "mixed" | null;
   provider?: ForgeProvider | null;
@@ -52,8 +59,6 @@ export function IssuesActivityBoard({
   onCreateIssue: (trigger: HTMLElement | null) => void;
 } & ComponentProps<typeof IssuesKanban>): JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false);
-  const [view, setView] = useState<IssueBoardView>("board");
-  const [bucket, setBucket] = useState<IssueListBucket>("open");
   const [titleQuery, setTitleQuery] = useState("");
   const filteredLanes = kanban.lanes.map((lane) => ({
     ...lane,
@@ -64,7 +69,7 @@ export function IssuesActivityBoard({
     (issue) => issueListBucket(issue) === "open",
   ).length;
   const visibleIssues = titleMatches.filter(
-    (issue) => issueListBucket(issue) === bucket,
+    (issue) => issueListBucket(issue) === issueBoard.bucket,
   );
   const showIssueChrome = pane === "issues" && !detailOpen;
   return (
@@ -82,14 +87,14 @@ export function IssuesActivityBoard({
       )}
       {showIssueChrome ? (
         <IssueBoardModeBar
-          bucket={bucket}
+          bucket={issueBoard.bucket}
           closedCount={titleMatches.length - openCount}
           openCount={openCount}
           titleQuery={titleQuery}
-          view={view}
-          onBucketChange={setBucket}
+          view={issueBoard.view}
+          onBucketChange={issueBoard.onBucketChange}
           onTitleQueryChange={setTitleQuery}
-          onViewChange={setView}
+          onViewChange={issueBoard.onViewChange}
           createButtonRef={createButtonRef}
           showCreate={showCreate}
           onCreateIssue={onCreateIssue}
@@ -106,9 +111,9 @@ export function IssuesActivityBoard({
           onOpenDetailConsumed={onOpenChangeRequestConsumed}
           onOpenLinkedIssue={onOpenLinkedIssue}
         />
-      ) : view === "list" ? (
+      ) : issueBoard.view === "list" ? (
         <IssueBoardList
-          bucket={bucket}
+          bucket={issueBoard.bucket}
           isLoading={kanban.isLoading}
           issues={visibleIssues}
           selectedIssueId={kanban.selectedIssueId}

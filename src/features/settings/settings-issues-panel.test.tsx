@@ -144,6 +144,7 @@ function settings(
   return {
     projectId: 7,
     issueSourceMode: "local",
+    issueDisplayMode: "board",
     issueSyncScope: "assigned_to_me",
     issueSyncLabel: null,
     issueSyncEnabled: true,

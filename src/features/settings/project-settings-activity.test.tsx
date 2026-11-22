@@ -79,6 +79,7 @@ vi.mock("./issue-source-commands", () => ({
   getProjectIssueSourceSettings: vi.fn(async () => ({
     projectId: 1,
     issueSourceMode: "local",
+    issueDisplayMode: "board",
     issueSyncScope: "assigned_to_me",
     issueSyncLabel: null,
     issueSyncEnabled: true,
@@ -103,6 +104,7 @@ vi.mock("./issue-source-commands", () => ({
   inspectProjectIssueConnection: vi.fn(async () => ({
     projectId: 1,
     issueSourceMode: "local",
+    issueDisplayMode: "board",
     issueSyncScope: "assigned_to_me",
     issueSyncLabel: null,
     issueSyncEnabled: true,

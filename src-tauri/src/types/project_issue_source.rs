@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +23,30 @@ impl IssueSourceMode {
             "local" => Some(Self::Local),
             "remote" => Some(Self::Remote),
             "mixed" => Some(Self::Mixed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueDisplayMode {
+    Board,
+    List,
+}
+
+impl IssueDisplayMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Board => "board",
+            Self::List => "list",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "board" => Some(Self::Board),
+            "list" => Some(Self::List),
             _ => None,
         }
     }
@@ -175,6 +199,7 @@ impl ProjectIssueConnection {
 pub struct ProjectIssueSourceSettings {
     pub project_id: i64,
     pub issue_source_mode: IssueSourceMode,
+    pub issue_display_mode: IssueDisplayMode,
     pub issue_sync_scope: IssueSyncScope,
     pub issue_sync_label: Option<String>,
     pub issue_sync_enabled: bool,
@@ -192,6 +217,7 @@ pub struct ProjectIssueSourceSettings {
 pub struct UpdateProjectIssueSourceSettings {
     pub project_id: i64,
     pub issue_source_mode: Option<IssueSourceMode>,
+    pub issue_display_mode: Option<IssueDisplayMode>,
     pub issue_sync_scope: Option<IssueSyncScope>,
     pub issue_sync_label: Option<String>,
     pub issue_sync_enabled: Option<bool>,
@@ -208,6 +234,8 @@ pub struct UpdateProjectIssueSourceSettingsInput {
     pub project_id: i64,
     #[serde(default)]
     pub issue_source_mode: Option<Value>,
+    #[serde(default, deserialize_with = "deserialize_nullable_value")]
+    pub issue_display_mode: Option<Option<Value>>,
     #[serde(default)]
     pub issue_sync_scope: Option<Value>,
     #[serde(default)]
@@ -224,4 +252,15 @@ pub struct UpdateProjectIssueSourceSettingsInput {
     pub issue_writeback_comment: Option<Value>,
     #[serde(default)]
     pub issue_create_source: Option<Value>,
+}
+
+fn deserialize_nullable_value<'de, D>(deserializer: D) -> Result<Option<Option<Value>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    Ok(match value {
+        Value::Null => Some(None),
+        value => Some(Some(value)),
+    })
 }

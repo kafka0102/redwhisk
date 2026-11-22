@@ -7,7 +7,7 @@ use crate::types::errors::CommandError;
 use crate::types::project::ProjectSummary;
 use crate::types::project::{CreateProjectIssueSourceInput, ValidatedExistingProject};
 use crate::types::project_issue_source::{
-    IssueCreateSource, IssueSourceMode, IssueSyncScope, ProjectIssueConnection,
+    IssueCreateSource, IssueDisplayMode, IssueSourceMode, IssueSyncScope, ProjectIssueConnection,
     ProjectIssueSourceSettings, UpdateProjectIssueSourceSettings,
 };
 
@@ -76,6 +76,7 @@ fn patch(
     UpdateProjectIssueSourceSettings {
         project_id,
         issue_source_mode: input.issue_source_mode,
+        issue_display_mode: None,
         issue_sync_scope: input.issue_sync_scope,
         issue_sync_label: input.issue_sync_label.clone(),
         issue_sync_enabled: input.issue_sync_enabled,
@@ -91,6 +92,7 @@ fn column_defaults() -> ProjectIssueSourceSettings {
     ProjectIssueSourceSettings {
         project_id: 0,
         issue_source_mode: IssueSourceMode::Local,
+        issue_display_mode: IssueDisplayMode::Board,
         issue_sync_scope: IssueSyncScope::AssignedToMe,
         issue_sync_label: None,
         issue_sync_enabled: true,

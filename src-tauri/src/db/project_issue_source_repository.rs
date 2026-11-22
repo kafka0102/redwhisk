@@ -1,8 +1,9 @@
 use rusqlite::{params, OptionalExtension};
 
 use crate::types::project_issue_source::{
-    ForgeAuthStatus, ForgeProvider, IssueCreateSource, IssueSourceMode, IssueSyncScope,
-    ProjectIssueConnection, ProjectIssueSourceSettings, UpdateProjectIssueSourceSettings,
+    ForgeAuthStatus, ForgeProvider, IssueCreateSource, IssueDisplayMode, IssueSourceMode,
+    IssueSyncScope, ProjectIssueConnection, ProjectIssueSourceSettings,
+    UpdateProjectIssueSourceSettings,
 };
 
 #[derive(Debug)]
@@ -43,7 +44,8 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
             .query_row(
                 "SELECT issue_source_mode, issue_sync_scope, issue_sync_label, issue_sync_enabled,
                     issue_sync_interval_seconds, issue_writeback_close_on_complete,
-                    issue_writeback_close_on_pr_merge, issue_writeback_comment, issue_create_source
+                    issue_writeback_close_on_pr_merge, issue_writeback_comment, issue_create_source,
+                    issue_display_mode
              FROM projects WHERE id = ?1",
                 params![project_id],
                 |row| {
@@ -60,6 +62,8 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
                         issue_writeback_close_on_pr_merge: row.get::<_, i64>(6)? != 0,
                         issue_writeback_comment: row.get::<_, i64>(7)? != 0,
                         issue_create_source: IssueCreateSource::parse(&row.get::<_, String>(8)?)
+                            .ok_or(rusqlite::Error::InvalidQuery)?,
+                        issue_display_mode: IssueDisplayMode::parse(&row.get::<_, String>(9)?)
                             .ok_or(rusqlite::Error::InvalidQuery)?,
                         local_issue_count: 0,
                         remote_issue_count: 0,
@@ -100,7 +104,8 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
                  issue_writeback_close_on_complete = ?7,
                  issue_writeback_close_on_pr_merge = ?8,
                  issue_writeback_comment = ?9,
-                 issue_create_source = ?10
+                 issue_create_source = ?10,
+                 issue_display_mode = ?11
              WHERE id = ?1",
             params![
                 next.project_id,
@@ -113,6 +118,7 @@ impl<'connection> ProjectIssueSourceRepository<'connection> {
                 bool_to_int(next.issue_writeback_close_on_pr_merge),
                 bool_to_int(next.issue_writeback_comment),
                 next.issue_create_source.as_str(),
+                next.issue_display_mode.as_str(),
             ],
         )?;
         if updated == 0 {
@@ -201,6 +207,9 @@ pub(crate) fn resolve_settings(
 
     if let Some(scope) = input.issue_sync_scope {
         next.issue_sync_scope = scope;
+    }
+    if let Some(display_mode) = input.issue_display_mode {
+        next.issue_display_mode = display_mode;
     }
     if next.issue_sync_scope == IssueSyncScope::Label {
         if let Some(label) = &input.issue_sync_label {

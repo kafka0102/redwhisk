@@ -10,7 +10,10 @@ import {
   openShadcnSelect,
   selectShadcnOption,
 } from "../../test/select-helpers";
-import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
+import {
+  getProjectIssueSourceSettings,
+  updateProjectIssueSourceSettings,
+} from "../settings/issue-source-commands";
 import { IssuesActivity } from "./issues-activity";
 import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
@@ -92,6 +95,9 @@ const getIssueSyncStatusMock = vi.mocked(getIssueSyncStatus);
 const getProjectIssueSourceSettingsMock = vi.mocked(
   getProjectIssueSourceSettings,
 );
+const updateProjectIssueSourceSettingsMock = vi.mocked(
+  updateProjectIssueSourceSettings,
+);
 const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const listenMock = vi.mocked(listen);
 const listProjectChangeRequestsMock = vi.mocked(listProjectChangeRequests);
@@ -171,6 +177,11 @@ describe("GitHub issue mirror board", () => {
     syncProjectIssuesMock.mockReset();
     getIssueSyncStatusMock.mockReset();
     getProjectIssueSourceSettingsMock.mockReset();
+    updateProjectIssueSourceSettingsMock.mockReset();
+    updateProjectIssueSourceSettingsMock.mockImplementation(async (input) => ({
+      ...sourceSettings(input.issueSourceMode ?? "mixed"),
+      issueDisplayMode: input.issueDisplayMode ?? "board",
+    }));
     getIssueTimelineMock.mockReset();
     getIssueTimelineMock.mockResolvedValue({ entries: [] });
     listProjectChangeRequestsMock.mockReset();
@@ -186,6 +197,7 @@ describe("GitHub issue mirror board", () => {
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
       issueSourceMode: "mixed",
+      issueDisplayMode: "board",
       issueSyncScope: "all_open",
       issueSyncLabel: null,
       issueSyncEnabled: true,
@@ -2214,6 +2226,7 @@ function sourceSettings(mode: "local" | "remote" | "mixed") {
   return {
     projectId: 1,
     issueSourceMode: mode,
+    issueDisplayMode: "board" as const,
     issueSyncScope: "all_open" as const,
     issueSyncLabel: null,
     issueSyncEnabled: true,

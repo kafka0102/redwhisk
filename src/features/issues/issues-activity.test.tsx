@@ -1,6 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -51,7 +52,11 @@ import {
   listSavedAgentSkills,
   type AgentProfileRecord,
 } from "../settings/settings-commands";
-import { getProjectIssueSourceSettings } from "../settings/issue-source-commands";
+import {
+  getProjectIssueSourceSettings,
+  updateProjectIssueSourceSettings,
+  type ProjectIssueSourceSettings,
+} from "../settings/issue-source-commands";
 import { getIssueDetail } from "./issue-detail/issue-detail-commands";
 import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "../../shared/i18n/i18n";
@@ -272,6 +277,9 @@ const listProjectLabelsMock = vi.mocked(listProjectLabels);
 const listSavedAgentSkillsMock = vi.mocked(listSavedAgentSkills);
 const getProjectIssueSourceSettingsMock = vi.mocked(
   getProjectIssueSourceSettings,
+);
+const updateProjectIssueSourceSettingsMock = vi.mocked(
+  updateProjectIssueSourceSettings,
 );
 const getIssueDetailMock = vi.mocked(getIssueDetail);
 const openDialogMock = vi.mocked(open);
@@ -511,6 +519,37 @@ const globalLabel = {
   del: 0,
 };
 
+function issueSourceSettings(
+  overrides: Partial<ProjectIssueSourceSettings> = {},
+): ProjectIssueSourceSettings {
+  return {
+    projectId: 1,
+    issueSourceMode: "local",
+    issueDisplayMode: "board",
+    issueSyncScope: "all_open",
+    issueSyncLabel: null,
+    issueSyncEnabled: false,
+    issueSyncIntervalSeconds: 90,
+    issueWritebackCloseOnComplete: false,
+    issueWritebackCloseOnPrMerge: false,
+    issueWritebackComment: false,
+    issueCreateSource: "local",
+    localIssueCount: 0,
+    remoteIssueCount: 0,
+    connection: {
+      provider: null,
+      hostUrl: null,
+      repoPath: null,
+      login: null,
+      cliInstalled: false,
+      cliAuthenticated: false,
+      authStatus: "unknown",
+      checkedAt: 1,
+    },
+    ...overrides,
+  };
+}
+
 const existingIssueRunPrompt = [
   "using skill bmad-dev-story for task:",
   "Existing description",
@@ -602,32 +641,10 @@ describe("IssuesActivity", () => {
     listenMock.mockReset();
     listenMock.mockImplementation(async () => () => {});
     getProjectIssueSourceSettingsMock.mockReset();
+    updateProjectIssueSourceSettingsMock.mockReset();
     getIssueDetailMock.mockReset();
     getIssueDetailMock.mockRejectedValue(new Error("detail unavailable"));
-    getProjectIssueSourceSettingsMock.mockResolvedValue({
-      projectId: 1,
-      issueSourceMode: "local",
-      issueSyncScope: "all_open",
-      issueSyncLabel: null,
-      issueSyncEnabled: false,
-      issueSyncIntervalSeconds: 90,
-      issueWritebackCloseOnComplete: false,
-      issueWritebackCloseOnPrMerge: false,
-      issueWritebackComment: false,
-      issueCreateSource: "local",
-      localIssueCount: 0,
-      remoteIssueCount: 0,
-      connection: {
-        provider: null,
-        hostUrl: null,
-        repoPath: null,
-        login: null,
-        cliInstalled: false,
-        cliAuthenticated: false,
-        authStatus: "unknown",
-        checkedAt: 1,
-      },
-    });
+    getProjectIssueSourceSettingsMock.mockResolvedValue(issueSourceSettings());
     completeIssueFlowMock.mockImplementation(async (input) =>
       completedFlowResult({
         id: input.issueId,
@@ -1150,6 +1167,286 @@ describe("IssuesActivity", () => {
         screen.getByRole("button", { name: "Existing issue" }),
       ).toHaveFocus(),
     );
+  });
+
+  it("keeps list mode and the selected list bucket after opening an issue detail", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [existingIssue, completedIssue],
+    });
+    updateProjectIssueSourceSettingsMock.mockResolvedValue(
+      issueSourceSettings({ issueDisplayMode: "list" }),
+    );
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueDisplayMode: "list",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Closed 1" }));
+    await user.click(screen.getByRole("button", { name: "Completed issue" }));
+    await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Issue list" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Closed 1" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Existing issue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("loads each project issue mode independently when the activity remounts", async () => {
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    getProjectIssueSourceSettingsMock.mockImplementation(async (projectId) =>
+      issueSourceSettings({
+        projectId,
+        issueDisplayMode: projectId === 1 ? "list" : "board",
+      }),
+    );
+
+    const first = renderIssuesActivity();
+    expect(
+      await screen.findByRole("button", { name: "List view" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("region", { name: "Issue list" }),
+    ).toBeInTheDocument();
+    first.unmount();
+
+    renderIssuesActivity({ projectId: 2 });
+    expect(
+      await screen.findByRole("button", { name: "Board view" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "Backlog" })).toBeInTheDocument();
+  });
+
+  it("keeps an optimistic list selection on save failure and reloads the stored mode", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    updateProjectIssueSourceSettingsMock.mockRejectedValueOnce(
+      new Error("save failed"),
+    );
+
+    const first = renderIssuesActivity();
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+
+    expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("region", { name: "Issue list" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).toBeInTheDocument();
+    first.unmount();
+
+    getProjectIssueSourceSettingsMock.mockResolvedValue(
+      issueSourceSettings({ issueDisplayMode: "board" }),
+    );
+    renderIssuesActivity();
+    expect(
+      await screen.findByRole("button", { name: "Board view" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("region", { name: "Backlog" })).toBeInTheDocument();
+  });
+
+  it("late initial display mode read cannot overwrite a failed optimistic selection", async () => {
+    const user = userEvent.setup();
+    const initialRead = createDeferred<ProjectIssueSourceSettings>();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    getProjectIssueSourceSettingsMock.mockReturnValue(initialRead.promise);
+    updateProjectIssueSourceSettingsMock.mockRejectedValueOnce(
+      new Error("save failed"),
+    );
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    expect(
+      await screen.findByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).toBeInTheDocument();
+
+    initialRead.resolve(issueSourceSettings({ issueDisplayMode: "board" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(
+      screen.getByRole("region", { name: "Issue list" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("late initial display mode read cannot overwrite a successful save", async () => {
+    const user = userEvent.setup();
+    const initialRead = createDeferred<ProjectIssueSourceSettings>();
+    const saved = createDeferred<ProjectIssueSourceSettings>();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    getProjectIssueSourceSettingsMock.mockReturnValue(initialRead.promise);
+    updateProjectIssueSourceSettingsMock.mockReturnValue(saved.promise);
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledWith({
+        projectId: 1,
+        issueDisplayMode: "list",
+      }),
+    );
+    await act(async () => {
+      saved.resolve(issueSourceSettings({ issueDisplayMode: "list" }));
+    });
+
+    initialRead.resolve(issueSourceSettings({ issueDisplayMode: "board" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(
+      screen.getByRole("region", { name: "Issue list" }),
+    ).toBeInTheDocument();
+  });
+
+  it("serializes a failed latest display mode save after an older success", async () => {
+    const user = userEvent.setup();
+    const listSave = createDeferred<ProjectIssueSourceSettings>();
+    const boardSave = createDeferred<ProjectIssueSourceSettings>();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    updateProjectIssueSourceSettingsMock
+      .mockReturnValueOnce(listSave.promise)
+      .mockReturnValueOnce(boardSave.promise);
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1),
+    );
+    await user.click(screen.getByRole("button", { name: "Board view" }));
+    expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await act(async () => {
+      listSave.resolve(issueSourceSettings({ issueDisplayMode: "list" }));
+    });
+
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(2),
+    );
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.queryByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      boardSave.reject(new Error("latest save failed"));
+    });
+
+    expect(
+      await screen.findByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("region", { name: "Backlog" })).toBeInTheDocument();
+  });
+
+  it("ignores an older display mode failure when the queued latest save succeeds", async () => {
+    const user = userEvent.setup();
+    const listSave = createDeferred<ProjectIssueSourceSettings>();
+    const boardSave = createDeferred<ProjectIssueSourceSettings>();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    updateProjectIssueSourceSettingsMock
+      .mockReturnValueOnce(listSave.promise)
+      .mockReturnValueOnce(boardSave.promise);
+
+    renderIssuesActivity();
+
+    await user.click(await screen.findByRole("button", { name: "List view" }));
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1),
+    );
+    await user.click(screen.getByRole("button", { name: "Board view" }));
+    expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await act(async () => {
+      listSave.reject(new Error("older save failed"));
+    });
+
+    await waitFor(() =>
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      screen.queryByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await act(async () => {
+      boardSave.resolve(issueSourceSettings({ issueDisplayMode: "board" }));
+    });
+
+    expect(
+      screen.queryByText(
+        "Could not save the issue display mode. Your current selection will remain for now.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("region", { name: "Backlog" })).toBeInTheDocument();
   });
 
   it("returns to the read-only detail when canceling an edit started from it", async () => {
@@ -5516,6 +5813,214 @@ describe("IssuesActivity", () => {
     expect(
       await screen.findByRole("region", { name: "Issue Detail" }),
     ).toBeInTheDocument();
+  });
+
+  describe("serializes display mode saves", () => {
+    it("queues only the latest selection until the in-flight save settles", async () => {
+      const user = userEvent.setup();
+      const listSave = createDeferred<ProjectIssueSourceSettings>();
+      const boardSave = createDeferred<ProjectIssueSourceSettings>();
+      const saves: Array<{
+        input: Parameters<typeof updateProjectIssueSourceSettings>[0];
+        deferred: ReturnType<typeof createDeferred<ProjectIssueSourceSettings>>;
+      }> = [];
+      let persistedDisplayMode: ProjectIssueSourceSettings["issueDisplayMode"] =
+        "board";
+
+      listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+      updateProjectIssueSourceSettingsMock.mockImplementation((input) => {
+        const deferred =
+          saves.length === 0
+            ? listSave
+            : saves.length === 1
+              ? boardSave
+              : createDeferred<ProjectIssueSourceSettings>();
+        saves.push({ input, deferred });
+        return deferred.promise.then((settings) => {
+          persistedDisplayMode = settings.issueDisplayMode;
+          return settings;
+        });
+      });
+
+      renderIssuesActivity();
+
+      await user.click(
+        await screen.findByRole("button", { name: "List view" }),
+      );
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Board view" }));
+
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("button", { name: "Board view" }),
+      ).toHaveAttribute("aria-pressed", "true");
+
+      await act(async () => {
+        listSave.resolve(issueSourceSettings({ issueDisplayMode: "list" }));
+      });
+
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(2),
+      );
+      expect(saves[1]?.input).toEqual({
+        projectId: 1,
+        issueDisplayMode: "board",
+      });
+      expect(persistedDisplayMode).toBe("list");
+
+      await act(async () => {
+        boardSave.resolve(issueSourceSettings({ issueDisplayMode: "board" }));
+      });
+
+      await waitFor(() => expect(persistedDisplayMode).toBe("board"));
+      expect(
+        screen.getByRole("button", { name: "Board view" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByRole("region", { name: "Backlog" }),
+      ).toBeInTheDocument();
+    });
+
+    it("starts the queued latest save after the first save fails", async () => {
+      const user = userEvent.setup();
+      const listSave = createDeferred<ProjectIssueSourceSettings>();
+      const boardSave = createDeferred<ProjectIssueSourceSettings>();
+
+      listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+      updateProjectIssueSourceSettingsMock
+        .mockReturnValueOnce(listSave.promise)
+        .mockReturnValueOnce(boardSave.promise);
+
+      renderIssuesActivity();
+
+      await user.click(
+        await screen.findByRole("button", { name: "List view" }),
+      );
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1),
+      );
+      await user.click(screen.getByRole("button", { name: "Board view" }));
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        listSave.reject(new Error("first save failed"));
+      });
+
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(2),
+      );
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenNthCalledWith(2, {
+        projectId: 1,
+        issueDisplayMode: "board",
+      });
+
+      await act(async () => {
+        boardSave.resolve(issueSourceSettings({ issueDisplayMode: "board" }));
+      });
+
+      expect(
+        screen.queryByText(
+          "Could not save the issue display mode. Your current selection will remain for now.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Board view" }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByRole("region", { name: "Backlog" }),
+      ).toBeInTheDocument();
+    });
+
+    it("ignores an older project save that succeeds after the latest success", async () => {
+      const user = userEvent.setup();
+      const firstProjectSave = createDeferred<ProjectIssueSourceSettings>();
+      const currentProjectSave = createDeferred<ProjectIssueSourceSettings>();
+      const persistedModes = new Map<
+        number,
+        ProjectIssueSourceSettings["issueDisplayMode"]
+      >();
+
+      listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+      getProjectIssueSourceSettingsMock.mockImplementation(async (projectId) =>
+        issueSourceSettings({ projectId, issueDisplayMode: "board" }),
+      );
+      updateProjectIssueSourceSettingsMock
+        .mockReturnValueOnce(firstProjectSave.promise)
+        .mockReturnValueOnce(currentProjectSave.promise)
+        .mockImplementation(async (input) => {
+          const next = issueSourceSettings({
+            projectId: input.projectId,
+            issueDisplayMode: input.issueDisplayMode ?? "board",
+          });
+          persistedModes.set(input.projectId, next.issueDisplayMode);
+          return next;
+        });
+      firstProjectSave.promise.then((settings) => {
+        persistedModes.set(settings.projectId, settings.issueDisplayMode);
+      });
+      currentProjectSave.promise.then((settings) => {
+        persistedModes.set(settings.projectId, settings.issueDisplayMode);
+      });
+
+      const { rerender } = renderIssuesActivity();
+
+      await user.click(
+        await screen.findByRole("button", { name: "List view" }),
+      );
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(1),
+      );
+
+      rerender(
+        <I18nProvider>
+          <IssuesActivity projectId={2} worktreeSetupCommand="pnpm install" />
+        </I18nProvider>,
+      );
+
+      await waitFor(() =>
+        expect(getProjectIssueSourceSettingsMock).toHaveBeenCalledWith(2),
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "List view" }),
+      );
+      await waitFor(() =>
+        expect(updateProjectIssueSourceSettingsMock).toHaveBeenCalledTimes(2),
+      );
+      expect(updateProjectIssueSourceSettingsMock).toHaveBeenNthCalledWith(2, {
+        projectId: 2,
+        issueDisplayMode: "list",
+      });
+
+      await act(async () => {
+        currentProjectSave.resolve(
+          issueSourceSettings({ projectId: 2, issueDisplayMode: "list" }),
+        );
+      });
+      expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+
+      await act(async () => {
+        firstProjectSave.resolve(
+          issueSourceSettings({ projectId: 1, issueDisplayMode: "board" }),
+        );
+      });
+
+      expect(screen.getByRole("button", { name: "List view" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(persistedModes).toEqual(
+        new Map<number, ProjectIssueSourceSettings["issueDisplayMode"]>([
+          [1, "board"],
+          [2, "list"],
+        ]),
+      );
+    });
   });
 });
 
