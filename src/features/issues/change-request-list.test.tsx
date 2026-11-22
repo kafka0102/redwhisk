@@ -224,7 +224,7 @@ describe("change request list", () => {
     );
     expect(screen.getByText(/2 分钟前/)).toBeInTheDocument();
     expect(screen.getByText(/14 小时前/)).toBeInTheDocument();
-    expect(screen.getByText(/昨天/)).toBeInTheDocument();
+    expect(screen.getByText(/1 天前/)).toBeInTheDocument();
     expect(
       [...document.querySelectorAll(".change-request-link")].map(
         (link) => link.textContent,
@@ -283,7 +283,37 @@ describe("change request list", () => {
     );
     expect(screen.getByText(/2 minutes ago/)).toBeInTheDocument();
     expect(screen.getByText(/14 hours ago/)).toBeInTheDocument();
-    expect(screen.getByText(/yesterday/)).toBeInTheDocument();
+    expect(screen.getByText(/1 day ago/)).toBeInTheDocument();
+  });
+
+  it("uses months and years for older pull requests", () => {
+    renderList(
+      "en",
+      <ChangeRequestList
+        now={NOW}
+        response={{
+          ...emptyResponse(),
+          rows: [
+            row({
+              id: 90,
+              number: 90,
+              title: "Three months old",
+              remoteUpdatedAt: NOW - 90 * 86_400_000,
+            }),
+            row({
+              id: 400,
+              number: 400,
+              title: "One year old",
+              remoteUpdatedAt: NOW - 400 * 86_400_000,
+            }),
+          ],
+        }}
+        sourceMode="remote"
+      />,
+    );
+
+    expect(screen.getByText(/3 months ago/)).toBeInTheDocument();
+    expect(screen.getByText(/1 year ago/)).toBeInTheDocument();
   });
 
   it("keeps filters when the current filter is empty", () => {

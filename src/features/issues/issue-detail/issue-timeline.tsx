@@ -6,6 +6,7 @@ import defaultUserProfile from "@/assets/images/default_user_profile.png";
 import { AgentMarkdown } from "../../agents/message-stream/agent-markdown";
 import { getAgentLogoSrc } from "../../agents/agent-visuals";
 import { useI18n } from "../../../shared/i18n/i18n";
+import { formatRelativeTime } from "../../../shared/time/relative-time";
 import { useTauriEvent } from "../../../shared/tauri-event/use-tauri-event";
 import {
   getIssueTimeline,
@@ -144,7 +145,14 @@ function IssueTimelineEntryRow({ entry }: { entry: IssueTimelineEntry }) {
           className="issue-timeline__time"
           dateTime={new Date(entry.createdAt).toISOString()}
         >
-          {formatRelativeTime(entry.createdAt, messages)}
+          {formatRelativeTime(entry.createdAt, {
+            justNow: messages.issues.timelineJustNow,
+            minutesAgo: messages.issues.timelineMinutesAgo,
+            hoursAgo: messages.issues.timelineHoursAgo,
+            daysAgo: messages.issues.timelineDaysAgo,
+            monthsAgo: messages.issues.timelineMonthsAgo,
+            yearsAgo: messages.issues.timelineYearsAgo,
+          })}
         </time>
         <span className="issue-timeline__source">{sourceLabel}</span>
       </div>
@@ -164,21 +172,4 @@ function resolveActorAvatar(actor: IssueTimelineActor): string {
   return actor.avatarPath
     ? convertFileSrc(actor.avatarPath)
     : defaultUserProfile;
-}
-
-function formatRelativeTime(
-  createdAt: number,
-  messages: ReturnType<typeof useI18n>["messages"],
-): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - createdAt) / 1_000));
-  if (seconds < 60) {
-    return messages.issues.timelineJustNow;
-  }
-  if (seconds < 3_600) {
-    return messages.issues.timelineMinutesAgo(Math.floor(seconds / 60));
-  }
-  if (seconds < 86_400) {
-    return messages.issues.timelineHoursAgo(Math.floor(seconds / 3_600));
-  }
-  return messages.issues.timelineDaysAgo(Math.floor(seconds / 86_400));
 }

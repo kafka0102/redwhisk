@@ -91,6 +91,7 @@ describe("formatBranchRelativeTime", () => {
     if (key === "changesCheckout.hoursAgo") return `${options?.hours} 小时前`;
     if (key === "changesCheckout.daysAgo") return `${options?.days} 天前`;
     if (key === "changesCheckout.monthsAgo") return `${options?.months} 个月前`;
+    if (key === "changesCheckout.yearsAgo") return `${options?.years} 年前`;
     return key;
   };
 
@@ -106,6 +107,9 @@ describe("formatBranchRelativeTime", () => {
     );
     expect(formatBranchRelativeTime(now - 90 * 86_400_000, t, now)).toBe(
       "3 个月前",
+    );
+    expect(formatBranchRelativeTime(now - 400 * 86_400_000, t, now)).toBe(
+      "1 年前",
     );
   });
 });

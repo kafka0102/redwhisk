@@ -1,3 +1,7 @@
+import {
+  formatRelativeTime,
+  type RelativeTimeFormatter,
+} from "../../shared/time/relative-time";
 import type { IssueRecord } from "./issue-commands";
 import type { IssueBoardRecord } from "./issue-mirror-commands";
 
@@ -161,22 +165,7 @@ export function linkedRequestLabel(mirror: IssueMirrorView): string | null {
 export function formatIssueAge(
   epochMilliseconds: number,
   now: number,
-  labels: {
-    justNow: string;
-    minutesAgo: (minutes: number) => string;
-    hoursAgo: (hours: number) => string;
-    daysAgo: (days: number) => string;
-  },
+  labels: RelativeTimeFormatter,
 ): string {
-  const seconds = Math.max(0, Math.floor((now - epochMilliseconds) / 1000));
-  if (seconds < 60) {
-    return labels.justNow;
-  }
-  if (seconds < 3_600) {
-    return labels.minutesAgo(Math.floor(seconds / 60));
-  }
-  if (seconds < 86_400) {
-    return labels.hoursAgo(Math.floor(seconds / 3_600));
-  }
-  return labels.daysAgo(Math.floor(seconds / 86_400));
+  return formatRelativeTime(epochMilliseconds, labels, now);
 }

@@ -998,7 +998,14 @@ describe("IssuesActivity", () => {
   it("shows issue project number (not global id), relative update time, full title, and a single-line description excerpt", async () => {
     // existingIssue.id = 20 但 number = 1；卡片展示必须用 number。
     expect(existingIssue.id).not.toBe(existingIssue.number);
-    listIssuesMock.mockResolvedValue({ issues: [existingIssue] });
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        {
+          ...existingIssue,
+          updatedAt: Date.now() - 10 * 86_400_000,
+        },
+      ],
+    });
 
     renderIssuesActivity();
 
@@ -1010,12 +1017,7 @@ describe("IssuesActivity", () => {
     expect(shell).toHaveTextContent("Existing issue");
     expect(shell).toHaveTextContent("#1");
     expect(shell).not.toHaveTextContent("#20");
-    const ageSeconds = Math.max(
-      0,
-      Math.floor((Date.now() - existingIssue.updatedAt) / 1000),
-    );
-    const ageDays = Math.floor(ageSeconds / 86_400);
-    expect(shell).toHaveTextContent(`${ageDays}d ago`);
+    expect(shell).toHaveTextContent("10d ago");
     expect(shell).toHaveTextContent("Existing description");
     expect(shell).not.toHaveTextContent(/priority|assignee|milestone/i);
   });

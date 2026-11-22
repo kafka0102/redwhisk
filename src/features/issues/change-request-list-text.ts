@@ -1,15 +1,9 @@
 import type { TFunction } from "i18next";
 
+import { formatRelativeTime } from "../../shared/time/relative-time";
 import type { ChangeRequestListRow } from "./change-request-commands";
 
 export type ChangeRequestTone = "danger" | "warning" | "success" | "muted";
-
-const SHANGHAI_DAY = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Shanghai",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 
 export function changeRequestCheck(
   row: ChangeRequestListRow,
@@ -94,21 +88,46 @@ export function changeRequestTime(
   now: number,
   t: TFunction,
 ): string {
-  const day = SHANGHAI_DAY.format(remoteUpdatedAt);
-  const today = SHANGHAI_DAY.format(now);
-  if (day !== today) {
-    const yesterday = SHANGHAI_DAY.format(now - 24 * 60 * 60 * 1000);
-    if (day === yesterday) {
-      return t("issues.changeRequests.yesterday");
-    }
-  }
-  const elapsed = Math.max(0, now - remoteUpdatedAt);
-  if (elapsed < 60 * 60 * 1000) {
-    return t("issues.changeRequests.minutesAgo", {
-      count: Math.floor(elapsed / 60000),
-    });
-  }
-  return t("issues.changeRequests.hoursAgo", {
-    count: Math.floor(elapsed / 3600000),
-  });
+  return formatRelativeTime(
+    remoteUpdatedAt,
+    {
+      justNow: t("issues.changeRequests.justNow"),
+      minutesAgo: (minutes) =>
+        t(
+          minutes === 1
+            ? "issues.changeRequests.minuteAgo"
+            : "issues.changeRequests.minutesAgo",
+          { count: minutes },
+        ),
+      hoursAgo: (hours) =>
+        t(
+          hours === 1
+            ? "issues.changeRequests.hourAgo"
+            : "issues.changeRequests.hoursAgo",
+          { count: hours },
+        ),
+      daysAgo: (days) =>
+        t(
+          days === 1
+            ? "issues.changeRequests.dayAgo"
+            : "issues.changeRequests.daysAgo",
+          { count: days },
+        ),
+      monthsAgo: (months) =>
+        t(
+          months === 1
+            ? "issues.changeRequests.monthAgo"
+            : "issues.changeRequests.monthsAgo",
+          { count: months },
+        ),
+      yearsAgo: (years) =>
+        t(
+          years === 1
+            ? "issues.changeRequests.yearAgo"
+            : "issues.changeRequests.yearsAgo",
+          { count: years },
+        ),
+    },
+    now,
+  );
 }

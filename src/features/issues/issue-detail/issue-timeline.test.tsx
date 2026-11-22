@@ -79,6 +79,23 @@ describe("IssueTimeline", () => {
     );
   });
 
+  it("renders month and year relative times", async () => {
+    getIssueTimelineMock.mockResolvedValue({
+      entries: [
+        {
+          actionType: "issue_created",
+          actor: { name: "Alice", avatarPath: null, actorKind: "user" },
+          createdAt: Date.now() - 400 * 86_400_000,
+          source: "local",
+        },
+      ],
+    });
+
+    renderTimeline();
+
+    expect(await screen.findByText("1y ago")).toBeVisible();
+  });
+
   it("renders the agent actor with the agent logo instead of the user avatar", async () => {
     getIssueTimelineMock.mockResolvedValue({
       entries: [

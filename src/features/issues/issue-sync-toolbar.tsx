@@ -110,5 +110,7 @@ function syncStatusText(
     minutesAgo: (minutes) => t("issues.syncedMinutesAgo", { minutes }),
     hoursAgo: (hours) => t("issues.syncedHoursAgo", { hours }),
     daysAgo: (days) => t("issues.syncedDaysAgo", { days }),
+    monthsAgo: (months) => t("issues.syncedMonthsAgo", { months }),
+    yearsAgo: (years) => t("issues.syncedYearsAgo", { years }),
   });
 }

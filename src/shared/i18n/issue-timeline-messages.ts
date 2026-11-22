@@ -7,6 +7,7 @@ export interface IssueTimelineMessages {
   timelineHoursAgo: (hours: number) => string;
   timelineJustNow: string;
   timelineMinutesAgo: (minutes: number) => string;
+  timelineMonthsAgo: (months: number) => string;
   timelineRemoteEvent: string;
   timelineRemoteOrigin: string;
   timelineReviewMarked: string;
@@ -14,4 +15,5 @@ export interface IssueTimelineMessages {
   timelineSourceRemote: string;
   timelineStatusChanged: string;
   timelineTitle: string;
+  timelineYearsAgo: (years: number) => string;
 }

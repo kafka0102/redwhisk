@@ -223,6 +223,9 @@ function IssueCard({
                   t("issues.timelineMinutesAgo", { minutes }),
                 hoursAgo: (hours) => t("issues.timelineHoursAgo", { hours }),
                 daysAgo: (days) => t("issues.timelineDaysAgo", { days }),
+                monthsAgo: (months) =>
+                  t("issues.timelineMonthsAgo", { months }),
+                yearsAgo: (years) => t("issues.timelineYearsAgo", { years }),
               })}
             </span>
             <IssueAssigneeAvatar issue={issue} />

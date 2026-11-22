@@ -350,6 +350,37 @@ describe("GitHub issue mirror board", () => {
     expect(screen.getByText("远端已重开")).toBeInTheDocument();
   });
 
+  it("uses months and years for old issue cards and list rows", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({
+      issues: [
+        boardIssue({
+          id: 20,
+          number: 20,
+          title: "Three months old",
+          updatedAt: Date.now() - 90 * 86_400_000,
+        }),
+        boardIssue({
+          id: 21,
+          number: 21,
+          title: "One year old",
+          updatedAt: Date.now() - 400 * 86_400_000,
+        }),
+      ],
+      statusTotals: { backlog: 2, running: 0, review: 0, completed: 0 },
+    });
+
+    renderBoard();
+
+    expect(await screen.findByText("3 个月前")).toBeInTheDocument();
+    expect(screen.getByText("1 年前")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "列表模式" }));
+
+    expect(screen.getAllByText("3 个月前")).toHaveLength(1);
+    expect(screen.getAllByText("1 年前")).toHaveLength(1);
+  });
+
   it("shows project labels on a remote issue card", async () => {
     listIssuesMock.mockResolvedValue({
       issues: [
@@ -511,6 +542,14 @@ describe("GitHub issue mirror board", () => {
       </I18nProvider>,
     );
     await expectSyncToolbar("已同步 2 小时前", "success");
+
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: now - 400 * 86_400_000,
+      syncError: null,
+    });
+    view.unmount();
+    renderBoard();
+    await expectSyncToolbar("已同步 1 年前", "success");
   });
 
   it("shows credential and cache failures without painting every card", async () => {
