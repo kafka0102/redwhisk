@@ -70,9 +70,14 @@ export function useIssueSyncChrome(
     useState<IssueBoardView>("board");
   const [issueListBucket, setIssueListBucket] =
     useState<IssueListBucket>("open");
-  const [syncing, setSyncing] = useState(false);
+  const [syncingProjectIds, setSyncingProjectIds] = useState(
+    () => new Set<number>(),
+  );
+  const [cliMissingConfirmed, setCliMissingConfirmed] = useState(false);
   const [seenProjectId, setSeenProjectId] = useState(projectId);
-  const syncingRef = useRef(false);
+  const syncingProjectIdsRef = useRef(new Set<number>());
+  const syncRequestSequenceRef = useRef(0);
+  const statusReadSequenceRef = useRef(0);
   const onReloadRef = useRef(onReload);
   const onIssueDisplayModeSaveFailedRef = useRef(onIssueDisplayModeSaveFailed);
   const projectIdRef = useRef(projectId);
@@ -89,6 +94,8 @@ export function useIssueSyncChrome(
     setSettings(null);
     setIssueDisplayMode("board");
     setIssueListBucket("open");
+    setStatus(null);
+    setCliMissingConfirmed(false);
   }
   const isPageVisible = usePageVisible();
   const isWindowFocused = useWindowFocus();
@@ -192,14 +199,23 @@ export function useIssueSyncChrome(
 
   useEffect(() => {
     let cancelled = false;
+    const statusReadSequence = ++statusReadSequenceRef.current;
     void getIssueSyncStatus(projectId)
       .then((next) => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          projectIdRef.current === projectId &&
+          statusReadSequenceRef.current === statusReadSequence
+        ) {
           setStatus(next);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          projectIdRef.current === projectId &&
+          statusReadSequenceRef.current === statusReadSequence
+        ) {
           setStatus(null);
         }
       });
@@ -216,26 +232,63 @@ export function useIssueSyncChrome(
           return;
         }
         onReloadRef.current(sourceFilterRef.current);
+        const statusReadSequence = ++statusReadSequenceRef.current;
         void getIssueSyncStatus(projectId)
-          .then(setStatus)
+          .then((next) => {
+            if (
+              projectIdRef.current !== projectId ||
+              statusReadSequenceRef.current !== statusReadSequence
+            ) {
+              return;
+            }
+            setStatus(next);
+            setCliMissingConfirmed(
+              payload.outcome === "cache_failed" &&
+                next.syncError === "cli_missing",
+            );
+          })
           .catch(() => undefined);
       },
     );
   }, [projectId]);
 
   const runSync = useCallback(async (): Promise<AutoSyncResult> => {
-    if (syncingRef.current) {
+    const currentProjectId = projectIdRef.current;
+    if (syncingProjectIdsRef.current.has(currentProjectId)) {
       return "skipped";
     }
-    syncingRef.current = true;
-    setSyncing(true);
-    const currentProjectId = projectIdRef.current;
+    syncingProjectIdsRef.current.add(currentProjectId);
+    setSyncingProjectIds((current) => {
+      const next = new Set(current);
+      next.add(currentProjectId);
+      return next;
+    });
+    setCliMissingConfirmed(false);
+    const syncRequestSequence = ++syncRequestSequenceRef.current;
+    const isCurrentSyncRequest = (): boolean =>
+      projectIdRef.current === currentProjectId &&
+      syncRequestSequenceRef.current === syncRequestSequence;
     try {
       const result = await syncProjectIssues(currentProjectId);
+      if (!isCurrentSyncRequest()) {
+        return "skipped";
+      }
       if (result?.outcome == null) {
         return "failed";
       }
-      setStatus(await getIssueSyncStatus(currentProjectId));
+      const statusReadSequence = ++statusReadSequenceRef.current;
+      const nextStatus = await getIssueSyncStatus(currentProjectId);
+      if (
+        !isCurrentSyncRequest() ||
+        statusReadSequenceRef.current !== statusReadSequence
+      ) {
+        return "skipped";
+      }
+      setStatus(nextStatus);
+      setCliMissingConfirmed(
+        result.outcome === "cache_failed" &&
+          nextStatus.syncError === "cli_missing",
+      );
       onReloadRef.current(sourceFilterRef.current);
       if (
         result.outcome === "credential_expired" ||
@@ -247,8 +300,12 @@ export function useIssueSyncChrome(
     } catch {
       return "failed";
     } finally {
-      syncingRef.current = false;
-      setSyncing(false);
+      syncingProjectIdsRef.current.delete(currentProjectId);
+      setSyncingProjectIds((current) => {
+        const next = new Set(current);
+        next.delete(currentProjectId);
+        return next;
+      });
     }
   }, []);
 
@@ -269,6 +326,7 @@ export function useIssueSyncChrome(
 
   const showFilter = sourceMode === "mixed";
   const showSync = sourceMode === "remote" || sourceMode === "mixed";
+  const syncing = syncingProjectIds.has(projectId);
   const toolbar =
     showFilter || showSync ? (
       <>
@@ -283,6 +341,7 @@ export function useIssueSyncChrome(
           <IssueSyncToolbar
             status={status}
             syncing={syncing}
+            cliMissingConfirmed={cliMissingConfirmed}
             provider={settings?.connection.provider ?? null}
             onRefresh={refresh}
           />

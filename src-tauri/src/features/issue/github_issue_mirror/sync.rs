@@ -63,14 +63,9 @@ pub fn sync_project_issues(
                 outcome: IssueSyncOutcome::CredentialExpired,
             });
         }
-        ForgeAuthStatus::CliMissing => {
-            refs.mark_sync_error(project_id, "cli_missing")
-                .map_err(persistence)?;
-            return Ok(IssueSyncResult {
-                outcome: IssueSyncOutcome::CacheFailed,
-            });
-        }
-        ForgeAuthStatus::Ready => {}
+        // `cli_missing` is a cached observation, not a permanent verdict. The forge call below
+        // re-classifies it after the background interactive PATH is available.
+        ForgeAuthStatus::CliMissing | ForgeAuthStatus::Ready => {}
         _ => {
             refs.mark_sync_error(project_id, "cache_failed")
                 .map_err(persistence)?;

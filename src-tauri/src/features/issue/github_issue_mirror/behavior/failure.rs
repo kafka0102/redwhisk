@@ -245,3 +245,117 @@ fn get_issue_sync_status_returns_last_synced_at_and_sync_error() {
     assert_eq!(json["syncError"], "cache_failed");
     let _ = fs::remove_dir_all(data_dir.path());
 }
+#[cfg(test)]
+mod ticket_04_cli_recovery {
+    use super::super::support::last_sync_error;
+    use super::*;
+
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use crate::agent::command_detector::pin_test_interactive_shell_path;
+    use crate::features::issue::github_issue_mirror::cli::ProjectIssueForge;
+    use crate::types::project_issue_source::ForgeProvider;
+
+    #[test]
+    fn first_background_sync_uses_the_resolved_interactive_path() {
+        let harness = ready_github_project("all_open", None);
+        let temp = tempdir().expect("temp dir");
+        let bin_dir = temp.path().join("bin");
+        let repo_dir = temp.path().join("repo");
+        fs::create_dir_all(&bin_dir).expect("bin dir");
+        fs::create_dir_all(&repo_dir).expect("repo dir");
+        let gh = bin_dir.join("gh");
+        fs::write(
+            &gh,
+            "#!/bin/sh\nprintf '%s\\n' '[{\"id\":88,\"number\":88,\"title\":\"PATH synced\",\"body\":\"\",\"state\":\"open\",\"url\":\"https://github.com/acme/redwhisk/issues/88\",\"assignees\":[]}]'\n",
+        )
+        .expect("fake gh");
+        fs::set_permissions(&gh, fs::Permissions::from_mode(0o755)).expect("chmod fake gh");
+        let path =
+            std::env::join_paths([bin_dir.as_path(), Path::new("/usr/bin"), Path::new("/bin")])
+                .expect("join path");
+        let _pin = pin_test_interactive_shell_path(Some(path));
+        let forge = ProjectIssueForge::new(Some(ForgeProvider::Github), repo_dir);
+
+        let result = super::super::super::sync::sync_project_issues(
+            &harness.connection,
+            harness.project_id,
+            &forge,
+            5_000,
+        )
+        .expect("sync");
+
+        assert_eq!(result.outcome, IssueSyncOutcome::Synced);
+        let listed = list_board_issues(&harness.connection, harness.project_id).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "PATH synced");
+        assert_eq!(
+            last_sync_error(&harness.connection, harness.project_id),
+            None
+        );
+    }
+
+    #[test]
+    fn missing_forge_cli_remains_a_real_sync_error() {
+        let harness = ready_github_project("all_open", None);
+        let temp = tempdir().expect("temp dir");
+        let empty_bin = temp.path().join("empty-bin");
+        fs::create_dir_all(&empty_bin).expect("empty bin");
+        let path = std::env::join_paths([empty_bin.as_path()]).expect("join path");
+        let _pin = pin_test_interactive_shell_path(Some(path));
+        let forge = ProjectIssueForge::new(Some(ForgeProvider::Github), temp.path().join("repo"));
+
+        let result = super::super::super::sync::sync_project_issues(
+            &harness.connection,
+            harness.project_id,
+            &forge,
+            5_000,
+        )
+        .expect("sync");
+
+        assert_eq!(result.outcome, IssueSyncOutcome::CacheFailed);
+        assert_eq!(
+            last_sync_error(&harness.connection, harness.project_id).as_deref(),
+            Some("cli_missing")
+        );
+        let listed = list_board_issues(&harness.connection, harness.project_id).expect("list");
+        assert!(listed.is_empty());
+    }
+
+    #[test]
+    fn cached_cli_missing_is_reclassified_by_real_forge() {
+        let harness = ready_github_project("all_open", None);
+        set_auth(
+            &harness.connection,
+            harness.project_id,
+            "github",
+            "cli_missing",
+        );
+        harness
+            .connection
+            .execute(
+                "UPDATE projects SET last_issue_sync_error = 'cli_missing' WHERE id = ?1",
+                rusqlite::params![harness.project_id],
+            )
+            .expect("seed cli_missing");
+        let forge = FixedForge::new(vec![remote_issue(
+            8,
+            RemoteIssueState::Open,
+            "Recovered issue",
+        )]);
+
+        let result = sync_forge(&harness, &forge);
+
+        assert_eq!(result.outcome, IssueSyncOutcome::Synced);
+        assert_eq!(forge.calls().len(), 1);
+        let listed = list_board_issues(&harness.connection, harness.project_id).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].external_number, Some(8));
+        assert_eq!(listed[0].title, "Recovered issue");
+        assert_eq!(
+            last_sync_error(&harness.connection, harness.project_id),
+            None
+        );
+    }
+}

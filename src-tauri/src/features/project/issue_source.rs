@@ -11,7 +11,6 @@ use crate::db::project_issue_source_repository::{
     ProjectIssueSourceError, ProjectIssueSourceRepository,
 };
 use crate::db::project_repository::ProjectRepository;
-use crate::git::command::apply_interactive_path;
 use crate::git::forge::{cli_is_installed, inspect_forge_remote, ForgeHost};
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_issue_source::{
@@ -228,7 +227,9 @@ fn probe_cli(provider: ForgeProvider) -> CliAuthSample {
     }
     let mut command = Command::new(cli);
     command.args(["auth", "status"]);
-    apply_interactive_path(&mut command);
+    if let Some(path) = crate::agent::command_detector::resolve_interactive_shell_path() {
+        command.env("PATH", path);
+    }
     match output_with_timeout(command, CLI_AUTH_TIMEOUT) {
         Ok(output) => {
             let mut text = String::from_utf8_lossy(&output.stdout).into_owned();

@@ -103,10 +103,10 @@ fn gitlab_failures_keep_existing_rows_and_record_sync_error() {
         ),
         (
             "cli_missing",
-            None,
+            Some(ForgeIssueError::CliMissing),
             IssueSyncOutcome::CacheFailed,
             "cli_missing",
-            0,
+            1,
         ),
         (
             "ready",

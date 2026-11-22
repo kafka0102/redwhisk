@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -151,6 +151,14 @@ function renderBoard(projectId = 1) {
       <IssuesActivity projectId={projectId} />
     </I18nProvider>,
   );
+}
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 async function expectSyncToolbar(
@@ -1004,6 +1012,56 @@ describe("GitHub issue mirror board", () => {
     resolveSync({ outcome: "synced" });
   });
 
+  it("project switch while sync pending isolates project sync state", async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+    const projectOneSync = deferred<{ outcome: "synced" }>();
+    const projectTwoSync = deferred<{ outcome: "synced" }>();
+    getProjectIssueSourceSettingsMock.mockImplementation(
+      async (requestedProjectId) => ({
+        ...sourceSettings("mixed"),
+        projectId: requestedProjectId,
+        issueSyncEnabled: false,
+      }),
+    );
+    getIssueSyncStatusMock.mockImplementation(async (requestedProjectId) =>
+      requestedProjectId === 2
+        ? { lastSyncedAt: now - 120_000, syncError: null }
+        : { lastSyncedAt: now - 7_200_000, syncError: null },
+    );
+    syncProjectIssuesMock.mockImplementation((requestedProjectId) =>
+      requestedProjectId === 1
+        ? projectOneSync.promise
+        : projectTwoSync.promise,
+    );
+
+    const view = renderBoard(1);
+    await user.click(await screen.findByRole("button", { name: "刷新" }));
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledWith(1));
+    await expectSyncToolbar("同步中");
+
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "刷新" }));
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledWith(2));
+    await expectSyncToolbar("同步中");
+
+    await act(async () => {
+      projectOneSync.resolve({ outcome: "synced" });
+    });
+
+    await expectSyncToolbar("同步中");
+    expect(screen.queryByText("已同步 2 小时前")).not.toBeInTheDocument();
+
+    await act(async () => {
+      projectTwoSync.resolve({ outcome: "synced" });
+    });
+    await expectSyncToolbar("已同步 2 分钟前");
+  });
+
   it("refreshes only issues while the Issues tab is selected", async () => {
     const user = userEvent.setup();
     renderBoard();
@@ -1257,6 +1315,7 @@ describe("GitHub issue mirror board", () => {
       lastSyncedAt: 1,
       syncError: "cli_missing",
     });
+    syncProjectIssuesMock.mockResolvedValue({ outcome: "cache_failed" });
     view.rerender(
       <I18nProvider fixedLocale="zh">
         <IssuesActivity projectId={4} />
@@ -1266,6 +1325,155 @@ describe("GitHub issue mirror board", () => {
       await screen.findByText("未找到 GitLab 命令行，已保留缓存"),
     ).toBeInTheDocument();
     expect(screen.getByText("#128")).toBeInTheDocument();
+  });
+
+  it("keeps cached cli_missing quiet while another sync is revalidating", async () => {
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "cli_missing",
+    });
+    syncProjectIssuesMock.mockResolvedValue({ outcome: "coalesced" });
+
+    renderBoard();
+
+    await waitFor(() => {
+      expect(syncProjectIssuesMock).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(getIssueSyncStatusMock.mock.calls.length).toBeGreaterThanOrEqual(
+        2,
+      );
+    });
+    expect(
+      screen.queryByText("未找到 GitHub 命令行，已保留缓存"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows syncing instead of cached cli_missing while PATH is resolving", async () => {
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "cli_missing",
+    });
+    syncProjectIssuesMock.mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    renderBoard();
+
+    await expectSyncToolbar("同步中");
+    expect(
+      screen.queryByText("未找到 GitHub 命令行，已保留缓存"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stale project cli missing from sync does not overwrite project 2", async () => {
+    const user = userEvent.setup();
+    const projectOneStatus = deferred<{
+      lastSyncedAt: number | null;
+      syncError: string | null;
+    }>();
+    let projectOneStatusReads = 0;
+    getProjectIssueSourceSettingsMock.mockImplementation(
+      async (requestedProjectId) => ({
+        ...sourceSettings("mixed"),
+        projectId: requestedProjectId,
+        issueSyncEnabled: false,
+      }),
+    );
+    getIssueSyncStatusMock.mockImplementation((requestedProjectId) => {
+      if (requestedProjectId === 2) {
+        return Promise.resolve({
+          lastSyncedAt: 1,
+          syncError: "cli_missing",
+        });
+      }
+      projectOneStatusReads += 1;
+      return projectOneStatusReads === 1
+        ? Promise.resolve({ lastSyncedAt: null, syncError: null })
+        : projectOneStatus.promise;
+    });
+    syncProjectIssuesMock.mockResolvedValue({ outcome: "cache_failed" });
+
+    const view = renderBoard(1);
+    await user.click(await screen.findByRole("button", { name: "刷新" }));
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(projectOneStatusReads).toBe(2));
+
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(getIssueSyncStatusMock).toHaveBeenCalledWith(2));
+
+    await act(async () => {
+      projectOneStatus.resolve({
+        lastSyncedAt: 1,
+        syncError: "cli_missing",
+      });
+    });
+
+    expect(
+      screen.queryByText("未找到 GitHub 命令行，已保留缓存"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stale project cli missing from event does not overwrite project 2", async () => {
+    const projectOneStatus = deferred<{
+      lastSyncedAt: number | null;
+      syncError: string | null;
+    }>();
+    let projectOneStatusReads = 0;
+    getProjectIssueSourceSettingsMock.mockImplementation(
+      async (requestedProjectId) => ({
+        ...sourceSettings("mixed"),
+        projectId: requestedProjectId,
+        issueSyncEnabled: false,
+      }),
+    );
+    getIssueSyncStatusMock.mockImplementation((requestedProjectId) => {
+      if (requestedProjectId === 2) {
+        return Promise.resolve({
+          lastSyncedAt: 1,
+          syncError: "cli_missing",
+        });
+      }
+      projectOneStatusReads += 1;
+      return projectOneStatusReads === 1
+        ? Promise.resolve({ lastSyncedAt: null, syncError: null })
+        : projectOneStatus.promise;
+    });
+
+    const view = renderBoard(1);
+    await screen.findByRole("button", { name: "刷新" });
+    await waitFor(() =>
+      expect(eventHandlers.has(ISSUE_SYNC_CHANGED_EVENT)).toBe(true),
+    );
+    eventHandlers.get(ISSUE_SYNC_CHANGED_EVENT)?.({
+      payload: {
+        projectId: 1,
+        outcome: "cache_failed",
+      } satisfies IssueSyncChangedEvent,
+    });
+    await waitFor(() => expect(projectOneStatusReads).toBe(2));
+
+    view.rerender(
+      <I18nProvider fixedLocale="zh">
+        <IssuesActivity projectId={2} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(getIssueSyncStatusMock).toHaveBeenCalledWith(2));
+
+    await act(async () => {
+      projectOneStatus.resolve({
+        lastSyncedAt: 1,
+        syncError: "cli_missing",
+      });
+    });
+
+    expect(
+      screen.queryByText("未找到 GitHub 命令行，已保留缓存"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses the english GitLab credential sentence", async () => {
@@ -1285,6 +1493,25 @@ describe("GitHub issue mirror board", () => {
     );
     expect(
       await screen.findByText("GitLab credentials expired"),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the english cli_missing sentence after revalidation fails", async () => {
+    getIssueSyncStatusMock.mockResolvedValue({
+      lastSyncedAt: 1,
+      syncError: "cli_missing",
+    });
+    syncProjectIssuesMock.mockResolvedValue({ outcome: "cache_failed" });
+    render(
+      <I18nProvider fixedLocale="en">
+        <IssuesActivity projectId={1} />
+      </I18nProvider>,
+    );
+
+    expect(
+      await screen.findByText(
+        "GitHub CLI was not found. Cached issues were kept.",
+      ),
     ).toBeInTheDocument();
   });
 

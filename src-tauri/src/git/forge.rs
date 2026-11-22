@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use super::command::{apply_interactive_path, run_git, GitCommandError};
+use super::command::{run_git, GitCommandError};
 
 /// `auth status` 会访问远端；离线或凭据失效时 glab 要等满 30 秒才返回。
 /// 状态展示只需要一个可用/不可用的判定，给短超时避免拖住设置页。
@@ -215,7 +215,9 @@ fn split_remote(url: &str) -> Option<(String, String)> {
 fn cli_command(cli: &str, args: &[&str]) -> Command {
     let mut command = Command::new(cli);
     command.args(args);
-    apply_interactive_path(&mut command);
+    if let Some(path) = crate::agent::command_detector::resolve_interactive_shell_path() {
+        command.env("PATH", path);
+    }
     command
 }
 
@@ -223,7 +225,9 @@ fn cli_command(cli: &str, args: &[&str]) -> Command {
 /// 包装脚本、冷启动或网络等待，不能用于「是否安装」这种高频判断。
 pub fn cli_is_installed(cli: &str) -> bool {
     let mut search_paths: Vec<OsString> = Vec::new();
-    if let Some(path) = crate::agent::command_detector::resolved_interactive_shell_path() {
+    // Forge connection inspection runs in a blocking background command. Waiting for the
+    // interactive PATH here prevents a cold GUI PATH from being cached as `cli_missing`.
+    if let Some(path) = crate::agent::command_detector::resolve_interactive_shell_path() {
         search_paths.push(path);
     }
     if let Some(path) = std::env::var_os("PATH") {
@@ -246,11 +250,49 @@ fn cli_is_authenticated(cli: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::process::Command;
 
     use tempfile::tempdir;
 
-    use super::{detect_forge_host, inspect_forge_remote, parse_forge_url, ForgeHost};
+    use crate::agent::command_detector::pin_test_interactive_shell_path;
+
+    use super::{
+        cli_command, cli_is_installed, detect_forge_host, inspect_forge_remote, parse_forge_url,
+        ForgeHost,
+    };
+
+    #[test]
+    fn cli_installation_probe_uses_the_resolved_interactive_path() {
+        let temp = tempdir().expect("temp dir");
+        let cli = temp.path().join("redwhisk-forge-probe");
+        fs::write(&cli, "#!/bin/sh\nexit 0\n").expect("probe");
+        fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).expect("chmod probe");
+        let path = std::env::join_paths([
+            temp.path(),
+            std::path::Path::new("/usr/bin"),
+            std::path::Path::new("/bin"),
+        ])
+        .expect("join path");
+        let _pin = pin_test_interactive_shell_path(Some(path));
+
+        assert!(cli_is_installed("redwhisk-forge-probe"));
+    }
+
+    #[test]
+    fn cli_auth_probe_uses_the_resolved_interactive_path() {
+        let pinned_path = OsString::from("/redwhisk/pinned/bin:/usr/bin:/bin");
+        let _pin = pin_test_interactive_shell_path(Some(pinned_path.clone()));
+        let command = cli_command("gh", &["auth", "status"]);
+        let path_env = command
+            .get_envs()
+            .find(|(key, _)| *key == "PATH")
+            .map(|(_, value)| value.map(std::ffi::OsStr::to_os_string));
+
+        assert_eq!(path_env, Some(Some(pinned_path)));
+    }
 
     #[test]
     fn parses_github_and_gitlab_urls() {

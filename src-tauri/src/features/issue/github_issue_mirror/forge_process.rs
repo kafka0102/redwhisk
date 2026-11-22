@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::git::command::apply_interactive_path;
+use crate::agent::command_detector::resolve_interactive_shell_path;
 
 use super::port::ForgeIssueError;
 
@@ -29,7 +29,11 @@ pub(super) fn forge_command(program: &str, args: &[String], repo_dir: &Path) -> 
     let mut command = Command::new(program);
     command.args(args);
     command.current_dir(repo_dir);
-    apply_interactive_path(&mut command);
+    // Forge calls are background network work, so the first call may wait for the
+    // login+interactive PATH probe. Git hot paths continue to read only the warm cache.
+    if let Some(path) = resolve_interactive_shell_path() {
+        command.env("PATH", path);
+    }
     command
 }
 
@@ -220,8 +224,10 @@ pub(crate) fn with_scripted_forge_output<T>(
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::path::PathBuf;
 
+    use crate::agent::command_detector::pin_test_interactive_shell_path;
     use crate::types::project_issue_source::ForgeProvider;
 
     use super::super::cli::ProjectIssueForge;
@@ -281,6 +287,8 @@ mod tests {
     #[test]
     fn glab_list_command_uses_the_repo_and_interactive_path() {
         let repo = std::env::temp_dir();
+        let pinned_path = OsString::from("/usr/bin:/bin");
+        let _pin = pin_test_interactive_shell_path(Some(pinned_path.clone()));
         let query = ForgeIssueListQuery {
             assignee: None,
             states: vec![RemoteIssueState::Open],
@@ -303,14 +311,22 @@ mod tests {
             .iter()
             .any(|arg| arg.to_ascii_lowercase().contains("token")));
         assert!(!rendered.iter().any(|arg| arg.contains("gitlab.com")));
-        let resolved = crate::agent::command_detector::resolved_interactive_shell_path();
         let path_env = command
             .get_envs()
             .find(|(key, _)| *key == "PATH")
             .map(|(_, value)| value.map(std::ffi::OsStr::to_os_string));
-        match resolved {
-            Some(path) => assert_eq!(path_env, Some(Some(path))),
-            None => assert!(path_env.is_none()),
-        }
+        assert_eq!(path_env, Some(Some(pinned_path)));
+    }
+
+    #[test]
+    fn missing_forge_spawn_still_classifies_cli_missing() {
+        let repo = std::env::temp_dir();
+        let _pin = pin_test_interactive_shell_path(Some(OsString::from("/usr/bin:/bin")));
+
+        let error =
+            super::capture_forge_stdout("redwhisk-forge-cli-that-does-not-exist", &[], &repo)
+                .expect_err("missing forge");
+
+        assert_eq!(error, ForgeIssueError::CliMissing);
     }
 }

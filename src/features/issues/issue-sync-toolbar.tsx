@@ -11,17 +11,26 @@ import type { ForgeProvider } from "../settings/issue-source-commands";
 export function IssueSyncToolbar({
   status,
   syncing,
+  cliMissingConfirmed = true,
   provider,
   onRefresh,
 }: {
   status: IssueSyncStatus | null;
   syncing: boolean;
+  cliMissingConfirmed?: boolean;
   provider: ForgeProvider | null;
   onRefresh: () => void;
 }): JSX.Element {
   const { t } = useI18n();
   const [now] = useState(() => Date.now());
-  const text = syncStatusText(status, syncing, provider, t, now);
+  const text = syncStatusText(
+    status,
+    syncing,
+    cliMissingConfirmed,
+    provider,
+    t,
+    now,
+  );
   const tone = syncing
     ? undefined
     : status?.syncError
@@ -61,6 +70,7 @@ export function IssueSyncToolbar({
 function syncStatusText(
   status: IssueSyncStatus | null,
   syncing: boolean,
+  cliMissingConfirmed: boolean,
   provider: ForgeProvider | null,
   t: TFunction,
   now: number,
@@ -84,6 +94,9 @@ function syncStatusText(
     return t("issues.forgeRateLimited", { provider: forgeName });
   }
   if (status?.syncError === "cli_missing") {
+    if (!cliMissingConfirmed) {
+      return null;
+    }
     return t("issues.forgeCliMissing", { provider: forgeName });
   }
   if (status?.syncError === "cache_failed") {
