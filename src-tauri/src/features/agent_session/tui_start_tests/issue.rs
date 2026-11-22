@@ -127,7 +127,7 @@ fn start_runtime_tui_spawns_pty_persists_snapshot_and_lists_display_mode() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -209,7 +209,7 @@ fn start_runtime_json_does_not_register_pty() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -275,7 +275,7 @@ fn reconcile_marks_tui_running_without_pty_stopped() {
         .expect("session");
 
     let service = service(&connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     service
         .reconcile_unrecoverable_running_sessions(1, &pty, &registry)
@@ -308,7 +308,7 @@ fn start_tui_with_stdin_prompt_returns_after_register() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -357,7 +357,7 @@ fn start_runtime_tui_with_model_injects_model_arg_without_touching_profile() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -427,7 +427,7 @@ fn start_runtime_tui_without_model_lists_catalog_default_startup_model() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 

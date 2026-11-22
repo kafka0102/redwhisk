@@ -2,6 +2,7 @@ use super::harness::*;
 
 #[test]
 fn switch_to_json_succeeds_when_native_session_log_is_missing() {
+    let (_pty_guard, pty) = test_pty();
     let temp_dir = tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     create_git_repo(&repo_dir);
@@ -30,7 +31,7 @@ fn switch_to_json_succeeds_when_native_session_log_is_missing() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: Some(temp_dir.path()),

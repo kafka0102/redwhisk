@@ -24,7 +24,7 @@ fn switch_from_live_tui_replaces_snapshot_relaunches_same_provider_session_and_b
         "tui",
     );
     let agent = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
     agent
@@ -98,6 +98,7 @@ fn switch_from_live_tui_replaces_snapshot_relaunches_same_provider_session_and_b
 
 #[test]
 fn switch_to_json_keeps_tui_snapshot_when_structured_relaunch_fails() {
+    let (_pty_guard, pty) = test_pty();
     let temp_dir = tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     create_git_repo(&repo_dir);
@@ -131,7 +132,7 @@ fn switch_to_json_keeps_tui_snapshot_when_structured_relaunch_fails() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: Some(temp_dir.path()),

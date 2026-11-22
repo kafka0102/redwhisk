@@ -6,6 +6,7 @@ use chrono::{DateTime, SecondsFormat};
 
 #[test]
 fn switch_backfills_grok_provider_session_id_from_native_store() {
+    let (_pty_guard, pty) = test_pty();
     let temp_dir = tempdir().expect("temp");
     let home_dir = temp_dir.path().to_path_buf();
     let data_dir = home_dir.join(".redwhisk");
@@ -40,7 +41,7 @@ fn switch_backfills_grok_provider_session_id_from_native_store() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: None,
@@ -67,6 +68,7 @@ fn switch_backfills_grok_provider_session_id_from_native_store() {
 
 #[test]
 fn switch_still_rejects_grok_tui_when_native_store_has_no_match() {
+    let (_pty_guard, pty) = test_pty();
     let temp_dir = tempdir().expect("temp");
     let home_dir = temp_dir.path().to_path_buf();
     let data_dir = home_dir.join(".redwhisk");
@@ -98,7 +100,7 @@ fn switch_still_rejects_grok_tui_when_native_store_has_no_match() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: None,

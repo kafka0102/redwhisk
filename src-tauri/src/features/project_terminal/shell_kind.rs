@@ -37,6 +37,8 @@ fn shell_commands_equivalent(left: &str, right: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::agent::test_support::pty_test_lock;
+
     use super::{is_shell_like_launch_command, shell_commands_equivalent};
 
     #[test]
@@ -48,9 +50,9 @@ mod tests {
 
     #[test]
     fn default_shell_absolute_and_basename_are_shell_like() {
+        let _pty_guard = pty_test_lock();
         let original = std::env::var_os("SHELL");
-        // SAFETY: tests that mutate SHELL are serialized via terminal env lock in service tests;
-        // these unit tests only set a known absolute path and restore on drop.
+        // SAFETY: the shared PTY lock serializes process-wide SHELL mutation.
         std::env::set_var("SHELL", "/bin/zsh");
         assert!(is_shell_like_launch_command("/bin/zsh"));
         assert!(is_shell_like_launch_command("zsh"));
@@ -63,6 +65,7 @@ mod tests {
 
     #[test]
     fn business_commands_are_not_shell_like() {
+        let _pty_guard = pty_test_lock();
         let original = std::env::var_os("SHELL");
         std::env::set_var("SHELL", "/bin/zsh");
         assert!(!is_shell_like_launch_command("pnpm dev"));

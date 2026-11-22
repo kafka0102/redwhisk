@@ -2,6 +2,7 @@ use super::harness::*;
 
 #[test]
 fn switch_rejects_deepseek_and_completed_issue_without_changing_snapshot() {
+    let (_pty_guard, pty) = test_pty();
     let temp_dir = tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     create_git_repo(&repo_dir);
@@ -28,7 +29,7 @@ fn switch_rejects_deepseek_and_completed_issue_without_changing_snapshot() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: None,
@@ -67,7 +68,7 @@ fn switch_rejects_deepseek_and_completed_issue_without_changing_snapshot() {
             },
             &AgentSessionRegistry::new(),
             &AgentEventBroadcaster::new(),
-            &PtySessionManager::new(),
+            &pty,
             &factory,
             NativeSessionHomes {
                 codex_home: None,

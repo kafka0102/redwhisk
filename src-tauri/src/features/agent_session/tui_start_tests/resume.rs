@@ -80,7 +80,7 @@ fn resume_tui_rejects_missing_provider_session_id() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -123,7 +123,7 @@ fn resume_tui_allows_closed_session_for_incomplete_issue() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -171,7 +171,7 @@ fn resume_tui_rejects_closed_session_for_backlog_issue() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -214,7 +214,7 @@ fn resume_tui_rejects_closed_session_for_completed_issue() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -257,7 +257,7 @@ fn resume_tui_rejects_workspace_missing_with_stable_reason() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -310,7 +310,7 @@ fn resume_tui_spawns_pty_marks_running_keeps_command_snapshot() {
     fs::write(&log_path, "prior output\n").expect("seed log");
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -368,7 +368,7 @@ fn resume_tui_short_circuits_when_pty_already_active() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -425,7 +425,7 @@ fn resume_tui_short_circuits_when_mark_starting() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
     registry.mark_starting(session_id);
@@ -468,7 +468,7 @@ fn resume_tui_allows_running_session_without_pty() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 

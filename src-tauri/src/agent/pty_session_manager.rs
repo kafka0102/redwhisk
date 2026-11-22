@@ -1554,14 +1554,8 @@ mod tests {
         trim_log_file, PtyCommandMode, PtySessionManager, TerminalBackgroundTheme,
     };
     use crate::agent::pty_osc_color_reply::format_theme_osc_color_reports;
+    use crate::agent::test_support::{pty_test_lock, wait_for_pty_marker};
     use std::io::Write;
-
-    /// 拉起真实 PTY 的 spawn 测试都会改进程级 env（`HOME` / `ZDOTDIR` / `PATH`），
-    /// 必须串行执行，否则并发的交互式 PATH 解析会读到对方 test 的 env。
-    fn spawn_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 
     #[test]
     fn terminal_background_theme_color_fgbg_matches_palette() {
@@ -1593,7 +1587,7 @@ mod tests {
         use super::{PtyCommandMode, PtySpawnRequest};
         use crate::agent::command_detector::pin_test_interactive_shell_path;
 
-        let _env_guard = spawn_env_test_lock();
+        let _env_guard = pty_test_lock();
         // 固定交互式 PATH 解析，避免测试真的去拉起 .zshrc 探测。
         let _pin = pin_test_interactive_shell_path(Some(std::ffi::OsString::from(
             "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -1633,6 +1627,9 @@ mod tests {
         manager
             .register(-1, pending_a, |_| {})
             .expect("会话 1 必须在并发交错下注册成功");
+
+        wait_for_pty_marker(&manager, -2, b"MARK-B");
+        wait_for_pty_marker(&manager, -1, b"MARK-A");
 
         // 每个 session 的 flush 必须刷到自己那份 log（前端 catch-up 读的就是它）。
         manager.flush_log(-2).expect("flush 会话 2");
@@ -1764,7 +1761,7 @@ mod tests {
     fn interactive_run_keepalive_seeds_launch_command_into_zsh_history() {
         use super::{PtyCommandMode, PtySpawnRequest};
 
-        let _env_guard = spawn_env_test_lock();
+        let _env_guard = pty_test_lock();
         let temp = tempfile::tempdir().expect("temp dir");
         let user_zdot = temp.path().join("user-zdot");
         std::fs::create_dir_all(&user_zdot).expect("user zdot");
@@ -1878,7 +1875,7 @@ mod tests {
         use super::{PtyCommandMode, PtySpawnRequest};
         use std::os::unix::fs::PermissionsExt;
 
-        let _env_guard = spawn_env_test_lock();
+        let _env_guard = pty_test_lock();
         let temp = tempfile::tempdir().expect("temp dir");
         let user_zdot = temp.path().join("user-zdot");
         let bin_dir = temp.path().join("bin");

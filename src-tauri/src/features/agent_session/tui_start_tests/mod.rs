@@ -2,6 +2,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
+use std::sync::MutexGuard;
 
 use rusqlite::{params, Connection};
 use tempfile::tempdir;
@@ -9,6 +10,7 @@ use tempfile::tempdir;
 use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_registry::AgentSessionRegistry;
+use crate::agent::test_support::pty_test_lock;
 use crate::db::agent_profile_repository::AgentProfileRepository;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::connection::DatabaseConfig;
@@ -50,6 +52,11 @@ pub(super) fn write_sleep_script(path: &Path) {
     let mut perms = fs::metadata(path).expect("meta").permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).expect("chmod");
+}
+
+/// 同时返回串行锁与 PTY manager，确保 PTY 测试不会并发修改进程环境与启动状态。
+pub(super) fn test_pty() -> (MutexGuard<'static, ()>, PtySessionManager) {
+    (pty_test_lock(), PtySessionManager::new())
 }
 
 pub(super) fn open_db(data_dir: &Path) -> crate::db::connection::Database {

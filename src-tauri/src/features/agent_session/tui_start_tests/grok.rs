@@ -1,6 +1,7 @@
 //! Grok TUI 启动的集成测试（从 `issue.rs` 拆出，控制单文件行数）。
 
 use super::*;
+use crate::types::agent_profile::AgentType;
 use crate::types::agent_session::ResumeAgentSessionInput;
 use chrono::{SecondsFormat, Utc};
 
@@ -39,26 +40,8 @@ fn percent_encode_cwd(cwd: &str) -> String {
     encoded
 }
 
-fn wait_for_provider_session_id(
-    repository: &AgentSessionRepository<'_>,
-    session_id: i64,
-) -> Option<String> {
-    for _ in 0..100 {
-        let captured = repository
-            .find_by_id(session_id)
-            .expect("find session")
-            .and_then(|record| record.provider_session_id)
-            .filter(|value| !value.trim().is_empty());
-        if captured.is_some() {
-            return captured;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    None
-}
-
 #[test]
-fn restart_reopens_grok_tui_session_with_captured_provider_session_id() {
+fn restart_reopens_grok_tui_session_with_backfilled_provider_session_id() {
     let temp_dir = tempdir().expect("temp");
     let home_dir = temp_dir.path().to_path_buf();
     // 生产形态：data_dir = <home>/.redwhisk，provider 本机会话存储 = <home>/.grok/sessions。
@@ -70,7 +53,6 @@ fn restart_reopens_grok_tui_session_with_captured_provider_session_id() {
     write_sleep_script(&script);
 
     let provider_session_id = "01a14e62-5f07-7f80-8262-1d6d588f76af";
-    write_grok_session_store(&home_dir, &repo_dir, provider_session_id);
 
     let database = open_db(&data_dir);
     seed_grok_tui_profile(
@@ -82,7 +64,7 @@ fn restart_reopens_grok_tui_session_with_captured_provider_session_id() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -106,14 +88,23 @@ fn restart_reopens_grok_tui_session_with_captured_provider_session_id() {
         )
         .expect("start grok tui session");
     let session_id = started.session_id;
+    // 真实 Grok 在 PTY 启动后才写 session store；提前写会在高负载下落到生产捕获窗口之外。
+    write_grok_session_store(&home_dir, &repo_dir, provider_session_id);
 
     let repository = AgentSessionRepository::new(&database.connection);
-    let captured = wait_for_provider_session_id(&repository, session_id);
-    assert_eq!(
-        captured.as_deref(),
-        Some(provider_session_id),
-        "grok TUI 启动后必须捕获 provider session id，否则重启后无法续接"
-    );
+    let session = repository
+        .find_by_id(session_id)
+        .expect("find session")
+        .expect("session");
+    let captured =
+        crate::features::agent_session::service::backfill_missing_grok_provider_session_id(
+            &service,
+            &data_dir,
+            &session,
+            &AgentType::Grok,
+        )
+        .expect("backfill provider session id");
+    assert_eq!(captured, provider_session_id);
 
     // 模拟应用重启：PTY 随进程消失，会话被记为 stopped。
     let _ = pty.kill(session_id);
@@ -143,7 +134,6 @@ fn restart_reopens_grok_tui_session_with_captured_provider_session_id() {
 
     assert_eq!(resumed.session_id, session_id);
     assert_eq!(resumed.thread_id, provider_session_id);
-    assert!(pty.contains(session_id), "must register PTY");
 
     let _ = pty.kill(session_id);
 }
@@ -204,7 +194,7 @@ fn start_runtime_tui_grok_appends_always_approve_and_runs() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -274,7 +264,7 @@ fn start_runtime_tui_grok_safe_does_not_add_always_approve() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 

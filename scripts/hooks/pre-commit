@@ -14,6 +14,7 @@ bash scripts/check-rust-command-reasons.sh
 bash scripts/check-rust-reason-locales.sh
 bash scripts/check-rust-command-dto.sh
 bash scripts/check-rust-event-emit.sh
+bash scripts/check-migration-schema.sh --cached
 bash scripts/check-rust-file-size.sh
 bash scripts/check-frontend-file-size.sh
 

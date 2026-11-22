@@ -55,7 +55,7 @@ fn reopen_completed_tui_session_resumes_same_conversation_and_marks_issue_runnin
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -120,7 +120,7 @@ fn reopen_completed_tui_session_prefixes_runtime_log_with_archive_and_keeps_arch
         .expect("point session at archive");
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -173,7 +173,7 @@ fn reopen_completed_tui_keeps_issue_completed_when_resume_spawn_fails() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -224,7 +224,7 @@ fn reopen_completed_tui_rejects_agent_without_tui_resume_and_keeps_completed() {
         .expect("switch profile to deepseek");
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -265,7 +265,7 @@ fn reopen_completed_tui_rejects_missing_provider_session_id_and_keeps_completed(
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 

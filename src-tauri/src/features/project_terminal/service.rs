@@ -1197,9 +1197,10 @@ fn run_restore_before_spawn_hook(_project_id: i64, _config_id: i64) {}
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc;
-    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+    use std::sync::{Arc, Mutex, MutexGuard};
 
     use crate::agent::pty_session_manager::PtySessionManager;
+    use crate::agent::test_support::pty_test_lock;
     use crate::db::agent_session_repository::AgentSessionRepository;
     use crate::db::connection::DatabaseConfig;
     use crate::db::project_repository::ProjectRepository;
@@ -1217,16 +1218,8 @@ mod tests {
     use crate::features::project_terminal::log::PROJECT_TERMINAL_LOG_DIR_NAME;
     use crate::features::project_terminal::{purge_terminal_log_dir, ProjectTerminalRegistry};
 
-    fn terminal_test_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
     fn lock_terminal_test_env() -> MutexGuard<'static, ()> {
-        match terminal_test_env_lock().lock() {
-            Ok(guard) => guard,
-            Err(error) => error.into_inner(),
-        }
+        pty_test_lock()
     }
 
     struct RestoreHooksGuard;

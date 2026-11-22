@@ -7,12 +7,12 @@ pub(super) use std::sync::Arc;
 use rusqlite::{params, Connection};
 pub(super) use tempfile::tempdir;
 
+pub(super) use super::super::test_pty;
 pub(super) use super::super::{create_git_repo, open_db, service, write_sleep_script};
 pub(super) use crate::agent::agent_event_broadcaster::AgentEventBroadcaster;
 use crate::agent::provider_factory::{
     AgentSessionProviderFactory, AgentSessionStartRequest, StartedSession, ThreadIdBackfill,
 };
-pub(super) use crate::agent::pty_session_manager::PtySessionManager;
 use crate::agent::session_handle::{AgentSessionError, AgentSessionHandle};
 pub(super) use crate::agent::session_registry::AgentSessionRegistry;
 pub(super) use crate::db::agent_session_repository::AgentSessionRepository;

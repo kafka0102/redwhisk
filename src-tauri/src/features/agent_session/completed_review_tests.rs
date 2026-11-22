@@ -6,6 +6,7 @@ use std::path::Path;
 use rusqlite::params;
 
 use crate::agent::pty_session_manager::PtySessionManager;
+use crate::agent::test_support::pty_test_lock;
 use crate::db::agent_session_repository::AgentSessionRepository;
 use crate::db::issue_repository::IssueRepository;
 use crate::features::agent_session::service::AgentSessionService;
@@ -162,6 +163,7 @@ fn assert_unchanged_records(connection: &rusqlite::Connection, seed: &CompletedR
 
 #[test]
 fn completed_review_resumes_codex_in_existing_workspace_without_changing_state() {
+    let _pty_guard = pty_test_lock();
     let temp_dir = tempfile::tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     let workspace = temp_dir.path().join("workspace");
@@ -210,6 +212,7 @@ fn completed_review_resumes_codex_in_existing_workspace_without_changing_state()
 
 #[test]
 fn completed_review_resumes_grok_json_without_changing_display_mode() {
+    let _pty_guard = pty_test_lock();
     let temp_dir = tempfile::tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     let workspace = temp_dir.path().join("workspace");
@@ -254,6 +257,7 @@ fn completed_review_resumes_grok_json_without_changing_display_mode() {
 
 #[test]
 fn completed_review_rejects_missing_workspace_without_starting() {
+    let _pty_guard = pty_test_lock();
     let temp_dir = tempfile::tempdir().expect("temp");
     let repo_dir = temp_dir.path().join("repo");
     create_git_repo(&repo_dir);

@@ -32,6 +32,7 @@
 - 每个新状态或分支至少覆盖合法迁移、非法迁移和持久化回读。
 - event 测试覆盖乱序/重复、`epoch` 变化或 provider 不支持语义的安全降级。
 - migration 测试不能只验证空库；涉及变更/回填时必须验证历史数据。
+- 暂存 `src-tauri/migrations/*.sql` 或 migration 注册文件时，pre-commit 自动运行 `bash scripts/check-migration-schema.sh --cached`，执行 project、issue、agent session、settings 与 local-data 的 schema integration tests。该检查防止新增列后旧 schema 列清单继续漂移。
 
 ## 正式构建与测试构建
 

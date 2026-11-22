@@ -51,7 +51,7 @@ fn reopen_completed_tui_resumes_in_existing_worktree_directory() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -115,7 +115,7 @@ fn reopen_completed_tui_rebuilds_missing_worktree_from_given_existing_branch() {
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -250,7 +250,7 @@ fn reopen_completed_tui_recreates_missing_worktree_from_latest_base_without_chec
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 
@@ -355,7 +355,7 @@ fn reopen_completed_tui_rejects_missing_worktree_when_given_branch_does_not_exis
     );
 
     let service = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
 

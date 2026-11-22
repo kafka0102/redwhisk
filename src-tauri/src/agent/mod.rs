@@ -22,6 +22,8 @@ pub(crate) mod session_log_coalesce;
 pub mod session_registry;
 pub(crate) mod session_token_usage;
 pub mod terminal_log_tail;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use provider_descriptor::{
     descriptor_for, plan_tui_initial_prompt, AgentProviderDescriptor, ClaudeDescriptor,

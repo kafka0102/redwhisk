@@ -29,7 +29,7 @@ fn switch_from_stopped_json_relaunches_tui_with_same_provider_session_without_ch
         "json",
     );
     let agent = service(&database.connection);
-    let pty = PtySessionManager::new();
+    let (_pty_guard, pty) = test_pty();
     let registry = AgentSessionRegistry::new();
     let broadcaster = AgentEventBroadcaster::new();
     let factory = RecordingFactory::default();
