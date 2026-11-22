@@ -636,6 +636,15 @@
   gap: 6px;
 }
 
+.activity-surface--issues:has(.issue-board-mode):not(:has(.issues-status)) {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "header"
+    "mode"
+    "kanban";
+  row-gap: 6px;
+}
+
 .activity-surface--issues:has(.change-request-list) {
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:

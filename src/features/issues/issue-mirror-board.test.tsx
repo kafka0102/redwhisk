@@ -1800,7 +1800,7 @@ describe("GitHub issue mirror board", () => {
     expect(screen.getByText("正文里的残句不算")).toBeInTheDocument();
   });
 
-  it("uses a 6px board gap and keeps the 12px list gap", async () => {
+  it("uses compact row gaps without reserving an empty status row", async () => {
     const user = userEvent.setup();
     renderBoard();
     const surface = document.querySelector(".activity-surface--issues");
@@ -1809,10 +1809,13 @@ describe("GitHub issue mirror board", () => {
     const boardIcon = screen.getByRole("button", { name: "看板模式" });
     const listIcon = screen.getByRole("button", { name: "列表模式" });
 
-    expect(window.getComputedStyle(surface!).gap).toBe("6px");
-    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+    expect(window.getComputedStyle(surface!).rowGap).toBe("6px");
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).not.toContain(
       "status",
     );
+    expect(
+      document.querySelector(".activity-surface--issues > .issues-status"),
+    ).toBeNull();
     expect(window.getComputedStyle(boardIcon)).toMatchObject({
       width: "28px",
       height: "28px",
@@ -1823,10 +1826,13 @@ describe("GitHub issue mirror board", () => {
     });
 
     await user.click(listIcon);
-    expect(window.getComputedStyle(surface!).gap).toBe("12px");
-    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+    expect(window.getComputedStyle(surface!).rowGap).toBe("6px");
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).not.toContain(
       "status",
     );
+    expect(
+      document.querySelector(".activity-surface--issues > .issues-status"),
+    ).toBeNull();
     expect(window.getComputedStyle(boardIcon)).toMatchObject({
       width: "28px",
       height: "28px",
@@ -1835,6 +1841,25 @@ describe("GitHub issue mirror board", () => {
       width: "28px",
       height: "28px",
     });
+  });
+
+  it("shows a page error in the status row without replacing issue content", async () => {
+    listIssuesMock.mockRejectedValueOnce(new Error("Issue mirror unavailable"));
+
+    renderBoard();
+
+    const status = await screen.findByRole("status", {
+      name: "Issues 状态",
+    });
+    expect(status).toHaveClass("issues-status");
+    const surface = document.querySelector(".activity-surface--issues");
+    expect(surface).not.toBeNull();
+    expect(window.getComputedStyle(surface!).gridTemplateAreas).toContain(
+      "status",
+    );
+    expect(
+      screen.getByRole("region", { name: "Issues 看板" }),
+    ).toBeInTheDocument();
   });
 
   it("draws one top border on the first list issue and one border between rows", async () => {
