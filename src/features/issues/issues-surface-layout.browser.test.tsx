@@ -82,6 +82,19 @@ interface ChangeRequestDetailSurfaceMeasurement {
   surfaceColor: string;
 }
 
+interface ChangeRequestListRowMeasurement {
+  rowGap: number;
+  titleMetaGap: number;
+  rows: Array<{
+    paddingTop: number;
+    paddingBottom: number;
+    borderTopWidth: number;
+    borderRightWidth: number;
+    borderBottomWidth: number;
+    borderLeftWidth: number;
+  }>;
+}
+
 function chromeBinary(): string {
   const fromEnv = process.env.CHROME_PATH;
   if (fromEnv !== undefined && fromEnv !== "" && existsSync(fromEnv)) {
@@ -530,6 +543,73 @@ document.getElementById("out").textContent = JSON.stringify({
   );
 }
 
+function measureChangeRequestListRows(): ChangeRequestListRowMeasurement {
+  const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+${stylesheet()}
+html, body { width: 900px; height: 500px; margin: 0; }
+#list { height: 400px; }
+</style>
+</head>
+<body>
+<section id="list" class="change-request-list">
+  <article class="change-request-row">
+    <button class="change-request-row__hit" type="button"></button>
+    <div class="change-request-title">
+      <span class="change-request-state change-request-state--open"></span>
+      <div class="change-request-title__text">
+        <h3 id="first-title">First pull request</h3>
+        <p id="first-meta" class="change-request-meta">#1 · main · author · 2 minutes ago · 3/4 passed</p>
+      </div>
+    </div>
+  </article>
+  <article class="change-request-row">
+    <button class="change-request-row__hit" type="button"></button>
+    <div class="change-request-title">
+      <span class="change-request-state change-request-state--draft"></span>
+      <div class="change-request-title__text">
+        <h3>Second pull request</h3>
+        <p class="change-request-meta">#2 · main · author · 3 minutes ago</p>
+      </div>
+    </div>
+  </article>
+</section>
+<pre id="out"></pre>
+<script>
+const round = (value) => Math.round(value * 10) / 10;
+const rows = [...document.querySelectorAll(".change-request-row")];
+const rects = rows.map((row) => row.getBoundingClientRect());
+document.getElementById("out").textContent = JSON.stringify({
+  rowGap: round(rects[1].top - rects[0].bottom),
+  titleMetaGap: round(
+    document.getElementById("first-meta").getBoundingClientRect().top -
+      document.getElementById("first-title").getBoundingClientRect().bottom,
+  ),
+  rows: rows.map((row) => {
+    const style = getComputedStyle(row);
+    return {
+      paddingTop: round(parseFloat(style.paddingTop)),
+      paddingBottom: round(parseFloat(style.paddingBottom)),
+      borderTopWidth: round(parseFloat(style.borderTopWidth)),
+      borderRightWidth: round(parseFloat(style.borderRightWidth)),
+      borderBottomWidth: round(parseFloat(style.borderBottomWidth)),
+      borderLeftWidth: round(parseFloat(style.borderLeftWidth)),
+    };
+  }),
+});
+</script>
+</body>
+</html>`;
+
+  return runChromeMeasurement<ChangeRequestListRowMeasurement>(
+    html,
+    "change request list rows",
+  );
+}
+
 function runChromeMeasurement<T>(html: string, label: string): T {
   const directory = mkdtempSync(join(tmpdir(), "redwhisk-issues-layout-"));
   const filePath = join(directory, "layout.html");
@@ -697,6 +777,25 @@ describe("Issues surface layout", { retry: 1 }, () => {
       expect(surface.prHeaderBackground).toBe(surface.surfaceColor);
       expect(surface.prPageBackground).toBe(surface.appColor);
       expect(surface.prHeaderBorderBottomWidth).toBe(1);
+    },
+    CHROME_MEASUREMENT_TIMEOUT_MS,
+  );
+
+  it(
+    "keeps change request rows spaced with symmetric padding and borders",
+    () => {
+      const list = measureChangeRequestListRows();
+
+      expect(list.rowGap).toBeGreaterThanOrEqual(8);
+      expect(list.titleMetaGap).toBeGreaterThanOrEqual(4);
+      for (const row of list.rows) {
+        expect(row.paddingTop).toBe(row.paddingBottom);
+        expect(row.paddingTop).toBeGreaterThan(0);
+        expect(row.borderTopWidth).toBe(1);
+        expect(row.borderRightWidth).toBe(1);
+        expect(row.borderBottomWidth).toBe(1);
+        expect(row.borderLeftWidth).toBe(1);
+      }
     },
     CHROME_MEASUREMENT_TIMEOUT_MS,
   );

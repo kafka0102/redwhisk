@@ -10,7 +10,6 @@ import type {
 } from "./change-request-commands";
 import {
   changeRequestCheck,
-  changeRequestReview,
   changeRequestTime,
 } from "./change-request-list-text";
 import type { ForgeProvider } from "../settings/issue-source-commands";
@@ -95,21 +94,14 @@ export function ChangeRequestList({
           <p>{t(emptyLabel(filter, provider))}</p>
         </div>
       ) : (
-        <>
-          <div className="change-request-head">
-            <span>{t("issues.changeRequests.columnTitle")}</span>
-            <span>{t("issues.changeRequests.columnChecks")}</span>
-            <span>{t("issues.changeRequests.columnLinks")}</span>
-          </div>
-          {rows.map((row) => (
-            <ChangeRequestRow
-              key={row.id}
-              now={now}
-              row={row}
-              onOpenDetail={onOpenDetail}
-            />
-          ))}
-        </>
+        rows.map((row) => (
+          <ChangeRequestRow
+            key={row.id}
+            now={now}
+            row={row}
+            onOpenDetail={onOpenDetail}
+          />
+        ))
       )}
     </section>
   );
@@ -126,49 +118,40 @@ function ChangeRequestRow({
 }): JSX.Element {
   const { t } = useI18n();
   const check = changeRequestCheck(row, t);
-  const review = changeRequestReview(row, t);
-  const reviewTone = review.tone === "muted" ? "neutral" : review.tone;
   const author = row.authorLogin ?? "";
   return (
-    <div className="change-request-row" role="row">
-      <div className="change-request-title" onClick={() => onOpenDetail?.(row)}>
+    <article className="change-request-row">
+      <button
+        aria-label={row.title}
+        className="change-request-row__hit"
+        type="button"
+        onClick={() => onOpenDetail?.(row)}
+      />
+      <div className="change-request-title">
         <span
           className={`change-request-state change-request-state--${row.state}`}
           role="img"
           aria-label={stateLabel(row.state, t)}
         />
-        <div>
+        <div className="change-request-title__text">
           <h3>{row.title}</h3>
-          <p>
+          <p className="change-request-meta">
             #{row.number} · {row.sourceBranch} → {row.targetBranch} · {author} ·{" "}
             {changeRequestTime(row.remoteUpdatedAt, now, t)}
+            {check === null ? null : (
+              <>
+                {" · "}
+                <span
+                  className={`change-request-check change-request-check--${check.tone}`}
+                >
+                  {check.text}
+                </span>
+              </>
+            )}
           </p>
         </div>
       </div>
-      <div>
-        <p
-          className={`change-request-check change-request-check--${check.tone}`}
-        >
-          {check.text}
-        </p>
-        <p
-          className={`change-request-review change-request-review--${reviewTone}`}
-        >
-          {review.text}
-        </p>
-      </div>
-      <div className="change-request-links">
-        {row.linkedIssues.map((link) => (
-          <span
-            key={link.issueId}
-            className="change-request-link"
-            title={link.label}
-          >
-            {link.label}
-          </span>
-        ))}
-      </div>
-    </div>
+    </article>
   );
 }
 

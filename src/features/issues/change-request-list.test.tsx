@@ -170,7 +170,112 @@ function expectEmptyChangeRequests(copy: string): void {
 }
 
 describe("change request list", () => {
-  it("shows review copy, wrapped links, and does not navigate the row", () => {
+  it("renders issue-style rows with deferred checks and visible borders", () => {
+    const onOpenDetail = vi.fn();
+    const view = renderList(
+      "zh",
+      <ChangeRequestList
+        filter="open"
+        now={NOW}
+        response={response()}
+        sourceMode="remote"
+        onOpenDetail={onOpenDetail}
+      />,
+    );
+
+    expect(document.querySelector(".change-request-head")).toBeNull();
+    expect(screen.queryByText("标题")).toBeNull();
+    expect(screen.queryByText("检查 / 评审")).toBeNull();
+    expect(screen.queryByText("关联 Issue")).toBeNull();
+
+    const rows = [
+      ...document.querySelectorAll<HTMLElement>(".change-request-row"),
+    ];
+    expect(rows).toHaveLength(6);
+    expect(rows[0]).toHaveTextContent(
+      "#132 · feat/remote-issue → main · yujianjia · 2 分钟前 · 3/4 通过",
+    );
+    expect(rows[0]).not.toHaveTextContent("#12 · 本地标题");
+    expect(rows[2]).toHaveTextContent("0/0 通过");
+    expect(rows[3]).not.toHaveTextContent("未知");
+    expect(
+      rows[3].querySelector(".change-request-check"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remote issue sync" }));
+    expect(onOpenDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ number: 132 }),
+    );
+    onOpenDetail.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Draft checks" }));
+    expect(onOpenDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ number: 127 }),
+    );
+
+    const checksReturned = response();
+    checksReturned.rows[3] = {
+      ...checksReturned.rows[3],
+      checksOk: 2,
+      checksFailed: 0,
+      checksPending: 0,
+    };
+    view.rerender(
+      <I18nProvider initialLocale="zh">
+        <ChangeRequestList
+          filter="open"
+          now={NOW}
+          response={checksReturned}
+          sourceMode="remote"
+          onOpenDetail={onOpenDetail}
+        />
+      </I18nProvider>,
+    );
+    const returnedRow = screen
+      .getByRole("heading", { name: "Unknown checks" })
+      .closest(".change-request-row");
+    expect(returnedRow).toHaveTextContent("2/2 通过");
+  });
+
+  it("renders available check data when some counters are still null", () => {
+    renderList(
+      "zh",
+      <ChangeRequestList
+        filter="open"
+        now={NOW}
+        response={{
+          ...emptyResponse(),
+          rows: [
+            row({
+              id: 201,
+              number: 201,
+              title: "Partial running checks",
+              checksOk: 2,
+              checksFailed: null,
+              checksPending: 1,
+            }),
+            row({
+              id: 202,
+              number: 202,
+              title: "Partial failed checks",
+              checksOk: null,
+              checksFailed: 1,
+              checksPending: null,
+            }),
+          ],
+        }}
+        sourceMode="remote"
+      />,
+    );
+
+    expect(screen.getByText("2 通过 · 1 运行中")).toHaveClass(
+      "change-request-check--warning",
+    );
+    expect(screen.getByText("0/1 通过")).toHaveClass(
+      "change-request-check--danger",
+    );
+  });
+
+  it("shows check summaries in metadata without opening remote links", () => {
     const onOpenUrl = vi.fn();
     const onOpenDetail = vi.fn();
     renderList(
@@ -202,76 +307,36 @@ describe("change request list", () => {
     expect(screen.getByText("3/4 通过")).toHaveClass(
       "change-request-check--danger",
     );
-    expect(screen.getAllByText("待审阅")[0]).toHaveClass(
-      "change-request-review--warning",
-    );
     expect(screen.getByText("2 通过 · 1 运行中")).toHaveClass(
       "change-request-check--warning",
-    );
-    expect(screen.getByText("等待检查")).toHaveClass(
-      "change-request-review--neutral",
     );
     expect(screen.getByText("0/0 通过")).toHaveClass(
       "change-request-check--success",
     );
-    expect(
-      screen
-        .getAllByText("未知")
-        .some((node) => node.classList.contains("change-request-check--muted")),
-    ).toBe(true);
-    expect(screen.getByText("需要修改")).toHaveClass(
-      "change-request-review--danger",
-    );
+    expect(screen.queryByText("未知")).toBeNull();
     expect(screen.getByText(/2 分钟前/)).toBeInTheDocument();
     expect(screen.getByText(/14 小时前/)).toBeInTheDocument();
     expect(screen.getByText(/1 天前/)).toBeInTheDocument();
-    expect(
-      [...document.querySelectorAll(".change-request-link")].map(
-        (link) => link.textContent,
-      ),
-    ).toEqual([
-      "#12 · 本地标题",
-      "#128 · 这是一个长到放不进关联列的标题",
-      "#7 · 完成流程",
-      "#12 · 本地标题",
-    ]);
-    expect(screen.queryByText(/\+\d/)).toBeNull();
-    const shortLink = screen.getByText("#7 · 完成流程");
-    expect(shortLink).toHaveTextContent("#7 · 完成流程");
-    expect(shortLink.textContent).not.toMatch(/…|\.\.\./);
-    expect(shortLink.tagName).not.toBe("BUTTON");
-    const longLabel = "#128 · 这是一个长到放不进关联列的标题";
-    const longLink = screen.getByText(longLabel);
-    expect(longLink).toHaveAttribute("title", longLabel);
-    expect(longLink.tagName).not.toBe("BUTTON");
-    for (const link of [shortLink, longLink]) {
-      const style = window.getComputedStyle(link);
-      expect(style.whiteSpace).toBe("nowrap");
-      expect(style.overflow).toBe("hidden");
-      expect(style.textOverflow).toBe("ellipsis");
-    }
+    expect(screen.queryByText("#12 · 本地标题")).toBeNull();
+    expect(screen.queryByText("#7 · 完成流程")).toBeNull();
+    expect(document.querySelector(".change-request-link")).toBeNull();
     expect(screen.queryByRole("link", { name: "打开" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
     expect(document.querySelector("a[href*='github.com']")).toBeNull();
-    const head = document.querySelector(".change-request-head");
     const row = document.querySelector(".change-request-row");
     const title = document.querySelector(".change-request-title");
-    expect(head).not.toBeNull();
+    const meta = document.querySelector(".change-request-meta");
     expect(row).not.toBeNull();
     expect(title).not.toBeNull();
-    expect(head!.querySelectorAll(":scope > span")).toHaveLength(3);
-    expect(row!.children).toHaveLength(3);
-    expect(window.getComputedStyle(head!).alignItems).toBe("center");
-    expect(window.getComputedStyle(row!).alignItems).toBe("center");
-    expect(window.getComputedStyle(title!).alignItems).toBe("center");
-    expect(window.getComputedStyle(head!).gridTemplateColumns).toBe(
-      window.getComputedStyle(row!).gridTemplateColumns,
+    expect(meta).toHaveTextContent(
+      "#132 · feat/remote-issue → main · yujianjia · 2 分钟前 · 3/4 通过",
     );
-    fireEvent.click(screen.getByRole("heading", { name: "Remote issue sync" }));
-    expect(onOpenUrl).not.toHaveBeenCalled();
+    expect(row!.children).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remote issue sync" }));
     expect(onOpenDetail).toHaveBeenCalledWith(
       expect.objectContaining({ number: 132, provider: "github" }),
     );
+    expect(onOpenUrl).not.toHaveBeenCalled();
     expect(screen.getByText("slot")).toBeInTheDocument();
     expect(screen.queryByText("已同步")).toBeNull();
   });
@@ -330,7 +395,7 @@ describe("change request list", () => {
     expect(screen.queryByText("Pull requests 还没有连接")).toBeNull();
   });
 
-  it("shows the header and the row when one pull request is open", () => {
+  it("shows one pull request without tabular columns", () => {
     renderList(
       "zh",
       <ChangeRequestList
@@ -354,12 +419,15 @@ describe("change request list", () => {
         sourceMode="remote"
       />,
     );
-    expect(document.querySelector(".change-request-head")).not.toBeNull();
-    expect(screen.getByText("标题")).toBeInTheDocument();
-    expect(screen.getByText("检查 / 评审")).toBeInTheDocument();
-    expect(screen.getByText("关联 Issue")).toBeInTheDocument();
+    expect(document.querySelector(".change-request-head")).toBeNull();
+    expect(screen.queryByText("标题")).toBeNull();
+    expect(screen.queryByText("检查 / 评审")).toBeNull();
+    expect(screen.queryByText("关联 Issue")).toBeNull();
     expect(document.querySelector(".change-request-row")).not.toBeNull();
-    expect(screen.getByText("#7 · 完成流程")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "完成流程" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("#7 · 完成流程")).toBeNull();
     expect(screen.queryByText("没有打开的 Pull request")).toBeNull();
   });
 

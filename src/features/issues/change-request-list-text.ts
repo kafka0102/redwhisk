@@ -8,11 +8,18 @@ export type ChangeRequestTone = "danger" | "warning" | "success" | "muted";
 export function changeRequestCheck(
   row: ChangeRequestListRow,
   t: TFunction,
-): { text: string; tone: ChangeRequestTone } {
+): { text: string; tone: ChangeRequestTone } | null {
+  if (
+    row.checksOk == null &&
+    row.checksFailed == null &&
+    row.checksPending == null
+  ) {
+    return null;
+  }
   return changeRequestChecksSummary(
-    row.checksOk,
-    row.checksFailed,
-    row.checksPending,
+    row.checksOk ?? 0,
+    row.checksFailed ?? 0,
+    row.checksPending ?? 0,
     t,
   );
 }

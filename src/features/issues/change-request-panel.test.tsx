@@ -332,7 +332,7 @@ describe("change request auto sync", () => {
       </I18nProvider>,
     );
     await flush();
-    fireEvent.click(screen.getByRole("heading", { name: "排行榜小程序" }));
+    fireEvent.click(screen.getByRole("button", { name: "排行榜小程序" }));
     await flush();
 
     expect(
