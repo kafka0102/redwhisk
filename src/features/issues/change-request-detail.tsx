@@ -73,24 +73,26 @@ function ChangeRequestDetailLoading({
   const { t } = useI18n();
   return (
     <section
-      className="change-request-detail"
+      className="issue-page issue-page--fullscreen change-request-detail"
       aria-busy="true"
       aria-label={t("issues.changeRequests.detailRegion")}
     >
-      {listRow == null ? null : (
-        <ChangeRequestDetailHeader
-          number={listRow.number}
-          title={listRow.title}
-          url={listRow.url}
-          provider={listRow.provider}
-          state={listRow.state}
-          showActions={false}
-          onBack={onBack}
-        />
-      )}
-      <div className="change-request-detail__loading">
-        <div className="change-request-detail__loading-box" role="status">
-          {t("issues.changeRequests.loadingDetail")}
+      <ChangeRequestDetailHeader
+        number={listRow?.number}
+        title={listRow?.title}
+        url={listRow?.url}
+        provider={listRow?.provider}
+        state={listRow?.state ?? "open"}
+        showActions={false}
+        onBack={onBack}
+      />
+      <div className="issue-page__body issue-page__body--fullscreen">
+        <div className="issue-page__content-shell change-request-detail__content">
+          <div className="change-request-detail__loading">
+            <div className="change-request-detail__loading-box" role="status">
+              {t("issues.changeRequests.loadingDetail")}
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -125,7 +127,7 @@ function ChangeRequestDetailLoaded({
   });
   return (
     <section
-      className="change-request-detail"
+      className="issue-page issue-page--fullscreen change-request-detail"
       aria-label={t("issues.changeRequests.detailRegion")}
     >
       <ChangeRequestDetailHeader
@@ -143,7 +145,6 @@ function ChangeRequestDetailLoaded({
         onRequestReview={actions.openReview}
         onClose={actions.openClose}
       />
-      {actions.error == null ? null : <p role="alert">{actions.error}</p>}
       <ChangeRequestActionDialogs
         dialog={actions.dialog}
         error={actions.dialog == null ? null : actions.error}
@@ -153,41 +154,50 @@ function ChangeRequestDetailLoaded({
         onSubmitReview={actions.submitReview}
         onConfirmClose={actions.confirmClose}
       />
-      {detail.detailStatus === "unavailable" ? (
-        <p role="status">{t("issues.changeRequests.detailUnavailable")}</p>
-      ) : null}
-      {detail.detailStatus === "cached" ? (
-        <p role="status">{t("issues.changeRequests.detailCached")}</p>
-      ) : null}
-      <ChangeRequestDetailTabs detail={detail} tab={tab} onTabChange={setTab} />
-      <div className="change-request-detail__grid">
-        <div>
-          {tab === "overview" ? (
-            <ChangeRequestDetailOverview
-              detail={detail}
-              onOpenIssue={onOpenIssue}
-            />
+      <div className="issue-page__body issue-page__body--fullscreen">
+        <div className="issue-page__content-shell change-request-detail__content">
+          {actions.error == null ? null : <p role="alert">{actions.error}</p>}
+          {detail.detailStatus === "unavailable" ? (
+            <p role="status">{t("issues.changeRequests.detailUnavailable")}</p>
           ) : null}
-          {tab === "files" ? (
-            <ChangeRequestDetailFiles detail={detail} />
+          {detail.detailStatus === "cached" ? (
+            <p role="status">{t("issues.changeRequests.detailCached")}</p>
           ) : null}
-          {tab === "checks" ? (
-            <ChangeRequestDetailChecks detail={detail} />
-          ) : null}
-          {tab === "discussion" ? (
-            <ChangeRequestDetailDiscussion detail={detail} />
-          ) : null}
+          <ChangeRequestDetailTabs
+            detail={detail}
+            tab={tab}
+            onTabChange={setTab}
+          />
+          <div className="change-request-detail__grid">
+            <div>
+              {tab === "overview" ? (
+                <ChangeRequestDetailOverview
+                  detail={detail}
+                  onOpenIssue={onOpenIssue}
+                />
+              ) : null}
+              {tab === "files" ? (
+                <ChangeRequestDetailFiles detail={detail} />
+              ) : null}
+              {tab === "checks" ? (
+                <ChangeRequestDetailChecks detail={detail} />
+              ) : null}
+              {tab === "discussion" ? (
+                <ChangeRequestDetailDiscussion detail={detail} />
+              ) : null}
+            </div>
+            <aside className="change-request-detail__side">
+              <ChangeRequestDetailSummary detail={detail} />
+              {isMerged(detail.state) ? null : (
+                <ChangeRequestDetailMerge
+                  projectId={projectId}
+                  detail={detail}
+                  onDetail={setDetail}
+                />
+              )}
+            </aside>
+          </div>
         </div>
-        <aside className="change-request-detail__side">
-          <ChangeRequestDetailSummary detail={detail} />
-          {isMerged(detail.state) ? null : (
-            <ChangeRequestDetailMerge
-              projectId={projectId}
-              detail={detail}
-              onDetail={setDetail}
-            />
-          )}
-        </aside>
       </div>
     </section>
   );

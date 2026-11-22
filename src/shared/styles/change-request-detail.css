@@ -1,17 +1,8 @@
 .change-request-detail {
-  display: flex;
-  flex-direction: column;
-  grid-area: kanban;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding: 12px 16px 24px;
+  min-width: 0;
 }
 
-.change-request-detail__header,
 .change-request-detail__heading,
-.change-request-detail__actions,
 .change-request-detail__sub,
 .change-request-panel__header,
 .change-request-chip-row,
@@ -21,11 +12,6 @@
 .change-request-file-fallback {
   display: flex;
   gap: 8px;
-}
-
-.change-request-detail__header {
-  align-items: flex-start;
-  justify-content: space-between;
 }
 
 .change-request-detail__heading {
@@ -95,10 +81,13 @@
   align-content: start;
 }
 
+.change-request-detail__content {
+  min-height: 100%;
+}
+
 .change-request-detail__loading {
   display: grid;
-  flex: 1;
-  min-height: 0;
+  min-height: 100%;
   place-items: center;
 }
 

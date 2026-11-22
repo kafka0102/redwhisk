@@ -1,10 +1,11 @@
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useI18n } from "../../shared/i18n/i18n";
 import { hostLabel, isMerged } from "./change-request-detail-model";
+import { IssueSurfaceHeader } from "./issue-surface-header";
 
 export function ChangeRequestDetailHeader({
   number,
@@ -21,10 +22,10 @@ export function ChangeRequestDetailHeader({
   onRequestReview,
   onClose,
 }: {
-  number: number;
-  title: string;
-  url: string;
-  provider: string;
+  number?: number;
+  title?: string;
+  url?: string;
+  provider?: string;
   state: string;
   showActions: boolean;
   pending?: boolean;
@@ -36,37 +37,30 @@ export function ChangeRequestDetailHeader({
   onClose?: () => void;
 }): JSX.Element {
   const { t } = useI18n();
-  const host = hostLabel(provider);
+  const host = hostLabel(provider ?? "github");
   const readyDisabled =
     pending === true || state !== "draft" || readySupported !== true;
   const reviewDisabled = pending === true || reviewSupported !== true;
   const closeDisabled = pending === true || state !== "open";
   const actionsVisible = showActions && !isMerged(state);
-  return (
-    <header className="change-request-detail__header">
-      <div className="change-request-detail__heading">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={t("issues.changeRequests.back")}
-          onClick={onBack}
-        >
-          <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
-        </Button>
-        <h2>{`#${number} · ${title}`}</h2>
-      </div>
-      <div className="change-request-detail__actions">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            void openUrl(url);
-          }}
-        >
-          {t("issues.changeRequests.openOnHost", { host })}
-        </Button>
+  let actions: ReactNode;
+  if (url == null && !actionsVisible) {
+    actions = undefined;
+  } else {
+    actions = (
+      <>
+        {url == null ? null : (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void openUrl(url);
+            }}
+          >
+            {t("issues.changeRequests.openOnHost", { host })}
+          </Button>
+        )}
         {actionsVisible ? (
           <>
             <Button
@@ -110,7 +104,30 @@ export function ChangeRequestDetailHeader({
             </Button>
           </>
         ) : null}
-      </div>
-    </header>
+      </>
+    );
+  }
+  return (
+    <IssueSurfaceHeader
+      actions={actions}
+      title={
+        <div className="issue-detail-heading change-request-detail__heading">
+          <Button
+            type="button"
+            variant="secondary"
+            className="issues-button"
+            aria-label={t("issues.changeRequests.back")}
+            onClick={onBack}
+          >
+            <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
+          </Button>
+          {number == null || title == null ? null : (
+            <h2 className="issue-surface-header__title">{`#${number} · ${title}`}</h2>
+          )}
+        </div>
+      }
+      titleAsChild
+      variant="fullscreen"
+    />
   );
 }

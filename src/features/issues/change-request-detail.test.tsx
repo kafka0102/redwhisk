@@ -1086,6 +1086,80 @@ describe("change request detail", () => {
     expect(screen.queryByText("正在加载详情")).toBeNull();
   });
 
+  it("matches the issue detail header and page surfaces", async () => {
+    let resolveLoad: (value: ChangeRequestDetail) => void = () => undefined;
+    getDetailMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    render(
+      <I18nProvider fixedLocale="zh">
+        <ChangeRequestDetailPage
+          number={10}
+          projectId={4}
+          provider="github"
+          listRow={{
+            number: 10,
+            title: "排行榜小程序",
+            url: "https://github.com/acme/redwhisk/pull/10",
+            provider: "github",
+            state: "open",
+          }}
+          onBack={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    const loadingPage = document.querySelector(".change-request-detail");
+    expect(loadingPage).toHaveClass("issue-page", "issue-page--fullscreen");
+    const loadingHeader = screen
+      .getByRole("heading", { name: "#10 · 排行榜小程序" })
+      .closest("header");
+    expect(loadingHeader).toHaveClass(
+      "issue-surface-header",
+      "issue-surface-header--fullscreen",
+    );
+    expect(
+      loadingHeader?.querySelector(".issue-detail-heading"),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "返回" })).toHaveClass(
+      "issues-button",
+    );
+    const loadingBody = loadingPage?.querySelector(
+      ":scope > .issue-page__body",
+    );
+    expect(loadingBody).toHaveClass(
+      "issue-page__body",
+      "issue-page__body--fullscreen",
+    );
+    expect(loadingBody?.previousElementSibling).toBe(loadingHeader);
+
+    resolveLoad(detail({ number: 10, title: "排行榜小程序" }));
+    await flush();
+
+    const loadedPage = document.querySelector(".change-request-detail");
+    expect(loadedPage).toHaveClass("issue-page", "issue-page--fullscreen");
+    const loadedHeader = screen
+      .getByRole("heading", { name: "#10 · 排行榜小程序" })
+      .closest("header");
+    expect(loadedHeader).toHaveClass(
+      "issue-surface-header",
+      "issue-surface-header--fullscreen",
+    );
+    expect(loadedHeader?.querySelector(".issue-detail-heading")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "返回" })).toHaveClass(
+      "issues-button",
+    );
+    const loadedBody = loadedPage?.querySelector(":scope > .issue-page__body");
+    expect(loadedBody).toHaveClass(
+      "issue-page__body",
+      "issue-page__body--fullscreen",
+    );
+    expect(loadedBody?.previousElementSibling).toBe(loadedHeader);
+  });
+
   it("puts merge facts in the side summary instead of under the title", async () => {
     getDetailMock.mockResolvedValue(
       detail({

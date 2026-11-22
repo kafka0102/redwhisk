@@ -652,6 +652,13 @@
     "kanban";
 }
 
+.activity-surface--issues:has(.change-request-detail) {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "kanban";
+  gap: 0;
+  padding: 0;
+}
+
 .activity-surface--issues .issues-status,
 .activity-surface--issues .issues-kanban {
   padding: 0 18px;

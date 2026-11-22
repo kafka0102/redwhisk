@@ -66,6 +66,22 @@ interface StatusRowMeasurement {
   };
 }
 
+interface ChangeRequestDetailSurfaceMeasurement {
+  parentRowCount: number;
+  issueHeaderHeight: number;
+  prHeaderHeight: number;
+  issueHeaderTop: number;
+  prHeaderTop: number;
+  issueBodyTopGap: number;
+  prBodyTopGap: number;
+  prFirstContentGap: number;
+  prHeaderBackground: string;
+  prPageBackground: string;
+  prHeaderBorderBottomWidth: number;
+  appColor: string;
+  surfaceColor: string;
+}
+
 function chromeBinary(): string {
   const fromEnv = process.env.CHROME_PATH;
   if (fromEnv !== undefined && fromEnv !== "" && existsSync(fromEnv)) {
@@ -94,6 +110,8 @@ function stylesheet(): string {
     "src/shared/styles/tokens.css",
     "src/shared/styles/workbench-shell.css",
     "src/shared/styles/issues-board.css",
+    "src/shared/styles/issue-detail.css",
+    "src/shared/styles/change-request-detail.css",
   ]
     .map((file) => readFileSync(resolve(process.cwd(), file), "utf8"))
     .join("\n");
@@ -426,6 +444,92 @@ document.getElementById("out").textContent = JSON.stringify({
   return runChromeMeasurement<StatusRowMeasurement>(html, "status rows");
 }
 
+function measureChangeRequestDetailSurface(): ChangeRequestDetailSurfaceMeasurement {
+  const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+${stylesheet()}
+html, body { width: 1200px; height: 800px; margin: 0; }
+body { padding: 0; }
+#surface { height: 390px; }
+</style>
+</head>
+<body>
+<main id="surface" class="activity-surface activity-surface--issues">
+  <section id="issue" class="issue-page issue-page--readonly issue-page--fullscreen">
+    <header id="issue-header" class="issue-surface-header issue-surface-header--fullscreen">
+      <div class="issue-detail-heading">
+        <button class="issues-button" type="button">Back</button>
+        <h2 class="issue-surface-header__title">Issue title</h2>
+      </div>
+    </header>
+    <div id="issue-body" class="issue-page__body issue-page__body--readonly-fullscreen">
+      <div class="issue-page__content-shell issue-page__content-shell--readonly">
+        <div>Issue content</div>
+      </div>
+    </div>
+  </section>
+  <section id="pr" class="issue-page issue-page--fullscreen change-request-detail">
+    <header id="pr-header" class="issue-surface-header issue-surface-header--fullscreen">
+      <div class="issue-detail-heading change-request-detail__heading">
+        <button class="issues-button" type="button">Back</button>
+        <h2 class="issue-surface-header__title">PR title</h2>
+      </div>
+    </header>
+    <div id="pr-body" class="issue-page__body issue-page__body--fullscreen">
+      <div class="issue-page__content-shell change-request-detail__content">
+        <div id="pr-first">PR content</div>
+      </div>
+    </div>
+  </section>
+</main>
+<pre id="out"></pre>
+<script>
+const surface = document.getElementById("surface");
+const issueHeader = document.getElementById("issue-header");
+const prHeader = document.getElementById("pr-header");
+const issueBody = document.getElementById("issue-body");
+const prBody = document.getElementById("pr-body");
+const prFirst = document.getElementById("pr-first");
+const round = (value) => Math.round(value * 10) / 10;
+const probe = document.createElement("span");
+document.body.append(probe);
+const tokenColor = (name) => {
+  probe.style.color = "var(" + name + ")";
+  return getComputedStyle(probe).color;
+};
+const surfaceRect = surface.getBoundingClientRect();
+const issueHeaderRect = issueHeader.getBoundingClientRect();
+const prHeaderRect = prHeader.getBoundingClientRect();
+const issueBodyRect = issueBody.getBoundingClientRect();
+const prBodyRect = prBody.getBoundingClientRect();
+document.getElementById("out").textContent = JSON.stringify({
+  parentRowCount: getComputedStyle(surface).gridTemplateRows.trim().split(/\\s+/).length,
+  issueHeaderHeight: round(issueHeaderRect.height),
+  prHeaderHeight: round(prHeaderRect.height),
+  issueHeaderTop: round(issueHeaderRect.top - surfaceRect.top),
+  prHeaderTop: round(prHeaderRect.top - surfaceRect.top),
+  issueBodyTopGap: round(issueBodyRect.top - issueHeaderRect.bottom),
+  prBodyTopGap: round(prBodyRect.top - prHeaderRect.bottom),
+  prFirstContentGap: round(prFirst.getBoundingClientRect().top - prHeaderRect.bottom),
+  prHeaderBackground: getComputedStyle(prHeader).backgroundColor,
+  prPageBackground: getComputedStyle(document.getElementById("pr")).backgroundColor,
+  prHeaderBorderBottomWidth: parseFloat(getComputedStyle(prHeader).borderBottomWidth),
+  appColor: tokenColor("--color-app"),
+  surfaceColor: tokenColor("--color-surface"),
+});
+</script>
+</body>
+</html>`;
+
+  return runChromeMeasurement<ChangeRequestDetailSurfaceMeasurement>(
+    html,
+    "change request detail surface",
+  );
+}
+
 function runChromeMeasurement<T>(html: string, label: string): T {
   const directory = mkdtempSync(join(tmpdir(), "redwhisk-issues-layout-"));
   const filePath = join(directory, "layout.html");
@@ -573,6 +677,26 @@ describe("Issues surface layout", { retry: 1 }, () => {
       expect(status.withError.hasStatusArea).toBe(true);
       expect(status.withError.statusHeight).toBeGreaterThan(0);
       expect(status.withError.contentBelowStatus).toBe(true);
+    },
+    CHROME_MEASUREMENT_TIMEOUT_MS,
+  );
+
+  it(
+    "aligns the change request detail surface with the issue detail surface",
+    () => {
+      const surface = measureChangeRequestDetailSurface();
+
+      expect(surface.parentRowCount).toBe(1);
+      expect(surface.prHeaderHeight).toBe(surface.issueHeaderHeight);
+      expect(surface.prHeaderTop).toBe(surface.issueHeaderTop);
+      expect(surface.prHeaderTop).toBe(0);
+      expect(surface.prBodyTopGap).toBe(0);
+      expect(surface.issueBodyTopGap).toBe(0);
+      expect(surface.prFirstContentGap).toBeGreaterThan(0);
+      expect(surface.prFirstContentGap).toBeLessThanOrEqual(22);
+      expect(surface.prHeaderBackground).toBe(surface.surfaceColor);
+      expect(surface.prPageBackground).toBe(surface.appColor);
+      expect(surface.prHeaderBorderBottomWidth).toBe(1);
     },
     CHROME_MEASUREMENT_TIMEOUT_MS,
   );
