@@ -243,52 +243,86 @@ function IssueLinkedChangeRequestCard({
       : `${t("issues.linkedChangeRequest")} #${request.number}`;
   const requestNumber = request.number;
   return (
-    <section aria-label={regionLabel} className="issue-detail-side-card">
-      <div className="issue-detail-side-card__header">
-        <h3>{t("issues.linkedChangeRequest")}</h3>
+    <section
+      aria-label={regionLabel}
+      className="issue-detail-side-card session-issue-panel__card"
+    >
+      <div className="session-issue-panel__header">
+        <div className="issue-detail-side-card__identity">
+          <h3 className="issue-detail__title">
+            {t("issues.linkedChangeRequest")}
+          </h3>
+          <p className="session-issue-panel__issue-title">{request.title}</p>
+        </div>
         {request.state != null && request.state.length > 0 ? (
-          <span>{request.state}</span>
+          <span className="issue-detail-side-card__state">
+            {changeRequestStateLabel(request.state, t)}
+          </span>
         ) : null}
       </div>
-      <p>{checks.text}</p>
+      <div aria-hidden="true" className="issue-detail__divider" />
+      <p className="issue-detail-side-card__checks">{checks.text}</p>
       {closedUnmerged ? <p>{t("issues.changeRequestClosedUnmerged")}</p> : null}
-      {requestNumber != null ? (
+      <div className="session-issue-panel__actions">
+        {requestNumber != null ? (
+          <Button
+            className="session-issue-panel__action"
+            size="sm"
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              onOpenChangeRequest?.({
+                number: requestNumber,
+                provider: request.provider,
+              });
+            }}
+          >
+            {t("issues.changeRequests.openInApp")}
+          </Button>
+        ) : null}
+        {closedUnmerged ? (
+          <Button
+            className="session-issue-panel__action"
+            size="sm"
+            type="button"
+            variant="secondary"
+            onClick={onReopenIssue}
+          >
+            {t("issues.reopenIssue")}
+          </Button>
+        ) : null}
         <Button
+          className="session-issue-panel__action"
           size="sm"
           type="button"
           variant="secondary"
           onClick={() => {
-            onOpenChangeRequest?.({
-              number: requestNumber,
-              provider: request.provider,
-            });
+            void openUrl(request.url);
           }}
         >
-          {t("issues.changeRequests.openInApp")}
+          {openLabel}
         </Button>
-      ) : null}
-      {closedUnmerged ? (
-        <Button
-          size="sm"
-          type="button"
-          variant="secondary"
-          onClick={onReopenIssue}
-        >
-          {t("issues.reopenIssue")}
-        </Button>
-      ) : null}
-      <Button
-        size="sm"
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          void openUrl(request.url);
-        }}
-      >
-        {openLabel}
-      </Button>
+      </div>
     </section>
   );
+}
+
+function changeRequestStateLabel(
+  state: string,
+  t: (key: string) => string,
+): string {
+  switch (state.toLowerCase()) {
+    case "draft":
+      return t("issues.changeRequests.statusDraft");
+    case "merged":
+      return t("issues.changeRequests.merged");
+    case "closed":
+      return t("issues.changeRequests.statusClosed");
+    case "open":
+      return t("issues.changeRequests.filterOpen");
+    default:
+      return state;
+  }
 }
 
 function remoteStateLabel(state: string, unavailable: string): string {

@@ -61,6 +61,8 @@
 - Issue 与 PR 同步必须错开或共享单项目同步节流，避免同一时刻重复打满宿主。
 - 同步失败保留已有列表缓存，并显示可恢复错误。
 
+> **规则状态（2026-11-22 更新）**：本节及下方完成记录中的“最近 30 天 merged/closed”只表示任务 6 当时的历史实现，已由 Issues 工作台修正 ticket 03（业务 Issue #400）的“CLI 返回即保留”规则取代。当前实现不再按 30 天窗口裁剪 merged/closed；open、draft、merged、closed 只要 CLI 返回就保留。
+
 ### 关联 Issue
 
 - 导入 PR/MR 时解析明确关联：GitHub closing keyword、GitLab closing pattern、分支名和可用宿主关系字段。

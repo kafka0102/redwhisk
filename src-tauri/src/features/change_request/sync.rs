@@ -7,8 +7,6 @@ use crate::types::change_request::{ChangeRequestSyncOutcome, ChangeRequestSyncRe
 use crate::types::errors::{CommandError, CommandErrorCode, ErrorDetail};
 use crate::types::project_issue_source::{ForgeProvider, IssueSourceMode};
 
-const THIRTY_DAYS_MS: i64 = 30 * 24 * 60 * 60 * 1000;
-
 pub(crate) fn sync_project_change_requests(
     connection: &Connection,
     project_id: i64,
@@ -50,13 +48,12 @@ pub(crate) fn sync_project_change_requests(
         .filter(|repo| !repo.is_empty())
         .map(str::to_string)
         .ok_or_else(missing_connection)?;
-    let window_start = now_ms.saturating_sub(THIRTY_DAYS_MS);
     let requests = match forge.list_change_requests() {
         Ok(requests) => requests,
         Err(error) => return fail_sync(connection, project_id, error),
     };
     for request in requests {
-        if !retained(&request, window_start) {
+        if !is_supported_state(&request.state) {
             continue;
         }
         insert_change_request(
@@ -126,12 +123,8 @@ fn mark_synced(connection: &Connection, project_id: i64, now_ms: i64) -> Result<
     Ok(())
 }
 
-fn retained(request: &RemoteChangeRequest, window_start: i64) -> bool {
-    match request.state.as_str() {
-        "open" | "draft" => true,
-        "merged" | "closed" => request.updated_at >= window_start,
-        _ => false,
-    }
+fn is_supported_state(state: &str) -> bool {
+    matches!(state, "open" | "draft" | "merged" | "closed")
 }
 
 fn insert_change_request(

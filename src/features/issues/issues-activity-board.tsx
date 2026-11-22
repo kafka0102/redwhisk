@@ -9,9 +9,12 @@ import {
 import { IssueBoardHeader, type IssueBoardPane } from "./issue-board-header";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { IssuesKanban } from "./issues-kanban";
+import type { IssueSyncStatus } from "./issue-mirror-commands";
 import type { ForgeProvider } from "../settings/issue-source-commands";
 import { IssueBoardList } from "./issue-board-list";
 import { IssueBoardModeBar } from "./issue-board-mode-bar";
+import { IssueSyncToolbar } from "./issue-sync-toolbar";
+import { useChangeRequestData } from "./use-change-request-data";
 import {
   filterIssuesByTitle,
   issueListBucket,
@@ -60,6 +63,32 @@ export function IssuesActivityBoard({
 } & ComponentProps<typeof IssuesKanban>): JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false);
   const [titleQuery, setTitleQuery] = useState("");
+  const changeRequestData = useChangeRequestData({
+    autoSyncEnabled: pane === "pullRequests",
+    projectId,
+    sourceMode,
+  });
+  const canSyncChangeRequests =
+    sourceMode === "remote" || sourceMode === "mixed";
+  const changeRequestStatus: IssueSyncStatus = {
+    lastSyncedAt: null,
+    syncError: changeRequestData.syncError,
+  };
+  const headerActions =
+    pane === "issues" ? (
+      actions
+    ) : canSyncChangeRequests ? (
+      <IssueSyncToolbar
+        provider={provider}
+        status={changeRequestStatus}
+        syncing={changeRequestData.syncing}
+        onRefresh={() => {
+          void changeRequestData
+            .runSync()
+            .then(changeRequestData.noteManualResult);
+        }}
+      />
+    ) : null;
   const filteredLanes = kanban.lanes.map((lane) => ({
     ...lane,
     issues: filterIssuesByTitle(lane.issues, titleQuery),
@@ -76,10 +105,10 @@ export function IssuesActivityBoard({
     <>
       {detailOpen ? null : (
         <IssueBoardHeader
-          actions={actions}
+          actions={headerActions}
           issueCount={issueCount}
           pane={pane}
-          projectId={projectId}
+          pullRequestCount={changeRequestData.response?.tabCount ?? null}
           sourceMode={sourceMode}
           provider={provider}
           onPaneChange={onPaneChange}
@@ -110,6 +139,7 @@ export function IssuesActivityBoard({
           openDetail={openChangeRequest}
           onOpenDetailConsumed={onOpenChangeRequestConsumed}
           onOpenLinkedIssue={onOpenLinkedIssue}
+          data={changeRequestData}
         />
       ) : issueBoard.view === "list" ? (
         <IssueBoardList

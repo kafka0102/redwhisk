@@ -246,7 +246,7 @@ v1 只做三个显式写回：
 
 应用页面顶部不再显示 `项目名 / 仓库 · 分支` 这一行；项目与分支信息只在实际需要操作的区域出现。
 
-顶部 Tab 右侧放来源筛选（仅混合 Issues）、同步状态与刷新图标；不放新建 Issue。刷新只显示图标；新建入口用 Issue 甬道的加号。
+顶部 Tab 右侧放来源筛选（仅混合 Issues）、同步状态与刷新图标；不放新建 Issue。刷新只显示图标；新建入口用 Issue 甬道的加号。刷新按当前 pane 分流：Issues 只同步 Issue；Pull requests / Merge requests 只同步 PR/MR，并重载当前筛选列表与 Open/Closed/Tab 数量。
 
 理由：
 
@@ -320,7 +320,7 @@ Issue 详情不能只做一套通用页面。待办没有 `linked_session`，没
 | 待审核 | 会话信息、运行参数；有关联 PR 时加 PR 卡片 | 同上，并加关联 PR |
 | 已完成 | 同待审核 | 同待审核 |
 
-宿主卡片标题用 `GitHub` / `GitLab`，不重复编号。会话信息与现有只读面板一致：开始时间、结束时间（已结束才有）、执行时长、会话状态、Token（总计 / 输入 / 输出 / 缓存 / 命中率）、运行时日志或归档日志。运行参数：智能体、模型、工作流技能、开发模式、分支目录。
+宿主卡片标题用 `GitHub` / `GitLab`，不重复编号。关联 PR/MR 使用同一套卡片边框、surface 背景、圆角、内边距与内部间距，按标题、状态、检查摘要、动作排列；应用内查看、宿主打开和 closed-unmerged 重新打开都留在动作区。会话信息与现有只读面板一致：开始时间、结束时间（已结束才有）、执行时长、会话状态、Token（总计 / 输入 / 输出 / 缓存 / 命中率）、运行时日志或归档日志。运行参数：智能体、模型、工作流技能、开发模式、分支目录。
 
 #### 编辑页标签与附件
 
@@ -743,9 +743,9 @@ sync_project_issues(project_id, full):
 
 ### 9.3 PR/MR
 
-- 列表默认：open + draft + 最近 30 天 merged/closed，按 `updated_at desc`。
+- 列表默认：CLI 返回的 open + draft + merged + closed 全部保留，不按更新时间丢弃历史项；GitHub 仍最多请求 200 条、GitLab 最多请求 100 条。列表按 `updated_at desc`。
 - 详情按需拉；打开详情时拉 files/checks/reviews/comments，之后 30 秒刷新（页面可见且窗口聚焦）。
-- 列表 60 秒刷新；与 Issue 同步错开，避免同一时刻打满 API。
+- 列表在 Pull requests / Merge requests pane 可见且窗口聚焦时每 60 秒刷新；右上角手动刷新只同步当前 pane 的 PR/MR，不连带同步 Issue。同步成功后重载当前筛选并更新 Open/Closed/Tab 数量，`change-request-sync-changed` 成功事件也更新顶部 Tab 数量。
 - PR 合并成功后：更新 PR state、关闭关联远程 Issue（若开启且仍 open）、刷新 Issue 卡片。
 - PR 关闭未合并：本地 Issue 保持 completed，但显示「PR 已关闭未合并」，提供「重新打开 Issue」。
 - GitHub `mergeable=null` 显示「正在计算」，不显示「不可合并」；合并失败时展示宿主错误。

@@ -1,7 +1,6 @@
-import { useEffect, useState, type JSX, type ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 
 import { useI18n } from "../../shared/i18n/i18n";
-import { listProjectChangeRequests } from "./change-request-commands";
 import type { ForgeProvider } from "../settings/issue-source-commands";
 
 export type IssueBoardPane = "issues" | "pullRequests";
@@ -11,20 +10,25 @@ export function IssueBoardHeader({
   issueCount,
   pane,
   onPaneChange,
-  projectId,
   sourceMode = null,
   provider = null,
+  pullRequestCount = null,
 }: {
   actions?: ReactNode;
   issueCount: number;
   pane: IssueBoardPane;
   onPaneChange: (pane: IssueBoardPane) => void;
-  projectId?: number;
   sourceMode?: "local" | "remote" | "mixed" | null;
   provider?: ForgeProvider | null;
+  pullRequestCount?: number | null;
 }): JSX.Element {
   const { t } = useI18n();
-  const pullRequestCount = usePullRequestCount(projectId, sourceMode);
+  const visiblePullRequestCount =
+    sourceMode === "local"
+      ? 0
+      : sourceMode === "remote" || sourceMode === "mixed"
+        ? pullRequestCount
+        : null;
   const tabLabel = t(
     provider === "gitlab"
       ? "issues.mergeRequestsTab"
@@ -57,9 +61,9 @@ export function IssueBoardHeader({
           onClick={() => onPaneChange("pullRequests")}
         >
           {tabLabel}
-          {pullRequestCount == null ? null : (
+          {visiblePullRequestCount == null ? null : (
             <span aria-hidden="true" className="issue-board-tab__count">
-              {pullRequestCount}
+              {visiblePullRequestCount}
             </span>
           )}
         </button>
@@ -69,41 +73,4 @@ export function IssueBoardHeader({
       ) : null}
     </header>
   );
-}
-
-function usePullRequestCount(
-  projectId: number | undefined,
-  sourceMode: "local" | "remote" | "mixed" | null,
-): number | null {
-  const [count, setCount] = useState<number | null>(null);
-  useEffect(() => {
-    if (
-      projectId == null ||
-      (sourceMode !== "remote" && sourceMode !== "mixed")
-    ) {
-      return;
-    }
-    let cancelled = false;
-    void listProjectChangeRequests({ projectId })
-      .then((response) => {
-        if (!cancelled) {
-          setCount(response.tabCount);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCount(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, sourceMode]);
-  if (sourceMode === "local") {
-    return 0;
-  }
-  if (sourceMode !== "remote" && sourceMode !== "mixed") {
-    return null;
-  }
-  return count;
 }

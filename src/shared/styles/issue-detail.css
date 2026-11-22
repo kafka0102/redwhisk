@@ -118,6 +118,31 @@
   gap: 8px;
 }
 
+.issue-detail-side-card__identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.issue-detail-side-card__identity > * {
+  margin: 0;
+}
+
+.issue-detail-side-card__state {
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.issue-detail-side-card__checks {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 /* 后加载的 .session-issue-panel 用同等优先级写了 padding: 12px，必须更具体才能和 GitHub 卡对齐 */
 .issue-page__side--readonly .issue-readonly-session-panel {
   height: 100%;

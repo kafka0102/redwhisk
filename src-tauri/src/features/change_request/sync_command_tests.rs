@@ -7,17 +7,16 @@ use crate::types::change_request::ChangeRequestListResponse;
 use crate::types::errors::CommandErrorCode;
 
 const CLOCK_MS: i64 = 1_794_063_600_000;
-const WINDOW_START_MS: i64 = 1_791_471_600_000;
-const ONE_SECOND_EARLIER_MS: i64 = 1_791_471_599_000;
 const OLD_MS: i64 = 1_767_225_600_000;
+const THIRTY_ONE_DAYS_AGO_MS: i64 = CLOCK_MS - 31 * 24 * 60 * 60 * 1000;
 
 #[test]
-fn merged_at_window_start_is_stored_and_one_second_earlier_is_not() {
+fn keeps_merged_and_closed_change_requests_older_than_thirty_days_and_counts_closed() {
     let connection = open_memory();
     let project_id = insert_remote_project(&connection);
     let forge = FixedForge::new(Vec::new()).with_change_requests(vec![
-        merged_request(126, WINDOW_START_MS),
-        merged_request(120, ONE_SECOND_EARLIER_MS),
+        merged_request(126, THIRTY_ONE_DAYS_AGO_MS),
+        change_request(127, "closed", THIRTY_ONE_DAYS_AGO_MS),
     ]);
 
     super::sync_project_change_requests(&connection, project_id, &forge, CLOCK_MS)
@@ -27,13 +26,13 @@ fn merged_at_window_start_is_stored_and_one_second_earlier_is_not() {
         super::list_project_change_requests(&connection, project_id, "closed", "yujianjia")
             .expect("list_project_change_requests");
 
-    assert_eq!(row_numbers(&listed), vec![126]);
-    assert_eq!(listed.tab_count, 1);
-    assert_eq!(listed.counts.closed, 1);
+    assert_eq!(row_numbers(&listed), vec![127, 126]);
+    assert_eq!(listed.tab_count, 2);
+    assert_eq!(listed.counts.closed, 2);
 }
 
 #[test]
-fn open_and_draft_before_the_window_are_stored() {
+fn open_and_draft_are_stored_regardless_of_age() {
     let connection = open_memory();
     let project_id = insert_remote_project(&connection);
     let forge = FixedForge::new(Vec::new()).with_change_requests(vec![
@@ -187,6 +186,8 @@ fn assert_stored_states(
     assert_eq!(state_of(&closed, merged_number), "merged");
     assert_eq!(state_of(&closed, closed_number), "closed");
     assert_eq!(open.tab_count, 4);
+    assert_eq!(open.counts.open, 2);
+    assert_eq!(closed.counts.closed, 2);
     assert!(!row_numbers(&open).contains(&closed_number));
     assert!(!row_numbers(&open).contains(&merged_number));
 }

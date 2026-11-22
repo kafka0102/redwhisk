@@ -19,7 +19,13 @@ import { resetIssuePageStateCacheForTests } from "./issues-activity-cache";
 import { ISSUE_PAGE_SIZE } from "./issue-activity-types";
 import { getIssueTimeline, listIssues } from "./issue-commands";
 import { type IssueBoardRecord } from "./issue-mirror-commands";
-import { listProjectChangeRequests } from "./change-request-commands";
+import {
+  CHANGE_REQUEST_SYNC_CHANGED_EVENT,
+  listProjectChangeRequests,
+  syncProjectChangeRequests,
+  type ChangeRequestListResponse,
+  type ChangeRequestSyncChangedEvent,
+} from "./change-request-commands";
 import {
   getIssueSyncStatus,
   ISSUE_SYNC_CHANGED_EVENT,
@@ -101,6 +107,7 @@ const updateProjectIssueSourceSettingsMock = vi.mocked(
 const getIssueTimelineMock = vi.mocked(getIssueTimeline);
 const listenMock = vi.mocked(listen);
 const listProjectChangeRequestsMock = vi.mocked(listProjectChangeRequests);
+const syncProjectChangeRequestsMock = vi.mocked(syncProjectChangeRequests);
 
 function boardIssue(
   partial: Partial<IssueBoardRecord> & { id: number },
@@ -162,6 +169,39 @@ async function expectSyncToolbar(
   });
 }
 
+function changeRequestResponse({
+  closed = 0,
+  open = 0,
+  titles = [],
+}: {
+  closed?: number;
+  open?: number;
+  titles?: string[];
+} = {}): ChangeRequestListResponse {
+  return {
+    rows: titles.map((title, index) => ({
+      id: index + 1,
+      provider: "github",
+      number: index + 1,
+      title,
+      url: `https://github.com/acme/redwhisk/pull/${index + 1}`,
+      state: closed > 0 ? "closed" : "open",
+      authorLogin: "octocat",
+      sourceBranch: "feat/change",
+      targetBranch: "main",
+      reviewDecision: null,
+      checksOk: null,
+      checksFailed: null,
+      checksPending: null,
+      remoteUpdatedAt: Date.now(),
+      linkedIssues: [],
+    })),
+    tabCount: open + closed,
+    counts: { open, closed },
+    pullRequestRefs: [],
+  };
+}
+
 describe("GitHub issue mirror board", () => {
   beforeAll(async () => {
     await import("./issue-detail/issue-read-only-page");
@@ -185,6 +225,11 @@ describe("GitHub issue mirror board", () => {
     getIssueTimelineMock.mockReset();
     getIssueTimelineMock.mockResolvedValue({ entries: [] });
     listProjectChangeRequestsMock.mockReset();
+    syncProjectChangeRequestsMock.mockReset();
+    syncProjectChangeRequestsMock.mockResolvedValue({
+      outcome: "synced",
+      errorCode: null,
+    });
     listProjectChangeRequestsMock.mockResolvedValue({
       rows: [],
       tabCount: 0,
@@ -957,6 +1002,125 @@ describe("GitHub issue mirror board", () => {
     expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("#12")).toBeInTheDocument();
     resolveSync({ outcome: "synced" });
+  });
+
+  it("refreshes only issues while the Issues tab is selected", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    expect(await screen.findByText("#12")).toBeInTheDocument();
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1));
+
+    syncProjectIssuesMock.mockClear();
+    syncProjectChangeRequestsMock.mockClear();
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+
+    await waitFor(() => expect(syncProjectIssuesMock).toHaveBeenCalledTimes(1));
+    expect(syncProjectChangeRequestsMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes only change requests from the Pull requests tab and reloads the selected filter", async () => {
+    const user = userEvent.setup();
+    let closedResponse = changeRequestResponse({
+      closed: 1,
+      titles: ["Old closed"],
+    });
+    listProjectChangeRequestsMock.mockImplementation(async ({ filter }) =>
+      filter === "closed"
+        ? closedResponse
+        : changeRequestResponse({ open: 1, titles: ["Open request"] }),
+    );
+    renderBoard();
+    const tab = await screen.findByRole("tab", { name: /Pull requests/ });
+    await user.click(tab);
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    await user.click(screen.getByRole("button", { name: /Closed/ }));
+    expect(await screen.findByText("Old closed")).toBeInTheDocument();
+
+    closedResponse = changeRequestResponse({
+      closed: 2,
+      open: 1,
+      titles: ["New closed A", "New closed B"],
+    });
+    syncProjectIssuesMock.mockClear();
+    syncProjectChangeRequestsMock.mockClear();
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(syncProjectIssuesMock).not.toHaveBeenCalled();
+    expect(await screen.findByText("New closed A")).toBeInTheDocument();
+    expect(screen.getByText("New closed B")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Closed/ })).toHaveTextContent(
+      "2",
+    );
+    expect(screen.getByRole("button", { name: /Open/ })).toHaveTextContent("1");
+    expect(
+      screen.getByRole("tab", { name: /Pull requests/ }),
+    ).toHaveTextContent("3");
+  });
+
+  it("updates the Pull requests tab from matching sync events and safely coalesces duplicates", async () => {
+    let resolveInitial: (value: ChangeRequestListResponse) => void = () =>
+      undefined;
+    let resolveRefresh: (value: ChangeRequestListResponse) => void = () =>
+      undefined;
+    listProjectChangeRequestsMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveInitial = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    renderBoard();
+    await waitFor(() =>
+      expect(listProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(eventHandlers.has(CHANGE_REQUEST_SYNC_CHANGED_EVENT)).toBe(true),
+    );
+    const handler = eventHandlers.get(CHANGE_REQUEST_SYNC_CHANGED_EVENT);
+    const synced = {
+      payload: {
+        projectId: 1,
+        outcome: "synced",
+      } satisfies ChangeRequestSyncChangedEvent,
+    };
+
+    handler?.({
+      payload: {
+        projectId: 9,
+        outcome: "synced",
+      } satisfies ChangeRequestSyncChangedEvent,
+    });
+    handler?.(synced);
+    handler?.(synced);
+    expect(listProjectChangeRequestsMock).toHaveBeenCalledTimes(1);
+
+    resolveInitial(changeRequestResponse({ open: 4 }));
+    await waitFor(() =>
+      expect(listProjectChangeRequestsMock).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /Pull requests/ }),
+      ).toHaveTextContent("4"),
+    );
+
+    resolveRefresh(changeRequestResponse({ open: 5 }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /Pull requests/ }),
+      ).toHaveTextContent("5"),
+    );
   });
 
   it("shows GitHub, GitLab, and local badges on one mixed board", async () => {

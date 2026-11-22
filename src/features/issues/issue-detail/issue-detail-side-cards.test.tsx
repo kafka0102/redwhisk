@@ -1,4 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { describe, expect, it, vi } from "vitest";
 
 import { listAgentSessions } from "../../agents/agent-session-commands";
@@ -10,13 +12,17 @@ import {
   IssueDetailSideCards,
   IssueReadOnlyLabelRow,
 } from "./issue-detail-side-cards";
-import type { IssueDetailProjection } from "./issue-detail-commands";
+import type {
+  IssueDetailProjection,
+  LinkedChangeRequestSummary,
+} from "./issue-detail-commands";
 
 vi.mock("../../agents/agent-session-commands", () => ({
   listAgentSessions: vi.fn(),
 }));
 
 const listAgentSessionsMock = vi.mocked(listAgentSessions);
+const openUrlMock = vi.mocked(openUrl);
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
@@ -33,6 +39,21 @@ function projection(): IssueDetailProjection {
     authorLogin: "kafka0102",
     assignees: [],
     labels: [],
+  };
+}
+
+function linkedRequest(): LinkedChangeRequestSummary {
+  return {
+    provider: "github",
+    url: "https://github.com/acme/redwhisk/pull/12",
+    number: 12,
+    state: "closed",
+    checksOk: 2,
+    checksFailed: 1,
+    checksPending: 0,
+    title: "Fix login",
+    sourceBranch: "feat/login",
+    targetBranch: "main",
   };
 }
 
@@ -154,5 +175,63 @@ describe("Issue 详情标签与远程侧栏", () => {
     const panelStyle = window.getComputedStyle(panel as Element);
     expect(panelStyle.paddingTop).toMatch(/^0(px)?$/);
     expect(panelStyle.paddingLeft).toMatch(/^0(px)?$/);
+  });
+
+  it("关联 PR 使用卡片布局并保留应用内查看、宿主打开与重新打开动作", async () => {
+    const user = userEvent.setup();
+    const onOpenChangeRequest = vi.fn();
+    const onReopenIssue = vi.fn();
+    render(
+      <I18nProvider fixedLocale="zh">
+        <IssueDetailSideCards
+          canOpenSession={false}
+          issueStatus="completed"
+          linkedChangeRequests={[linkedRequest()]}
+          linkedSessionId={null}
+          projectId={1}
+          projection={projection()}
+          writebackError={null}
+          writebackPending={false}
+          onOpenSession={vi.fn()}
+          onOpenChangeRequest={onOpenChangeRequest}
+          onReopenIssue={onReopenIssue}
+          onRetryWriteback={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    const card = screen.getByRole("region", { name: "关联 PR #12" });
+    const hostCard = screen.getByRole("region", { name: "GitHub" });
+    const cardStyle = window.getComputedStyle(card);
+    const hostCardStyle = window.getComputedStyle(hostCard);
+    expect(card).toHaveClass("session-issue-panel__card");
+    expect(cardStyle.display).toBe("grid");
+    expect(cardStyle.padding).toBe("12px");
+    expect(cardStyle.borderStyle).toBe("solid");
+    expect(cardStyle.borderWidth).toBe("1px");
+    expect(cardStyle.borderRadius).toBe(hostCardStyle.borderRadius);
+    expect(cardStyle.borderColor).toBe(hostCardStyle.borderColor);
+    expect(cardStyle.backgroundColor).toBe(hostCardStyle.backgroundColor);
+    expect(card).toHaveTextContent("Fix login");
+    expect(card).toHaveTextContent("2/3 通过");
+
+    const actions = card.querySelector(".session-issue-panel__actions");
+    expect(actions).not.toBeNull();
+    expect(window.getComputedStyle(actions as Element).flexWrap).toBe("wrap");
+    await user.click(
+      within(card).getByRole("button", { name: "在应用内查看" }),
+    );
+    expect(onOpenChangeRequest).toHaveBeenCalledWith({
+      provider: "github",
+      number: 12,
+    });
+    await user.click(within(card).getByRole("button", { name: "打开 GitHub" }));
+    expect(openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/acme/redwhisk/pull/12",
+    );
+    await user.click(
+      within(card).getByRole("button", { name: "重新打开 Issue" }),
+    );
+    expect(onReopenIssue).toHaveBeenCalledTimes(1);
   });
 });

@@ -560,7 +560,7 @@
       "openHostForFile": "打开宿主",
       "openLogs": "日志",
       "openOnHost": "在 {{host}} 打开",
-      "openInApp": "查看详情",
+      "openInApp": "在应用内查看",
       "overviewTab": "概览",
       "readyToMerge": "可合并",
       "rebaseMerge": "变基合并",

@@ -581,7 +581,7 @@ describe("Issue 详情按状态与来源", () => {
       absent: ["运行", "保存", "删除", "完成", "查看回看"],
       statusText: "待验收",
       cards: ["host", "pr", "session"] as Array<"host" | "pr" | "session">,
-      prState: "open",
+      prState: "Open",
     },
     {
       name: "待审核本地没有宿主卡",
@@ -632,7 +632,7 @@ describe("Issue 详情按状态与来源", () => {
       absent: ["运行", "保存", "完成", "删除", "查看回看"],
       statusText: "已完成",
       cards: ["host", "pr", "session"] as Array<"host" | "pr" | "session">,
-      prState: "merged",
+      prState: "已合并",
     },
     {
       name: "已完成本地没有宿主卡",
@@ -732,7 +732,7 @@ describe("Issue 详情按状态与来源", () => {
           within(pullRequest).getByText(prState ?? ""),
         ).toBeInTheDocument();
         expect(
-          within(pullRequest).getByRole("button", { name: "查看详情" }),
+          within(pullRequest).getByRole("button", { name: "在应用内查看" }),
         ).toBeInTheDocument();
       } else {
         expect(
@@ -1345,12 +1345,12 @@ describe("Issue 详情按状态与来源", () => {
     });
     const first = within(root).getByRole("region", { name: "关联 PR #9" });
     const second = within(root).getByRole("region", { name: "关联 PR #11" });
-    expect(within(first).getByText("open")).toBeInTheDocument();
+    expect(within(first).getByText("Open")).toBeInTheDocument();
     expect(within(first).getByText("3/4 通过")).toBeInTheDocument();
-    expect(within(second).getByText("merged")).toBeInTheDocument();
+    expect(within(second).getByText("已合并")).toBeInTheDocument();
     expect(within(second).getByText("4/4 通过")).toBeInTheDocument();
     expect(
-      within(first).getByRole("button", { name: "查看详情" }),
+      within(first).getByRole("button", { name: "在应用内查看" }),
     ).toBeInTheDocument();
     expect(
       within(first).getByRole("button", { name: "打开 GitHub" }),
@@ -1423,7 +1423,7 @@ describe("Issue 详情按状态与来源", () => {
       ],
     });
     await userEvent.click(
-      within(root).getByRole("button", { name: "查看详情" }),
+      within(root).getByRole("button", { name: "在应用内查看" }),
     );
     expect(
       await screen.findByRole("heading", { name: /#9/ }),

@@ -7,16 +7,8 @@ import type { Locale } from "../../shared/i18n/i18n-constants";
 import { IssueBoardHeader } from "./issue-board-header";
 import { ChangeRequestList } from "./change-request-list";
 import type { ChangeRequestListResponse } from "./change-request-commands";
-import { listProjectChangeRequests } from "./change-request-commands";
 
 import "../../shared/styles/issues-board.css";
-
-vi.mock("./change-request-commands", async () => {
-  const actual = await vi.importActual<
-    typeof import("./change-request-commands")
-  >("./change-request-commands");
-  return { ...actual, listProjectChangeRequests: vi.fn() };
-});
 
 const NOW = Date.parse("2026-11-07T15:00:00Z");
 
@@ -398,13 +390,11 @@ describe("change request list", () => {
   });
 
   it("hides a zero tab count until the source mode is known", async () => {
-    vi.mocked(listProjectChangeRequests).mockResolvedValue(response());
     const { rerender } = renderList(
       "en",
       <IssueBoardHeader
         issueCount={4}
         pane="issues"
-        projectId={1}
         sourceMode={null}
         onPaneChange={vi.fn()}
       />,
@@ -420,7 +410,6 @@ describe("change request list", () => {
         <IssueBoardHeader
           issueCount={4}
           pane="issues"
-          projectId={1}
           sourceMode="local"
           onPaneChange={vi.fn()}
         />
@@ -437,7 +426,7 @@ describe("change request list", () => {
         <IssueBoardHeader
           issueCount={4}
           pane="issues"
-          projectId={1}
+          pullRequestCount={8}
           sourceMode="remote"
           onPaneChange={vi.fn()}
         />
@@ -452,7 +441,6 @@ describe("change request list", () => {
       <IssueBoardHeader
         issueCount={4}
         pane="issues"
-        projectId={1}
         provider="gitlab"
         sourceMode="remote"
         onPaneChange={vi.fn()}
@@ -467,7 +455,6 @@ describe("change request list", () => {
         <IssueBoardHeader
           issueCount={4}
           pane="issues"
-          projectId={1}
           provider="gitlab"
           sourceMode="local"
           onPaneChange={vi.fn()}
@@ -483,7 +470,6 @@ describe("change request list", () => {
         <IssueBoardHeader
           issueCount={4}
           pane="issues"
-          projectId={1}
           provider="github"
           sourceMode="remote"
           onPaneChange={vi.fn()}
@@ -500,7 +486,6 @@ describe("change request list", () => {
           <IssueBoardHeader
             issueCount={4}
             pane="pullRequests"
-            projectId={1}
             provider={null}
             sourceMode={null}
             onPaneChange={vi.fn()}
