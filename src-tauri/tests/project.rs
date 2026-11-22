@@ -78,6 +78,7 @@ fn project_migration_creates_projects_schema_with_unique_repo_path() {
             "last_issue_sync_error",
             "last_change_request_synced_at",
             "last_change_request_sync_error",
+            "issue_display_mode",
         ],
     );
     assert_eq!(
