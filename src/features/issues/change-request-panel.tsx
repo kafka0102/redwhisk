@@ -82,7 +82,7 @@ export function ChangeRequestPanel({
       sourceMode={sourceMode}
       provider={provider}
       syncSlot={
-        data.syncError == null ? null : (
+        suppliedData != null || data.syncError == null ? null : (
           <p role="status">{t("issues.syncCacheFailed")}</p>
         )
       }

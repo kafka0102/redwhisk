@@ -60,6 +60,8 @@ export interface ChangeRequestListResponse {
   tabCount: number;
   counts: ChangeRequestFilterCounts;
   pullRequestRefs: IssuePullRequestRef[];
+  lastSyncedAt: number | null;
+  syncError: string | null;
 }
 
 export function listProjectChangeRequests(input: {

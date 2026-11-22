@@ -207,6 +207,8 @@ function changeRequestResponse({
     tabCount: open + closed,
     counts: { open, closed },
     pullRequestRefs: [],
+    lastSyncedAt: null,
+    syncError: null,
   };
 }
 
@@ -246,6 +248,8 @@ describe("GitHub issue mirror board", () => {
         closed: 0,
       },
       pullRequestRefs: [],
+      lastSyncedAt: null,
+      syncError: null,
     });
     getProjectIssueSourceSettingsMock.mockResolvedValue({
       projectId: 1,
@@ -1157,6 +1161,136 @@ describe("GitHub issue mirror board", () => {
     expect(
       screen.getByRole("tab", { name: /Pull requests/ }),
     ).toHaveTextContent("3");
+  });
+
+  it("shows persisted change request sync status after returning to the Pull requests tab", async () => {
+    const user = userEvent.setup();
+    const persistedResponse: ChangeRequestListResponse = {
+      ...changeRequestResponse({ open: 1, titles: ["Open request"] }),
+      lastSyncedAt: Date.now() - 120_000,
+      syncError: null,
+    };
+    listProjectChangeRequestsMock.mockResolvedValue(persistedResponse);
+
+    renderBoard();
+    const pullRequestsTab = await screen.findByRole("tab", {
+      name: /Pull requests/,
+    });
+    await user.click(pullRequestsTab);
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(await screen.findByText("Open request")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Issues/ }));
+    await user.click(screen.getByRole("tab", { name: /Pull requests/ }));
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(2),
+    );
+
+    await expectSyncToolbar("已同步 2 分钟前", "success");
+  });
+
+  it("shows the persisted change request sync error after returning to the Pull requests tab", async () => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    const user = userEvent.setup();
+    const view = renderBoard();
+    try {
+      listProjectChangeRequestsMock.mockResolvedValue({
+        ...changeRequestResponse({ open: 1, titles: ["Open request"] }),
+        lastSyncedAt: Date.now() - 120_000,
+        syncError: "credential_expired",
+      });
+      const pullRequestsTab = await screen.findByRole("tab", {
+        name: /Pull requests/,
+      });
+      await user.click(pullRequestsTab);
+      await screen.findByText("Open request");
+
+      await user.click(screen.getByRole("tab", { name: /^Issues/ }));
+      await user.click(screen.getByRole("tab", { name: /Pull requests/ }));
+
+      await expectSyncToolbar("GitHub 凭据已过期", "error");
+      expect(syncProjectChangeRequestsMock).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  });
+
+  it("keeps change requests syncing until the refreshed list response arrives", async () => {
+    const user = userEvent.setup();
+    const initialResponse: ChangeRequestListResponse = {
+      ...changeRequestResponse({ open: 1, titles: ["Open request"] }),
+      lastSyncedAt: Date.now() - 120_000,
+      syncError: null,
+    };
+    listProjectChangeRequestsMock.mockResolvedValue(initialResponse);
+
+    renderBoard();
+    await user.click(await screen.findByRole("tab", { name: /Pull requests/ }));
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    await screen.findByText("Open request");
+    await expectSyncToolbar("已同步 2 分钟前", "success");
+
+    syncProjectChangeRequestsMock.mockClear();
+    listProjectChangeRequestsMock.mockClear();
+    const sync = deferred<{
+      outcome: "synced";
+      errorCode: null;
+    }>();
+    const reload = deferred<ChangeRequestListResponse>();
+    syncProjectChangeRequestsMock.mockReturnValueOnce(sync.promise);
+    listProjectChangeRequestsMock.mockReturnValueOnce(reload.promise);
+
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+    await expectSyncToolbar("同步中");
+    await act(async () => {
+      sync.resolve({ outcome: "synced", errorCode: null });
+    });
+    await waitFor(() =>
+      expect(listProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    await expectSyncToolbar("同步中");
+
+    await act(async () => {
+      reload.resolve({
+        ...initialResponse,
+        lastSyncedAt: Date.now(),
+      });
+    });
+    await expectSyncToolbar("已同步 刚刚", "success");
+  });
+
+  it("keeps the cached list and shows the issue sync error after a manual refresh fails", async () => {
+    const user = userEvent.setup();
+    const initialResponse: ChangeRequestListResponse = {
+      ...changeRequestResponse({ open: 1, titles: ["Open request"] }),
+      lastSyncedAt: Date.now() - 120_000,
+      syncError: null,
+    };
+    listProjectChangeRequestsMock.mockResolvedValue(initialResponse);
+
+    renderBoard();
+    await user.click(await screen.findByRole("tab", { name: /Pull requests/ }));
+    await waitFor(() =>
+      expect(syncProjectChangeRequestsMock).toHaveBeenCalledTimes(1),
+    );
+    await expectSyncToolbar("已同步 2 分钟前", "success");
+
+    syncProjectChangeRequestsMock.mockResolvedValueOnce({
+      outcome: "cache_failed",
+      errorCode: "cache_failed",
+    });
+    await user.click(screen.getByRole("button", { name: "刷新" }));
+
+    await expectSyncToolbar("同步失败，已保留缓存", "error");
+    expect(screen.getByText("Open request")).toBeInTheDocument();
   });
 
   it("updates the Pull requests tab from matching sync events and safely coalesces duplicates", async () => {

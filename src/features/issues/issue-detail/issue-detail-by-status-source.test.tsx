@@ -1368,6 +1368,8 @@ describe("Issue 详情按状态与来源", () => {
             closed: 0,
           },
           pullRequestRefs: [],
+          lastSyncedAt: null,
+          syncError: null,
         };
       }
       if (command === "get_project_change_request") {

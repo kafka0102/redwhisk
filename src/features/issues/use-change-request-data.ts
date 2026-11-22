@@ -10,6 +10,7 @@ import {
   type ChangeRequestListResponse,
   type ChangeRequestSyncChangedEvent,
 } from "./change-request-commands";
+import type { IssueSyncStatus } from "./issue-mirror-commands";
 import {
   useIssueAutoSync,
   usePageVisible,
@@ -19,6 +20,7 @@ import {
 export interface ChangeRequestData {
   filter: ChangeRequestFilter;
   response: ChangeRequestListResponse | null;
+  status: IssueSyncStatus | null;
   syncError: string | null;
   syncing: boolean;
   selectFilter: (filter: ChangeRequestFilter) => void;
@@ -75,6 +77,7 @@ export function useChangeRequestData({
       }).then((next) => {
         if (requestId === requestIdRef.current) {
           setResponse(next);
+          setSyncError(null);
         }
       });
       const entry = {
@@ -179,9 +182,18 @@ export function useChangeRequestData({
     );
   }, [canSync, projectId, reload]);
 
+  const status: IssueSyncStatus | null =
+    response == null && syncError == null
+      ? null
+      : {
+          lastSyncedAt: response?.lastSyncedAt ?? null,
+          syncError: syncError ?? response?.syncError ?? null,
+        };
+
   return {
     filter,
     response,
+    status,
     syncError,
     syncing,
     selectFilter,

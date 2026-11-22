@@ -328,8 +328,10 @@
     "ChangeRequestListResponse": {
       "fields": {
         "counts": "required",
+        "lastSyncedAt": "required",
         "pullRequestRefs": "required",
         "rows": "required",
+        "syncError": "required",
         "tabCount": "required"
       }
     },

@@ -27,6 +27,8 @@ function response(): ChangeRequestListResponse {
       closed: 2,
     },
     pullRequestRefs: [],
+    lastSyncedAt: null,
+    syncError: null,
     rows: [
       row({
         id: 132,
@@ -141,6 +143,8 @@ function emptyResponse(): ChangeRequestListResponse {
       closed: 0,
     },
     pullRequestRefs: [],
+    lastSyncedAt: null,
+    syncError: null,
     rows: [],
   };
 }

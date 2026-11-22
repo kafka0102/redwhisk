@@ -83,6 +83,8 @@ function response(): ChangeRequestListResponse {
       closed: 0,
     },
     pullRequestRefs: [],
+    lastSyncedAt: null,
+    syncError: null,
   };
 }
 
@@ -111,6 +113,8 @@ function namedResponse(
     tabCount: titles.length,
     counts,
     pullRequestRefs: [],
+    lastSyncedAt: null,
+    syncError: null,
   };
 }
 
@@ -325,6 +329,8 @@ describe("change request auto sync", () => {
       tabCount: 1,
       counts: { open: 1, closed: 0 },
       pullRequestRefs: [],
+      lastSyncedAt: null,
+      syncError: null,
     });
     render(
       <I18nProvider fixedLocale="zh">

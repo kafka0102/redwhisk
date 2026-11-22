@@ -37,6 +37,7 @@ pub(crate) fn list_project_change_requests(
     let pull_request_refs = upgrade_pull_request_urls(connection, project_id)?;
     let stored = load_change_requests(connection, project_id)?;
     let links = load_links(connection, project_id)?;
+    let (last_synced_at, sync_error) = load_sync_status(connection, project_id)?;
     let counts = ChangeRequestFilterCounts {
         open: stored.iter().filter(|row| is_open_like(&row.state)).count() as i64,
         closed: stored
@@ -54,7 +55,24 @@ pub(crate) fn list_project_change_requests(
         tab_count: stored.len() as i64,
         counts,
         pull_request_refs,
+        last_synced_at,
+        sync_error,
     })
+}
+
+fn load_sync_status(
+    connection: &Connection,
+    project_id: i64,
+) -> Result<(Option<i64>, Option<String>), CommandError> {
+    connection
+        .query_row(
+            "SELECT last_change_request_synced_at, last_change_request_sync_error
+             FROM projects
+             WHERE id = ?1",
+            params![project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(query_failed)
 }
 
 fn to_row(

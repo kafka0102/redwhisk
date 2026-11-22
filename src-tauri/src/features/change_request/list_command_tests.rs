@@ -241,6 +241,43 @@ fn blank_viewer_login_keeps_open_and_closed_counts() {
 }
 
 #[test]
+fn list_project_change_requests_reads_persisted_sync_status() {
+    let connection = open_memory();
+    let project_id = insert_project(&connection);
+    insert_sample(&connection, project_id);
+    connection
+        .execute(
+            "UPDATE projects
+             SET last_change_request_synced_at = ?1,
+                 last_change_request_sync_error = NULL
+             WHERE id = ?2",
+            params![1_794_063_600_000_i64, project_id],
+        )
+        .expect("sync status");
+
+    let synced = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
+    let synced_json = serde_json::to_value(&synced).expect("serialize synced response");
+    assert_eq!(synced_json["lastSyncedAt"], 1_794_063_600_000_i64);
+    assert!(synced_json["syncError"].is_null());
+
+    connection
+        .execute(
+            "UPDATE projects
+             SET last_change_request_sync_error = 'offline'
+             WHERE id = ?1",
+            params![project_id],
+        )
+        .expect("sync error");
+
+    let failed = super::list_project_change_requests(&connection, project_id, "open", "yujianjia")
+        .expect("list_project_change_requests");
+    let failed_json = serde_json::to_value(&failed).expect("serialize failed response");
+    assert_eq!(failed_json["lastSyncedAt"], 1_794_063_600_000_i64);
+    assert_eq!(failed_json["syncError"], "offline");
+}
+
+#[test]
 fn weird_state_stays_out_of_open_and_closed_counts() {
     let connection = open_memory();
     let project_id = insert_project(&connection);

@@ -9,7 +9,6 @@ import {
 import { IssueBoardHeader, type IssueBoardPane } from "./issue-board-header";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { IssuesKanban } from "./issues-kanban";
-import type { IssueSyncStatus } from "./issue-mirror-commands";
 import type { ForgeProvider } from "../settings/issue-source-commands";
 import { IssueBoardList } from "./issue-board-list";
 import { IssueBoardModeBar } from "./issue-board-mode-bar";
@@ -70,17 +69,13 @@ export function IssuesActivityBoard({
   });
   const canSyncChangeRequests =
     sourceMode === "remote" || sourceMode === "mixed";
-  const changeRequestStatus: IssueSyncStatus = {
-    lastSyncedAt: null,
-    syncError: changeRequestData.syncError,
-  };
   const headerActions =
     pane === "issues" ? (
       actions
     ) : canSyncChangeRequests ? (
       <IssueSyncToolbar
         provider={provider}
-        status={changeRequestStatus}
+        status={changeRequestData.status}
         syncing={changeRequestData.syncing}
         onRefresh={() => {
           void changeRequestData

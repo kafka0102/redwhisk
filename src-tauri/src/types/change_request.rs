@@ -75,6 +75,8 @@ pub struct ChangeRequestListResponse {
     pub tab_count: i64,
     pub counts: ChangeRequestFilterCounts,
     pub pull_request_refs: Vec<IssuePullRequestRef>,
+    pub last_synced_at: Option<i64>,
+    pub sync_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
