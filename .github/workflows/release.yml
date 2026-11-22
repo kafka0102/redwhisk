@@ -106,6 +106,8 @@ jobs:
         run: |
           bash scripts/tests/rust-compile-gate.test.sh
           bash scripts/tests/frontend-feature-boundary-gate.test.sh
+          bash scripts/tests/rust-reason-gates.test.sh
+          bash scripts/tests/cargo-filter.test.sh
 
   # tag 触发：构建 Universal Mac 包并创建 draft Release
   release-macos:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # diff 里新增的 command reason 字面量必须写入 Tauri 契约。
-# 只看 src-tauri/src 的新增行：with_reason("...")、("reason", "...")、以及 => "reason"。
+# 只看 src-tauri/src 的新增行：with_reason("...")、("reason", "...")、=> "reason"，
+# 以及把参数转发给 with_reason 的本地 helper 调用。
 # reason 须是含大写字母的 camelCase。存量 reason 不追溯。测试文件里的断言不查。
 set -euo pipefail
 
@@ -43,6 +44,10 @@ contract_path = os.path.join(root, "docs/architecture-design/tauri-contract.md")
 call_re = re.compile(r'with_reason\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
 tuple_re = re.compile(r'\(\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*,\s*"')
 arm_re = re.compile(r'=>\s*"([A-Za-z_][A-Za-z0-9_]*)"')
+fn_re = re.compile(
+    r"(?m)^[ \t]*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
+reason_param_re = re.compile(r"\.with_reason\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
 
 
 def git(*args):
@@ -68,11 +73,34 @@ def is_reason(token):
     return bool(re.fullmatch(r"[a-z][A-Za-z0-9]*", token) and re.search(r"[A-Z]", token))
 
 
-def literals(text):
+def reason_helper_names(text):
+    matches = list(fn_re.finditer(text))
+    names = set()
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end() : end]
+        parameter = reason_param_re.search(body)
+        if parameter is not None:
+            names.add(match.group(1))
+    return names
+
+
+def helper_call_re(pattern):
+    return re.compile(
+        rf"\b{re.escape(pattern)}\s*\(\s*\"([A-Za-z_][A-Za-z0-9_]*)\""
+    )
+
+
+def literals(text, helper_names=()):
     line = code_only(text)
     found = []
     for pattern in (call_re, tuple_re, arm_re):
         for match in pattern.finditer(line):
+            token = match.group(1)
+            if is_reason(token):
+                found.append(token)
+    for helper in helper_names:
+        for match in helper_call_re(helper).finditer(line):
             token = match.group(1)
             if is_reason(token):
                 found.append(token)
@@ -83,19 +111,24 @@ def parse_diff(diff):
     path = None
     added = set()
     removed = set()
+    helpers = set()
     for raw in diff.splitlines():
         if raw.startswith("diff --git "):
             path = None
+            helpers = set()
             continue
         if raw.startswith("+++ b/"):
             path = raw[6:]
+            if is_source(path):
+                with open(os.path.join(root, path), encoding="utf-8") as handle:
+                    helpers = reason_helper_names(handle.read())
             continue
         if not is_source(path):
             continue
         if raw.startswith("+") and not raw.startswith("+++"):
-            added.update(literals(raw[1:]))
+            added.update(literals(raw[1:], helpers))
         elif raw.startswith("-") and not raw.startswith("---"):
-            removed.update(literals(raw[1:]))
+            removed.update(literals(raw[1:], helpers))
     return added - removed
 
 
@@ -106,8 +139,10 @@ def untracked_reasons():
         if not is_source(rel):
             continue
         with open(os.path.join(root, rel), encoding="utf-8") as handle:
-            for line in handle:
-                found.update(literals(line.rstrip("\n")))
+            text = handle.read()
+            helpers = reason_helper_names(text)
+            for line in text.splitlines():
+                found.update(literals(line, helpers))
     return found
 
 

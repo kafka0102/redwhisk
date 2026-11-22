@@ -59,7 +59,18 @@ cd - && git worktree remove --force "$tmp/base" && rmdir "$tmp"   # 清理用 wo
 
 判据：基线同样失败 → 既有问题，写进回报但不纳入本次改动；基线通过 → 本次引入，必须在本次修掉。
 
-注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**默认全量单测** `pnpm test`（真实浏览器测量另跑 `pnpm test:browser`），过滤运行只用于定位，不作为通过依据。过滤名没命中任何用例时，vitest 和 `cargo test` 都退出 0。那不是红，也不是通过。
+注意：本仓库部分用例在**过滤运行**下会依赖同文件其它用例的时序（例如 `src/features/issues/issues-activity.test.tsx` 中缺 `await findByRole` 的断言）。门禁口径是**默认全量单测** `pnpm test`（真实浏览器测量另跑 `pnpm test:browser`），过滤运行只用于定位，不作为通过依据。
+
+Rust 定向测试必须使用包装器：
+
+```bash
+bash scripts/run-cargo-filter.sh --lib <filter>
+bash scripts/run-cargo-filter.sh --test <test-target> [filter]
+```
+
+包装器先用 `--list` 确认至少命中一个测试，再执行真实测试；过滤零命中必须失败。直接使用 `cargo test <filter>` 只适合全量或你已独立确认命中时。
+
+有效红测必须进入目标行为并因预期缺陷失败。测试过滤零命中、无关 import/编译错误、模块路径写错或 fixture 路径错误都不是红；这些状态不能作为 TDD 的红测证据。
 
 ## 文件树右键菜单
 

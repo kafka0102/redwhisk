@@ -108,6 +108,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - 优先用 `pnpm add <pkg>` / `pnpm remove <pkg>` 改依赖（会同步 lockfile 并安装）；禁止只改 `package.json` 却不安装、不更新 lockfile。
 - `vi.mock("某包")` 只替测试运行时，**不能**替代真实依赖安装；缺包时 `pnpm typecheck` / `pnpm build` 仍会报 `Cannot find module`。
 - 若 typecheck 报 `Cannot find module 'X'` 且 `X` 已在 `package.json` 声明：先 `pnpm install` 再重跑，不要把它当成源码逻辑 bug 去改 import 或加 `@ts-ignore`。
+- Rust 定向测试使用 `bash scripts/run-cargo-filter.sh --lib <filter>` 或 `bash scripts/run-cargo-filter.sh --test <target> [filter]`；过滤零命中必须失败。全量 Rust 测试仍直接使用 `cargo test`。
 
 纯文档改动（`docs/**`、`*.md`、`AGENTS.md`）豁免 lint / typecheck / test / build，但须复查内部相对链接、索引与引用是否一致（如 `rg -n "目标路径" docs`）。
 
@@ -132,6 +133,7 @@ src-tauri/migrations/                           SQLite migrations（业务状态
 - **最小方案**：只实现当前任务需要的代码；不提前加未被要求的抽象、配置、扩展点、缓存、通知或兼容层。
 - **只改相关代码**：只动与任务直接相关的文件，保持既有风格；不顺手重构、不改无关注释、不格式化无关文件；发现无关问题只说明，不擅自处理。
 - **目标驱动**：bugfix 先复现或补失败测试再修；功能开发说明验收标准；多步任务为每步写明验证方式。
+- 有效红测必须命中目标行为并因预期行为失败；测试过滤零命中、无关 import/编译错误或 fixture 路径错误都不能算红。
 - 明显的一行 typo / 格式修正可按常识快速处理，但仍不得混入无关改动。
 
 ## 7. 类型与代码风格（要点，细节见 docs）

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # 新增 command reason 必须在对应错误码的中英文 locale 里有文案。
+# 也检查把参数转发给 with_reason 的本地 helper 调用。
 # with_reason 配对同一函数里的 CommandErrorCode，键是 errors.<CODE>.<reason>。
 # 函数里只有一种错误码时用它，rustfmt 换行不影响配对。
 # 有多种错误码时，用该 with_reason 前面最近的一种。
@@ -53,6 +54,7 @@ fn_re = re.compile(
 with_reason_re = re.compile(r'with_reason\(\s*"([a-z][A-Za-z0-9]*)"')
 coded_error_re = re.compile(r"\bcoded_error\s*\(")
 quoted_re = re.compile(r'"([a-z][A-Za-z0-9]*)"')
+reason_param_re = re.compile(r"\.with_reason\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
 
 
 def git(*args):
@@ -102,6 +104,17 @@ def helper_code(text, name):
     return None
 
 
+def reason_helpers(text):
+    helpers = []
+    for name, body, _start in functions(text):
+        if reason_param_re.search(body) is None:
+            continue
+        code = helper_code(text, name)
+        if code is not None:
+            helpers.append((name, code))
+    return helpers
+
+
 def enclosing_code(text, offset):
     owner = None
     for _name, body, start in functions(text):
@@ -135,6 +148,24 @@ def with_reason_hits(path, text, added_lines):
             continue
         code = enclosing_code(text, match.start())
         found.append((screaming(code) if code else None, token, path))
+    return found
+
+
+def reason_helper_hits(path, text, added_lines):
+    found = []
+    if not is_source(path):
+        return found
+    for helper, code in reason_helpers(text):
+        pattern = re.compile(
+            rf"\b{re.escape(helper)}\s*\(\s*\"([a-z][A-Za-z0-9]*)\""
+        )
+        for match in pattern.finditer(text):
+            token = match.group(1)
+            if not is_reason(token):
+                continue
+            line_no = line_of(text, match.start())
+            if line_no in added_lines:
+                found.append((screaming(code), token, path))
     return found
 
 
@@ -205,6 +236,7 @@ def added_lines_from_diff(diff):
 
 def hits_for_text(path, text, lines):
     hits = with_reason_hits(path, text, lines)
+    hits.extend(reason_helper_hits(path, text, lines))
     for line_no in lines:
         hits.extend(requirements_in_window(path, window_at(text, line_no), text))
     return hits

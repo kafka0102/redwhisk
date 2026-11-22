@@ -446,14 +446,14 @@ bash scripts/check-rust-compile.sh
 
 改动 `src-tauri/src` 时再跑 `bash scripts/check-rust-user-strings.sh`。它只看本次 diff 的新增字符串，含中文即失败（注释除外）。错误用英文 code，展示文案放前端 locales。新增 `#[tauri::command]` 时再跑 `bash scripts/check-rust-command-failure-tests.sh`。它要求 diff 里每个新命令都有带 `expect_err` 的失败测试。
 新增 `app.emit` / `app_handle.emit` 时再跑 `bash scripts/check-rust-event-emit.sh`。它要求这次 diff 里的调用位于 `emit_*` 函数中，存量直接 `emit` 不追溯。
-新增 command reason 时再跑 `bash scripts/check-rust-command-reasons.sh`。它要求这次 diff 里的 `with_reason("...")`、`("reason", "...")` 和 `=> "reason"` 字面量出现在 `docs/architecture-design/tauri-contract.md`，存量 reason 不追溯。同时跑 `bash scripts/check-rust-reason-locales.sh`：`with_reason("...")` 和 `coded_error("...")` 必须在 `errors.<CommandErrorCode>.<reason>` 的 zh/en 都有键；`features/issue/completion` 里作为失败原因返回的裸 reason 必须在 `errors.ISSUE_VALIDATION_FAILED`。存量不追溯。
+新增 command reason 时再跑 `bash scripts/check-rust-command-reasons.sh`。它要求这次 diff 里的 `with_reason("...")`、`("reason", "...")`、`=> "reason"`，以及把参数转发给 `with_reason` 的本地 helper 调用字面量出现在 `docs/architecture-design/tauri-contract.md`，存量 reason 不追溯。同时跑 `bash scripts/check-rust-reason-locales.sh`：直接 `with_reason("...")`、`coded_error("...")` 和本地 reason helper 调用必须在 `errors.<CommandErrorCode>.<reason>` 的 zh/en 都有键；`features/issue/completion` 里作为失败原因返回的裸 reason 必须在 `errors.ISSUE_VALIDATION_FAILED`。存量不追溯。
 
 检查实际代码，不能只看测试能否编过：
 
 - 新增或移动的 `use` / `pub use` / `pub(crate) use` 必须有同一 `cfg` 下的非测试调用方。只有 `#[cfg(test)]` 模块或测试函数引用时，重导出本身必须标 `#[cfg(test)]`。
 - 禁止用 `#[allow(unused_imports)]` 或 `#[allow(dead_code)]` 压掉 `src-tauri/Cargo.toml` 中 `warnings = "deny"` 造成的正式构建失败。
 - `cargo test`、`cargo test --lib`、`cargo check --tests`、`cargo check --all-targets` 不能代替上面的脚本。这些命令以 `cfg(test)` 编译库，测试里的引用会藏住正式构建中的未使用导入。
-- 行为变更仍要跑相关的 `cargo test <filter>` 或 `cargo test --lib <module>`。这是测行为，不是测能否按正式口径编译。不要为了编译检查跑全量 `cargo test`，也不要跑 `pnpm build:macos`、`tauri build` 或 `cargo build --release`。
+- 行为变更仍要跑相关定向测试。使用 `bash scripts/run-cargo-filter.sh --lib <filter>` 或 `--test <target> [filter]`，由包装器拒绝零命中；这是测行为，不是测能否按正式口径编译。不要为了编译检查跑全量 `cargo test`，也不要跑 `pnpm build:macos`、`tauri build` 或 `cargo build --release`。
 - `--offline` 因依赖缓存缺失失败时，先在 `src-tauri` 执行 `cargo check --lib --bins` 拉齐依赖，再重跑脚本。不要改跑整包构建。
 
 改动文档时，至少检查：
