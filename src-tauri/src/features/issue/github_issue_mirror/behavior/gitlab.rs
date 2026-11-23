@@ -89,17 +89,17 @@ fn gitlab_failures_keep_existing_rows_and_record_sync_error() {
     let cases = [
         (
             "expired",
-            None,
+            Some(ForgeIssueError::Unauthenticated),
             IssueSyncOutcome::CredentialExpired,
             "credential_expired",
-            0,
+            1,
         ),
         (
             "unauthenticated",
-            None,
+            Some(ForgeIssueError::Unauthenticated),
             IssueSyncOutcome::CredentialExpired,
             "credential_expired",
-            0,
+            1,
         ),
         (
             "cli_missing",

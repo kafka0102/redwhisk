@@ -56,16 +56,12 @@ pub fn sync_project_issues(
     let label = label_filter(&settings)?;
     let refs = IssueExternalRefRepository::new(connection);
     match settings.connection.auth_status {
-        ForgeAuthStatus::Expired | ForgeAuthStatus::Unauthenticated => {
-            refs.mark_sync_error(project_id, "credential_expired")
-                .map_err(persistence)?;
-            return Ok(IssueSyncResult {
-                outcome: IssueSyncOutcome::CredentialExpired,
-            });
-        }
-        // `cli_missing` is a cached observation, not a permanent verdict. The forge call below
-        // re-classifies it after the background interactive PATH is available.
-        ForgeAuthStatus::CliMissing | ForgeAuthStatus::Ready => {}
+        // Cached auth and CLI observations are not a permanent verdict. A later
+        // `glab auth login` or PATH fix is observed by the live list call.
+        ForgeAuthStatus::Expired
+        | ForgeAuthStatus::Unauthenticated
+        | ForgeAuthStatus::CliMissing
+        | ForgeAuthStatus::Ready => {}
         _ => {
             refs.mark_sync_error(project_id, "cache_failed")
                 .map_err(persistence)?;
@@ -132,11 +128,13 @@ pub fn sync_project_issues(
     let listed = match forge.list_issues(&query) {
         Ok(issues) => issues,
         Err(error) => {
+            let outcome = match &error {
+                ForgeIssueError::Unauthenticated => IssueSyncOutcome::CredentialExpired,
+                _ => IssueSyncOutcome::CacheFailed,
+            };
             refs.mark_sync_error(project_id, list_sync_error(&error))
                 .map_err(persistence)?;
-            return Ok(IssueSyncResult {
-                outcome: IssueSyncOutcome::CacheFailed,
-            });
+            return Ok(IssueSyncResult { outcome });
         }
     };
     for remote in listed {

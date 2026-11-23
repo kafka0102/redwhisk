@@ -78,10 +78,10 @@ fn expired_credentials_keep_the_cached_issue() {
         false,
     );
     set_auth(&harness.connection, harness.project_id, "github", "expired");
-    let forge = FixedForge::new(vec![]);
+    let forge = FixedForge::failing(ForgeIssueError::Unauthenticated);
     let result = sync_forge(&harness, &forge);
     assert_eq!(result.outcome, IssueSyncOutcome::CredentialExpired);
-    assert!(forge.calls().is_empty());
+    assert_eq!(forge.calls().len(), 1);
     let listed = list_board_issues(&harness.connection, harness.project_id).expect("list");
     assert_eq!(listed[0].id, issue_id);
     assert_eq!(listed[0].external_number, Some(4));
@@ -353,6 +353,41 @@ mod ticket_04_cli_recovery {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].external_number, Some(8));
         assert_eq!(listed[0].title, "Recovered issue");
+        assert_eq!(
+            last_sync_error(&harness.connection, harness.project_id),
+            None
+        );
+    }
+
+    #[test]
+    fn stale_unauthenticated_snapshot_is_rechecked_by_the_live_forge() {
+        let harness = ready_github_project("all_open", None);
+        set_auth(
+            &harness.connection,
+            harness.project_id,
+            "gitlab",
+            "unauthenticated",
+        );
+        harness
+            .connection
+            .execute(
+                "UPDATE projects SET last_issue_sync_error = 'credential_expired' WHERE id = ?1",
+                rusqlite::params![harness.project_id],
+            )
+            .expect("seed credential_expired");
+        let forge = FixedForge::new(vec![remote_issue(
+            8,
+            RemoteIssueState::Open,
+            "Still signed in",
+        )]);
+
+        let result = sync_forge(&harness, &forge);
+
+        assert_eq!(result.outcome, IssueSyncOutcome::Synced);
+        assert_eq!(forge.calls().len(), 1);
+        let listed = list_board_issues(&harness.connection, harness.project_id).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "Still signed in");
         assert_eq!(
             last_sync_error(&harness.connection, harness.project_id),
             None
