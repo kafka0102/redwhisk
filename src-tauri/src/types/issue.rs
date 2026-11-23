@@ -137,6 +137,9 @@ pub struct GetIssueSummaryInput {
 pub struct DeleteIssueInput {
     pub project_id: i64,
     pub issue_id: i64,
+    /// Omitted on the wire means false. Host deletion runs only when this is true.
+    #[serde(default)]
+    pub sync_delete_host: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

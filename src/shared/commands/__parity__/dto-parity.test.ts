@@ -20,6 +20,7 @@ const tsFiles = [
   path.join(srcDir, "features/project/project-commands.ts"),
   path.join(srcDir, "features/project/project-forge-commands.ts"),
   path.join(srcDir, "features/issues/issue-commands.ts"),
+  path.join(srcDir, "features/issues/issue-delete-input.ts"),
   path.join(srcDir, "features/issues/issue-form/host-attachment-commands.ts"),
   path.join(srcDir, "features/issues/issue-timeline-commands.ts"),
   path.join(srcDir, "features/issues/issue-detail/issue-detail-commands.ts"),

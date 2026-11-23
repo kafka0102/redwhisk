@@ -10,8 +10,6 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ConfirmContent } from "@/components/ui/confirm-dialog";
-import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "../../../shared/i18n/i18n";
 import {
@@ -31,6 +29,7 @@ import { IssueSurfaceHeader } from "../issue-surface-header";
 import { IssueDetailHeading } from "./issue-detail-heading";
 import { issueDetailTitleParts } from "./issue-detail-mode";
 import { IssueCreateSource } from "./issue-create-source";
+import { IssueDeleteConfirmDialog } from "./sync-delete-host-confirm";
 
 interface IssueEditablePageProps {
   mode: DialogMode;
@@ -56,7 +55,7 @@ interface IssueEditablePageProps {
   onRemoveAttachment: (
     attachment: IssueAttachmentRecord | IssueAttachmentDraft,
   ) => void;
-  onDeleteIssue: () => void;
+  onDeleteIssue: (syncDeleteHost: boolean) => void;
   onOpenProjectLabelsSettings?: () => void;
   onOpenProjectSettings?: () => void;
   projectId: number;
@@ -208,22 +207,15 @@ export function IssueEditablePage({
           </div>
         </div>
       </form>
-      <Dialog
+      <IssueDeleteConfirmDialog
+        cancelLabel={messages.issues.backEditable}
+        confirmLabel={messages.issues.deleteEditable}
+        issue={selectedIssue}
+        message={messages.issues.deleteConfirmMessage}
         open={isDeleteDialogOpen}
-        onOpenChange={(nextOpen) => setIsDeleteDialogOpen(nextOpen)}
-      >
-        <ConfirmContent
-          cancelLabel={messages.issues.backEditable}
-          confirmLabel={messages.issues.deleteEditable}
-          confirmVariant="destructive"
-          message={messages.issues.deleteConfirmMessage}
-          onCancel={() => setIsDeleteDialogOpen(false)}
-          onConfirm={() => {
-            setIsDeleteDialogOpen(false);
-            onDeleteIssue();
-          }}
-        />
-      </Dialog>
+        onConfirm={onDeleteIssue}
+        onOpenChange={setIsDeleteDialogOpen}
+      />
     </>
   );
 }

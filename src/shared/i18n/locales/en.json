@@ -665,7 +665,9 @@
     "mergeConflictRelatedWorktree": "Related worktree: {{workspacePath}}",
     "mergeConflictCompleteMerge": "After resolving conflicts, complete the merge and make sure the code lands on the target branch.",
     "mergeConflictNoSessionHandoff": "Merge conflict detected, but no agent session is available to take over.",
-    "agentSessionOpenMissing": "No openable session was returned after starting the agent session."
+    "agentSessionOpenMissing": "No openable session was returned after starting the agent session.",
+    "syncDeleteGithub": "Also delete the GitHub Issue",
+    "syncDeleteGitlab": "Also delete the GitLab Issue"
   },
   "issueSummary": {
     "closedAt": "Closed",
@@ -1290,7 +1292,9 @@
       "changeRequestNotDraft": "Only a draft can be marked ready.",
       "changeRequestNotOpen": "Only an open change request can be closed.",
       "changeRequestReviewerMissing": "Enter a reviewer.",
-      "changeRequestNotMergeable": "The host does not allow this merge yet."
+      "changeRequestNotMergeable": "The host does not allow this merge yet.",
+      "syncDeleteHostNotRemote": "Only a GitHub or GitLab remote issue can delete the host issue. The local copy was not deleted.",
+      "syncDeleteHostIdentityMissing": "This remote issue has no host identity. The local copy was not deleted."
     },
     "ISSUE_WORKTREE_OCCUPIED": {
       "default": "A worktree with the same name is already occupied. Remove it before running."
@@ -1326,7 +1330,13 @@
       "forgeCliMissing": "gh / glab was not found.",
       "forgeOffline": "The network is unavailable, so the host was not reached.",
       "rateLimited": "The host rate limit was reached. Try again later.",
-      "writeForbidden": "Write permission is required."
+      "writeForbidden": "Write permission is required.",
+      "syncDeleteHostNotFound": "The host issue was not found. The local copy was not deleted.",
+      "syncDeleteHostGone": "This host issue is gone. The local copy was not deleted.",
+      "syncDeleteHostUnauthenticated": "Sign in to GitHub or GitLab before deleting the host issue. The local copy was not deleted.",
+      "syncDeleteHostForbidden": "You do not have permission to delete this host issue. The local copy was not deleted.",
+      "syncDeleteHostOffline": "The network is unavailable. Neither the host issue nor the local copy was deleted.",
+      "syncDeleteHostUnavailable": "The host issue could not be deleted right now. The local copy was not deleted."
     },
     "PROJECT_NOT_FOUND": {
       "default": "Project not found."

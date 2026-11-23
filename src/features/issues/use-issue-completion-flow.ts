@@ -383,7 +383,7 @@ export function useIssueCompletionFlow({
     }
   }
 
-  async function handleDeleteIssue() {
+  async function handleDeleteIssue(syncDeleteHost = false) {
     if (!selectedIssue || isSaving) {
       return;
     }
@@ -399,6 +399,7 @@ export function useIssueCompletionFlow({
       await deleteIssue({
         projectId: requestProjectId,
         issueId: issueToDelete.id,
+        syncDeleteHost,
       });
 
       if (activeProjectIdRef.current !== requestProjectId) {

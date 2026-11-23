@@ -11,6 +11,7 @@ mod remote_create;
 mod remote_label_attach;
 mod remote_timeline;
 mod service;
+mod sync_delete_host;
 mod time;
 pub mod unavailable_recovery;
 mod validation;
@@ -25,6 +26,8 @@ mod host_attachment_test;
 mod host_attachment_upload_test;
 #[cfg(test)]
 mod remote_create_test;
+#[cfg(test)]
+mod sync_delete_host_test;
 
 #[cfg(test)]
 mod closed_unmerged_reopen_tests;

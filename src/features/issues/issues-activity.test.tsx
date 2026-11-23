@@ -5408,6 +5408,7 @@ describe("IssuesActivity", () => {
       expect(deleteIssueMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: runningIssue.id,
+        syncDeleteHost: false,
       }),
     );
     expect(
@@ -5483,6 +5484,7 @@ describe("IssuesActivity", () => {
     expect(deleteIssueMock).toHaveBeenCalledWith({
       projectId: 1,
       issueId: existingIssue.id,
+      syncDeleteHost: false,
     });
     expect(
       screen.queryByRole("form", { name: "Edit Issue" }),
@@ -5491,6 +5493,1280 @@ describe("IssuesActivity", () => {
       screen.queryByRole("button", { name: "Existing issue" }),
     ).not.toBeInTheDocument();
     expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
+  });
+
+  it("shows a checked sync-delete checkbox for a GitHub remote issue", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("redwhisk.locale", "en");
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 40,
+      number: 40,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+
+    expect(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).toBeChecked();
+  });
+
+  it("shows a checked sync-delete checkbox for a GitLab read-only issue in English", async () => {
+    const user = userEvent.setup();
+    const remoteGitlabIssue = {
+      ...runningIssue,
+      id: 41,
+      number: 41,
+      title: "Remote GitLab issue",
+      source: "remote" as const,
+      provider: "gitlab" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGitlabIssue] });
+
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitLab issue" }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "More issue actions" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+
+    expect(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "Also delete the GitLab Issue",
+      }),
+    ).toBeChecked();
+  });
+
+  it("shows a checked sync-delete checkbox for a GitHub backlog issue in Chinese", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 42,
+      number: 42,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "删除后无法恢复。确认删除当前 Issue 吗？",
+    });
+
+    expect(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "同步删除 GitHub Issue",
+      }),
+    ).toBeChecked();
+  });
+
+  it("shows a checked sync-delete checkbox for a GitLab read-only issue in Chinese", async () => {
+    const user = userEvent.setup();
+    const remoteGitlabIssue = {
+      ...runningIssue,
+      id: 43,
+      number: 43,
+      title: "Remote GitLab issue",
+      source: "remote" as const,
+      provider: "gitlab" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGitlabIssue] });
+
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitLab issue" }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue 详情" });
+    await user.click(
+      within(detail).getByRole("button", { name: "更多 issue 操作" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "删除后无法恢复。确认删除当前 Issue 吗？",
+    });
+
+    expect(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "同步删除 GitLab Issue",
+      }),
+    ).toBeChecked();
+  });
+
+  it("does not show a sync-delete checkbox for a local issue", async () => {
+    const user = userEvent.setup();
+    listIssuesMock.mockResolvedValue({ issues: [existingIssue, runningIssue] });
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Existing issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const editDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    expect(
+      within(editDialog).queryByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(editDialog).queryByRole("checkbox", {
+        name: "Also delete the GitLab Issue",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(within(editDialog).getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    await user.click(
+      await screen.findByRole("button", { name: "Running issue" }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "More issue actions" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const readOnlyDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    expect(
+      within(readOnlyDialog).queryByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(readOnlyDialog).queryByRole("checkbox", {
+        name: "Also delete the GitLab Issue",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show a sync-delete checkbox for a remote issue from another host", async () => {
+    const user = userEvent.setup();
+    const backlog = {
+      ...existingIssue,
+      id: 44,
+      number: 44,
+      title: "Remote other backlog",
+      source: "remote" as const,
+      provider: "gitea" as const,
+    };
+    const running = {
+      ...runningIssue,
+      id: 45,
+      number: 45,
+      title: "Remote other running",
+      source: "remote" as const,
+      provider: "gitea" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [backlog, running] });
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote other backlog" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const editDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    expect(
+      within(editDialog).queryByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(editDialog).queryByRole("checkbox", {
+        name: "Also delete the GitLab Issue",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(within(editDialog).getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote other running" }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "More issue actions" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const readOnlyDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    expect(
+      within(readOnlyDialog).queryByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(readOnlyDialog).queryByRole("checkbox", {
+        name: "Also delete the GitLab Issue",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sends syncDeleteHost false after unchecking and checks the box again next time", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 46,
+      number: 46,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockResolvedValue({
+      issueId: remoteGithubIssue.id,
+      linkedSessionId: null,
+    });
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    await user.click(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    );
+    await user.click(
+      within(deleteDialog).getByRole("button", { name: "Back" }),
+    );
+
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const reopened = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    expect(
+      within(reopened).getByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    ).toBeChecked();
+    await user.click(
+      within(reopened).getByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    );
+    await user.click(within(reopened).getByRole("button", { name: "Delete" }));
+
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: remoteGithubIssue.id,
+      syncDeleteHost: false,
+    });
+  });
+
+  it("sends syncDeleteHost true when the checkbox stays checked", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 47,
+      number: 47,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockResolvedValue({
+      issueId: remoteGithubIssue.id,
+      linkedSessionId: null,
+    });
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: remoteGithubIssue.id,
+      syncDeleteHost: true,
+    });
+  });
+
+  it("does not delete a remote issue when the confirmation is canceled", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 48,
+      number: 48,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    const remoteGitlabIssue = {
+      ...runningIssue,
+      id: 49,
+      number: 49,
+      title: "Remote GitLab issue",
+      source: "remote" as const,
+      provider: "gitlab" as const,
+    };
+    listIssuesMock.mockResolvedValue({
+      issues: [remoteGithubIssue, remoteGitlabIssue],
+    });
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Back" }),
+    );
+    expect(deleteIssueMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Back" }));
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitLab issue" }),
+    );
+    const detail = await screen.findByRole("region", { name: "Issue Detail" });
+    await user.click(
+      within(detail).getByRole("button", { name: "More issue actions" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Cancel" }),
+    );
+    expect(deleteIssueMock).not.toHaveBeenCalled();
+  });
+
+  it("removes the issue and shows the existing success and loading copy when sync delete stays checked", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 50,
+      number: 50,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    const pendingDelete =
+      createDeferred<Awaited<ReturnType<typeof deleteIssue>>>();
+    deleteIssueMock.mockReturnValue(pendingDelete.promise);
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(await screen.findByText("Deleting...")).toBeInTheDocument();
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: remoteGithubIssue.id,
+      syncDeleteHost: true,
+    });
+    pendingDelete.resolve({
+      issueId: remoteGithubIssue.id,
+      linkedSessionId: null,
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Remote GitHub issue" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
+  });
+
+  it("removes the issue and shows the existing success and loading copy when sync delete is unchecked", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 51,
+      number: 51,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    const pendingDelete =
+      createDeferred<Awaited<ReturnType<typeof deleteIssue>>>();
+    deleteIssueMock.mockReturnValue(pendingDelete.promise);
+    renderIssuesActivity();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    const deleteDialog = await screen.findByRole("dialog", {
+      name: "This cannot be undone. Delete the current Issue?",
+    });
+    await user.click(
+      within(deleteDialog).getByRole("checkbox", {
+        name: "Also delete the GitHub Issue",
+      }),
+    );
+    await user.click(
+      within(deleteDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(await screen.findByText("Deleting...")).toBeInTheDocument();
+    expect(deleteIssueMock).toHaveBeenCalledWith({
+      projectId: 1,
+      issueId: remoteGithubIssue.id,
+      syncDeleteHost: false,
+    });
+    pendingDelete.resolve({
+      issueId: remoteGithubIssue.id,
+      linkedSessionId: null,
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Remote GitHub issue" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(toastSuccessMock).toHaveBeenCalledWith("Deleted successfully");
+  });
+
+  it("shows the en syncDeleteHostNotFound delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 60,
+      number: 60,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostNotFound",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The host issue was not found. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostNotFound delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 61,
+      number: 61,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostNotFound",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("找不到这个宿主 Issue，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostGone delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 62,
+      number: 62,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostGone",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "This host issue is gone. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostGone delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 63,
+      number: 63,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostGone",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("这个宿主 Issue 已经不存在，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostUnauthenticated delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 64,
+      number: 64,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnauthenticated",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Sign in to GitHub or GitLab before deleting the host issue. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostUnauthenticated delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 65,
+      number: 65,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnauthenticated",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "请先登录 GitHub 或 GitLab，再删除宿主 Issue。本地未删除。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostForbidden delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 66,
+      number: 66,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostForbidden",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "You do not have permission to delete this host issue. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostForbidden delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 67,
+      number: 67,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostForbidden",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("没有权限删除这个宿主 Issue，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostOffline delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 68,
+      number: 68,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostOffline",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The network is unavailable. Neither the host issue nor the local copy was deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostOffline delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 69,
+      number: 69,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostOffline",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("网络不可用，宿主 Issue 和本地副本都没有删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en CliMissing delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 70,
+      number: 70,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The host issue could not be deleted right now. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en RateLimited delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 71,
+      number: 71,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The host issue could not be deleted right now. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en CommandFailed delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 72,
+      number: 72,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "The host issue could not be deleted right now. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh CliMissing delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 73,
+      number: 73,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("暂时无法删除宿主 Issue，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh RateLimited delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 74,
+      number: 74,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("暂时无法删除宿主 Issue，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh CommandFailed delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 75,
+      number: 75,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "FORGE_UNAVAILABLE",
+      message: "raw command message",
+      reason: "syncDeleteHostUnavailable",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("暂时无法删除宿主 Issue，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostNotRemote delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 76,
+      number: 76,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "raw command message",
+      reason: "syncDeleteHostNotRemote",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Only a GitHub or GitLab remote issue can delete the host issue. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostNotRemote delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 77,
+      number: 77,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "raw command message",
+      reason: "syncDeleteHostNotRemote",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "只有 GitHub 或 GitLab 远程 Issue 可以同步删除宿主，本地未删除。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the en syncDeleteHostIdentityMissing delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 78,
+      number: 78,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "raw command message",
+      reason: "syncDeleteHostIdentityMissing",
+    });
+    renderIssuesActivity(undefined, "en");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "Edit Issue" });
+    await user.click(within(form).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "This cannot be undone. Delete the current Issue?",
+        }),
+      ).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "This remote issue has no host identity. The local copy was not deleted.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
+  });
+
+  it("shows the zh syncDeleteHostIdentityMissing delete failure", async () => {
+    const user = userEvent.setup();
+    const remoteGithubIssue = {
+      ...existingIssue,
+      id: 79,
+      number: 79,
+      title: "Remote GitHub issue",
+      source: "remote" as const,
+      provider: "github" as const,
+    };
+    listIssuesMock.mockResolvedValue({ issues: [remoteGithubIssue] });
+    deleteIssueMock.mockRejectedValue({
+      code: "ISSUE_VALIDATION_FAILED",
+      message: "raw command message",
+      reason: "syncDeleteHostIdentityMissing",
+    });
+    renderIssuesActivity(undefined, "zh");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remote GitHub issue" }),
+    );
+    const form = await screen.findByRole("form", { name: "编辑 Issue" });
+    await user.click(within(form).getByRole("button", { name: "删除" }));
+    await user.click(
+      within(
+        await screen.findByRole("dialog", {
+          name: "删除后无法恢复。确认删除当前 Issue 吗？",
+        }),
+      ).getByRole("button", { name: "删除" }),
+    );
+
+    expect(
+      await screen.findByText("这条远程 Issue 没有宿主身份，本地未删除。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("form")).toBeInTheDocument();
+    expect(screen.queryByText("raw command message")).not.toBeInTheDocument();
   });
 
   it("closes the backlog edit delete dialog without deleting", async () => {
@@ -6061,9 +7337,10 @@ function captureIssueSessionStartProgressListener() {
 
 function renderIssuesActivity(
   props?: Partial<ComponentProps<typeof IssuesActivity>>,
+  locale?: "en" | "zh",
 ) {
   return render(
-    <I18nProvider>
+    <I18nProvider initialLocale={locale}>
       <IssuesActivity
         projectId={1}
         worktreeSetupCommand="pnpm install"

@@ -636,7 +636,8 @@
     "DeleteIssueInput": {
       "fields": {
         "issueId": "required",
-        "projectId": "required"
+        "projectId": "required",
+        "syncDeleteHost": "optional"
       }
     },
     "DeleteIssueResult": {

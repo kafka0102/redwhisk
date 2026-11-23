@@ -631,6 +631,14 @@ impl<'connection> IssueService<'connection> {
 
     pub fn delete_issue(&self, input: DeleteIssueInput) -> Result<DeleteIssueResult, CommandError> {
         let project = self.require_project(input.project_id)?;
+        if input.sync_delete_host {
+            super::sync_delete_host::delete_host_issue(
+                self.issue_repository.connection(),
+                &project.repo_path,
+                input.project_id,
+                input.issue_id,
+            )?;
+        }
         // 事务前读取 latest worktree session，避免在未提交事务上复用 connection。
         let latest_worktree_session =
             AgentSessionRepository::new(self.issue_repository.connection())
@@ -2485,6 +2493,7 @@ mod tests {
             .delete_issue(crate::types::issue::DeleteIssueInput {
                 project_id: 1,
                 issue_id: 99,
+                sync_delete_host: false,
             })
             .expect("delete issue");
 
@@ -2584,6 +2593,7 @@ mod tests {
             .delete_issue(crate::types::issue::DeleteIssueInput {
                 project_id: 1,
                 issue_id: 100,
+                sync_delete_host: false,
             })
             .expect("delete issue");
 

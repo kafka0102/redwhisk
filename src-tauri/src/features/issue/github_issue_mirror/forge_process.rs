@@ -22,7 +22,8 @@ pub(crate) fn capture_forge_stdout(
     if !output.status.success() {
         return Err(classify_stderr(&String::from_utf8_lossy(&output.stderr)));
     }
-    String::from_utf8(output.stdout).map_err(|_| ForgeIssueError::Unparseable)
+    // Exit 0 is success. Empty, non-JSON, or non-UTF8 stdout is ignored.
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 pub(super) fn forge_command(program: &str, args: &[String], repo_dir: &Path) -> Command {
@@ -268,6 +269,11 @@ mod tests {
             classify_stderr("HTTP 403 forbidden"),
             ForgeIssueError::Forbidden
         );
+        assert_eq!(
+            classify_stderr("HTTP 404 not found issue"),
+            ForgeIssueError::NotFound
+        );
+        assert_eq!(classify_stderr("HTTP 410 is gone"), ForgeIssueError::Gone);
     }
 
     #[test]

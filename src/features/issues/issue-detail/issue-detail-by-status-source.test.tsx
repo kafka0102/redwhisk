@@ -1526,7 +1526,7 @@ describe("Issue 详情按状态与来源", () => {
     }
   });
 
-  it("更多菜单可编辑和删除，远程删除只走本地删除", async () => {
+  it("更多菜单可编辑和删除，远程删除默认要求同步删除宿主且前端不直接调用宿主", async () => {
     const user = userEvent.setup();
     const issue = boardIssue({
       id: 57,
@@ -1556,6 +1556,7 @@ describe("Issue 详情按状态与来源", () => {
       expect(deleteIssueMock).toHaveBeenCalledWith({
         projectId: 1,
         issueId: 57,
+        syncDeleteHost: true,
       }),
     );
     expectNoHostMutation(/delete|close/);

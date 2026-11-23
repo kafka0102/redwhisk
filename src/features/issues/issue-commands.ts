@@ -1,5 +1,6 @@
 import { invokeCommand } from "../../shared/commands/command-client";
 import type { AgentType } from "../agents/agent-session-commands";
+import type { DeleteIssueInput } from "./issue-delete-input";
 import type {
   GetIssueTimelineInput,
   IssueTimelineResponse,
@@ -176,10 +177,7 @@ export interface GetIssueSummaryInput {
   issueId: number;
 }
 
-export interface DeleteIssueInput {
-  projectId: number;
-  issueId: number;
-}
+export type { DeleteIssueInput } from "./issue-delete-input";
 
 export interface DeleteIssueWorktreeCleanup {
   repoPath: string;

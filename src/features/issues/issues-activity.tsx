@@ -684,7 +684,7 @@ export function IssuesActivity({
               void handleDownloadAttachment(attachment)
             }
             onRemoveAttachment={handleRemoveAttachment}
-            onDeleteIssue={() => void handleDeleteIssue()}
+            onDeleteIssue={handleDeleteIssue}
             onRunIssue={
               selectedIssue && canRunIssueFor(selectedIssue)
                 ? (trigger) => void confirmRunIssueFromEditPage(trigger)
@@ -717,7 +717,7 @@ export function IssuesActivity({
             void handleAdvanceStatus(targetStatus)
           }
           onReopenIssue={() => void handleReopenClosedUnmergedIssue()}
-          onDeleteIssue={() => void handleDeleteIssue()}
+          onDeleteIssue={handleDeleteIssue}
           onEditIssue={editSelectedIssue}
           onOpenLinkedSession={openLinkedSession}
           onRunIssue={

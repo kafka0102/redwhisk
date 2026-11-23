@@ -4567,6 +4567,7 @@ fn delete_issue_soft_deletes_issue_and_linked_session() {
         .delete_issue(DeleteIssueInput {
             project_id,
             issue_id: issue.id,
+            sync_delete_host: false,
         })
         .expect("soft delete issue");
 

@@ -18,6 +18,8 @@ export interface ConfirmContentProps {
   confirmVariant?: "default" | "destructive";
   message: string;
   title?: string;
+  /** 确认文案和按钮之间的可选内容，例如同步删除复选框。 */
+  body?: ReactNode;
   onCancel?: () => void;
   onConfirm?: () => void;
   /**
@@ -45,6 +47,7 @@ export function ConfirmContent({
   confirmVariant = "default",
   message,
   title,
+  body,
   onCancel,
   onConfirm,
   footer,
@@ -69,6 +72,7 @@ export function ConfirmContent({
         <DialogTitle>{title ?? message}</DialogTitle>
         {title ? <DialogDescription>{message}</DialogDescription> : null}
       </DialogHeader>
+      {body}
       {footer ?? defaultFooter}
     </DialogContent>
   );

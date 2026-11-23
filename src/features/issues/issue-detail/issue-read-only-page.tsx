@@ -2,8 +2,6 @@ import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ConfirmContent } from "@/components/ui/confirm-dialog";
-import { Dialog } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +32,7 @@ import {
 import { IssueUnavailableBanner } from "./issue-unavailable-banner";
 import { IssueDetailHeading } from "./issue-detail-heading";
 import { issueDetailTitleParts } from "./issue-detail-mode";
+import { IssueDeleteConfirmDialog } from "./sync-delete-host-confirm";
 import { readOnlyDetailLabels } from "./issue-readonly-labels";
 import { useIssueLabelCatalog } from "../use-issue-label-catalog";
 import {
@@ -57,7 +56,7 @@ interface IssueReadOnlyPageProps {
   ) => void;
   onAdvanceStatus: (targetStatus: IssueStatus) => void;
   onReopenIssue?: () => void;
-  onDeleteIssue: () => void;
+  onDeleteIssue: (syncDeleteHost: boolean) => void;
   onEditIssue: () => void;
   onOpenLinkedSession: () => void;
   onRunIssue?: (trigger: HTMLElement | null) => void;
@@ -280,22 +279,15 @@ export function IssueReadOnlyPage({
       >
         {errorMessage}
       </p>
-      <Dialog
+      <IssueDeleteConfirmDialog
+        cancelLabel={messages.issues.completionCancel}
+        confirmLabel={messages.issues.deleteReadonly}
+        issue={selectedIssue}
+        message={messages.issues.deleteConfirmMessage}
         open={isDeleteDialogOpen}
-        onOpenChange={(nextOpen) => setIsDeleteDialogOpen(nextOpen)}
-      >
-        <ConfirmContent
-          cancelLabel={messages.issues.completionCancel}
-          confirmLabel={messages.issues.deleteReadonly}
-          confirmVariant="destructive"
-          message={messages.issues.deleteConfirmMessage}
-          onCancel={() => setIsDeleteDialogOpen(false)}
-          onConfirm={() => {
-            setIsDeleteDialogOpen(false);
-            onDeleteIssue();
-          }}
-        />
-      </Dialog>
+        onConfirm={onDeleteIssue}
+        onOpenChange={setIsDeleteDialogOpen}
+      />
     </section>
   );
 }
